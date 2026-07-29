@@ -290,6 +290,15 @@ Pocket ID.
   (no flash of the wrong theme).
 - An interactive **Help** page (in the sidebar) walks through everything above from inside the app.
 
+## Security
+
+- **CSRF protection** — a synchronizer token, stamped onto every form client-side and checked on
+  every state-changing request. Session cookies use `SameSite=Lax` (not `Strict`, which would
+  break the Pocket ID SSO redirect callback).
+- **Login rate-limiting** — 10 attempts per 15 minutes per IP on `/login`.
+- The web UI itself has no built-in TLS. If you expose it beyond a trusted LAN, put a
+  TLS-terminating reverse proxy (Caddy, nginx, Traefik, ...) in front of it.
+
 ## Known scope limitations
 
 - No way to autocomplete Virtual Input names — see the Miniservers section above.

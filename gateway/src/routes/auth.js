@@ -1,16 +1,28 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { generators } = require('openid-client');
 const db = require('../db');
 const ssoClient = require('../ssoClient');
 
 const router = express.Router();
 
+// Password guessing is the only real brute-force surface here — SSO login has no password to
+// guess, and its own external IdP already rate-limits itself. Keyed on IP only (no per-username
+// tracking), so it caps how fast any one client can try passwords regardless of which account.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many login attempts. Please wait a few minutes and try again.',
+});
+
 router.get('/login', (req, res) => {
   res.render('login', { error: null, ssoEnabled: ssoClient.isEnabled(), ssoButtonLabel: ssoClient.getButtonLabel() });
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', loginLimiter, (req, res) => {
   const { username, password, remember } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
 

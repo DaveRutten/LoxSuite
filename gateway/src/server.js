@@ -16,6 +16,7 @@ const { startLogCollector } = require('./logCollector');
 const requireAuth = require('./middleware/requireAuth');
 const loadUserContext = require('./middleware/loadUserContext');
 const { requirePermission, requireAdmin } = require('./middleware/requirePermission');
+const { attachCsrfToken, verifyCsrfToken } = require('./middleware/csrf');
 
 const authRoutes = require('./routes/auth');
 const miniserverRoutes = require('./routes/miniservers');
@@ -51,11 +52,21 @@ app.use(
     secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
     resave: false,
     saveUninitialized: false,
+    // sameSite: 'lax' (not 'strict') is deliberate — the Pocket ID SSO callback is a top-level
+    // GET redirect back from an external origin, and 'strict' would drop the session cookie on
+    // that hop (breaking the codeVerifier/state check in routes/auth.js). 'lax' still excludes
+    // the cookie from cross-site POSTs, which is the actual CSRF vector this app cares about.
+    cookie: { httpOnly: true, sameSite: 'lax' },
   })
 );
 
+app.get('/healthz', (req, res) => res.status(200).json({ ok: true }));
+
 // Public: Loxone calls this directly, no login involved.
 app.use('/api/loxone-in', loxoneInboundRoutes);
+
+app.use(attachCsrfToken);
+app.use(verifyCsrfToken);
 
 // Populates req.user/res.locals.currentUser whenever a session exists; a no-op otherwise, so it's
 // safe to run globally ahead of both the public routes above and every authenticated one below.

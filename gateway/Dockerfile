@@ -53,4 +53,9 @@ RUN chmod +x ./docker-entrypoint.sh
 
 VOLUME ["/data"]
 EXPOSE 3000 1883
+# Checks the gateway's own HTTP server only — Mosquitto's own listener isn't probed here, but a
+# wedged Node process (which also carries mosquitto's supervision loop, see
+# docker-entrypoint.sh) is the failure mode that actually matters for auto-recovery.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:3000/healthz || exit 1
 ENTRYPOINT ["./docker-entrypoint.sh"]

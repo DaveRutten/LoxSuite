@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const multer = require('multer');
 const backup = require('../backup');
+const { verifyCsrfToken } = require('../middleware/csrf');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
@@ -71,7 +72,11 @@ router.post('/:filename/delete', (req, res) => {
   }
 });
 
-router.post('/restore', upload.single('file'), (req, res) => {
+// verifyCsrfToken runs here, after multer, rather than as global app-wide middleware — the
+// global one (server.js) skips multipart bodies entirely since express.urlencoded/json never
+// parses them, leaving req.body empty until multer runs. Same token, just checked once the body
+// carrying it actually exists.
+router.post('/restore', upload.single('file'), verifyCsrfToken, (req, res) => {
   if (!req.file) return renderPage(res, { error: 'Choose a backup .zip file to upload first.' });
 
   try {

@@ -21,6 +21,27 @@
 
 <script src="/tables.js" defer></script>
 <script>
+  // Stamps the CSRF token (see middleware/csrf.js) onto every plain-HTML form on the page,
+  // instead of hand-adding a hidden field to each of the ~40 view files that have one. Exposed on
+  // window rather than a one-shot IIFE because the live-refresh script below (liveSwap) can
+  // replace a table's tbody — Live Messages' per-row "Map"/"Widget" forms included — with freshly
+  // fetched, unstamped markup; without re-running this after each swap those rows would 403 on
+  // the very first submit after a refresh. JSON-bodied fetch() calls elsewhere in this file are
+  // exempt on the server side (see csrf.js) and don't need this.
+  window.stampCsrfTokens = function () {
+    var token = document.querySelector('meta[name="csrf-token"]').content;
+    document.querySelectorAll('form').forEach(function (form) {
+      if (form.querySelector('input[name="_csrf"]')) return;
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = '_csrf';
+      input.value = token;
+      form.appendChild(input);
+    });
+  };
+  window.stampCsrfTokens();
+</script>
+<script>
   // A plain <meta refresh> would reload mid-interaction — e.g. closing the
   // Columns menu the moment you opened it, or losing your place in a table.
   // Refresh on the same interval instead, but postpone while a Columns menu
@@ -62,6 +83,7 @@
         if (freshBody && body) body.innerHTML = freshBody.innerHTML;
       });
 
+      window.stampCsrfTokens();
       if (window.refreshTables) window.refreshTables();
     }
 

@@ -18,6 +18,7 @@
         <p class="error"><%= error %></p>
       <% } %>
       <form method="post" action="/login">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <div class="form-grid">
           <div>
             <label for="username">Username</label>
