@@ -1,0 +1,106 @@
+<%- include('partials/head', { pageTitle: 'Mappings', active: 'mqtt-to-loxone' }) %>
+
+<%- include('partials/tabs-mappings', { active: 'mqtt-to-loxone' }) %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<% if (miniservers.length === 0) { %>
+  <p class="hint">Add a <a href="/miniservers">Miniserver</a> first.</p>
+<% } else { %>
+  <% if (canEdit('mqtt_to_loxone')) { %>
+  <details class="add-panel" <%= prefillTopic ? 'open' : '' %>>
+    <summary>Add mapping</summary>
+    <div class="add-panel-body">
+      <form method="post" action="/mappings/mqtt-to-loxone">
+        <div class="form-grid">
+          <div>
+            <label>MQTT topic</label>
+            <input type="text" name="mqtt_topic" placeholder="home/livingroom/light" value="<%= prefillTopic %>" required>
+          </div>
+          <div>
+            <label>Miniserver</label>
+            <select name="miniserver_id" id="miniserver-select" required>
+              <% miniservers.forEach(ms => { %>
+                <option value="<%= ms.id %>"><%= ms.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div>
+            <label>Transport</label>
+            <select name="transport">
+              <option value="http">HTTP (Virtual Input)</option>
+              <option value="udp">UDP (Virtual Input)</option>
+            </select>
+          </div>
+          <div>
+            <label>Virtual input name <span class="hint" style="margin:0;display:inline;">(UDP: documentation only, not sent)</span></label>
+            <input type="text" name="target" placeholder="LivingRoomLight" required>
+          </div>
+          <div>
+            <label>Value transform</label>
+            <select name="value_transform">
+              <option value="passthrough">Pass through unchanged</option>
+              <option value="bool_on_off">on/off &rarr; 1/0</option>
+              <option value="json_path">JSON path</option>
+              <option value="translation_table">Translation table (manage after adding)</option>
+            </select>
+          </div>
+          <div>
+            <label>Transform argument (e.g. JSON path "data.temp")</label>
+            <input type="text" name="transform_arg">
+          </div>
+          <div>
+            <label>Min. interval between updates (ms, 0 = off)</label>
+            <input type="number" name="min_interval_ms" value="0" min="0">
+          </div>
+          <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+        </div>
+      </form>
+    </div>
+  </details>
+  <% } %>
+<% } %>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Status</th><th>Topic</th><th>Miniserver</th><th>Transport</th><th>Target</th><th>Transform</th><th>Min. interval</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% mappings.forEach(m => { %>
+        <tr>
+          <td><span class="badge <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
+          <td><code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
+          <td><%= m.miniserver_name %></td>
+          <td><%= m.transport %></td>
+          <td><%= m.target %></td>
+          <td><%= m.value_transform %><% if (m.transform_arg) { %> (<span class="truncate" title="<%= m.transform_arg %>"><%= m.transform_arg %></span>)<% } %></td>
+          <td><%= m.min_interval_ms ? `${m.min_interval_ms} ms` : '-' %></td>
+          <td>
+            <% if (canEdit('mqtt_to_loxone')) { %>
+            <div class="row-actions">
+              <a class="inline" href="/mappings/mqtt-to-loxone/<%= m.id %>/edit"><button type="button" class="btn-edit"><%- icon('edit') %> Edit</button></a>
+              <% if (m.value_transform === 'translation_table') { %>
+                <a class="inline" href="/mappings/mqtt-to-loxone/<%= m.id %>/translations"><button type="button" class="btn-edit"><%- icon('list') %> Translations</button></a>
+              <% } %>
+              <form class="inline" method="post" action="/mappings/mqtt-to-loxone/<%= m.id %>/toggle">
+                <button type="submit" class="btn-edit"><%- icon('power') %> <%= m.enabled ? 'Disable' : 'Enable' %></button>
+              </form>
+              <form class="inline" method="post" action="/mappings/mqtt-to-loxone/<%= m.id %>/delete" data-confirm="Delete this mapping?">
+                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+              </form>
+            </div>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (mappings.length === 0) { %>
+        <tr><td colspan="8" class="empty">No mappings yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

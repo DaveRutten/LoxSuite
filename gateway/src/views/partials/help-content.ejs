@@ -1,0 +1,498 @@
+<h2>Dashboard</h2>
+
+<details class="add-panel" id="help-dashboard">
+  <summary>What am I looking at on the Dashboard?</summary>
+  <div class="add-panel-body">
+    <p>Four things, top to bottom:</p>
+    <ul>
+      <li><strong>Status cards</strong> &mdash; whether the gateway is connected to the MQTT broker, and how many
+        mappings are currently active in each direction.</li>
+      <li><strong>Panels</strong> &mdash; the same 6 panel types as <a href="/dashboards">My Dashboards</a>
+        (chart, table, current value, gauge, stat with change, threshold indicator), except this board is
+        <strong>shared</strong>: everyone who logs in sees and (depending on their Access Role's
+        <code>dashboard</code> permission) can edit the same one. Add one here, or pin a topic straight from
+        the "Widget" button on the <a href="/incoming/messages">Live Messages</a> page (which creates a
+        monitor for that topic automatically if one doesn't exist yet). Drag a panel's handle to reorder it
+        or its corner to resize it, exactly like on My Dashboards.</li>
+      <li><strong>Load</strong> &mdash; messages/sec (10s average), total messages since the gateway started, how
+        many unique topics have been seen, and how many MQTT clients are currently connected.</li>
+      <li><strong>Miniservers</strong> &mdash; the same online/offline status shown on the
+        <a href="/miniservers">Miniservers</a> page, plus the last successful call and last error per server.</li>
+    </ul>
+    <p>The page auto-refreshes every 5 seconds.</p>
+    <p><a href="/">Open Dashboard &rarr;</a></p>
+  </div>
+</details>
+
+<h2>Monitor</h2>
+
+<details class="add-panel" id="help-monitor">
+  <summary>Monitor &mdash; how do I track a value over time?</summary>
+  <div class="add-panel-body">
+    <p>Add a monitor from one of two sources:</p>
+    <ul>
+      <li><strong>MQTT topic</strong> &mdash; pick any topic the gateway has seen (or add it directly from
+        Live Traffic's "Monitor" button). Every message on that exact topic is recorded.</li>
+      <li><strong>Loxone (direct, polled)</strong> &mdash; pick a Miniserver, then a control/state from its
+        structure export (<code>LoxAPP3.json</code>) &mdash; the same file used for the Miniservers page, but
+        here it also lists ordinary controls (sensors, lights, etc.), not just Virtual Inputs. The gateway then
+        polls that value's live reading (<code>/jdev/sps/io/&lt;uuid&gt;</code>) on the interval you pick (5s to
+        5 minutes). This is polling, not a push subscription &mdash; a real-time websocket connection per
+        Miniserver would be more instant but far more complex to build and maintain, and polling is
+        indistinguishable in practice at these intervals.</li>
+    </ul>
+    <p>
+      Every reading is stored in SQLite, so it survives a gateway restart. Old readings are purged
+      automatically after the configured <strong>retention</strong> (in days, editable on the Monitor page) to
+      keep the database from growing forever.
+    </p>
+    <p>
+      Opening a monitor shows a line chart (only for monitors that have recorded at least one numeric value)
+      plus the full raw-values table, both filterable by time range. <strong>Export CSV</strong> downloads the
+      currently selected range as a plain <code>timestamp,value</code> file that opens in Excel or any
+      spreadsheet/analysis tool.
+    </p>
+    <p><a href="/monitor">Open Monitor &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-dashboards">
+  <summary>My Dashboards &mdash; how is this different from the home Dashboard?</summary>
+  <div class="add-panel-body">
+    <p>
+      Same panels, different scope. The home <strong>Dashboard</strong> (first item in the sidebar) is
+      one board <strong>shared</strong> by everyone who logs in, editable only by Access Roles with the
+      <code>dashboard</code> permission's edit checkbox. <strong>My Dashboards</strong> is
+      <strong>personal</strong> to your account &mdash; you can create any number of named dashboards,
+      always editable by you regardless of Access Role, since they're yours alone. Both are built from
+      the same <strong>panels</strong> pulling from your monitors on the <a href="/monitor">Monitor</a>
+      page.
+    </p>
+    <p>Six panel types &mdash; chart and current-value panels can hold several monitors at once for
+      comparison; the rest are single-monitor (a gauge, a delta, or a threshold badge is inherently one
+      number):</p>
+    <ul>
+      <li><strong>Chart</strong> &mdash; a line chart. Pick more than one monitor to overlay them on the
+        same chart for comparison (e.g. two rooms' temperatures).</li>
+      <li><strong>Table</strong> &mdash; the raw values for one monitor. Deliberately single-monitor:
+        comparing several independently-sampled time series in one flat table would need aligning their
+        timestamps, which a chart already does visually without that complexity.</li>
+      <li><strong>Current value</strong> &mdash; a compact tile listing the latest reading for one or more
+        monitors. Choose a <strong>stacked</strong> (one per line) or <strong>row</strong> (side by side)
+        layout.</li>
+      <li><strong>Gauge</strong> &mdash; a fill-bar meter against a min/max range you set, with an
+        optional unit label.</li>
+      <li><strong>Stat with change</strong> &mdash; the current value plus how much it's changed since
+        the start of the panel's selected time range, with an up/down arrow. Optionally color the change
+        once you tell it whether higher or lower is "better" &mdash; left neutral, it's shown without
+        color since the app can't know that on its own.</li>
+      <li><strong>Threshold indicator</strong> &mdash; a colored badge that flips between a normal and an
+        alert label (both of which you can customize) once the value crosses a limit you configure
+        (above/below, inclusive or not).</li>
+    </ul>
+    <p>
+      Drag a panel by its handle (top-left) to reorder it, and drag its bottom-right corner to resize it —
+      both width and height snap to a 12-column grid, so a size means the same thing regardless of window
+      width. Deleting a monitor from the Monitor page removes it from any panel that used it; a panel left
+      with no monitors shows a hint instead of an empty chart.
+    </p>
+    <img class="help-img" src="/images/help/panel-grid.png" alt="A row of dashboard panels, each with a drag handle top-left, an edit/delete icon top-right, and a resize handle bottom-right.">
+    <p>
+      The <strong>Add panel</strong> form's fields change based on the panel type you pick — a gauge asks
+      for a min/max range and unit, for example, while a threshold indicator asks for a comparison and
+      alert labels instead:
+    </p>
+    <img class="help-img" src="/images/help/add-panel-gauge.png" alt="The Add panel form with panel type set to Gauge, showing its minimum, maximum, and unit fields plus the monitor picklist.">
+    <p><a href="/dashboards">Open My Dashboards &rarr;</a></p>
+  </div>
+</details>
+
+<h2>Loxone</h2>
+
+<details class="add-panel" id="help-miniservers">
+  <summary>Miniservers &mdash; what do I fill in, and what is "Test now"?</summary>
+  <div class="add-panel-body">
+    <p>
+      Add one entry per physical Loxone Miniserver: a name, its host/IP, the HTTP port for Virtual
+      Inputs (switch on <strong>HTTPS</strong> if the Miniserver only serves TLS, e.g. with a
+      self-signed certificate &mdash; the gateway won't reject it for that), an optional UDP port,
+      and a webservice username/password with rights to call Virtual Inputs.
+    </p>
+    <p>
+      The gateway pings every Miniserver's HTTP endpoint once a minute in the background and shows
+      an Online/Offline/Unknown badge. <strong>Test now</strong> triggers that same check immediately
+      instead of waiting for the next cycle. Any HTTP response (even 401/404) counts as "online" &mdash;
+      only a network-level failure (timeout, connection refused, DNS) counts as offline.
+    </p>
+    <p>
+      Editing a Miniserver never shows its stored password back to you &mdash; leave the password field
+      blank to keep the existing one, or type a new one to change it.
+    </p>
+    <p>
+      <strong>External URL</strong> (optional) is a full base address &mdash; e.g. a DynDNS hostname with
+      port, or a Loxone DNS/Cloud address &mdash; reachable from outside the local network. Every HTTP call
+      this gateway makes to that Miniserver (Virtual Inputs, Monitor polling, structure lookups, Common
+      commands, the <a href="/logs">Logs</a> page, and "Test now" above) tries the local Host/IP first and
+      only falls back to this address if the local one fails at the network level, so the same Miniserver
+      stays configured for both on-site and remote use without switching anything.
+    </p>
+    <p class="hint" style="margin-bottom:0;">
+      There is no way to look up a Miniserver's Virtual Input names automatically. Virtual Inputs are
+      pure programming blocks in Loxone Config and don't appear in the Miniserver's structure export
+      (<code>LoxAPP3.json</code>) &mdash; this was tested against a real Miniserver with 365 controls and zero
+      Virtual Inputs in the export. Type the name yourself, exactly as configured in Loxone Config.
+    </p>
+    <p><a href="/miniservers">Open Miniservers &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-mqtt-to-loxone">
+  <summary>MQTT &rarr; Loxone &mdash; how does a message reach the Miniserver?</summary>
+  <div class="add-panel-body">
+    <p>
+      Each mapping subscribes to one MQTT topic (wildcards <code>+</code> and <code>#</code> are supported) and,
+      whenever a message arrives, calls a Virtual Input on the chosen Miniserver &mdash; either as an HTTP
+      request (<code>/dev/sps/io/&lt;target&gt;/&lt;value&gt;</code>) or as a UDP datagram, depending on the
+      transport you pick.
+    </p>
+    <p>Before the value is sent, one of these transforms is applied:</p>
+    <ul>
+      <li><strong>Pass through unchanged</strong> &mdash; send the raw payload as-is.</li>
+      <li><strong>on/off &rarr; 1/0</strong> &mdash; for topics that publish text.</li>
+      <li><strong>JSON path</strong> &mdash; pull a single field out of a JSON payload (e.g. a Shelly power
+        reading nested a few levels deep).</li>
+      <li><strong>Translation table</strong> &mdash; a free-form lookup table you manage per mapping (via its
+        "Translations" link) that maps arbitrary incoming values to arbitrary output values, e.g.
+        <code>False &rarr; 0</code>, <code>open &rarr; 1</code>. Use this for anything the other transforms
+        don't cover.</li>
+    </ul>
+    <p>
+      <strong>Minimum interval (ms)</strong> throttles a mapping so a fast-changing sensor can't flood the
+      Miniserver &mdash; messages arriving sooner than the interval since the last forwarded one are
+      dropped.
+    </p>
+    <p><a href="/mappings/mqtt-to-loxone">Open MQTT &rarr; Loxone &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-loxone-to-mqtt">
+  <summary>Loxone &rarr; MQTT &mdash; how do I wire this into Loxone Config?</summary>
+  <div class="add-panel-body">
+    <p>Each mapping gets a random token and publishes to one MQTT topic. Two transports:</p>
+    <ul>
+      <li><strong>HTTP</strong> &mdash; the mapping's row shows a ready-to-use callback URL
+        (<code>http://&lt;gateway-host&gt;:3000/api/loxone-in/&lt;token&gt;?value=\v</code>). Paste it into a
+        Virtual Output's HTTP command in Loxone Config; Loxone replaces <code>\v</code> with the actual
+        value on every call. This endpoint intentionally has no login &mdash; the Miniserver can't hold a
+        session, so the token itself is the secret.</li>
+      <li><strong>UDP</strong> &mdash; send <code>&lt;token&gt;=\v</code> as a Virtual UDP Output to the gateway
+        on the port shown (11884 by default, see <code>LOXONE_UDP_PORT</code>).</li>
+    </ul>
+    <p>
+      A <strong>translation table</strong> value transform is available here too, for when Loxone sends
+      something a device doesn't understand directly (e.g. Loxone sends <code>1</code>/<code>0</code>, but a
+      Shelly relay wants the text <code>on</code>/<code>off</code>).
+    </p>
+    <p>
+      <strong>Test</strong> on each row lets you publish a value straight to the topic without touching
+      Loxone at all &mdash; useful for confirming a device reacts correctly before wiring up the real Virtual
+      Output. It runs through the exact same value transform a real call would.
+    </p>
+    <p><a href="/mappings/loxone-to-mqtt">Open Loxone &rarr; MQTT &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-commands">
+  <summary>Common commands &mdash; what is this builder for?</summary>
+  <div class="add-panel-body">
+    <p>
+      A reference and topic-builder for devices with well-known MQTT command topics (currently Shelly
+      Gen1: relay, roller, and light channels). Pick a device &mdash; from every device the broker has
+      actually seen traffic for, across all known types &mdash; and its device type fills in
+      automatically; correct it manually if it guessed wrong or the device hasn't been seen yet. Then
+      pick a command and channel number, and it composes the topic for you. From there,
+      <strong>Use in mapping</strong> jumps straight to a pre-filled Loxone &rarr; MQTT mapping.
+    </p>
+    <p>
+      On <a href="/incoming/clients">Connected Clients</a>, devices that look like a Shelly show a
+      "Suggest commands" shortcut that opens this builder with the device already selected.
+    </p>
+    <p><a href="/mappings/commands">Open Common commands &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-transformations">
+  <summary>Transformations &mdash; what does this overview show?</summary>
+  <div class="add-panel-body">
+    <p>
+      Every mapping (in either direction) that uses the "Translation table" value transform, in one place,
+      with a count of how many entries each translation table has and a shortcut to manage them. Handy once
+      you have more than a couple of translation tables scattered across the two mapping pages.
+    </p>
+    <p><a href="/transformations">Open Transformations &rarr;</a></p>
+  </div>
+</details>
+
+<h2>MQTT Broker</h2>
+
+<details class="add-panel" id="help-incoming">
+  <summary>Live traffic &mdash; Live Messages vs. Connected Clients?</summary>
+  <div class="add-panel-body">
+    <p>Two sub-pages, both refreshing every 5 seconds and both in-memory only (cleared on a gateway restart):</p>
+    <ul>
+      <li><strong>Live Messages</strong> &mdash; one row per topic seen, showing its actual and previous value,
+        a message count, and a ready-to-copy <strong>Command Recognition</strong> string
+        (<code>MQTT:\i&lt;topic&gt;=\i\v</code>, the same format LoxBerry uses) for a Loxone Virtual UDP Input's
+        "Command Recognition" field. <strong>Map</strong> jumps to a pre-filled MQTT &rarr; Loxone mapping for
+        that topic, <strong>Widget</strong> pins its value on the Dashboard.</li>
+      <li><strong>Connected Clients</strong> &mdash; which MQTT clients are connected or have been, with a
+        "Suggest commands" shortcut for Shelly-like client IDs.</li>
+    </ul>
+    <p><strong>Clear list</strong> on Live Messages empties that view entirely. On Connected Clients it only
+      drops <em>disconnected</em> entries &mdash; a client that's still actually connected stays listed, since
+      it won't send a new "connected" event just because the view was cleared.</p>
+    <p><a href="/incoming/messages">Open Live traffic &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-logs">
+  <summary>Logs &mdash; real log files, not monitored values</summary>
+  <div class="add-panel-body">
+    <p>
+      Different from <a href="/monitor">Monitor</a>: this fetches and displays actual
+      <strong>log files</strong>, not a tracked value's history. Two tabs, both live (refreshing every 5
+      seconds) plus a persisted history you can page back through and export:
+    </p>
+    <ul>
+      <li><strong>MQTT broker</strong> &mdash; the raw Mosquitto broker log file, tailed the same way the
+        <a href="/incoming/clients">Connected Clients</a> page already reads it for connect/disconnect
+        events, except every line is kept here, not just the ones that indicate a client connecting or
+        disconnecting.</li>
+      <li><strong>Loxone Miniservers</strong> &mdash; each configured Miniserver's own system log
+        (<code>def.log</code>), fetched over the same HTTP connection used for everything else Loxone-related
+        (falling back to its <strong>External URL</strong> on the <a href="/miniservers">Miniservers</a> page
+        if the local address can't be reached). There's no push channel for this on the Loxone side, so the
+        gateway polls once a minute and only stores newly appended lines &mdash; if more than one Miniserver is
+        configured, a dropdown filters to just one.</li>
+    </ul>
+    <p>
+      Each line gets a <strong>Level</strong> badge (info/warning/error) &mdash; a best-effort guess
+      from the line's own wording, since neither Mosquitto nor Loxone tags lines with a real severity.
+      Treat it as a scanning aid, not a guarantee.
+    </p>
+    <p>
+      Both are persisted in SQLite and purged automatically after the configured
+      <strong>retention</strong> (in days, editable on either tab) so the database doesn't grow forever.
+      <strong>Export .log</strong> downloads everything currently retained as a plain-text file
+      (unfiltered, always the full retained history).
+    </p>
+    <p>
+      Both tabs have a filter bar above the table: <strong>From</strong>/<strong>To</strong> narrow to a
+      date/time range, <strong>Level</strong> narrows to just info, warning, or error lines, and
+      <strong>Contains</strong> does a plain substring search over the line text. Filters combine (all
+      apply at once), stay in the URL so a filtered view can be bookmarked or shared, and survive the
+      5-second live refresh. The table still shows at most 1000 lines even when filtered.
+    </p>
+    <p><a href="/logs">Open Logs &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-mqtt-users">
+  <summary>Users &mdash; how do I add a new device's MQTT account?</summary>
+  <div class="add-panel-body">
+    <p>
+      Every device that connects to the broker needs its own account (the broker rejects anonymous
+      connections). Add a username/password and a role here &mdash; no broker restart needed, changes take
+      effect immediately. This is backed by Mosquitto's <strong>dynamic-security</strong> plugin rather than
+      a classic password file, specifically so the web UI can manage accounts live.
+    </p>
+    <p>
+      Change a device's role right in the table (saves immediately), or use the pencil icon next to
+      Delete to set a new password without recreating the account.
+    </p>
+    <p>The gateway's own account (<code>gateway</code> by default) can't be edited or deleted from here
+      &mdash; changing its password or role here would desync it from the credentials configured on the
+      <a href="/settings">Settings</a> page and lock the gateway itself out of the broker.</p>
+    <p><a href="/mqtt-users">Open Users &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-mqtt-roles">
+  <summary>Roles &mdash; what's the difference between a role and a user?</summary>
+  <div class="add-panel-body">
+    <p>
+      A role is a named set of ACL rules (publish/subscribe permissions on topic patterns); a user is
+      assigned one or more roles. Out of the box there's a <code>client</code> role with full publish/subscribe
+      on every topic (<code>#</code>) &mdash; simple, since per-device topic restrictions weren't a requirement
+      here &mdash; and the built-in <code>admin</code> role Mosquitto itself uses.
+    </p>
+    <p>
+      <code>admin</code> and <code>client</code> can't be <em>deleted</em> (the gateway's bootstrap and every
+      device account depend on them), but their ACL rules can still be edited like any other role &mdash; useful
+      if you do want to lock a role down later.
+    </p>
+    <p>Each role is its own collapsible section with its own ACL table (here, <code>client</code> expanded):</p>
+    <img class="help-img" src="/images/help/mqtt-role-acl.png" alt="The MQTT Roles page with the built-in client role expanded, showing its four ACL rules all allowing the # topic wildcard.">
+    <p><a href="/mqtt-roles">Open Roles &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-settings">
+  <summary>Settings &mdash; broker connection and auto-create</summary>
+  <div class="add-panel-body">
+    <p>
+      <strong>Broker connection</strong> is what the gateway itself uses to connect to MQTT (host, port,
+      username, password, TLS). It defaults to the bundled Mosquitto container, but can point at any
+      external broker. Saving reconnects immediately. The <code>MQTT_URL</code>/<code>MQTT_USERNAME</code>/
+      <code>MQTT_PASSWORD</code> environment variables only seed this setting on the very first start.
+    </p>
+    <p>
+      <strong>Auto-create Loxone &rarr; MQTT mappings</strong> is off by default. When enabled, a call to
+      <code>/api/loxone-in/&lt;anything&gt;</code> that doesn't match an existing token is treated as a
+      literal MQTT topic and a new passthrough mapping is created for it on the spot, instead of returning
+      404. This is convenient for quickly wiring up Loxone without pre-creating every mapping by hand, but
+      it means any string reaching that endpoint becomes a real topic &mdash; leave it off unless you
+      specifically want that behavior.
+    </p>
+    <p><a href="/settings">Open Settings &rarr;</a></p>
+  </div>
+</details>
+
+<h2>Administration</h2>
+
+<details class="add-panel" id="help-profile">
+  <summary>Profile &mdash; what's here?</summary>
+  <div class="add-panel-body">
+    <p>
+      Your own account: avatar, name, email, Access Role, and how you sign in. Pocket ID (SSO)
+      accounts get their avatar/name/email from Pocket ID automatically, refreshed on every login;
+      local (username/password) accounts can set a display name and email themselves and change
+      their password here. SSO accounts have no local password to change &mdash; that's managed by
+      Pocket ID instead.
+    </p>
+    <p><a href="/profile">Open Profile &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-admin">
+  <summary>Administration &mdash; Users, Access Roles, Single Sign-On, and Backups</summary>
+  <div class="add-panel-body">
+    <p>Visible only to users whose Access Role has <strong>Administrator</strong> checked. Four tabs:</p>
+    <ul>
+      <li><strong>Users</strong> &mdash; every web UI account (not to be confused with
+        <a href="/mqtt-users">MQTT Users</a>, which is about IoT devices connecting to the broker, a
+        completely different thing). Add a local account, change anyone's Access Role, reset a local
+        user's password, or delete an account.</li>
+      <li><strong>Access Roles</strong> &mdash; named permission sets. Each role has a fixed matrix: one
+        <strong>view</strong>/<strong>edit</strong> pair per page in the app (Monitor, Miniservers, MQTT
+        Users, Settings, and so on). An <strong>Administrator</strong> role bypasses the matrix entirely
+        and always has full access, including to this page &mdash; that flag is separate from the matrix
+        specifically so a role can never accidentally grant itself more power through it. Hiding a nav
+        item or button a role can't use is a convenience; the actual enforcement happens on the server
+        for every request, matrix or not.</li>
+      <li><strong>Single Sign-On</strong> &mdash; connect a self-hosted Pocket ID instance so people can log
+        in with it alongside the existing username/password login (SSO doesn't replace it). The first
+        time someone signs in via Pocket ID, an account is created for them automatically with whatever
+        Access Role you set as the default here &mdash; pick something limited unless you want every new
+        SSO user starting out as an administrator. When creating the OIDC client on the Pocket ID side,
+        the page shows the exact <strong>Callback URL</strong> to register
+        (<code>&lt;gateway-host&gt;/auth/sso/callback</code>); if you also want LoxSuite to show up as a
+        launchable app on the Pocket ID home screen, set its <strong>Client Launch URL</strong> &mdash;
+        labeled <strong>User URL</strong> in some Pocket ID versions &mdash; to the gateway's own address
+        (<code>http://&lt;gateway-host&gt;:3000/</code>).</li>
+      <li><strong>Backups</strong> &mdash; back up the gateway's own database, optionally together with the
+        MQTT broker's dynamic-security file (users/roles/ACLs), into one downloadable <code>.zip</code>.
+        Runs on a cron schedule you set, on demand via <strong>Backup now</strong>, or both. See below.</li>
+    </ul>
+    <p class="hint" style="margin-bottom:0;">
+      The gateway always keeps at least one administrator: deleting, demoting, or reassigning the last
+      remaining admin account is blocked with an error instead of silently locking everyone out.
+    </p>
+    <p><a href="/admin/users">Open Administration &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-admin-backup">
+  <summary>Backups &mdash; what exactly gets backed up, and how does restore work?</summary>
+  <div class="add-panel-body">
+    <p>Each backup is one <code>.zip</code> containing:</p>
+    <ul>
+      <li><strong>gateway.db</strong> &mdash; always included. Users, Access Roles, Miniservers, both
+        mapping directions, Monitor history, Dashboards/panels, and Settings: everything this app itself
+        manages. Taken as a consistent online snapshot (SQLite's own backup API), so it's safe to run
+        while the gateway keeps handling traffic.</li>
+      <li><strong>dynamic-security.json</strong> &mdash; optional (a checkbox in the schedule settings).
+        Mosquitto's own file for MQTT Users/Roles/ACLs. Only available if this container can see
+        it (the <code>./mosquitto/config:/mosquitto/config</code> volume in <code>docker-compose.yml</code>);
+        the page tells you if it can't.</li>
+    </ul>
+    <p>
+      <strong>Schedule</strong> uses a standard 5-field cron expression (e.g. <code>0 3 * * *</code> for
+      every day at 03:00). <strong>Keep last</strong> automatically deletes older backups beyond that
+      count, so this can run indefinitely without slowly filling the disk.
+    </p>
+    <p>
+      <strong>Restore never applies immediately</strong> &mdash; on upload, the enclosed database is
+      validated (opened and integrity-checked) before anything happens. If it's a MQTT config restore too,
+      that file is written to disk right away, but Mosquitto only reads it at its own startup and otherwise
+      trusts its own in-memory state, so it has no effect until Mosquitto restarts. The gateway's own
+      database similarly can't be swapped out from under the connection it's already using while running.
+      Both halves take effect only after you restart the container &mdash; <code>docker compose restart
+      loxsuite</code> restarts Mosquitto and the gateway together, since they run inside the same
+      container.
+    </p>
+    <p><a href="/admin/backup">Open Backups &rarr;</a></p>
+  </div>
+</details>
+
+<h2>Other things worth knowing</h2>
+
+<details class="add-panel">
+  <summary>Can I customize tables &mdash; column order, hiding columns?</summary>
+  <div class="add-panel-body">
+    <p>
+      Yes. Drag a column header to reorder it, and use the <strong>Columns</strong> button above a table to
+      show/hide columns. This is remembered per logged-in user (stored server-side, not in the browser), so
+      it follows you across devices and browsers.
+    </p>
+    <img class="help-img" src="/images/help/columns-menu.png" alt="The Columns button open above a table, showing a checklist to show or hide each column.">
+  </div>
+</details>
+
+<details class="add-panel">
+  <summary>What does "Remember me" do on the login page?</summary>
+  <div class="add-panel-body">
+    <p>
+      Without it, your session ends when you close the browser. With it, the login is kept for 30 days.
+      Sessions are stored in the same SQLite database as everything else, so a "remembered" login also
+      survives a gateway restart or redeploy &mdash; it isn't just a longer-lived cookie on top of an
+      in-memory session.
+    </p>
+  </div>
+</details>
+
+<details class="add-panel">
+  <summary>Light/dark theme?</summary>
+  <div class="add-panel-body">
+    <p>Use the theme toggle button in the sidebar. Your choice is remembered in the browser (not per-user on
+      the server), and the page applies it before first paint so there's no flash of the wrong theme.</p>
+  </div>
+</details>
+
+<details class="add-panel">
+  <summary>Known limitations</summary>
+  <div class="add-panel-body">
+    <ul>
+      <li>No autocomplete for Virtual Input names &mdash; see the Miniservers answer above for why.</li>
+      <li>MQTT device accounts all share one <code>client</code> role with access to every topic; there's no
+        per-device topic restriction out of the box (you can build one yourself under
+        <a href="/mqtt-roles">Roles</a> if you need it).</li>
+      <li>Device-specific value transforms beyond a plain translation table (e.g. LoxBerry's RGBW colour
+        conversion) aren't built &mdash; the translation table covers most simple on/off- and enum-style
+        cases.</li>
+      <li>Loxone-direct monitors (see the Monitor answer above) are polling-based, not a websocket push
+        subscription &mdash; readings only land on the configured interval, not the instant Loxone's own value
+        changes.</li>
+    </ul>
+  </div>
+</details>

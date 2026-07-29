@@ -1,0 +1,4 @@
+# Force LF regardless of platform autocrlf settings — a CRLF-converted docker-entrypoint.sh
+# breaks under /bin/sh inside the Linux container ("$'\r': command not found").
+* text=auto eol=lf
+*.sh text eol=lf

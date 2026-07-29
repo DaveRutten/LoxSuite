@@ -1,0 +1,15 @@
+.env
+data/
+node_modules/
+gateway/node_modules/
+
+# Mosquitto's own runtime state — password hashes and live ACL/role data, not source. The base
+# mosquitto.conf stays tracked; only what the broker itself writes at runtime is excluded here.
+mosquitto/config/passwd
+mosquitto/config/dynamic-security.json
+
+.claude/
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db

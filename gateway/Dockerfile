@@ -1,0 +1,56 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+RUN apk add --no-cache python3 make g++
+COPY package.json ./
+RUN npm install --omit=dev
+
+FROM eclipse-mosquitto:2 AS mosquitto
+
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Mosquitto runs inside this same container, so the whole stack is a single container from the
+# outside — docker-entrypoint.sh starts and supervises both processes. Vendored directly from the
+# eclipse-mosquitto image (same Alpine 3.23 base as node:20-alpine, so musl/openssl/etc. are
+# ABI-compatible) rather than installed from Alpine's own repo: Alpine's own mosquitto package
+# (2.0.22) cannot read this project's actual dynamic-security.json at all — reproduced against a
+# copy of the real file and confirmed as a genuine cross-build incompatibility (not a permissions
+# or content issue) before reaching for this. The exact binary/libs already proven against that
+# file avoid the incompatibility entirely.
+COPY --from=mosquitto /usr/sbin/mosquitto /usr/sbin/mosquitto
+COPY --from=mosquitto /usr/bin/mosquitto_ctrl /usr/bin/mosquitto_pub /usr/bin/mosquitto_sub /usr/bin/
+COPY --from=mosquitto /usr/lib/libmosquitto.so.1 /usr/lib/mosquitto_dynamic_security.so /usr/lib/
+COPY --from=mosquitto \
+  /usr/lib/libcjson.so.1 \
+  /usr/lib/libmicrohttpd.so.12 \
+  /usr/lib/libssl.so.3 \
+  /usr/lib/libcrypto.so.3 \
+  /usr/lib/libgnutls.so.30 \
+  /usr/lib/libz.so.1 \
+  /usr/lib/libzstd.so.1 \
+  /usr/lib/libbrotlienc.so.1 \
+  /usr/lib/libbrotlidec.so.1 \
+  /usr/lib/libbrotlicommon.so.1 \
+  /usr/lib/libp11-kit.so.0 \
+  /usr/lib/libidn2.so.0 \
+  /usr/lib/libunistring.so.5 \
+  /usr/lib/libtasn1.so.6 \
+  /usr/lib/libhogweed.so.6 \
+  /usr/lib/libnettle.so.8 \
+  /usr/lib/libgmp.so.10 \
+  /usr/lib/libffi.so.8 \
+  /usr/lib/
+RUN chmod +x /usr/sbin/mosquitto /usr/bin/mosquitto_ctrl /usr/bin/mosquitto_pub /usr/bin/mosquitto_sub \
+  && addgroup -S mosquitto && adduser -S -D -H -G mosquitto mosquitto
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY package.json ./
+COPY src ./src
+COPY public ./public
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
+VOLUME ["/data"]
+EXPOSE 3000 1883
+ENTRYPOINT ["./docker-entrypoint.sh"]

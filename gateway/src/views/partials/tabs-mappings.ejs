@@ -1,0 +1,10 @@
+<%
+  // Shared by all four "Loxone mappings" pages (see the sidebar's consolidated "Mappings" link in
+  // partials/head.ejs) — locals: active. canView comes from res.locals, always in scope.
+%>
+<div class="tabs">
+  <% if (canView('mqtt_to_loxone')) { %><a href="/mappings/mqtt-to-loxone" class="<%= active === 'mqtt-to-loxone' ? 'active' : '' %>">MQTT &rarr; Loxone</a><% } %>
+  <% if (canView('loxone_to_mqtt')) { %><a href="/mappings/loxone-to-mqtt" class="<%= active === 'loxone-to-mqtt' ? 'active' : '' %>">Loxone &rarr; MQTT</a><% } %>
+  <% if (canView('commands')) { %><a href="/mappings/commands" class="<%= active === 'commands' ? 'active' : '' %>">Common commands</a><% } %>
+  <% if (canView('transformations')) { %><a href="/transformations" class="<%= active === 'transformations' ? 'active' : '' %>">Transformations</a><% } %>
+</div>

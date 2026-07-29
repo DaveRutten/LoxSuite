@@ -1,0 +1,179 @@
+<%- include('partials/head', { pageTitle: 'Mappings', active: 'commands' }) %>
+
+<%- include('partials/tabs-mappings', { active: 'commands' }) %>
+
+<p class="hint">
+  Pick a device &mdash; from every device the broker has actually seen traffic for, across all known
+  types &mdash; and the device type is filled in automatically; correct it manually if it guessed wrong
+  or the device hasn't been seen yet. Then pick a command to build a topic and send it straight to a
+  new Loxone &rarr; MQTT mapping.
+</p>
+
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="form-grid">
+    <div>
+      <label for="device-input">Device</label>
+      <input type="text" id="device-input" list="known-devices" placeholder="shellyplug-s-02086E" value="<%= presetDevice %>">
+      <datalist id="known-devices">
+        <% allDevices.forEach(d => { %><option value="<%= d %>"></option><% }) %>
+      </datalist>
+    </div>
+    <div>
+      <label for="family-select">Device type</label>
+      <select id="family-select">
+        <% catalog.forEach(f => { %>
+          <option value="<%= f.key %>" <%= f.key === presetFamily ? 'selected' : '' %>><%= f.label %></option>
+        <% }) %>
+      </select>
+      <span class="hint" id="auto-detected-hint" style="display:none;">auto-detected from the device</span>
+    </div>
+    <div>
+      <label for="command-select">Command</label>
+      <select id="command-select"></select>
+    </div>
+    <div>
+      <label for="channel-input">Channel</label>
+      <input type="number" id="channel-input" min="0" value="0" style="max-width:6rem;">
+    </div>
+    <div>
+      <label for="action-select">Payload value</label>
+      <select id="action-select"></select>
+    </div>
+  </div>
+
+  <p style="margin:1rem 0 0.5rem;">Topic: <code id="topic-preview">&mdash;</code></p>
+  <div class="row-actions">
+    <a class="inline" id="use-in-mapping-link" href="#">
+      <button type="button" class="primary"><%- icon('link') %> Use in mapping</button>
+    </a>
+    <button type="button" id="copy-topic-btn" class="btn-soft"><%- icon('copy') %> <span class="btn-label">Copy topic</span></button>
+  </div>
+</div>
+
+<% catalog.forEach(f => { %>
+  <h2><%= f.label %></h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Topic pattern</th><th>Payload values</th></tr>
+      </thead>
+      <tbody>
+        <% f.commands.forEach(c => { %>
+          <tr>
+            <td><%= c.label %></td>
+            <td><code><%= c.topicTemplate %></code></td>
+            <td><% c.actions.forEach((a, i) => { %><code><%= a %></code><%= i < c.actions.length - 1 ? ' / ' : '' %><% }) %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+<% }) %>
+
+<p class="hint">
+  <code>{device}</code> is the device's own ID as it appears in its topics, <code>{channel}</code> is the
+  channel number (0-based). If Loxone sends a numeric 0/1 instead of the text values above, add a
+  <strong>translation table</strong> to the mapping after creating it (e.g. 1 &rarr; on, 0 &rarr; off).
+</p>
+
+<script>
+  (function () {
+    var catalog = <%- JSON.stringify(catalog) %>;
+    var deviceFamily = <%- JSON.stringify(deviceFamily) %>;
+    var presetDevice = <%- JSON.stringify(presetDevice) %>;
+
+    var deviceInput = document.getElementById('device-input');
+    var familySelect = document.getElementById('family-select');
+    var autoDetectedHint = document.getElementById('auto-detected-hint');
+    var commandSelect = document.getElementById('command-select');
+    var channelInput = document.getElementById('channel-input');
+    var actionSelect = document.getElementById('action-select');
+    var topicPreview = document.getElementById('topic-preview');
+    var useInMappingLink = document.getElementById('use-in-mapping-link');
+    var copyBtn = document.getElementById('copy-topic-btn');
+
+    function currentFamily() {
+      return catalog.find(function (f) { return f.key === familySelect.value; }) || catalog[0];
+    }
+
+    function currentCommand() {
+      var family = currentFamily();
+      return family.commands.find(function (c) { return c.key === commandSelect.value; }) || family.commands[0];
+    }
+
+    function fillCommands() {
+      var family = currentFamily();
+      commandSelect.innerHTML = '';
+      family.commands.forEach(function (c) {
+        var opt = document.createElement('option');
+        opt.value = c.key;
+        opt.textContent = c.label;
+        commandSelect.appendChild(opt);
+      });
+    }
+
+    function fillActions() {
+      var command = currentCommand();
+      actionSelect.innerHTML = '';
+      command.actions.forEach(function (a) {
+        var opt = document.createElement('option');
+        opt.value = a;
+        opt.textContent = a;
+        actionSelect.appendChild(opt);
+      });
+    }
+
+    // The device is the primary choice; the device type follows automatically
+    // whenever we've actually seen this device's traffic, since we know its
+    // type from that. Left untouched (and still manually overridable) for
+    // devices we haven't seen yet.
+    function autoDetectFamily() {
+      var known = deviceFamily[deviceInput.value.trim()];
+      autoDetectedHint.style.display = known ? 'inline' : 'none';
+      if (known && familySelect.value !== known) {
+        familySelect.value = known;
+        return true;
+      }
+      return false;
+    }
+
+    function currentTopic() {
+      var command = currentCommand();
+      var device = deviceInput.value.trim();
+      var channel = channelInput.value || '0';
+      return command.topicTemplate.replace('{device}', device || '<device>').replace('{channel}', channel);
+    }
+
+    function update() {
+      var topic = currentTopic();
+      topicPreview.textContent = topic;
+      useInMappingLink.href = '/mappings/loxone-to-mqtt?topic=' + encodeURIComponent(topic);
+    }
+
+    deviceInput.addEventListener('input', function () {
+      if (autoDetectFamily()) { fillCommands(); fillActions(); }
+      update();
+    });
+    familySelect.addEventListener('change', function () { fillCommands(); fillActions(); update(); });
+    commandSelect.addEventListener('change', function () { fillActions(); update(); });
+    channelInput.addEventListener('input', update);
+    actionSelect.addEventListener('change', update);
+
+    copyBtn.addEventListener('click', function () {
+      navigator.clipboard.writeText(topicPreview.textContent).then(function () {
+        var label = copyBtn.querySelector('.btn-label');
+        var original = label.textContent;
+        label.textContent = 'Copied!';
+        setTimeout(function () { label.textContent = original; }, 1500);
+      });
+    });
+
+    if (presetDevice) deviceInput.value = presetDevice;
+    autoDetectFamily();
+    fillCommands();
+    fillActions();
+    update();
+  })();
+</script>
+
+<%- include('partials/foot') %>

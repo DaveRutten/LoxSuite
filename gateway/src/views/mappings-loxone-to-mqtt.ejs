@@ -1,0 +1,172 @@
+<%- include('partials/head', { pageTitle: 'Mappings', active: 'loxone-to-mqtt' }) %>
+
+<%- include('partials/tabs-mappings', { active: 'loxone-to-mqtt' }) %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<p class="hint">
+  <strong>HTTP</strong>: paste the callback URL into the Virtual Output HTTP command in Loxone Config.<br>
+  <strong>UDP</strong>: send <code>&lt;token&gt;=\v</code> to the gateway on the listed UDP port from a Virtual UDP Output.
+  Loxone replaces <code>\v</code> with the actual value on every call.<br>
+  <strong>Test</strong>: publish a value on a mapping's row to check the device reacts, without needing Loxone at all
+  &mdash; any value transform (e.g. a translation table) is applied exactly as it would be for a real call.
+</p>
+
+<% if (canEdit('loxone_to_mqtt')) { %>
+<details class="add-panel" <%= prefillTopic ? 'open' : '' %>>
+  <summary>Add mapping</summary>
+  <div class="add-panel-body">
+    <form method="post" action="/mappings/loxone-to-mqtt">
+      <div class="form-grid">
+        <div>
+          <label>MQTT topic</label>
+          <input type="text" name="mqtt_topic" id="mqtt-topic-input" value="<%= prefillTopic %>" placeholder="home/livingroom/temperature" required>
+          <span class="hint" style="margin:0.3rem 0 0;">Not sure about the topic for a Shelly or similar device? Use the <a href="/mappings/commands">Common commands</a> builder.</span>
+        </div>
+        <div>
+          <label>Miniserver (informational)</label>
+          <select name="miniserver_id">
+            <option value="">-</option>
+            <% miniservers.forEach(ms => { %>
+              <option value="<%= ms.id %>"><%= ms.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label>Transport</label>
+          <select name="transport">
+            <option value="http">HTTP (Virtual Output)</option>
+            <option value="udp">UDP (Virtual Output)</option>
+          </select>
+        </div>
+        <div>
+          <label>QoS</label>
+          <select name="qos">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+          </select>
+        </div>
+        <div>
+          <label>Retain</label>
+          <select name="retain">
+            <option value="">No</option>
+            <option value="1">Yes</option>
+          </select>
+        </div>
+        <div>
+          <label>Value transform</label>
+          <select name="value_transform">
+            <option value="passthrough">Pass through unchanged</option>
+            <option value="translation_table">Translation table (manage after adding)</option>
+          </select>
+        </div>
+        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+      </div>
+    </form>
+  </div>
+</details>
+<% } %>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Status</th><th>MQTT topic</th><th>Miniserver</th><th>Transport</th><th>Transform</th><th>QoS</th><th>Retain</th><th>Connection info</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% mappings.forEach(m => { %>
+        <tr>
+          <td><span class="badge <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
+          <td><code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
+          <td><%= m.miniserver_name || '-' %></td>
+          <td><%= m.transport %></td>
+          <td><%= m.value_transform %></td>
+          <td><%= m.qos %></td>
+          <td><%= m.retain ? 'yes' : 'no' %></td>
+          <td>
+            <% if (m.transport === 'udp') { %>
+              UDP port <code><%= m.udpPort %></code>, message <code class="truncate" title="<%= m.udpMessage %>"><%= m.udpMessage %></code>
+            <% } else { %>
+              <code class="truncate" title="<%= m.callbackUrl %>"><%= m.callbackUrl %></code>
+            <% } %>
+          </td>
+          <td>
+            <% if (canEdit('loxone_to_mqtt')) { %>
+            <div class="row-actions">
+              <a class="inline" href="/mappings/loxone-to-mqtt/<%= m.id %>/edit"><button type="button" class="btn-edit"><%- icon('edit') %> Edit</button></a>
+              <% if (m.value_transform === 'translation_table') { %>
+                <a class="inline" href="/mappings/loxone-to-mqtt/<%= m.id %>/translations"><button type="button" class="btn-edit"><%- icon('list') %> Translations</button></a>
+              <% } %>
+              <form class="inline" method="post" action="/mappings/loxone-to-mqtt/<%= m.id %>/toggle">
+                <button type="submit" class="btn-edit"><%- icon('power') %> <%= m.enabled ? 'Disable' : 'Enable' %></button>
+              </form>
+              <form class="inline" method="post" action="/mappings/loxone-to-mqtt/<%= m.id %>/delete" data-confirm="Delete this mapping?">
+                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+              </form>
+              <button type="button" class="btn-test" data-toggle-row="test-row-<%= m.id %>"><%- icon('power') %> Test</button>
+            </div>
+            <% } %>
+          </td>
+        </tr>
+        <% if (canEdit('loxone_to_mqtt')) { %>
+        <tr class="expand-row" id="test-row-<%= m.id %>">
+          <td colspan="9">
+            <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">Value to send:</label>
+              <input type="text" class="test-value-input" placeholder="e.g. on" style="max-width:12rem;">
+              <button type="button" class="test-send-btn btn-test" data-mapping-id="<%= m.id %>"><%- icon('link') %> Send</button>
+              <span class="hint test-result" style="margin:0;"></span>
+            </div>
+          </td>
+        </tr>
+        <% } %>
+      <% }) %>
+      <% if (mappings.length === 0) { %>
+        <tr><td colspan="9" class="empty">No mappings yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  (function () {
+    document.querySelectorAll('.test-send-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var wrap = btn.closest('tr');
+        var input = wrap.querySelector('.test-value-input');
+        var result = wrap.querySelector('.test-result');
+        var value = input.value.trim();
+        if (!value) {
+          result.textContent = 'Enter a value first.';
+          result.style.color = 'var(--danger)';
+          return;
+        }
+        result.textContent = 'Sending...';
+        result.style.color = '';
+        fetch('/mappings/loxone-to-mqtt/' + btn.dataset.mappingId + '/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: value }),
+        })
+          .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+          .then(function (res) {
+            if (res.ok && res.data.ok) {
+              result.textContent = 'Published "' + res.data.sentValue + '" to ' + res.data.topic + ' (via ' + res.data.via + ')';
+              result.style.color = 'var(--accent)';
+            } else {
+              result.textContent = res.data.error || 'Failed to send.';
+              result.style.color = 'var(--danger)';
+            }
+          })
+          .catch(function () {
+            result.textContent = 'Failed to send.';
+            result.style.color = 'var(--danger)';
+          });
+      });
+    });
+  })();
+</script>
+
+<%- include('partials/foot') %>

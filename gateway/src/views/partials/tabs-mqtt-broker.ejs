@@ -1,0 +1,9 @@
+<%
+  // Shared by the three "MQTT broker" admin pages (see the sidebar's consolidated "Broker" link in
+  // partials/head.ejs) — locals: active. canView comes from res.locals, always in scope.
+%>
+<div class="tabs">
+  <% if (canView('mqtt_users')) { %><a href="/mqtt-users" class="<%= active === 'mqtt-users' ? 'active' : '' %>">Users</a><% } %>
+  <% if (canView('mqtt_roles')) { %><a href="/mqtt-roles" class="<%= active === 'mqtt-roles' ? 'active' : '' %>">Roles</a><% } %>
+  <% if (canView('settings')) { %><a href="/settings" class="<%= active === 'settings' ? 'active' : '' %>">Settings</a><% } %>
+</div>

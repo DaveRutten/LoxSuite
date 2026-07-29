@@ -1,0 +1,27 @@
+<%- include('partials/head', { pageTitle: 'Help', active: 'help' }) %>
+
+<p class="hint">
+  A quick tour of everything this gateway can do, organized the same way as the sidebar. Click a
+  question to expand it, or click <strong>Help</strong> in any page's header (or the sidebar) for
+  the same content in a panel over whatever you're doing, no need to leave the page.
+</p>
+
+<%- include('partials/help-content') %>
+
+<script>
+  // Arriving via a direct link (e.g. /help#help-miniservers): open that section,
+  // scroll to it, and briefly highlight it so the jump is obvious rather than
+  // landing on an anonymous FAQ list. The in-page Help drawer (see partials/foot.ejs)
+  // handles the equivalent behavior for every other page.
+  (function () {
+    if (!location.hash) return;
+    var target = document.querySelector(location.hash);
+    if (!target || target.tagName !== 'DETAILS') return;
+    target.open = true;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    target.classList.add('help-highlight');
+    setTimeout(function () { target.classList.remove('help-highlight'); }, 2200);
+  })();
+</script>
+
+<%- include('partials/foot') %>

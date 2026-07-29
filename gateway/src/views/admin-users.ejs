@@ -1,0 +1,85 @@
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+
+<div class="tabs">
+  <a class="active" href="/admin/users">Users</a>
+  <a href="/admin/roles">Access Roles</a>
+  <a href="/admin/sso">Single Sign-On</a>
+  <a href="/admin/backup">Backups</a>
+</div>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<p class="hint">
+  Web UI accounts and their Access Role. This is separate from <a href="/mqtt-users">MQTT Users</a>,
+  which governs which IoT devices can connect to the broker, not who can use this web interface.
+</p>
+
+<details class="add-panel">
+  <summary>Add local user</summary>
+  <div class="add-panel-body">
+    <form method="post" action="/admin/users">
+      <div class="form-grid">
+        <div><label>Username</label><input type="text" name="username" required></div>
+        <div><label>Password</label><input type="password" name="password" required minlength="8"></div>
+        <div>
+          <label>Access Role</label>
+          <select name="role_id">
+            <% roles.forEach(r => { %><option value="<%= r.id %>"><%= r.name %></option><% }) %>
+          </select>
+        </div>
+        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+      </div>
+    </form>
+  </div>
+</details>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Username</th><th>Signs in via</th><th>Last login</th><th>Access Role</th><th>Actions</th></tr></thead>
+    <tbody>
+      <% users.forEach(u => { %>
+        <tr>
+          <td><%= u.username %></td>
+          <td><%= u.auth_provider === 'local' ? 'Password' : 'Pocket ID (SSO)' %></td>
+          <td><%= u.last_login_at ? new Date(u.last_login_at).toLocaleString('en-GB') : '-' %></td>
+          <td>
+            <form class="inline" method="post" action="/admin/users/<%= u.id %>/role" style="display:flex; gap:0.4rem; align-items:center;">
+              <select name="role_id">
+                <% roles.forEach(r => { %><option value="<%= r.id %>" <%= r.id === u.role_id ? 'selected' : '' %>><%= r.name %></option><% }) %>
+              </select>
+              <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+            </form>
+          </td>
+          <td>
+            <div class="row-actions">
+              <% if (u.auth_provider === 'local') { %>
+                <button type="button" class="btn-edit" data-toggle-row="admin-reset-pw-<%= u.id %>"><%- icon('edit') %> Reset password</button>
+              <% } %>
+              <form class="inline" method="post" action="/admin/users/<%= u.id %>/delete" data-confirm="Delete this user?">
+                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        <% if (u.auth_provider === 'local') { %>
+        <tr class="expand-row" id="admin-reset-pw-<%= u.id %>">
+          <td colspan="5">
+            <form method="post" action="/admin/users/<%= u.id %>/reset-password" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">New password:</label>
+              <input type="password" name="password" required minlength="8" style="max-width:14rem;">
+              <button type="submit" class="btn-edit"><%- icon('edit') %> Set password</button>
+            </form>
+          </td>
+        </tr>
+        <% } %>
+      <% }) %>
+      <% if (users.length === 0) { %>
+        <tr><td colspan="5" class="empty">No users found.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

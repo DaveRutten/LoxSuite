@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log in · LoxSuite</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="login-page">
+  <div class="login-box">
+    <div class="brand">
+      <span class="brand-icon"><%- icon('logo', { size: 18 }) %></span>
+      <span>LoxSuite</span>
+    </div>
+    <div class="card">
+      <% if (error) { %>
+        <p class="error"><%= error %></p>
+      <% } %>
+      <form method="post" action="/login">
+        <div class="form-grid">
+          <div>
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required autofocus>
+          </div>
+          <div>
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required>
+          </div>
+          <div>
+            <label style="display:flex; align-items:center; gap:0.5rem; font-weight:400;">
+              <input type="checkbox" name="remember" value="1" style="width:auto;">
+              Remember me for 30 days
+            </label>
+          </div>
+          <button type="submit" class="primary">Log in</button>
+        </div>
+      </form>
+      <% if (ssoEnabled) { %>
+        <div style="display:flex; align-items:center; gap:0.75rem; margin:1.1rem 0;">
+          <div style="flex:1; height:1px; background:var(--border);"></div>
+          <span class="hint" style="margin:0;">or</span>
+          <div style="flex:1; height:1px; background:var(--border);"></div>
+        </div>
+        <a href="/login/sso"><button type="button" class="btn-soft" style="width:100%; display:flex; justify-content:center;">Log in with <%= ssoButtonLabel %></button></a>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

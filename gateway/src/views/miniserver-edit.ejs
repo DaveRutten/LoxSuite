@@ -1,0 +1,45 @@
+<%- include('partials/head', { pageTitle: 'Edit Miniserver', active: 'miniservers' }) %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<% if (canEdit('miniservers')) { %>
+<div class="card">
+  <form method="post" action="/miniservers/<%= miniserver.id %>/update">
+    <div class="form-grid">
+      <div><label>Name</label><input type="text" name="name" value="<%= miniserver.name %>" required></div>
+      <div><label>Host / IP</label><input type="text" name="host" value="<%= miniserver.host %>" required></div>
+      <div><label>HTTP port</label><input type="number" name="http_port" value="<%= miniserver.http_port %>" required></div>
+      <div>
+        <label>HTTPS</label>
+        <select name="use_https">
+          <option value="" <%= !miniserver.use_https ? 'selected' : '' %>>No</option>
+          <option value="1" <%= miniserver.use_https ? 'selected' : '' %>>Yes (self-signed certificate allowed)</option>
+        </select>
+      </div>
+      <div><label>UDP port (optional)</label><input type="number" name="udp_port" value="<%= miniserver.udp_port || '' %>"></div>
+      <div><label>Username</label><input type="text" name="username" value="<%= miniserver.username %>" required></div>
+      <div>
+        <label>Password</label>
+        <input type="password" name="password" placeholder="Leave blank to keep the current password">
+      </div>
+      <div>
+        <label>External URL (optional)</label>
+        <input type="text" name="external_url" value="<%= miniserver.external_url || '' %>" placeholder="https://myhome.dyndns.org:8080">
+      </div>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+    </div>
+  </form>
+  <p class="hint">
+    <strong>External URL</strong> is tried automatically whenever the local Host/IP can't be
+    reached, so this Miniserver stays usable both at home and remotely.
+  </p>
+</div>
+<% } else { %>
+  <p class="hint">Your Access Role doesn't have permission to edit Miniservers.</p>
+<% } %>
+
+<p><a href="/miniservers">&larr; Back to Miniservers</a></p>
+
+<%- include('partials/foot') %>

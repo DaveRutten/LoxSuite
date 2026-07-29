@@ -1,0 +1,93 @@
+<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-loxone', refresh: 5, liveSwap: true }) %>
+
+<div class="tabs">
+  <a href="/logs/mqtt">MQTT broker</a>
+  <a class="active" href="/logs/loxone">Loxone Miniservers</a>
+</div>
+
+<p class="hint">
+  Real log lines fetched from each Miniserver's own <code>def.log</code>, newest first, refreshing
+  every 5 seconds. The gateway polls each Miniserver every minute (there's no push channel for this on
+  the Loxone side) and persists only newly appended lines. Kept for
+  <strong><%= retentionDays %></strong> days &mdash; change that below.
+  <strong>Level</strong> is a best-effort guess from each line's wording, not a guarantee.
+</p>
+
+<% if (canEdit('logs')) { %>
+<form method="post" action="/logs/settings" class="form-grid" style="max-width:20rem; margin-bottom:1rem;">
+  <div>
+    <label>Retention (days)</label>
+    <input type="number" name="log_retention_days" min="1" value="<%= retentionDays %>">
+  </div>
+  <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+</form>
+<% } %>
+
+<form method="get" action="/logs/loxone" class="form-grid" style="margin-bottom:1rem; align-items:end;">
+  <% if (miniservers.length > 1) { %>
+  <div>
+    <label>Miniserver</label>
+    <select name="miniserver_id">
+      <option value="">All Miniservers</option>
+      <% miniservers.forEach(ms => { %>
+        <option value="<%= ms.id %>" <%= miniserverId === ms.id ? 'selected' : '' %>><%= ms.name %></option>
+      <% }) %>
+    </select>
+  </div>
+  <% } %>
+  <div>
+    <label>From</label>
+    <input type="datetime-local" name="from" value="<%= query.from || '' %>">
+  </div>
+  <div>
+    <label>To</label>
+    <input type="datetime-local" name="to" value="<%= query.to || '' %>">
+  </div>
+  <div>
+    <label>Level</label>
+    <select name="level">
+      <option value="" <%= !query.level ? 'selected' : '' %>>All</option>
+      <option value="error" <%= query.level === 'error' ? 'selected' : '' %>>Error</option>
+      <option value="warning" <%= query.level === 'warning' ? 'selected' : '' %>>Warning</option>
+      <option value="info" <%= query.level === 'info' ? 'selected' : '' %>>Info</option>
+    </select>
+  </div>
+  <div>
+    <label>Contains</label>
+    <input type="text" name="q" value="<%= query.q || '' %>" placeholder="Search log text">
+  </div>
+  <div style="display:flex; gap:0.5rem;">
+    <button type="submit" class="btn-soft"><%- icon('filter') %> Apply</button>
+    <a href="/logs/loxone"><button type="button" class="btn-soft">Clear</button></a>
+  </div>
+</form>
+
+<div style="margin-bottom:1.25rem;">
+  <a href="/logs/loxone/export.txt<%= miniserverId ? '?miniserver_id=' + miniserverId : '' %>">
+    <button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button>
+  </a>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Time</th><% if (miniservers.length > 1) { %><th>Miniserver</th><% } %><th>Level</th><th>Line</th></tr>
+    </thead>
+    <tbody>
+      <% rows.forEach(r => { %>
+        <% const levelBadge = r.level === 'error' ? 'badge-off' : r.level === 'warning' ? 'badge-warning' : 'badge-neutral'; %>
+        <tr>
+          <td><%= new Date(r.recordedAt).toLocaleString('en-GB') %></td>
+          <% if (miniservers.length > 1) { %><td><%= r.miniserverName || '-' %></td><% } %>
+          <td><span class="badge <%= levelBadge %>"><%= r.level %></span></td>
+          <td class="log-line <%= r.level !== 'info' ? 'log-line-' + r.level : '' %>"><%= r.line %></td>
+        </tr>
+      <% }) %>
+      <% if (rows.length === 0) { %>
+        <tr><td colspan="<%= miniservers.length > 1 ? 4 : 3 %>" class="empty">No log lines recorded yet &mdash; make sure a Miniserver is configured and reachable.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

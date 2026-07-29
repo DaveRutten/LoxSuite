@@ -1,0 +1,254 @@
+    </main>
+  </div>
+</div>
+
+<%
+  // Always rendered (even on /help itself, harmlessly redundant there — the topbar-help trigger
+  // never appears on that page anyway since it's not in head.ejs's helpAnchors map) so every page
+  // can open it without a fetch: it's the exact same content as partials/help-content.ejs, already
+  // in the DOM, just hidden until toggled.
+%>
+<div id="help-backdrop" class="help-backdrop"></div>
+<aside id="help-drawer" class="help-drawer">
+  <div class="help-drawer-head">
+    <h2 style="margin:0;">Help</h2>
+    <button type="button" id="help-drawer-close" class="icon-btn" title="Close">&times;</button>
+  </div>
+  <div class="help-drawer-body">
+    <%- include('help-content') %>
+  </div>
+</aside>
+
+<script src="/tables.js" defer></script>
+<script>
+  // A plain <meta refresh> would reload mid-interaction — e.g. closing the
+  // Columns menu the moment you opened it, or losing your place in a table.
+  // Refresh on the same interval instead, but postpone while a Columns menu
+  // is open, and prefer a content-only swap over a full navigation wherever
+  // the page opts in (data-live-swap) so scroll position and open panels
+  // survive.
+  (function () {
+    var seconds = Number(document.body.dataset.refresh);
+    if (!seconds) return;
+    var ms = seconds * 1000;
+    var liveSwap = document.body.dataset.liveSwap === 'true';
+
+    function menuOpen() {
+      return Array.prototype.some.call(
+        document.querySelectorAll('.columns-menu-panel'),
+        function (panel) { return !panel.hidden; }
+      );
+    }
+
+    function swapFrom(doc) {
+      document.querySelectorAll('[data-live-id]').forEach(function (el) {
+        var fresh = doc.querySelector('[data-live-id="' + el.dataset.liveId + '"]');
+        if (fresh) el.innerHTML = fresh.innerHTML;
+      });
+
+      var freshTables = doc.querySelectorAll('.table-wrap table');
+      document.querySelectorAll('.table-wrap table').forEach(function (table, i) {
+        var freshBody = freshTables[i] && freshTables[i].querySelector('tbody');
+        var body = table.querySelector('tbody');
+        if (freshBody && body) body.innerHTML = freshBody.innerHTML;
+      });
+
+      // Small standalone tables (e.g. a dashboard panel) that intentionally opt out of
+      // the .table-wrap column-menu/drag machinery still get the same tbody-only swap.
+      var freshPanelTables = doc.querySelectorAll('.panel-table');
+      document.querySelectorAll('.panel-table').forEach(function (table, i) {
+        var freshBody = freshPanelTables[i] && freshPanelTables[i].querySelector('tbody');
+        var body = table.querySelector('tbody');
+        if (freshBody && body) body.innerHTML = freshBody.innerHTML;
+      });
+
+      if (window.refreshTables) window.refreshTables();
+    }
+
+    function tick() {
+      setTimeout(function () {
+        if (menuOpen()) { tick(); return; }
+        if (!liveSwap) { location.reload(); return; }
+        fetch(location.pathname + location.search)
+          .then(function (res) { return res.text(); })
+          .then(function (html) {
+            swapFrom(new DOMParser().parseFromString(html, 'text/html'));
+            tick();
+          })
+          .catch(function () { tick(); });
+      }, ms);
+    }
+    tick();
+  })();
+</script>
+<script>
+  // Collapsible sidebar sections (see partials/head.ejs) — toggling flips the visible state
+  // immediately and persists it server-side (routes/navPrefs.js) so it follows the user across
+  // devices/browsers, same as their table column preferences.
+  (function () {
+    document.querySelectorAll('.nav-section-label[data-nav-section]').forEach(function (btn) {
+      var group = btn.nextElementSibling;
+      if (!group) return;
+      btn.addEventListener('click', function () {
+        var collapsed = !group.hidden;
+        group.hidden = collapsed;
+        btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        fetch('/api/nav-prefs/' + encodeURIComponent(btn.dataset.navSection), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ collapsed: collapsed }),
+        });
+      });
+    });
+  })();
+</script>
+<script>
+  (function () {
+    var btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var current = document.documentElement.getAttribute('data-theme')
+        || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      var next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+    });
+  })();
+</script>
+<script>
+  // The in-page Help drawer — opened from the topbar's per-page "Help" button
+  // (marked [data-help-open], see partials/head.ejs), instead of navigating to
+  // /help. Content is already in the DOM (partials/help-content.ejs, included
+  // above), so opening it is just a class toggle, no fetch involved.
+  (function () {
+    var drawer = document.getElementById('help-drawer');
+    var backdrop = document.getElementById('help-backdrop');
+    var closeBtn = document.getElementById('help-drawer-close');
+    if (!drawer || !backdrop) return;
+
+    function openDrawer(anchor) {
+      drawer.classList.add('open');
+      backdrop.classList.add('open');
+
+      if (!anchor) return;
+      var target = drawer.querySelector('#' + anchor);
+      if (!target || target.tagName !== 'DETAILS') return;
+      target.open = true;
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      target.classList.add('help-highlight');
+      setTimeout(function () { target.classList.remove('help-highlight'); }, 2200);
+    }
+
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      backdrop.classList.remove('open');
+    }
+
+    // These stay real <a href="/help..."> links (not buttons) so a no-JS visit or a
+    // middle-click/"open in new tab" still gets the standalone page — JS just
+    // intercepts the plain click to open the drawer instead of navigating.
+    document.querySelectorAll('[data-help-open]').forEach(function (link) {
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        openDrawer(link.dataset.helpAnchor);
+      });
+    });
+    closeBtn.addEventListener('click', closeDrawer);
+    backdrop.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeDrawer();
+    });
+  })();
+</script>
+<script>
+  // Topbar account menu (avatar + name -> Profile/Administration/Log out popover).
+  (function () {
+    var btn = document.getElementById('account-menu-btn');
+    var panel = document.getElementById('account-menu-panel');
+    if (!btn || !panel) return;
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      panel.hidden = !panel.hidden;
+    });
+    document.addEventListener('click', function () { panel.hidden = true; });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') panel.hidden = true;
+    });
+  })();
+</script>
+<script>
+  // A row-action button with data-toggle-row="<id>" (Rename/Test/Reset password/Edit panel/...)
+  // reveals a collapsed sibling with that id instead of opening a floating popover — it expands
+  // in place (full table width for a <tr>, full card width for a dash-panel's form), so it can
+  // never overflow or get clipped the way a floated box would. Toggled via a .open class (not the
+  // hidden attribute) specifically so CSS can transition it open/closed instead of an abrupt snap
+  // — see tr.expand-row and .panel-settings-form in style.css.
+  (function () {
+    document.querySelectorAll('[data-toggle-row]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var row = document.getElementById(btn.dataset.toggleRow);
+        if (!row) return;
+        var opening = !row.classList.contains('open');
+        row.classList.toggle('open');
+        if (opening) {
+          var firstInput = row.querySelector('input, select, textarea');
+          if (firstInput) firstInput.focus();
+        }
+      });
+    });
+  })();
+</script>
+<script>
+  // Any form[data-confirm="message"] gets a native-confirm()-free "are you sure?" — clicking its
+  // submit button hides that button and slides out a full-width bar (message + Yes/Cancel, Yes
+  // matching the trigger's own color) right below the whole row-actions group instead of inline
+  // next to the other buttons, where it fragmented across multiple wrapped lines in the cramped
+  // remaining space. Placed after .row-actions when there is one, else after the form itself.
+  (function () {
+    document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+      var submitBtn = form.querySelector('button[type="submit"]');
+      if (!submitBtn) return;
+
+      var bar = document.createElement('div');
+      bar.className = 'confirm-bar';
+      var inner = document.createElement('div');
+      inner.className = 'confirm-bar-inner';
+      var text = document.createElement('span');
+      text.className = 'confirm-bar-text';
+      text.textContent = form.dataset.confirm;
+      var yesBtn = document.createElement('button');
+      yesBtn.type = 'button';
+      yesBtn.className = submitBtn.className;
+      yesBtn.innerHTML = submitBtn.innerHTML;
+      var noBtn = document.createElement('button');
+      noBtn.type = 'button';
+      noBtn.className = 'btn-soft';
+      noBtn.textContent = 'Cancel';
+      inner.appendChild(text);
+      inner.appendChild(yesBtn);
+      inner.appendChild(noBtn);
+      bar.appendChild(inner);
+      // .dash-panel-head is checked before .row-actions: a panel's Delete/Duplicate live in a
+      // .row-actions that's itself a flex item inside .dash-panel-head's own (row) flex layout —
+      // anchoring to .row-actions there would just squeeze the bar in sideways next to the title
+      // instead of below it. Anchoring to the whole head instead lands it as a sibling in
+      // .dash-panel's flex *column*, where a new full-width block correctly stacks underneath.
+      var anchor = form.closest('.dash-panel-head') || form.closest('.row-actions') || form;
+      anchor.insertAdjacentElement('afterend', bar);
+
+      submitBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        submitBtn.hidden = true;
+        bar.classList.add('open');
+      });
+      yesBtn.addEventListener('click', function () { form.submit(); });
+      noBtn.addEventListener('click', function () {
+        bar.classList.remove('open');
+        setTimeout(function () { submitBtn.hidden = false; }, 200);
+      });
+    });
+  })();
+</script>
+</body>
+</html>

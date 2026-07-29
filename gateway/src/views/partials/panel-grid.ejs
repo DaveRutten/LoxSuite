@@ -1,0 +1,586 @@
+<%
+  // Shared by both dashboard.ejs (the one shared/home dashboard) and dashboard-detail.ejs (a
+  // personal My Dashboards board) — locals: dashboardId, panels, monitors, canEditPanels.
+  // canEditPanels is computed by the caller: personal dashboards are always editable by their
+  // owner (no Access Role check), the shared one is gated by canEdit('dashboard').
+
+  // A <datalist> suggestion list is easy to miss — nothing marks the field as "has a dropdown"
+  // the way a <select> does, and whether clicking (rather than typing first) reveals every
+  // suggestion varies by browser. A real <select> is unambiguous: pick one of these, or the
+  // explicit "Custom..." option reveals a free-text field (wired up in the script below).
+  const UNIT_PRESETS = ['°C', '°F', '%', 'W', 'kW', 'kWh', 'V', 'A', 'Hz', 'hPa', 'lux', 'ppm', 'bar', 'm³', 'dB'];
+  function escAttr(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  }
+  function unitField(fieldName, currentValue) {
+    const isCustom = !!currentValue && !UNIT_PRESETS.includes(currentValue);
+    let html = `<select class="unit-select" data-unit-name="${fieldName}"><option value="">(none)</option>`;
+    UNIT_PRESETS.forEach((u) => {
+      html += `<option value="${escAttr(u)}" ${currentValue === u ? 'selected' : ''}>${u}</option>`;
+    });
+    html += `<option value="__custom__" ${isCustom ? 'selected' : ''}>Custom&hellip;</option></select>`;
+    html += `<input type="text" class="unit-custom-input" placeholder="Custom unit"
+      value="${isCustom ? escAttr(currentValue) : ''}" style="margin-top:0.3rem; width:100%; ${isCustom ? '' : 'display:none;'}">`;
+    return html;
+  }
+%>
+<% if (canEditPanels) { %>
+<details class="add-panel">
+  <summary>Add panel</summary>
+  <div class="add-panel-body">
+    <form method="post" action="/dashboards/<%= dashboardId %>/panels">
+      <div class="form-grid">
+        <div>
+          <label>Panel type</label>
+          <select name="panel_type" id="panel-type-select">
+            <option value="chart">Chart</option>
+            <option value="table">Table</option>
+            <option value="value">Current value</option>
+            <option value="gauge">Gauge</option>
+            <option value="stat_delta">Stat with change</option>
+            <option value="threshold">Threshold indicator</option>
+          </select>
+        </div>
+        <div><label>Title (optional)</label><input type="text" name="title" placeholder="Leave blank to auto-generate one"></div>
+        <div id="panel-range-field">
+          <label>Range</label>
+          <select name="range">
+            <option value="1h">Last hour</option>
+            <option value="24h" selected>Last 24 hours</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid" id="chart-fields" style="margin-top:0.85rem; display:none;">
+        <div>
+          <label>Legend</label>
+          <select name="legend_position">
+            <option value="auto" selected>Auto (only when &gt;1 monitor)</option>
+            <option value="top">Top</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div><label>Y-axis unit (optional)</label><%- unitField('unit_chart', '') %></div>
+        <div><label>Decimals</label><input type="number" name="decimals" value="2" min="0" max="6" step="1"></div>
+      </div>
+
+      <div class="form-grid" id="value-layout-field" style="margin-top:0.85rem; display:none;">
+        <div>
+          <label>Layout</label>
+          <select name="value_layout">
+            <option value="stacked">Stacked (one per line)</option>
+            <option value="row">Row (side by side)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid" id="gauge-fields" style="margin-top:0.85rem; display:none;">
+        <div><label>Minimum</label><input type="number" name="gauge_min" value="0" step="any"></div>
+        <div><label>Maximum</label><input type="number" name="gauge_max" value="100" step="any"></div>
+        <div><label>Unit (optional)</label><%- unitField('unit_gauge', '') %></div>
+      </div>
+
+      <div class="form-grid" id="stat-delta-fields" style="margin-top:0.85rem; display:none;">
+        <div><label>Unit (optional)</label><%- unitField('unit_stat_delta', '') %></div>
+        <div>
+          <label>Color the change when</label>
+          <select name="direction">
+            <option value="neutral">Neutral (no color)</option>
+            <option value="up_good">Higher is better</option>
+            <option value="down_good">Lower is better</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid" id="threshold-fields" style="margin-top:0.85rem; display:none;">
+        <div>
+          <label>Alert when value is</label>
+          <select name="threshold_operator">
+            <option value="gt">Above</option>
+            <option value="gte">Above or equal to</option>
+            <option value="lt">Below</option>
+            <option value="lte">Below or equal to</option>
+          </select>
+        </div>
+        <div><label>Threshold</label><input type="number" name="threshold_value" value="0" step="any"></div>
+        <div><label>Unit (optional)</label><%- unitField('unit_threshold', '') %></div>
+        <div><label>Label when normal</label><input type="text" name="label_ok" placeholder="Normal"></div>
+        <div><label>Label when alert</label><input type="text" name="label_alert" placeholder="Alert"></div>
+      </div>
+
+      <p class="hint" style="margin-top:0.6rem;">New panels start at a default size &mdash; drag a panel's bottom-right corner afterwards to resize it.</p>
+
+      <div style="margin-top:0.85rem;">
+        <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);">
+          Monitors
+        </label>
+        <p class="hint" id="table-monitor-hint" style="display:none; margin:0 0 0.5rem;">
+          This panel type shows one monitor &mdash; if you check more than one, only the first is used.
+        </p>
+        <input type="text" id="monitor-filter" placeholder="Filter monitors&hellip;" style="max-width:20rem; margin-bottom:0.6rem; padding:0.5rem 0.6rem; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text);">
+        <div id="monitor-checklist" style="display:flex; flex-direction:column; gap:0.35rem; max-height:220px; overflow-y:auto; padding:0.6rem; border:1px solid var(--border); border-radius:8px;">
+          <% monitors.forEach(m => { %>
+            <label class="monitor-check-row" data-label="<%= m.label.toLowerCase() %>" style="display:flex; align-items:center; gap:0.5rem; font-size:0.87rem;">
+              <input type="checkbox" name="monitor_ids" value="<%= m.id %>">
+              <%= m.label %> <span class="hint" style="margin:0;">(<%= m.source_type %>)</span>
+            </label>
+          <% }) %>
+          <% if (monitors.length === 0) { %>
+            <p class="hint" style="margin:0;">No monitors yet &mdash; add one on the <a href="/monitor">Monitor</a> page first.</p>
+          <% } %>
+        </div>
+      </div>
+
+      <div style="margin-top:0.9rem;">
+        <button type="submit" class="primary"><%- icon('plus') %> Add panel</button>
+      </div>
+    </form>
+  </div>
+</details>
+<% } %>
+
+<div class="dash-grid" id="dash-grid">
+  <% panels.forEach(p => { %>
+    <div class="dash-panel" data-id="<%= p.id %>" data-col-span="<%= p.col_span %>" data-row-span="<%= p.row_span %>" draggable="<%= canEditPanels ? 'true' : 'false' %>" style="grid-column: span <%= p.col_span %>; grid-row: span <%= p.row_span %>;">
+      <% if (canEditPanels) { %><span class="widget-drag-handle" title="Drag to reorder">&#8942;&#8942;</span><% } %>
+      <div class="dash-panel-head">
+        <div class="dash-panel-title"><%= p.title || (p.panel_type.charAt(0).toUpperCase() + p.panel_type.slice(1)) %></div>
+        <% if (canEditPanels) { %>
+        <div class="row-actions">
+          <button type="button" class="icon-btn icon-btn-edit" title="Edit panel" data-toggle-row="panel-edit-<%= p.id %>"><%- icon('edit') %></button>
+          <form method="post" action="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/duplicate">
+            <button type="submit" class="icon-btn icon-btn-add" title="Duplicate panel"><%- icon('copy') %></button>
+          </form>
+          <form method="post" action="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/delete" data-confirm="Remove this panel?">
+            <button type="submit" class="icon-btn icon-btn-danger" title="Delete panel"><%- icon('trash') %></button>
+          </form>
+        </div>
+        <% } %>
+      </div>
+
+      <% if (canEditPanels) { %>
+      <form id="panel-edit-<%= p.id %>" method="post" action="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/settings" class="form-grid panel-settings-form">
+        <div>
+          <label>Panel type</label>
+          <select name="panel_type" class="panel-type-select">
+            <option value="chart" <%= p.panel_type === 'chart' ? 'selected' : '' %>>Chart</option>
+            <option value="table" <%= p.panel_type === 'table' ? 'selected' : '' %>>Table</option>
+            <option value="value" <%= p.panel_type === 'value' ? 'selected' : '' %>>Current value</option>
+            <option value="gauge" <%= p.panel_type === 'gauge' ? 'selected' : '' %>>Gauge</option>
+            <option value="stat_delta" <%= p.panel_type === 'stat_delta' ? 'selected' : '' %>>Stat with change</option>
+            <option value="threshold" <%= p.panel_type === 'threshold' ? 'selected' : '' %>>Threshold indicator</option>
+          </select>
+        </div>
+        <div><label>Title</label><input type="text" name="title" value="<%= p.title || '' %>" placeholder="Title"></div>
+        <div data-fields-for="chart,table,stat_delta">
+          <label>Range</label>
+          <select name="range">
+            <option value="1h" <%= p.range === '1h' ? 'selected' : '' %>>Last hour</option>
+            <option value="24h" <%= p.range === '24h' ? 'selected' : '' %>>Last 24 hours</option>
+            <option value="7d" <%= p.range === '7d' ? 'selected' : '' %>>Last 7 days</option>
+            <option value="30d" <%= p.range === '30d' ? 'selected' : '' %>>Last 30 days</option>
+            <option value="all" <%= p.range === 'all' ? 'selected' : '' %>>All</option>
+          </select>
+        </div>
+        <div data-fields-for="chart">
+          <label>Legend</label>
+          <select name="legend_position">
+            <% var legendPos = p.panel_type === 'chart' ? (p.config.legendPosition || 'auto') : 'auto'; %>
+            <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto (only when &gt;1 monitor)</option>
+            <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
+            <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
+            <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
+            <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
+          </select>
+        </div>
+        <div data-fields-for="chart"><label>Y-axis unit</label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
+        <div data-fields-for="chart"><label>Decimals</label><input type="number" name="decimals" value="<%= p.panel_type === 'chart' && p.config.decimals != null ? p.config.decimals : 2 %>" min="0" max="6" step="1"></div>
+        <div data-fields-for="value">
+          <label>Layout</label>
+          <select name="value_layout">
+            <option value="stacked" <%= !(p.panel_type === 'value' && p.config.layout === 'row') ? 'selected' : '' %>>Stacked (one per line)</option>
+            <option value="row" <%= p.panel_type === 'value' && p.config.layout === 'row' ? 'selected' : '' %>>Row (side by side)</option>
+          </select>
+        </div>
+        <div data-fields-for="gauge"><label>Minimum</label><input type="number" name="gauge_min" value="<%= p.panel_type === 'gauge' ? p.config.min : 0 %>" step="any"></div>
+        <div data-fields-for="gauge"><label>Maximum</label><input type="number" name="gauge_max" value="<%= p.panel_type === 'gauge' ? p.config.max : 100 %>" step="any"></div>
+        <div data-fields-for="gauge"><label>Unit</label><%- unitField('unit_gauge', p.panel_type === 'gauge' ? (p.config.unit || '') : '') %></div>
+        <div data-fields-for="stat_delta"><label>Unit</label><%- unitField('unit_stat_delta', p.panel_type === 'stat_delta' ? (p.config.unit || '') : '') %></div>
+        <div data-fields-for="stat_delta">
+          <label>Color the change when</label>
+          <select name="direction">
+            <option value="neutral" <%= !(p.panel_type === 'stat_delta' && p.config.direction !== 'neutral') ? 'selected' : '' %>>Neutral (no color)</option>
+            <option value="up_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'up_good' ? 'selected' : '' %>>Higher is better</option>
+            <option value="down_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'down_good' ? 'selected' : '' %>>Lower is better</option>
+          </select>
+        </div>
+        <div data-fields-for="threshold">
+          <label>Alert when value is</label>
+          <select name="threshold_operator">
+            <option value="gt" <%= !(p.panel_type === 'threshold') || p.config.operator === 'gt' ? 'selected' : '' %>>Above</option>
+            <option value="gte" <%= p.panel_type === 'threshold' && p.config.operator === 'gte' ? 'selected' : '' %>>Above or equal to</option>
+            <option value="lt" <%= p.panel_type === 'threshold' && p.config.operator === 'lt' ? 'selected' : '' %>>Below</option>
+            <option value="lte" <%= p.panel_type === 'threshold' && p.config.operator === 'lte' ? 'selected' : '' %>>Below or equal to</option>
+          </select>
+        </div>
+        <div data-fields-for="threshold"><label>Threshold</label><input type="number" name="threshold_value" value="<%= p.panel_type === 'threshold' ? p.config.value : 0 %>" step="any"></div>
+        <div data-fields-for="threshold"><label>Unit</label><%- unitField('unit_threshold', p.panel_type === 'threshold' ? (p.config.unit || '') : '') %></div>
+        <div data-fields-for="threshold"><label>Label when normal</label><input type="text" name="label_ok" value="<%= p.panel_type === 'threshold' ? p.config.labelOk : 'Normal' %>"></div>
+        <div data-fields-for="threshold"><label>Label when alert</label><input type="text" name="label_alert" value="<%= p.panel_type === 'threshold' ? p.config.labelAlert : 'Alert' %>"></div>
+        <div>
+          <label style="display:block; font-size:0.72rem; margin-bottom:0.1rem; color:var(--text-muted);">Monitors</label>
+          <p class="hint panel-single-monitor-hint" data-fields-for="table,gauge,stat_delta,threshold" style="display:none; margin:0 0 0.25rem; font-size:0.7rem;">
+            This panel type only uses the first checked monitor.
+          </p>
+          <input type="text" class="panel-monitor-filter" placeholder="Filter monitors&hellip;" style="margin-bottom:0.25rem; width:100%;">
+          <div class="panel-monitor-checklist" style="display:flex; flex-direction:column; max-height:100px; overflow-y:auto; overflow-x:hidden; padding:0.2rem; border:1px solid var(--border); border-radius:6px;">
+            <% monitors.forEach(m => { %>
+              <label class="panel-monitor-check-row" data-label="<%= m.label.toLowerCase() %>" style="display:flex; align-items:center; gap:0.3rem; font-size:0.75rem; min-width:0; padding:0.05rem 0;">
+                <input type="checkbox" name="monitor_ids" value="<%= m.id %>" style="flex-shrink:0;" <%= p.monitors.some(pm => pm.id === m.id) ? 'checked' : '' %>>
+                <span style="flex:1; min-width:0; overflow-wrap:anywhere; line-height:1.2;"><%= m.label %></span>
+              </label>
+            <% }) %>
+            <% if (monitors.length === 0) { %>
+              <p class="hint" style="margin:0;">No monitors yet.</p>
+            <% } %>
+          </div>
+        </div>
+        <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+      </form>
+      <% } %>
+
+      <% if (p.monitors.length === 0) { %>
+        <p class="hint">No monitors left in this panel &mdash; they may have been deleted from the Monitor page. Remove this panel or add a new one.</p>
+      <% } else if (p.panel_type === 'chart') { %>
+        <div class="chart-wrap">
+          <canvas data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.range %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= p.config.decimals != null ? p.config.decimals : 2 %>"></canvas>
+        </div>
+      <% } else if (p.panel_type === 'table') { %>
+        <div class="panel-table-scroll">
+          <table class="panel-table">
+            <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
+            <tbody>
+              <% p.rows.forEach(r => { %>
+                <tr><td><%= new Date(r.recordedAt).toLocaleString('en-GB') %></td><td><span class="truncate" title="<%= r.value %>"><%= r.value %></span></td></tr>
+              <% }) %>
+              <% if (p.rows.length === 0) { %>
+                <tr><td colspan="2" class="empty">No readings in this range yet.</td></tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      <% } else if (p.panel_type === 'gauge') { %>
+        <div class="gauge-wrap" data-live-id="panel-<%= p.id %>-body">
+          <div class="gauge-track"><div class="gauge-fill" style="width: <%= p.percent === null ? 0 : p.percent %>%;"></div></div>
+          <div class="gauge-value"><%= p.current ? p.current.value : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+          <div class="hint" style="margin:0;"><%= p.config.min %>&ndash;<%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+        </div>
+      <% } else if (p.panel_type === 'stat_delta') { %>
+        <% const RANGE_LABELS = { '1h': '1 hour', '24h': '24 hours', '7d': '7 days', '30d': '30 days', all: 'the start' };
+           let deltaClass = 'neutral';
+           if (p.delta !== null && p.delta !== 0 && p.config.direction !== 'neutral') {
+             const isUp = p.delta > 0;
+             const good = (p.config.direction === 'up_good' && isUp) || (p.config.direction === 'down_good' && !isUp);
+             deltaClass = good ? 'good' : 'bad';
+           }
+        %>
+        <div class="stat-delta" data-live-id="panel-<%= p.id %>-body">
+          <div class="stat-delta-value"><%= p.current ? p.current.value : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+          <% if (p.delta === null) { %>
+            <p class="hint" style="margin:0;">No comparison reading yet.</p>
+          <% } else { %>
+            <div class="stat-delta-change <%= deltaClass %>">
+              <%- p.delta > 0 ? '&#9650;' : (p.delta < 0 ? '&#9660;' : '&#8212;') %> <%= Math.abs(p.delta).toFixed(2) %><%= p.config.unit ? ' ' + p.config.unit : '' %>
+            </div>
+            <p class="hint" style="margin:0;">vs <%= RANGE_LABELS[p.range] || p.range %> ago</p>
+          <% } %>
+        </div>
+      <% } else if (p.panel_type === 'threshold') { %>
+        <div class="threshold-wrap" data-live-id="panel-<%= p.id %>-body">
+          <div class="gauge-value"><%= p.current ? p.current.value : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+          <span class="badge <%= p.isAlert ? 'badge-off' : 'badge-ok' %>"><%= p.isAlert ? p.config.labelAlert : p.config.labelOk %></span>
+        </div>
+      <% } else { %>
+        <div class="panel-value-list" data-layout="<%= p.config.layout === 'row' ? 'row' : 'stacked' %>" data-live-id="panel-<%= p.id %>-body">
+          <% p.monitors.forEach(m => { %>
+            <div class="panel-value-row">
+              <div class="label"><%= m.label %></div>
+              <div class="value">
+                <%= m.current ? m.current.value : '-' %>
+                <span class="hint" style="margin:0; display:block; font-size:0.72rem;">
+                  <%= m.current ? new Date(m.current.recordedAt).toLocaleString('en-GB') : '' %>
+                </span>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+      <% if (canEditPanels) { %><span class="dash-panel-resize-handle" title="Drag to resize"></span><% } %>
+    </div>
+  <% }) %>
+  <% if (panels.length === 0) { %>
+    <p class="hint">No panels yet<% if (canEditPanels) { %> &mdash; add one above<% } %>.</p>
+  <% } %>
+</div>
+
+<script>
+  (function () {
+    var panelTypeSelect = document.getElementById('panel-type-select');
+    if (!panelTypeSelect) return; // add-panel form isn't rendered for view-only users
+
+    var rangeField = document.getElementById('panel-range-field');
+    var tableHint = document.getElementById('table-monitor-hint');
+    var chartFields = document.getElementById('chart-fields');
+    var valueLayoutField = document.getElementById('value-layout-field');
+    var gaugeFields = document.getElementById('gauge-fields');
+    var statDeltaFields = document.getElementById('stat-delta-fields');
+    var thresholdFields = document.getElementById('threshold-fields');
+    var SINGLE_MONITOR_TYPES = ['table', 'gauge', 'stat_delta', 'threshold'];
+    var NO_RANGE_TYPES = ['value', 'gauge', 'threshold'];
+
+    function syncPanelType() {
+      var type = panelTypeSelect.value;
+      rangeField.style.display = NO_RANGE_TYPES.indexOf(type) !== -1 ? 'none' : '';
+      tableHint.style.display = SINGLE_MONITOR_TYPES.indexOf(type) !== -1 ? '' : 'none';
+      chartFields.style.display = type === 'chart' ? '' : 'none';
+      valueLayoutField.style.display = type === 'value' ? '' : 'none';
+      gaugeFields.style.display = type === 'gauge' ? '' : 'none';
+      statDeltaFields.style.display = type === 'stat_delta' ? '' : 'none';
+      thresholdFields.style.display = type === 'threshold' ? '' : 'none';
+    }
+    panelTypeSelect.addEventListener('change', syncPanelType);
+    syncPanelType();
+
+    var filterInput = document.getElementById('monitor-filter');
+    filterInput.addEventListener('input', function () {
+      var q = filterInput.value.toLowerCase();
+      document.querySelectorAll('.monitor-check-row').forEach(function (row) {
+        row.style.display = row.dataset.label.indexOf(q) !== -1 ? '' : 'none';
+      });
+    });
+  })();
+</script>
+
+<script>
+  // Per-panel "Edit panel" popovers (see .panel-settings-form above) — one of these exists per
+  // panel on the page, so unlike the single Add-panel form above, fields are toggled by walking
+  // up to the closest form rather than by a page-wide element id.
+  (function () {
+    document.querySelectorAll('.panel-settings-form .panel-type-select').forEach(function (select) {
+      var form = select.closest('form');
+
+      function sync() {
+        var type = select.value;
+        form.querySelectorAll('[data-fields-for]').forEach(function (el) {
+          var types = el.getAttribute('data-fields-for').split(',');
+          el.style.display = types.indexOf(type) !== -1 ? '' : 'none';
+        });
+      }
+      select.addEventListener('change', sync);
+      sync();
+    });
+
+    document.querySelectorAll('.panel-monitor-filter').forEach(function (filterInput) {
+      var form = filterInput.closest('form');
+      filterInput.addEventListener('input', function () {
+        var q = filterInput.value.toLowerCase();
+        form.querySelectorAll('.panel-monitor-check-row').forEach(function (row) {
+          row.style.display = row.dataset.label.indexOf(q) !== -1 ? '' : 'none';
+        });
+      });
+    });
+  })();
+</script>
+
+<script>
+  // Every unit field (Chart/Gauge/Stat/Threshold, in both the Add-panel form and each panel's own
+  // Edit form) is a <select class="unit-select"> of common presets plus "Custom...", paired with
+  // a hidden text input that appears when "Custom..." is picked. Only one of the two ever carries
+  // the real field name at a time, so exactly one value — never both, never neither — submits.
+  (function () {
+    document.querySelectorAll('.unit-select').forEach(function (select) {
+      var input = select.nextElementSibling;
+      var name = select.dataset.unitName;
+
+      function sync() {
+        if (select.value === '__custom__') {
+          select.removeAttribute('name');
+          input.name = name;
+          input.style.display = '';
+        } else {
+          select.name = name;
+          input.removeAttribute('name');
+          input.style.display = 'none';
+        }
+      }
+      select.addEventListener('change', function () {
+        sync();
+        if (select.value === '__custom__') input.focus();
+      });
+      sync();
+    });
+  })();
+</script>
+
+<script>
+  // A small resized panel has no room to fit the settings form once it's open — grow the card to
+  // fit the form's actual measured height for the duration of editing (not a fixed guess: the
+  // field set varies a lot by panel type, and a guess that's too small just reintroduces the
+  // clipped/scrolling form this is meant to avoid), then shrink back to the saved size on close.
+  (function () {
+    var ROW_UNIT_PX = 70; // must match .dash-grid's grid-auto-rows in style.css
+    var GAP_PX = 16; // must match .dash-grid's gap in style.css
+    var HEAD_ALLOWANCE_PX = 90; // .dash-panel-head + its own margin-bottom, roughly
+
+    document.querySelectorAll('.dash-panel > .panel-settings-form').forEach(function (form) {
+      var card = form.closest('.dash-panel');
+      if (!card) return;
+      var savedRowSpan = Number(card.dataset.rowSpan) || 3;
+
+      new MutationObserver(function () {
+        if (!form.classList.contains('open')) {
+          card.style.gridRow = 'span ' + savedRowSpan;
+          return;
+        }
+        // Measured after the class flip, one frame ahead of the max-height transition finishing
+        // — scrollHeight already reflects the form's full natural content height regardless of
+        // where the transition currently is, since scrollHeight isn't clipped by max-height.
+        requestAnimationFrame(function () {
+          var neededPx = form.scrollHeight + HEAD_ALLOWANCE_PX;
+          var neededSpan = Math.ceil((neededPx + GAP_PX) / (ROW_UNIT_PX + GAP_PX));
+          card.style.gridRow = 'span ' + Math.max(savedRowSpan, neededSpan);
+        });
+      }).observe(form, { attributes: true, attributeFilter: ['class'] });
+    });
+  })();
+</script>
+
+<script>
+  // Drag-reorder for dashboard panels — distance-based: find the nearest card by
+  // straight-line distance, then decide before/after by which side of its center
+  // the pointer is on (a simple Y-only check can't tell cards in the same row apart
+  // once the grid wraps into multiple columns).
+  (function () {
+    var grid = document.getElementById('dash-grid');
+    if (!grid) return;
+    var dragEl = null;
+
+    function getDragAfterElement(x, y) {
+      var cards = Array.prototype.slice.call(grid.querySelectorAll('.dash-panel:not(.dragging)'));
+      var closestCard = null;
+      var closestCenterX = 0;
+      var closestDistance = Infinity;
+
+      cards.forEach(function (card) {
+        var box = card.getBoundingClientRect();
+        var centerX = box.left + box.width / 2;
+        var centerY = box.top + box.height / 2;
+        var distance = Math.hypot(x - centerX, y - centerY);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestCard = card;
+          closestCenterX = centerX;
+        }
+      });
+
+      if (!closestCard) return null;
+      return x < closestCenterX ? closestCard : closestCard.nextElementSibling;
+    }
+
+    function saveOrder() {
+      var order = Array.prototype.map.call(grid.querySelectorAll('.dash-panel'), function (c) {
+        return Number(c.dataset.id);
+      });
+      fetch('/dashboards/<%= dashboardId %>/panels/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: order }),
+      }).catch(function () { /* best-effort */ });
+    }
+
+    grid.querySelectorAll('.dash-panel').forEach(function (card) {
+      card.addEventListener('dragstart', function (e) {
+        // A resize-drag on the corner handle must never also start a reorder-drag.
+        if (e.target.closest('.dash-panel-resize-handle')) { e.preventDefault(); return; }
+        dragEl = card;
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', function () {
+        card.classList.remove('dragging');
+        saveOrder();
+      });
+      card.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        var after = getDragAfterElement(e.clientX, e.clientY);
+        if (!dragEl) return;
+        if (after == null) grid.appendChild(dragEl);
+        else grid.insertBefore(dragEl, after);
+      });
+    });
+  })();
+</script>
+
+<script>
+  // Drag-to-resize from each panel's bottom-right corner handle — separate from the
+  // whole-card HTML5 reorder-drag above (that one is cancelled when it starts on this
+  // handle, see the dragstart listener). Pointer-based (mousedown/move/up), converts
+  // the live pixel delta into whole grid-column/row units against the grid's actual
+  // measured column width and the fixed row-unit height set in style.css, so a resize
+  // means the same thing regardless of viewport width.
+  (function () {
+    var grid = document.getElementById('dash-grid');
+    if (!grid) return;
+    var ROW_UNIT_PX = 70; // must match .dash-grid's grid-auto-rows in style.css
+    var COLUMNS = 12;
+    var MIN_COL_SPAN = 2, MAX_COL_SPAN = 12, MIN_ROW_SPAN = 2, MAX_ROW_SPAN = 8;
+
+    function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+
+    grid.querySelectorAll('.dash-panel-resize-handle').forEach(function (handle) {
+      handle.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var card = handle.closest('.dash-panel');
+        var gapPx = parseFloat(getComputedStyle(grid).columnGap) || 0;
+        var colStep = (grid.getBoundingClientRect().width + gapPx) / COLUMNS;
+        var rowStep = ROW_UNIT_PX + gapPx;
+
+        var startX = e.clientX, startY = e.clientY;
+        var startColSpan = Number(card.dataset.colSpan) || 4;
+        var startRowSpan = Number(card.dataset.rowSpan) || 3;
+        var colSpan = startColSpan, rowSpan = startRowSpan;
+
+        function onMove(e) {
+          colSpan = clamp(startColSpan + Math.round((e.clientX - startX) / colStep), MIN_COL_SPAN, MAX_COL_SPAN);
+          rowSpan = clamp(startRowSpan + Math.round((e.clientY - startY) / rowStep), MIN_ROW_SPAN, MAX_ROW_SPAN);
+          card.style.gridColumn = 'span ' + colSpan;
+          card.style.gridRow = 'span ' + rowSpan;
+        }
+
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          card.dataset.colSpan = colSpan;
+          card.dataset.rowSpan = rowSpan;
+          fetch('/dashboards/<%= dashboardId %>/panels/' + card.dataset.id + '/resize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ colSpan: colSpan, rowSpan: rowSpan }),
+          }).catch(function () { /* best-effort */ });
+        }
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    });
+  })();
+</script>
+
+<script src="/vendor/chart.umd.min.js"></script>
+<script src="/monitor-chart.js" defer></script>

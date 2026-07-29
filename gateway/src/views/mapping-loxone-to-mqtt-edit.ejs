@@ -1,0 +1,65 @@
+<%- include('partials/head', { pageTitle: 'Edit mapping', active: 'loxone-to-mqtt' }) %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<p class="hint">The token/callback URL never changes when editing &mdash; you don't need to update anything in Loxone Config.</p>
+
+<div class="card">
+  <% if (canEdit('loxone_to_mqtt')) { %>
+  <form method="post" action="/mappings/loxone-to-mqtt/<%= mapping.id %>/update">
+    <div class="form-grid">
+      <div>
+        <label>MQTT topic</label>
+        <input type="text" name="mqtt_topic" value="<%= mapping.mqtt_topic %>" required>
+      </div>
+      <div>
+        <label>Miniserver (informational)</label>
+        <select name="miniserver_id">
+          <option value="">-</option>
+          <% miniservers.forEach(ms => { %>
+            <option value="<%= ms.id %>" <%= ms.id === mapping.miniserver_id ? 'selected' : '' %>><%= ms.name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label>Transport</label>
+        <select name="transport">
+          <option value="http" <%= mapping.transport === 'http' ? 'selected' : '' %>>HTTP (Virtual Output)</option>
+          <option value="udp" <%= mapping.transport === 'udp' ? 'selected' : '' %>>UDP (Virtual Output)</option>
+        </select>
+      </div>
+      <div>
+        <label>QoS</label>
+        <select name="qos">
+          <option value="0" <%= mapping.qos === 0 ? 'selected' : '' %>>0</option>
+          <option value="1" <%= mapping.qos === 1 ? 'selected' : '' %>>1</option>
+          <option value="2" <%= mapping.qos === 2 ? 'selected' : '' %>>2</option>
+        </select>
+      </div>
+      <div>
+        <label>Retain</label>
+        <select name="retain">
+          <option value="" <%= !mapping.retain ? 'selected' : '' %>>No</option>
+          <option value="1" <%= mapping.retain ? 'selected' : '' %>>Yes</option>
+        </select>
+      </div>
+      <div>
+        <label>Value transform</label>
+        <select name="value_transform">
+          <option value="passthrough" <%= mapping.value_transform === 'passthrough' ? 'selected' : '' %>>Pass through unchanged</option>
+          <option value="translation_table" <%= mapping.value_transform === 'translation_table' ? 'selected' : '' %>>Translation table (manage separately)</option>
+        </select>
+      </div>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+    </div>
+  </form>
+  <% } else { %>
+  <p class="hint">You don't have permission to edit this mapping.</p>
+  <% } %>
+</div>
+
+<p><a href="/mappings/loxone-to-mqtt">&larr; Back to mappings</a></p>
+
+<%- include('partials/foot') %>

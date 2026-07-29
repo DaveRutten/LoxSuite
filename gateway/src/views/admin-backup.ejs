@@ -1,0 +1,128 @@
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+
+<div class="tabs">
+  <a href="/admin/users">Users</a>
+  <a href="/admin/roles">Access Roles</a>
+  <a href="/admin/sso">Single Sign-On</a>
+  <a class="active" href="/admin/backup">Backups</a>
+</div>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<% if (restored) { %>
+  <p class="hint" style="background:var(--warning-soft); color:var(--warning); padding:0.75rem 1rem; border-radius:8px; margin-bottom:1.25rem;">
+    <strong>Restore staged, not applied yet.</strong> The uploaded database passed its integrity check and is
+    queued to replace the live one on next start.<% if (restored.mqttConfigRestored) { %> The MQTT broker's
+    users/roles/ACLs were written to its config file directly, but Mosquitto only reads that file at its own
+    startup.<% } %> Restart to apply: <code>docker compose restart <%= restored.restartTargets.join(' ') %></code>
+  </p>
+<% } %>
+
+<p class="hint">
+  Backs up the gateway's own database (users, mappings, monitors, dashboards, settings) and,
+  optionally, the MQTT broker's dynamic-security file (users/roles/ACLs) into one downloadable
+  <code>.zip</code>. Restoring always requires restarting the affected container(s) &mdash; neither
+  half can be swapped into a running process safely.
+</p>
+
+<div class="card">
+  <h2>Schedule</h2>
+  <form method="post" action="/admin/backup/settings" class="form-grid">
+    <div>
+      <label>Enabled</label>
+      <select name="enabled">
+        <option value="1" <%= settings.enabled ? 'selected' : '' %>>Yes</option>
+        <option value="" <%= !settings.enabled ? 'selected' : '' %>>No</option>
+      </select>
+    </div>
+    <div>
+      <label>Cron expression</label>
+      <input type="text" name="schedule_cron" value="<%= settings.schedule_cron %>" placeholder="0 3 * * *">
+    </div>
+    <div>
+      <label>Keep last</label>
+      <input type="number" name="retention_count" min="1" value="<%= settings.retention_count %>">
+    </div>
+    <div>
+      <label>Include MQTT config</label>
+      <select name="include_mqtt_config" <%= mqttConfigMounted ? '' : 'disabled' %>>
+        <option value="1" <%= settings.include_mqtt_config ? 'selected' : '' %>>Yes</option>
+        <option value="" <%= !settings.include_mqtt_config ? 'selected' : '' %>>No</option>
+      </select>
+    </div>
+    <button type="submit" class="btn-edit"><%- icon('edit') %> Save schedule</button>
+  </form>
+  <p class="hint" style="margin-bottom:0;">
+    Standard 5-field cron (minute hour day month weekday), evaluated in the gateway container's own
+    timezone. <code>0 3 * * *</code> = every day at 03:00.
+    <% if (!mqttConfigMounted) { %>
+      MQTT config isn't reachable from this container right now &mdash; check the
+      <code>./mosquitto/config:/mosquitto/config</code> volume in <code>docker-compose.yml</code>.
+    <% } %>
+    <% if (settings.last_run_at) { %>
+      Last run: <%= new Date(settings.last_run_at).toLocaleString('en-GB') %> &mdash;
+      <span class="badge <%= settings.last_status === 'ok' ? 'badge-ok' : 'badge-off' %>"><%= settings.last_status %></span>
+      <% if (settings.last_error) { %><span class="hint"><%= settings.last_error %></span><% } %>
+    <% } else { %>
+      No scheduled or manual run yet.
+    <% } %>
+  </p>
+</div>
+
+<div class="card">
+  <h2>Manual backup</h2>
+  <form method="post" action="/admin/backup/run">
+    <button type="submit" class="primary"><%- icon('plus') %> Backup now</button>
+  </form>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Created</th><th>Size</th><th>Contents</th><th>Actions</th></tr></thead>
+    <tbody>
+      <% backups.forEach(b => { %>
+        <tr>
+          <td><%= new Date(b.createdAt).toLocaleString('en-GB') %></td>
+          <td><%= (b.size / 1024).toFixed(1) %> KB</td>
+          <td>
+            <span class="badge badge-neutral">gateway.db</span>
+            <% if (b.includesMqttConfig) { %><span class="badge badge-neutral">MQTT config</span><% } %>
+          </td>
+          <td>
+            <div class="row-actions">
+              <a class="inline" href="/admin/backup/<%= b.filename %>/download"><button type="button" class="btn-soft"><%- icon('download') %> Download</button></a>
+              <form class="inline" method="post" action="/admin/backup/<%= b.filename %>/restore" data-confirm="Stage this backup for restore? It replaces the current database next time the gateway container restarts.">
+                <button type="submit" class="primary"><%- icon('upload') %> Restore</button>
+              </form>
+              <form class="inline" method="post" action="/admin/backup/<%= b.filename %>/delete" data-confirm="Delete this backup?">
+                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (backups.length === 0) { %>
+        <tr><td colspan="4" class="empty">No backups yet &mdash; run one manually above or enable the schedule.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<details class="add-panel">
+  <summary>Restore from a backup</summary>
+  <div class="add-panel-body">
+    <p class="hint">
+      Uploading and validating a backup does <strong>not</strong> touch the live database &mdash; it's staged
+      and only takes effect after the container(s) shown above are restarted. Choose the moment
+      deliberately; this replaces current data.
+    </p>
+    <form method="post" action="/admin/backup/restore" enctype="multipart/form-data" class="form-grid">
+      <div><label>Backup file (.zip)</label><input type="file" name="file" accept=".zip" required></div>
+      <button type="submit" class="primary"><%- icon('upload') %> Upload &amp; stage restore</button>
+    </form>
+  </div>
+</details>
+
+<%- include('partials/foot') %>

@@ -1,0 +1,82 @@
+<%- include('partials/head', { pageTitle: 'Incoming', active: 'incoming', refresh: 5, liveSwap: true }) %>
+
+<div class="tabs">
+  <a class="active" href="/incoming/messages">Live Messages</a>
+  <a href="/incoming/clients">Connected Clients</a>
+</div>
+
+<p class="hint">
+  Refreshes every 5 seconds. One row per topic, most recently updated on top &mdash; the
+  <strong>Previous value</strong> column shows what changed. In-memory only, so this clears on a gateway restart.
+</p>
+
+<% if (canEdit('incoming')) { %>
+<form method="post" action="/incoming/messages/clear" data-confirm="Clear the live message list? It will start filling up again from the next message." style="margin-bottom:1rem;">
+  <button type="submit" class="danger"><%- icon('trash') %> Clear list</button>
+</form>
+<% } %>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Topic</th><th>Actual value</th><th>Previous value</th><th>Count</th><th>Last seen</th><th>Command Recognition (UDP)</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% topics.forEach(t => { %>
+        <tr>
+          <td><code class="truncate" title="<%= t.topic %>"><%= t.topic %></code></td>
+          <td><strong class="truncate" title="<%= t.value %>"><%= t.value %></strong></td>
+          <td>
+            <% if (t.previousValue === null) { %>-<% } else { %>
+              <span class="truncate" title="<%= t.previousValue %>"><%= t.previousValue %></span>
+            <% } %>
+          </td>
+          <td><%= t.count %></td>
+          <td><%= new Date(t.lastSeen).toLocaleString('en-GB') %></td>
+          <td><code class="recognition-string" title="<%= t.recognition %>"><%= t.recognition %></code></td>
+          <td>
+            <div class="row-actions">
+              <button type="button" class="copy-btn" data-copy="<%= t.recognition %>" title="Copy Command Recognition string"><%- icon('copy') %> <span class="btn-label">Copy</span></button>
+              <% if (canEdit('mqtt_to_loxone')) { %>
+              <a class="inline" href="/mappings/mqtt-to-loxone?topic=<%= encodeURIComponent(t.topic) %>" title="Use this topic in a new MQTT&nbsp;&rarr;&nbsp;Loxone mapping"><button type="button" class="primary"><%- icon('link') %> Map</button></a>
+              <% } %>
+              <% if (canEdit('dashboard')) { %>
+              <form class="inline" method="post" action="/dashboards/quick-add-topic">
+                <input type="hidden" name="topic" value="<%= t.topic %>">
+                <button type="submit" class="primary" title="Pin this topic's value on the Dashboard &mdash; gets an auto-generated name"><%- icon('plus') %> Widget</button>
+              </form>
+              <% } %>
+              <% if (canEdit('monitor')) { %>
+              <form class="inline" method="post" action="/monitor">
+                <input type="hidden" name="source_type" value="mqtt">
+                <input type="hidden" name="topic" value="<%= t.topic %>">
+                <button type="submit" class="primary" title="Start recording this topic's history on the Monitor page"><%- icon('plus') %> Monitor</button>
+              </form>
+              <% } %>
+            </div>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (topics.length === 0) { %>
+        <tr><td colspan="7" class="empty">No topics seen since the gateway started.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  // Delegated on document (rather than bound per-button) so it keeps working
+  // after the table body is replaced by the partial-refresh in foot.ejs.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+    var label = btn.querySelector('.btn-label');
+    navigator.clipboard.writeText(btn.getAttribute('data-copy')).then(function () {
+      var original = label.textContent;
+      label.textContent = 'Copied!';
+      setTimeout(function () { label.textContent = original; }, 1500);
+    });
+  });
+</script>
+
+<%- include('partials/foot') %>

@@ -1,0 +1,83 @@
+<%- include('partials/head', { pageTitle: 'Miniservers', active: 'miniservers' }) %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<% if (canEdit('miniservers')) { %>
+<details class="add-panel">
+  <summary>Add Miniserver</summary>
+  <div class="add-panel-body">
+    <form method="post" action="/miniservers">
+      <div class="form-grid">
+        <div><label>Name</label><input type="text" name="name" required></div>
+        <div><label>Host / IP</label><input type="text" name="host" required></div>
+        <div><label>HTTP port</label><input type="number" name="http_port" value="80" required></div>
+        <div>
+          <label>HTTPS</label>
+          <select name="use_https">
+            <option value="">No</option>
+            <option value="1">Yes (self-signed certificate allowed)</option>
+          </select>
+        </div>
+        <div><label>UDP port (optional)</label><input type="number" name="udp_port"></div>
+        <div><label>Username</label><input type="text" name="username" required></div>
+        <div><label>Password</label><input type="password" name="password" required></div>
+        <div>
+          <label>External URL (optional)</label>
+          <input type="text" name="external_url" placeholder="https://myhome.dyndns.org:8080">
+        </div>
+        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+      </div>
+    </form>
+  </div>
+</details>
+<p class="hint">
+  <strong>External URL</strong> is used as a fallback whenever the local Host/IP can't be reached
+  (e.g. from outside the home network) — Monitor polling, Common commands, log fetching and the
+  "Test now" check all try it automatically if the local address fails.
+</p>
+<% } %>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Status</th><th>Name</th><th>Host</th><th>HTTP port</th><th>HTTPS</th><th>UDP port</th><th>External URL</th><th>User</th><th>Last checked</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% miniservers.forEach(ms => { %>
+        <tr>
+          <td>
+            <% const badgeClass = ms.status === 'online' ? 'badge-ok' : ms.status === 'offline' ? 'badge-off' : 'badge-neutral'; %>
+            <% const badgeText = ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown'; %>
+            <span class="badge <%= badgeClass %>"><%= badgeText %></span>
+          </td>
+          <td><%= ms.name %></td>
+          <td><%= ms.host %></td>
+          <td><%= ms.http_port %></td>
+          <td><%= ms.use_https ? 'yes' : 'no' %></td>
+          <td><%= ms.udp_port || '-' %></td>
+          <td><%= ms.external_url || '-' %></td>
+          <td><%= ms.username %></td>
+          <td><%= ms.last_checked_at ? new Date(ms.last_checked_at).toLocaleString('en-GB') : '-' %></td>
+          <td>
+            <% if (canEdit('miniservers')) { %>
+            <a class="inline" href="/miniservers/<%= ms.id %>/edit"><button type="button" class="btn-edit"><%- icon('edit') %> Edit</button></a>
+            <form class="inline" method="post" action="/miniservers/<%= ms.id %>/check">
+              <button type="submit" class="btn-test"><%- icon('refresh') %> Test now</button>
+            </form>
+            <form class="inline" method="post" action="/miniservers/<%= ms.id %>/delete" data-confirm="Delete this Miniserver?">
+              <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+            </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (miniservers.length === 0) { %>
+        <tr><td colspan="10" class="empty">No miniservers added yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

@@ -1,0 +1,104 @@
+<%- include('partials/head', { pageTitle: 'MQTT Users', active: 'mqtt-users' }) %>
+
+<%- include('partials/tabs-mqtt-broker', { active: 'mqtt-users' }) %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<p class="hint">
+  Every device that connects to the broker (e.g. a Shelly) needs its own account here
+  &mdash; the broker does not allow anonymous clients. <strong>Last used</strong> comes from the
+  broker's own log and only covers activity since this gateway last started &mdash; a blank means
+  no connection has been seen yet in that window, not necessarily that the account has never
+  connected.
+</p>
+
+<% if (canEdit('mqtt_users')) { %>
+<details class="add-panel">
+  <summary>Add user</summary>
+  <div class="add-panel-body">
+    <form method="post" action="/mqtt-users">
+      <div class="form-grid">
+        <div><label>Username</label><input type="text" name="username" required></div>
+        <div><label>Password</label><input type="password" name="password" required></div>
+        <div>
+          <label>Role</label>
+          <select name="rolename">
+            <% roles.forEach(r => { %>
+              <option value="<%= r %>" <%= r === 'client' ? 'selected' : '' %>><%= r %></option>
+            <% }) %>
+          </select>
+        </div>
+        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+      </div>
+    </form>
+  </div>
+</details>
+<% } %>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Username</th><th>Roles</th><th>Active connections</th><th>Last used</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% clients.forEach(c => { %>
+        <tr>
+          <td><%= c.username %></td>
+          <td>
+            <% if (!protectedUsernames.includes(c.username) && canEdit('mqtt_users')) { %>
+              <form class="inline" method="post" action="/mqtt-users/<%= c.username %>/role" style="display:flex; gap:0.4rem; align-items:center;">
+                <input type="hidden" name="previous_roles" value="<%= (c.roles || []).map(r => r.rolename).join(',') %>">
+                <select name="rolename">
+                  <% roles.forEach(r => { %>
+                    <option value="<%= r %>" <%= (c.roles || []).some(cr => cr.rolename === r) ? 'selected' : '' %>><%= r %></option>
+                  <% }) %>
+                </select>
+                <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+              </form>
+            <% } else { %>
+              <%= (c.roles || []).map(r => r.rolename).join(', ') || '-' %>
+            <% } %>
+          </td>
+          <td><%= (c.connections || []).length %></td>
+          <td>
+            <% if (c.lastSeen && c.lastSeen.status === 'connected') { %>
+              <span class="badge badge-ok">Connected now</span>
+            <% } else if (c.lastSeen) { %>
+              <span class="badge badge-neutral"><%= new Date(c.lastSeen.at).toLocaleString('en-GB') %></span>
+            <% } else { %>
+              <span class="badge badge-neutral">Not seen yet</span>
+            <% } %>
+          </td>
+          <td>
+            <% if (!protectedUsernames.includes(c.username) && canEdit('mqtt_users')) { %>
+              <div class="row-actions">
+                <button type="button" class="btn-edit" data-toggle-row="mqtt-reset-pw-<%= c.username %>"><%- icon('edit') %> Reset password</button>
+                <form class="inline" method="post" action="/mqtt-users/<%= c.username %>/delete" data-confirm="Delete this user?">
+                  <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+                </form>
+              </div>
+            <% } %>
+          </td>
+        </tr>
+        <% if (!protectedUsernames.includes(c.username) && canEdit('mqtt_users')) { %>
+        <tr class="expand-row" id="mqtt-reset-pw-<%= c.username %>">
+          <td colspan="5">
+            <form method="post" action="/mqtt-users/<%= c.username %>/password" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">New password:</label>
+              <input type="password" name="password" required style="max-width:14rem;">
+              <button type="submit" class="btn-edit"><%- icon('edit') %> Set password</button>
+            </form>
+          </td>
+        </tr>
+        <% } %>
+      <% }) %>
+      <% if (clients.length === 0) { %>
+        <tr><td colspan="5" class="empty">No devices added yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

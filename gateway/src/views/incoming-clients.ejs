@@ -1,0 +1,62 @@
+<%- include('partials/head', { pageTitle: 'Incoming', active: 'incoming', refresh: 5, liveSwap: true }) %>
+
+<div class="tabs">
+  <a href="/incoming/messages">Live Messages</a>
+  <a class="active" href="/incoming/clients">Connected Clients</a>
+</div>
+
+<p class="hint">
+  Refreshes every 5 seconds. In-memory only, so this clears on a gateway restart. The
+  <strong>Device</strong> column shows the topic prefix seen in that device's own MQTT traffic when one is
+  known (hover to see the raw MQTT client ID) &mdash; otherwise it falls back to the raw client ID.
+</p>
+
+<% if (canEdit('incoming')) { %>
+<form method="post" action="/incoming/clients/clear" data-confirm="Clear disconnected clients from this list? Clients that are still actively connected stay listed." style="margin-bottom:1rem;">
+  <button type="submit" class="danger"><%- icon('trash') %> Clear list</button>
+</form>
+<% } %>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Device</th><th>Address</th><th>User</th><th>Status</th><th>Connected since</th><th>Disconnected</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% clients.forEach(c => { %>
+        <% var isShelly = /shelly/i.test(c.displayName); %>
+        <tr>
+          <td>
+            <span class="truncate" title="<%= c.resolvedFromTopic ? `MQTT client ID: ${c.clientId}` : c.displayName %>"><%= c.displayName %></span>
+          </td>
+          <td><%= c.address %></td>
+          <td><%= c.username || '-' %></td>
+          <td>
+            <span class="badge <%= c.status === 'connected' ? 'badge-ok' : 'badge-neutral' %>">
+              <%= c.status === 'connected' ? 'Connected' : 'Disconnected' %>
+            </span>
+          </td>
+          <td><%= new Date(c.connectedAt).toLocaleString('en-GB') %></td>
+          <td><%= c.disconnectedAt ? new Date(c.disconnectedAt).toLocaleString('en-GB') : '-' %></td>
+          <td>
+            <% if (isShelly) { %>
+              <a class="inline" href="/mappings/commands?family=shelly-gen1&device=<%= encodeURIComponent(c.displayName) %>">
+                <button type="button" class="btn-soft"><%- icon('link') %> Suggest commands</button>
+              </a>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (clients.length === 0) { %>
+        <tr><td colspan="7" class="empty">No clients seen since the gateway started.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<p class="hint">
+  "Suggest commands" appears for client IDs that look like a Shelly device and opens the
+  <a href="/mappings/commands">Common commands</a> builder with this device type and device pre-selected.
+</p>
+
+<%- include('partials/foot') %>

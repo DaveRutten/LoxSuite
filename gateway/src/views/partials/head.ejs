@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= pageTitle %> · LoxSuite</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    // Applied before first paint to avoid a flash of the wrong theme.
+    (function () {
+      var saved = localStorage.getItem('theme');
+      if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+</head>
+<body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>">
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-icon"><%- icon('logo', { size: 18 }) %></span>
+      <span>LoxSuite</span>
+    </div>
+    <%
+      // canView/canEdit come from res.locals (see middleware/loadUserContext.js) — hiding a nav
+      // item or button a role can't use is UX only, requirePermission on the server is the actual
+      // boundary (middleware/requirePermission.js).
+
+      // Pages that used to each get their own sidebar link now live together behind one link, with
+      // tabs at the top of the page itself doing the switching (see partials/tabs-*.ejs) — these
+      // work out which of a group's areas the current user can actually reach, and land them on
+      // the first one, rather than a fixed href that might 403 for their role.
+      const mappingAreas = [
+        { key: 'mqtt_to_loxone', href: '/mappings/mqtt-to-loxone' },
+        { key: 'loxone_to_mqtt', href: '/mappings/loxone-to-mqtt' },
+        { key: 'commands', href: '/mappings/commands' },
+        { key: 'transformations', href: '/transformations' },
+      ];
+      const mappingsHref = (mappingAreas.find((a) => canView(a.key)) || {}).href;
+      const mappingsActive = ['mqtt-to-loxone', 'loxone-to-mqtt', 'commands', 'transformations'].includes(active);
+
+      const brokerAreas = [
+        { key: 'mqtt_users', href: '/mqtt-users' },
+        { key: 'mqtt_roles', href: '/mqtt-roles' },
+        { key: 'settings', href: '/settings' },
+      ];
+      const brokerHref = (brokerAreas.find((a) => canView(a.key)) || {}).href;
+      const brokerActive = ['mqtt-users', 'mqtt-roles', 'settings'].includes(active);
+
+      const loxoneSectionVisible = canView('miniservers') || !!mappingsHref;
+      const mqttSectionVisible = canView('incoming') || !!brokerHref;
+
+      // A section stays expanded regardless of the user's saved preference while they're actually
+      // on one of its pages — otherwise the active link would be invisible inside its own collapsed
+      // section, which reads as broken navigation rather than a deliberate collapse.
+      const isCollapsed = (key, forceExpanded) => !forceExpanded && collapsedSections.includes(key);
+    %>
+    <nav>
+      <% if (canView('dashboard')) { %><a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>">Dashboard</a><% } %>
+
+      <a href="<%= canView('monitor') ? '/monitor' : '/dashboards' %>" class="<%= (active === 'monitor' || active === 'dashboards') ? 'active' : '' %>">Monitor</a>
+
+      <% if (loxoneSectionVisible) { %>
+        <% const loxoneExpanded = active === 'miniservers' || mappingsActive; %>
+        <button type="button" class="nav-section-label" data-nav-section="loxone-mappings" aria-expanded="<%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'false' : 'true' %>">
+          <span>Loxone mappings</span><%- icon('chevron') %>
+        </button>
+        <div class="nav-group" <%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'hidden' : '' %>>
+          <% if (canView('miniservers')) { %><a href="/miniservers" class="<%= active === 'miniservers' ? 'active' : '' %>">Miniservers</a><% } %>
+          <% if (mappingsHref) { %><a href="<%= mappingsHref %>" class="<%= mappingsActive ? 'active' : '' %>">Mappings</a><% } %>
+        </div>
+      <% } %>
+
+      <% if (mqttSectionVisible) { %>
+        <% const brokerExpanded = active === 'incoming' || brokerActive; %>
+        <button type="button" class="nav-section-label" data-nav-section="mqtt-broker" aria-expanded="<%= isCollapsed('mqtt-broker', brokerExpanded) ? 'false' : 'true' %>">
+          <span>MQTT broker</span><%- icon('chevron') %>
+        </button>
+        <div class="nav-group" <%= isCollapsed('mqtt-broker', brokerExpanded) ? 'hidden' : '' %>>
+          <% if (canView('incoming')) { %><a href="/incoming" class="<%= active === 'incoming' ? 'active' : '' %>">Live traffic</a><% } %>
+          <% if (brokerHref) { %><a href="<%= brokerHref %>" class="<%= brokerActive ? 'active' : '' %>">Broker</a><% } %>
+        </div>
+      <% } %>
+
+      <% if (canView('logs')) { %><a href="/logs" class="<%= (active === 'logs-mqtt' || active === 'logs-loxone') ? 'active' : '' %>">Logs</a><% } %>
+    </nav>
+    <button type="button" id="theme-toggle" class="theme-toggle"><%- icon('theme') %> Toggle theme</button>
+  </aside>
+  <div class="content">
+    <header class="topbar">
+      <h1><%= pageTitle %></h1>
+      <%
+        const helpAnchors = {
+          dashboard: 'dashboard', monitor: 'monitor', dashboards: 'dashboards', miniservers: 'miniservers', 'mqtt-to-loxone': 'mqtt-to-loxone',
+          'loxone-to-mqtt': 'loxone-to-mqtt', commands: 'commands', transformations: 'transformations',
+          incoming: 'incoming', 'logs-mqtt': 'logs', 'logs-loxone': 'logs', 'mqtt-users': 'mqtt-users', 'mqtt-roles': 'mqtt-roles', settings: 'settings',
+          admin: 'admin', profile: 'profile',
+        };
+        const helpAnchor = helpAnchors[active];
+      %>
+      <div class="topbar-right">
+        <% if (helpAnchor) { %>
+          <a class="topbar-help" href="/help#help-<%= helpAnchor %>" data-help-open data-help-anchor="help-<%= helpAnchor %>" title="Explain this page">
+            <%- icon('help') %> Help
+          </a>
+        <% } %>
+        <% if (currentUser) { %>
+          <div class="account-menu">
+            <button type="button" id="account-menu-btn" class="account-menu-btn">
+              <% if (currentUser.avatarUrl) { %>
+                <img src="<%= currentUser.avatarUrl %>" alt="" class="account-menu-avatar">
+              <% } else { %>
+                <span class="account-menu-avatar account-menu-avatar-fallback"><%= (currentUser.displayName || currentUser.username).charAt(0).toUpperCase() %></span>
+              <% } %>
+              <span class="account-menu-name"><%= currentUser.displayName || currentUser.username %></span>
+            </button>
+            <div id="account-menu-panel" class="account-menu-panel" hidden>
+              <a href="/profile" class="<%= active === 'profile' ? 'active' : '' %>">Profile</a>
+              <% if (currentUser.isAdmin) { %>
+                <a href="/admin/users" class="<%= active === 'admin' ? 'active' : '' %>">Administration</a>
+              <% } %>
+              <div class="account-menu-divider"></div>
+              <form method="post" action="/logout">
+                <button type="submit"><%- icon('logout') %> Log out</button>
+              </form>
+            </div>
+          </div>
+        <% } %>
+      </div>
+    </header>
+    <main>

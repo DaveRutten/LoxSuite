@@ -1,0 +1,80 @@
+<%- include('partials/head', { pageTitle: 'Dashboard', active: 'dashboard', refresh: 5, liveSwap: true }) %>
+
+<p class="hint">Logged in as <strong><%= username %></strong></p>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">MQTT broker</div>
+    <div class="value" data-live-id="stat-mqtt-status">
+      <span class="badge <%= mqttConnected ? 'badge-ok' : 'badge-off' %>">
+        <%= mqttConnected ? 'Connected' : 'Not connected' %>
+      </span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Active mappings MQTT &rarr; Loxone</div>
+    <div class="value" data-live-id="stat-map-in-count"><%= mqttToLoxoneCount %></div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Active mappings Loxone &rarr; MQTT</div>
+    <div class="value" data-live-id="stat-map-out-count"><%= loxoneToMqttCount %></div>
+  </div>
+</div>
+
+<h2>Panels</h2>
+<p class="hint">
+  Shared by everyone who logs in &mdash; charts, gauges, current values, and more, built from your
+  <a href="/monitor">monitors</a>. Personal boards live under <a href="/dashboards">My Dashboards</a>
+  instead.
+</p>
+
+<%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEdit('dashboard') }) %>
+
+<h2>Load</h2>
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">Messages / sec (10s average)</div>
+    <div class="value" data-live-id="stat-msgs-per-sec"><%= stats.messagesPerSecond %></div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Total messages since start</div>
+    <div class="value" data-live-id="stat-total-msgs"><%= stats.totalMessages %></div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Unique topics seen</div>
+    <div class="value" data-live-id="stat-topics-seen"><%= stats.topicsSeen %></div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Connected MQTT clients</div>
+    <div class="value" data-live-id="stat-connected-clients"><%= connectedClientCount %></div>
+  </div>
+</div>
+
+<h2>Miniservers</h2>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Status</th><th>Name</th><th>Host</th><th>Last successful call</th><th>Last error</th></tr>
+    </thead>
+    <tbody>
+      <% miniservers.forEach(ms => { %>
+        <tr>
+          <td>
+            <% const badgeClass = ms.status === 'online' ? 'badge-ok' : ms.status === 'offline' ? 'badge-off' : 'badge-neutral'; %>
+            <% const badgeText = ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown'; %>
+            <span class="badge <%= badgeClass %>"><%= badgeText %></span>
+          </td>
+          <td><%= ms.name %></td>
+          <td><%= ms.host %>:<%= ms.http_port %></td>
+          <td><%= ms.last_success_at ? new Date(ms.last_success_at).toLocaleString('en-GB') : '-' %></td>
+          <td><% if (ms.last_error) { %><span class="truncate" title="<%= ms.last_error %>"><%= ms.last_error %></span><% } else { %>-<% } %></td>
+        </tr>
+      <% }) %>
+      <% if (miniservers.length === 0) { %>
+        <tr><td colspan="5" class="empty">No miniservers added yet. Go to <a href="/miniservers">Miniservers</a>.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

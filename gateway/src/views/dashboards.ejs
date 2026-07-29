@@ -1,0 +1,60 @@
+<%- include('partials/head', { pageTitle: 'My Dashboards', active: 'dashboards' }) %>
+
+<%- include('partials/tabs-monitoring', { active: 'dashboards' }) %>
+
+<p class="hint">
+  Build your own dashboards out of the monitors you're tracking on the <a href="/monitor">Monitor</a>
+  page &mdash; charts, tables, or current-value tiles, arranged however you like. These are personal
+  to your account; other logged-in users have their own.
+</p>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<details class="add-panel">
+  <summary>Create dashboard</summary>
+  <div class="add-panel-body">
+    <form method="post" action="/dashboards" class="form-grid">
+      <div><label>Name</label><input type="text" name="name" placeholder="e.g. Upstairs temperatures" required></div>
+      <button type="submit" class="primary"><%- icon('plus') %> Create</button>
+    </form>
+  </div>
+</details>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Name</th><th>Panels</th><th>Actions</th></tr></thead>
+    <tbody>
+      <% dashboards.forEach(d => { %>
+        <tr>
+          <td><a href="/dashboards/<%= d.id %>"><%= d.name %></a></td>
+          <td><%= d.panelCount %></td>
+          <td>
+            <div class="row-actions">
+              <a class="inline" href="/dashboards/<%= d.id %>"><button type="button"><%- icon('list') %> Open</button></a>
+              <button type="button" class="btn-edit" data-toggle-row="dash-rename-<%= d.id %>"><%- icon('edit') %> Rename</button>
+              <form class="inline" method="post" action="/dashboards/<%= d.id %>/delete" data-confirm="Delete this dashboard and all of its panels? Monitors themselves are not affected.">
+                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        <tr class="expand-row" id="dash-rename-<%= d.id %>">
+          <td colspan="3">
+            <form method="post" action="/dashboards/<%= d.id %>/rename" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">New name:</label>
+              <input type="text" name="name" value="<%= d.name %>" required style="max-width:16rem;">
+              <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (dashboards.length === 0) { %>
+        <tr><td colspan="3" class="empty">No dashboards yet &mdash; create one above.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

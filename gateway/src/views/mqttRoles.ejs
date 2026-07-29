@@ -1,0 +1,104 @@
+<%- include('partials/head', { pageTitle: 'MQTT Roles', active: 'mqtt-roles' }) %>
+
+<%- include('partials/tabs-mqtt-broker', { active: 'mqtt-roles' }) %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<p class="hint">
+  Roles define what a client is allowed to publish/subscribe to. <code>client</code> (full access) and
+  <code>admin</code> (broker control) are built-in and used by the gateway itself &mdash; create a custom
+  role here if you want to scope a device to only its own topics. You can edit their ACLs too, but be
+  careful: removing <code>client</code>'s <code>#</code> access breaks every device using it, and removing
+  <code>admin</code>'s <code>$CONTROL/dynamic-security/#</code> access locks the gateway out of managing
+  users/roles until you fix it via <code>mosquitto_ctrl</code>. The roles themselves can't be deleted.
+</p>
+
+<% if (canEdit('mqtt_roles')) { %>
+<details class="add-panel">
+  <summary>Add role</summary>
+  <div class="add-panel-body">
+    <form method="post" action="/mqtt-roles">
+      <div class="form-grid">
+        <div><label>Role name</label><input type="text" name="rolename" required></div>
+        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+      </div>
+    </form>
+  </div>
+</details>
+<% } %>
+
+<% roles.forEach(role => { %>
+  <details class="add-panel">
+    <summary>
+      <%= role.rolename %>
+      <% if (protectedRoles.includes(role.rolename)) { %><span class="badge badge-neutral" style="margin-left:0.5rem;">Built-in</span><% } %>
+      <span class="hint" style="margin:0 0 0 0.5rem;"><%= (role.acls || []).length %> ACL<%= (role.acls || []).length === 1 ? '' : 's' %></span>
+    </summary>
+    <div class="add-panel-body">
+    <% if (!protectedRoles.includes(role.rolename) && canEdit('mqtt_roles')) { %>
+      <div class="row-actions" style="justify-content:flex-end; margin-bottom:0.9rem;">
+        <form method="post" action="/mqtt-roles/<%= role.rolename %>/delete" data-confirm="Delete this role?">
+          <button type="submit" class="danger"><%- icon('trash') %> Delete role</button>
+        </form>
+      </div>
+    <% } %>
+
+    <div class="table-wrap">
+      <table class="acl-table">
+        <thead>
+          <tr><th>ACL type</th><th>Topic filter</th><th>Allow</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          <% (role.acls || []).forEach(acl => { %>
+            <tr>
+              <td><%= acl.acltype %></td>
+              <td><code><%= acl.topic %></code></td>
+              <td><span class="badge <%= acl.allow ? 'badge-ok' : 'badge-off' %>"><%= acl.allow ? 'Allow' : 'Deny' %></span></td>
+              <td>
+                <% if (canEdit('mqtt_roles')) { %>
+                <form class="inline" method="post" action="/mqtt-roles/<%= role.rolename %>/acls/delete">
+                  <input type="hidden" name="acltype" value="<%= acl.acltype %>">
+                  <input type="hidden" name="topic" value="<%= acl.topic %>">
+                  <button type="submit" class="danger"><%- icon('trash') %> Remove</button>
+                </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+          <% if (!role.acls || role.acls.length === 0) { %>
+            <tr><td colspan="4" class="empty">No ACLs on this role &mdash; it currently grants no access.</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if (canEdit('mqtt_roles')) { %>
+    <form method="post" action="/mqtt-roles/<%= role.rolename %>/acls">
+      <div class="form-grid">
+        <div>
+          <label>ACL type</label>
+          <select name="acltype">
+            <% aclTypes.forEach(t => { %>
+              <option value="<%= t %>"><%= t %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div><label>Topic filter</label><input type="text" name="topic" placeholder="home/livingroom/#" required></div>
+        <div>
+          <label>Effect</label>
+          <select name="allow">
+            <option value="1">Allow</option>
+            <option value="0">Deny</option>
+          </select>
+        </div>
+        <button type="submit" class="primary"><%- icon('plus') %> Add ACL</button>
+      </div>
+    </form>
+    <% } %>
+    </div>
+  </details>
+<% }) %>
+
+<%- include('partials/foot') %>

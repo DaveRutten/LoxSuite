@@ -1,0 +1,55 @@
+<%- include('partials/head', { pageTitle: 'Translations', active: 'loxone-to-mqtt' }) %>
+
+<p class="hint">
+  Translation table for Loxone &rarr; <code><%= mapping.mqtt_topic %></code><% if (mapping.miniserver_name) { %> (<%= mapping.miniserver_name %>)<% } %>.
+  If the value Loxone sends has no match here, it is passed through unchanged.
+</p>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<% if (canEdit('loxone_to_mqtt')) { %>
+<details class="add-panel">
+  <summary>Add translation</summary>
+  <div class="add-panel-body">
+    <form method="post" action="/mappings/loxone-to-mqtt/<%= mapping.id %>/translations">
+      <div class="form-grid">
+        <div><label>Value from Loxone (e.g. "1")</label><input type="text" name="match_value" required></div>
+        <div><label>Becomes (e.g. "on")</label><input type="text" name="output_value" required></div>
+        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+      </div>
+    </form>
+  </div>
+</details>
+<% } %>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Value from Loxone</th><th>Becomes</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% translations.forEach(t => { %>
+        <tr>
+          <td><code><%= t.match_value %></code></td>
+          <td><code><%= t.output_value %></code></td>
+          <td>
+            <% if (canEdit('loxone_to_mqtt')) { %>
+            <form class="inline" method="post" action="/mappings/loxone-to-mqtt/<%= mapping.id %>/translations/<%= t.id %>/delete">
+              <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+            </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (translations.length === 0) { %>
+        <tr><td colspan="3" class="empty">No translations yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<p><a href="/mappings/loxone-to-mqtt">&larr; Back to mappings</a></p>
+
+<%- include('partials/foot') %>

@@ -1,0 +1,72 @@
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+
+<div class="tabs">
+  <a href="/admin/users">Users</a>
+  <a href="/admin/roles">Access Roles</a>
+  <a class="active" href="/admin/sso">Single Sign-On</a>
+  <a href="/admin/backup">Backups</a>
+</div>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+<% if (saved) { %>
+  <p class="hint" style="color: var(--success);">Saved.</p>
+<% } %>
+
+<p class="hint">
+  Lets people log in with a self-hosted <a href="https://pocket-id.org" target="_blank" rel="noopener">Pocket ID</a>
+  instance, alongside (not instead of) the existing username/password login. The first time someone
+  signs in via Pocket ID, an account is created for them automatically with the default Access Role
+  below &mdash; pick something with limited permissions unless you want every SSO user to start out
+  as an administrator.
+</p>
+
+<div class="card">
+  <form method="post" action="/admin/sso">
+    <div class="form-grid">
+      <div>
+        <label>Enabled</label>
+        <select name="enabled">
+          <option value="" <%= !sso.enabled ? 'selected' : '' %>>Off</option>
+          <option value="1" <%= sso.enabled ? 'selected' : '' %>>On</option>
+        </select>
+      </div>
+      <div>
+        <label>Button label</label>
+        <input type="text" name="button_label" value="<%= sso.button_label %>">
+      </div>
+      <div>
+        <label>Issuer URL</label>
+        <input type="text" name="issuer_url" value="<%= sso.issuer_url || '' %>" placeholder="https://pocket-id.example.com">
+      </div>
+      <div>
+        <label>Client ID</label>
+        <input type="text" name="client_id" value="<%= sso.client_id || '' %>">
+      </div>
+      <div>
+        <label>Client secret</label>
+        <input type="password" name="client_secret" placeholder="<%= sso.client_secret ? 'Leave blank to keep the current secret' : '' %>">
+      </div>
+      <div>
+        <label>Default Access Role for new SSO users</label>
+        <select name="default_role_id">
+          <option value="">-</option>
+          <% roles.forEach(r => { %>
+            <option value="<%= r.id %>" <%= r.id === sso.default_role_id ? 'selected' : '' %>><%= r.name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+    </div>
+  </form>
+</div>
+
+<p class="hint">
+  In Pocket ID's client settings, register <code><%= baseUrl %>/auth/sso/callback</code> as the
+  <strong>Callback URL</strong>. If you also want LoxSuite to show up as a launchable app on the
+  Pocket ID home screen, set <code><%= baseUrl %>/</code> as the <strong>Client Launch URL</strong>
+  (the "User URL") &mdash; that's the address a signed-in user lands on.
+</p>
+
+<%- include('partials/foot') %>

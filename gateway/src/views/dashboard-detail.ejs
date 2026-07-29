@@ -1,0 +1,11 @@
+<%- include('partials/head', { pageTitle: dashboard.name, active: 'dashboards', refresh: 5, liveSwap: true }) %>
+
+<p class="hint"><a href="/dashboards">&larr; back to My Dashboards</a></p>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEditPanels }) %>
+
+<%- include('partials/foot') %>

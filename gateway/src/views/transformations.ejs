@@ -1,0 +1,56 @@
+<%- include('partials/head', { pageTitle: 'Transformations', active: 'transformations' }) %>
+
+<%- include('partials/tabs-mappings', { active: 'transformations' }) %>
+
+<p class="hint">
+  All mappings using a translation table, from both directions. Use
+  <a href="/mappings/mqtt-to-loxone">MQTT &rarr; Loxone</a> or <a href="/mappings/loxone-to-mqtt">Loxone &rarr; MQTT</a>
+  to create a new mapping and pick "Translation table" as its value transform.
+</p>
+
+<h2>MQTT &rarr; Loxone</h2>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Topic</th><th>Miniserver</th><th>Target</th><th>Translations</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% mqttToLoxone.forEach(m => { %>
+        <tr>
+          <td><code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
+          <td><%= m.miniserver_name %></td>
+          <td><%= m.target %></td>
+          <td><%= m.translation_count %></td>
+          <td><a class="inline" href="/mappings/mqtt-to-loxone/<%= m.id %>/translations"><button type="button" class="btn-edit"><%- icon('list') %> Manage</button></a></td>
+        </tr>
+      <% }) %>
+      <% if (mqttToLoxone.length === 0) { %>
+        <tr><td colspan="5" class="empty">No MQTT &rarr; Loxone mappings use a translation table yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<h2>Loxone &rarr; MQTT</h2>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Topic</th><th>Miniserver</th><th>Translations</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% loxoneToMqtt.forEach(m => { %>
+        <tr>
+          <td><code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
+          <td><%= m.miniserver_name || '-' %></td>
+          <td><%= m.translation_count %></td>
+          <td><a class="inline" href="/mappings/loxone-to-mqtt/<%= m.id %>/translations"><button type="button" class="btn-edit"><%- icon('list') %> Manage</button></a></td>
+        </tr>
+      <% }) %>
+      <% if (loxoneToMqtt.length === 0) { %>
+        <tr><td colspan="4" class="empty">No Loxone &rarr; MQTT mappings use a translation table yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

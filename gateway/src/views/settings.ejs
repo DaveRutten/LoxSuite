@@ -1,0 +1,77 @@
+<%- include('partials/head', { pageTitle: 'Settings', active: 'settings' }) %>
+
+<%- include('partials/tabs-mqtt-broker', { active: 'settings' }) %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+<% if (saved) { %>
+  <p class="hint" style="color: var(--success);">Saved.</p>
+<% } %>
+
+<div class="card">
+  <h2>MQTT Broker</h2>
+  <% if (canEdit('settings')) { %>
+  <form method="post" action="/settings">
+    <div class="form-grid">
+      <div>
+        <label>Host</label>
+        <input type="text" name="host" value="<%= settings.host %>" required>
+      </div>
+      <div>
+        <label>Port</label>
+        <input type="number" name="port" value="<%= settings.port %>" required>
+      </div>
+      <div>
+        <label>Username</label>
+        <input type="text" name="username" value="<%= settings.username || '' %>">
+      </div>
+      <div>
+        <label>Password</label>
+        <input type="password" name="password" value="<%= settings.password || '' %>">
+      </div>
+      <div>
+        <label>TLS</label>
+        <select name="use_tls">
+          <option value="" <%= !settings.use_tls ? 'selected' : '' %>>No</option>
+          <option value="1" <%= settings.use_tls ? 'selected' : '' %>>Yes</option>
+        </select>
+      </div>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> Save &amp; reconnect</button>
+    </div>
+  </form>
+  <% } %>
+</div>
+
+<p class="hint">
+  The bundled Mosquitto broker runs inside this same container and listens internally on
+  <code>127.0.0.1:1883</code>. You can also point this at a different/external broker &mdash;
+  the gateway will then stop using the bundled Mosquitto process for this connection.
+</p>
+
+<div class="card">
+  <h2>Loxone &rarr; MQTT auto-create</h2>
+  <p class="hint">
+    Off by default: an unrecognised token/topic sent from Loxone (HTTP or UDP) is rejected
+    (404 or a log warning). Turn this on to have the gateway create a new passthrough mapping
+    on the fly instead &mdash; useful if you'd rather send topics directly from Loxone without
+    pre-registering each one here first, but a typo in Loxone Config will then silently create
+    a stray mapping instead of failing loudly.
+  </p>
+  <% if (canEdit('settings')) { %>
+  <form method="post" action="/settings/auto-create">
+    <div class="form-grid">
+      <div>
+        <label>Allow auto-created mappings</label>
+        <select name="enabled">
+          <option value="" <%= !gatewaySettings.auto_create_loxone_mappings ? 'selected' : '' %>>Off</option>
+          <option value="1" <%= gatewaySettings.auto_create_loxone_mappings ? 'selected' : '' %>>On</option>
+        </select>
+      </div>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+    </div>
+  </form>
+  <% } %>
+</div>
+
+<%- include('partials/foot') %>

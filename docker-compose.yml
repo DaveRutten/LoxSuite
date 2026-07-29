@@ -1,0 +1,37 @@
+name: loxsuite
+
+services:
+  # Mosquitto runs inside this same container's docker-entrypoint.sh (gateway/Dockerfile) —
+  # a single "loxsuite" container is all that shows up in `docker ps`/Docker Desktop, even
+  # though the broker and the gateway are still two independent processes internally.
+  loxsuite:
+    build: ./gateway
+    container_name: loxsuite
+    restart: unless-stopped
+    environment:
+      MQTT_URL: mqtt://127.0.0.1:1883
+      MQTT_USERNAME: ${MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      MQTT_ADMIN_USERNAME: ${MQTT_ADMIN_USERNAME:-admin}
+      MQTT_ADMIN_PASSWORD: ${MQTT_ADMIN_PASSWORD}
+      SESSION_SECRET: ${SESSION_SECRET}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DB_PATH: /data/gateway.db
+      MOSQUITTO_LOG_PATH: /mosquitto/log/mosquitto.log
+      MOSQUITTO_CONFIG_PATH: /mosquitto/config
+      LOXONE_UDP_PORT: 11884
+      PORT: 3000
+    volumes:
+      - ./data:/data
+      - ./mosquitto/config:/mosquitto/config
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    ports:
+      - "3000:3000"
+      - "1883:1883"
+      - "11884:11884/udp"
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
