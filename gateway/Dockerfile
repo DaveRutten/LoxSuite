@@ -40,7 +40,14 @@ COPY --from=mosquitto \
   /usr/lib/libnettle.so.8 \
   /usr/lib/libgmp.so.10 \
   /usr/lib/libffi.so.8 \
+  /usr/lib/libedit.so.0 \
+  /usr/lib/libncursesw.so.6 \
   /usr/lib/
+# libedit/libncursesw above are mosquitto_ctrl's own deps (readline-style line editing), not
+# mosquitto's — `ldd /usr/sbin/mosquitto` alone won't surface them. Found by actually running a
+# fresh (no pre-existing dynamic-security.json) container end to end: mosquitto_ctrl is only
+# invoked once, during first-boot bootstrap, so this was otherwise easy to miss with a reused
+# config volume where that code path never runs again.
 RUN chmod +x /usr/sbin/mosquitto /usr/bin/mosquitto_ctrl /usr/bin/mosquitto_pub /usr/bin/mosquitto_sub \
   && addgroup -S mosquitto && adduser -S -D -H -G mosquitto mosquitto
 
