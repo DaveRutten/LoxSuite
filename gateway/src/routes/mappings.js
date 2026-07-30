@@ -26,8 +26,10 @@ function loadMqttToLoxoneView() {
   ).all();
 }
 
+const loxoneTranslationValuesStmt = db.prepare('SELECT match_value FROM loxone_mapping_translations WHERE mapping_id = ? ORDER BY match_value');
+
 function loadLoxoneToMqttView(baseUrl) {
-  const udpPort = process.env.LOXONE_UDP_PORT || 11884;
+  const udpPort = process.env.LOXONE_UDP_PORT || 11885;
   return db.prepare(
     `SELECT l.*, ms.name AS miniserver_name
      FROM mappings_loxone_to_mqtt l
@@ -38,6 +40,12 @@ function loadLoxoneToMqttView(baseUrl) {
     callbackUrl: `${baseUrl}/api/loxone-in/${row.token}?value=\\v`,
     udpMessage: `${row.token}=\\v`,
     udpPort,
+    // Powers the Test row's value picker — for a translation_table mapping, only these inputs are
+    // actually meaningful to "send as if from Loxone" (anything else has no defined translation
+    // and would forward untouched, which is rarely what testing that kind of mapping is for).
+    translationValues: row.value_transform === 'translation_table'
+      ? loxoneTranslationValuesStmt.all(row.id).map((t) => t.match_value)
+      : null,
   }));
 }
 
@@ -77,6 +85,16 @@ router.post('/mqtt-to-loxone/:id/update', requirePermission('mqtt_to_loxone', 'e
 
 router.post('/mqtt-to-loxone/:id/toggle', requirePermission('mqtt_to_loxone', 'edit'), (req, res) => {
   db.prepare('UPDATE mappings_mqtt_to_loxone SET enabled = 1 - enabled WHERE id = ?').run(req.params.id);
+  res.redirect('/mappings/mqtt-to-loxone');
+});
+
+router.post('/mqtt-to-loxone/enable-all', requirePermission('mqtt_to_loxone', 'edit'), (req, res) => {
+  db.prepare('UPDATE mappings_mqtt_to_loxone SET enabled = 1').run();
+  res.redirect('/mappings/mqtt-to-loxone');
+});
+
+router.post('/mqtt-to-loxone/disable-all', requirePermission('mqtt_to_loxone', 'edit'), (req, res) => {
+  db.prepare('UPDATE mappings_mqtt_to_loxone SET enabled = 0').run();
   res.redirect('/mappings/mqtt-to-loxone');
 });
 
@@ -161,19 +179,35 @@ router.get('/loxone-to-mqtt/:id/edit', (req, res) => {
 
 router.post('/loxone-to-mqtt/:id/update', requirePermission('loxone_to_mqtt', 'edit'), (req, res) => {
   const { miniserver_id, mqtt_topic, qos, retain, transport, value_transform } = req.body;
-  db.prepare(
-    `UPDATE mappings_loxone_to_mqtt
-     SET miniserver_id = ?, mqtt_topic = ?, qos = ?, retain = ?, transport = ?, value_transform = ?
-     WHERE id = ?`
-  ).run(
-    miniserver_id ? Number(miniserver_id) : null,
-    mqtt_topic,
-    Number(qos) || 0,
-    retain ? 1 : 0,
-    transport === 'udp' ? 'udp' : 'http',
-    value_transform === 'translation_table' ? 'translation_table' : 'passthrough',
-    req.params.id
-  );
+  const token = (req.body.token || '').trim();
+
+  if (!token) {
+    const mapping = db.prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE id = ?').get(req.params.id);
+    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+    return res.render('mapping-loxone-to-mqtt-edit', { mapping, miniservers, error: 'Token is required.' });
+  }
+
+  try {
+    db.prepare(
+      `UPDATE mappings_loxone_to_mqtt
+       SET token = ?, miniserver_id = ?, mqtt_topic = ?, qos = ?, retain = ?, transport = ?, value_transform = ?
+       WHERE id = ?`
+    ).run(
+      token,
+      miniserver_id ? Number(miniserver_id) : null,
+      mqtt_topic,
+      Number(qos) || 0,
+      retain ? 1 : 0,
+      transport === 'udp' ? 'udp' : 'http',
+      value_transform === 'translation_table' ? 'translation_table' : 'passthrough',
+      req.params.id
+    );
+  } catch (err) {
+    // token has a UNIQUE constraint — the only realistic way this UPDATE fails.
+    const mapping = db.prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE id = ?').get(req.params.id);
+    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+    return res.render('mapping-loxone-to-mqtt-edit', { mapping, miniservers, error: `"${token}" is already used by another mapping — tokens must be unique.` });
+  }
 
   res.redirect('/mappings/loxone-to-mqtt');
 });
@@ -191,7 +225,7 @@ router.post('/loxone-to-mqtt/:id/test', requirePermission('loxone_to_mqtt', 'edi
   if (!rawValue) return res.status(400).json({ ok: false, error: 'Enter a value to send.' });
 
   if (mapping.transport === 'udp') {
-    const port = Number(process.env.LOXONE_UDP_PORT) || 11884;
+    const port = Number(process.env.LOXONE_UDP_PORT) || 11885;
     const message = `${mapping.token}=${rawValue}`;
     const socket = dgram.createSocket('udp4');
     socket.send(Buffer.from(message), port, '127.0.0.1', (err) => {
@@ -227,6 +261,16 @@ router.post('/loxone-to-mqtt/:id/test', requirePermission('loxone_to_mqtt', 'edi
 
 router.post('/loxone-to-mqtt/:id/toggle', requirePermission('loxone_to_mqtt', 'edit'), (req, res) => {
   db.prepare('UPDATE mappings_loxone_to_mqtt SET enabled = 1 - enabled WHERE id = ?').run(req.params.id);
+  res.redirect('/mappings/loxone-to-mqtt');
+});
+
+router.post('/loxone-to-mqtt/enable-all', requirePermission('loxone_to_mqtt', 'edit'), (req, res) => {
+  db.prepare('UPDATE mappings_loxone_to_mqtt SET enabled = 1').run();
+  res.redirect('/mappings/loxone-to-mqtt');
+});
+
+router.post('/loxone-to-mqtt/disable-all', requirePermission('loxone_to_mqtt', 'edit'), (req, res) => {
+  db.prepare('UPDATE mappings_loxone_to_mqtt SET enabled = 0').run();
   res.redirect('/mappings/loxone-to-mqtt');
 });
 

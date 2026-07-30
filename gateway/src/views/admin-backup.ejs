@@ -62,7 +62,7 @@
       <code>./mosquitto/config:/mosquitto/config</code> volume in <code>docker-compose.yml</code>.
     <% } %>
     <% if (settings.last_run_at) { %>
-      Last run: <%= new Date(settings.last_run_at).toLocaleString('en-GB') %> &mdash;
+      Last run: <%= formatDateTime(settings.last_run_at) %> &mdash;
       <span class="badge <%= settings.last_status === 'ok' ? 'badge-ok' : 'badge-off' %>"><%= settings.last_status %></span>
       <% if (settings.last_error) { %><span class="hint"><%= settings.last_error %></span><% } %>
     <% } else { %>
@@ -84,7 +84,7 @@
     <tbody>
       <% backups.forEach(b => { %>
         <tr>
-          <td><%= new Date(b.createdAt).toLocaleString('en-GB') %></td>
+          <td><%= formatDateTime(b.createdAt) %></td>
           <td><%= (b.size / 1024).toFixed(1) %> KB</td>
           <td>
             <span class="badge badge-neutral">gateway.db</span>

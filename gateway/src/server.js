@@ -13,6 +13,7 @@ const { startTailing, getClients } = require('./mosquittoLog');
 const { startUdpServer } = require('./loxoneUdpServer');
 const { startMonitorCollector } = require('./monitorCollector');
 const { startLogCollector } = require('./logCollector');
+const { startLiveConnections } = require('./loxoneWebSocket');
 const requireAuth = require('./middleware/requireAuth');
 const loadUserContext = require('./middleware/loadUserContext');
 const { requirePermission, requireAdmin } = require('./middleware/requirePermission');
@@ -20,6 +21,7 @@ const { attachCsrfToken, verifyCsrfToken } = require('./middleware/csrf');
 
 const authRoutes = require('./routes/auth');
 const miniserverRoutes = require('./routes/miniservers');
+const liveDataRoutes = require('./routes/liveData');
 const mappingRoutes = require('./routes/mappings');
 const loxoneInboundRoutes = require('./routes/loxoneInbound');
 const incomingRoutes = require('./routes/incoming');
@@ -35,14 +37,23 @@ const dashboardsRoutes = require('./routes/dashboards');
 const adminRoutes = require('./routes/admin');
 const backupRoutes = require('./routes/backup');
 const profileRoutes = require('./routes/profile');
+const avatarRoutes = require('./routes/avatar');
 const { icon } = require('./icons');
 const backup = require('./backup');
+const { formatDateTime, getDisplayTimezone } = require('./dateFormat');
 
 const app = express();
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.locals.icon = icon;
+app.locals.formatDateTime = formatDateTime;
+app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
+app.locals.serializeThresholdLadder = dashboardsRoutes.serializeThresholdLadder;
+app.locals.serializeValueMappings = dashboardsRoutes.serializeValueMappings;
+// Exposed as a global for the client-side chart (public/monitor-chart.js) — everything
+// server-rendered uses formatDateTime() directly and never needs this.
+app.use((req, res, next) => { res.locals.displayTimezone = getDisplayTimezone(); next(); });
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -104,10 +115,12 @@ app.get('/', requireAuth, requirePermission('dashboard', 'view'), (req, res) => 
     dashboard: sharedDashboard,
     panels,
     monitors: dashboardMonitors,
+    defaultPanelDecimals: dashboardsRoutes.getDefaultPanelDecimals(),
   });
 });
 
 app.use('/miniservers', requireAuth, requirePermission('miniservers', 'view'), miniserverRoutes);
+app.use('/live-data', requireAuth, requirePermission('miniservers', 'view'), liveDataRoutes);
 // mappings.js serves three distinct areas (mqtt_to_loxone/loxone_to_mqtt/commands) under one
 // router, so it's gated per-route inside that file instead of once here.
 app.use('/mappings', requireAuth, mappingRoutes);
@@ -129,6 +142,7 @@ app.use('/api/nav-prefs', requireAuth, navPrefsRoutes);
 app.use('/admin/backup', requireAuth, requireAdmin, backupRoutes);
 app.use('/admin', requireAuth, requireAdmin, adminRoutes);
 app.use('/profile', requireAuth, profileRoutes);
+app.use('/avatar', requireAuth, avatarRoutes);
 app.get('/help', requireAuth, (req, res) => res.render('help'));
 
 runBootstrap();
@@ -137,6 +151,7 @@ startTailing();
 startUdpServer();
 startMonitorCollector();
 startLogCollector();
+startLiveConnections();
 backup.startScheduler();
 
 const port = process.env.PORT || 3000;

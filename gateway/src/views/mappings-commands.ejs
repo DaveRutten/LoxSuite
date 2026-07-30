@@ -160,7 +160,7 @@
     actionSelect.addEventListener('change', update);
 
     copyBtn.addEventListener('click', function () {
-      navigator.clipboard.writeText(topicPreview.textContent).then(function () {
+      window.copyToClipboard(topicPreview.textContent).then(function () {
         var label = copyBtn.querySelector('.btn-label');
         var original = label.textContent;
         label.textContent = 'Copied!';

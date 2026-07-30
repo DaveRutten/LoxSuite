@@ -37,9 +37,10 @@
         structure export (<code>LoxAPP3.json</code>) &mdash; the same file used for the Miniservers page, but
         here it also lists ordinary controls (sensors, lights, etc.), not just Virtual Inputs. The gateway then
         polls that value's live reading (<code>/jdev/sps/io/&lt;uuid&gt;</code>) on the interval you pick (5s to
-        5 minutes). This is polling, not a push subscription &mdash; a real-time websocket connection per
-        Miniserver would be more instant but far more complex to build and maintain, and polling is
-        indistinguishable in practice at these intervals.</li>
+        5 minutes). This is deliberate polling at a fixed cadence, not the websocket push feed
+        <a href="/live-data">Live Data</a> uses &mdash; fine for a value you're recording into a chart every
+        few seconds, but see the Live Data answer above if you want a browse-everything, always-current
+        view instead.</li>
     </ul>
     <p>
       Every reading is stored in SQLite, so it survives a gateway restart. Old readings are purged
@@ -121,8 +122,10 @@
     <p>
       The gateway pings every Miniserver's HTTP endpoint once a minute in the background and shows
       an Online/Offline/Unknown badge. <strong>Test now</strong> triggers that same check immediately
-      instead of waiting for the next cycle. Any HTTP response (even 401/404) counts as "online" &mdash;
-      only a network-level failure (timeout, connection refused, DNS) counts as offline.
+      instead of waiting for the next cycle, and also reports <strong>Live data (websocket)</strong>
+      &mdash; whether the persistent real-time connection used by <a href="/live-data">Live Data</a>
+      is currently up. Any HTTP response (even 401/404) counts as "online" for the Local/External
+      checks &mdash; only a network-level failure (timeout, connection refused, DNS) counts as offline.
     </p>
     <p>
       Editing a Miniserver never shows its stored password back to you &mdash; leave the password field
@@ -143,6 +146,30 @@
       Virtual Inputs in the export. Type the name yourself, exactly as configured in Loxone Config.
     </p>
     <p><a href="/miniservers">Open Miniservers &rarr;</a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-live-data">
+  <summary>Live Data (Loxone) &mdash; why did values used to show "(unreadable)"?</summary>
+  <div class="add-panel-body">
+    <p>
+      Browse every control the selected Miniserver's structure file knows about, grouped by room and
+      then by category &mdash; the same grouping Loxone Config itself uses, so this works for any
+      project, not just this one's specific setup. Rooms, categories, and values are only fetched once
+      you actually expand them.
+    </p>
+    <p>
+      Values come from a persistent <strong>websocket</strong> connection to the Miniserver (the same
+      real-time push feed Node-RED's Loxone nodes and the official app use), not one-off HTTP polling
+      &mdash; measured against a real installation, the plain HTTP <code>/jdev/sps/io/&lt;uuid&gt;</code>
+      endpoint only answers for a small slice of a control's states (roughly 8% here); the rest
+      (sub-states like <code>active</code>, <code>numOpen</code>, <code>lockedUntil</code>) simply have
+      no HTTP-pollable equivalent at all and used to show as "(unreadable)". The websocket feed covers
+      nearly all of them, and updates automatically every few seconds while a category is open. The
+      "Live connection" line at the top of the page, and <strong>Test now</strong> on the
+      <a href="/miniservers">Miniservers</a> page, both show whether that connection is currently up.
+    </p>
+    <p><a href="/live-data">Open Live Data &rarr;</a></p>
   </div>
 </details>
 
@@ -214,7 +241,7 @@
       <strong>Use in mapping</strong> jumps straight to a pre-filled Loxone &rarr; MQTT mapping.
     </p>
     <p>
-      On <a href="/incoming/clients">Connected Clients</a>, devices that look like a Shelly show a
+      On <a href="/incoming/clients">Client Activity</a>, devices that look like a Shelly show a
       "Suggest commands" shortcut that opens this builder with the device already selected.
     </p>
     <p><a href="/mappings/commands">Open Common commands &rarr;</a></p>
@@ -236,7 +263,7 @@
 <h2>MQTT Broker</h2>
 
 <details class="add-panel" id="help-incoming">
-  <summary>Live traffic &mdash; Live Messages vs. Connected Clients?</summary>
+  <summary>Live Data (MQTT) &mdash; Live Messages vs. Client Activity?</summary>
   <div class="add-panel-body">
     <p>Two sub-pages, both refreshing every 5 seconds and both in-memory only (cleared on a gateway restart):</p>
     <ul>
@@ -245,13 +272,15 @@
         (<code>MQTT:\i&lt;topic&gt;=\i\v</code>, the same format LoxBerry uses) for a Loxone Virtual UDP Input's
         "Command Recognition" field. <strong>Map</strong> jumps to a pre-filled MQTT &rarr; Loxone mapping for
         that topic, <strong>Widget</strong> pins its value on the Dashboard.</li>
-      <li><strong>Connected Clients</strong> &mdash; which MQTT clients are connected or have been, with a
-        "Suggest commands" shortcut for Shelly-like client IDs.</li>
+      <li><strong>Client Activity</strong> &mdash; which MQTT clients are connected or have been, with a
+        "Suggest commands" shortcut for Shelly-like client IDs. Disconnected entries are auto-removed after a
+        configurable number of hours (default 24) &mdash; each removal is logged on the
+        <a href="/logs/system">System</a> log, since this list itself doesn't survive a restart.</li>
     </ul>
-    <p><strong>Clear list</strong> on Live Messages empties that view entirely. On Connected Clients it only
+    <p><strong>Clear list</strong> on Live Messages empties that view entirely. On Client Activity it only
       drops <em>disconnected</em> entries &mdash; a client that's still actually connected stays listed, since
       it won't send a new "connected" event just because the view was cleared.</p>
-    <p><a href="/incoming/messages">Open Live traffic &rarr;</a></p>
+    <p><a href="/incoming/messages">Open Live Data &rarr;</a></p>
   </div>
 </details>
 
@@ -260,12 +289,12 @@
   <div class="add-panel-body">
     <p>
       Different from <a href="/monitor">Monitor</a>: this fetches and displays actual
-      <strong>log files</strong>, not a tracked value's history. Two tabs, both live (refreshing every 5
+      <strong>log files</strong>, not a tracked value's history. Four tabs, all live (refreshing every 5
       seconds) plus a persisted history you can page back through and export:
     </p>
     <ul>
       <li><strong>MQTT broker</strong> &mdash; the raw Mosquitto broker log file, tailed the same way the
-        <a href="/incoming/clients">Connected Clients</a> page already reads it for connect/disconnect
+        <a href="/incoming/clients">Client Activity</a> page already reads it for connect/disconnect
         events, except every line is kept here, not just the ones that indicate a client connecting or
         disconnecting.</li>
       <li><strong>Loxone Miniservers</strong> &mdash; each configured Miniserver's own system log
@@ -274,6 +303,18 @@
         if the local address can't be reached). There's no push channel for this on the Loxone side, so the
         gateway polls once a minute and only stores newly appended lines &mdash; if more than one Miniserver is
         configured, a dropdown filters to just one.</li>
+      <li><strong>Loxone commands</strong> &mdash; every Virtual Output command this gateway receives from
+        Loxone (UDP or HTTP), one row per attempt: when it arrived, which client sent it (the matching
+        <a href="/miniservers">Miniserver's</a> name when its Host matches the sender's IP, otherwise the
+        bare IP), the MQTT topic it targeted, the value transition (<strong>From value</strong> &rarr;
+        <strong>To value</strong>, tracked per topic since this gateway last restarted), and whether it was
+        accepted (published to MQTT) or rejected (malformed message, no matching
+        <a href="/mappings/loxone-to-mqtt">Loxone &rarr; MQTT mapping</a>, or the MQTT broker being
+        unreachable). The first place to check when a Virtual Output works from the mapping page's own
+        Test button but not from the real Miniserver &mdash; if nothing shows up here at all, the command
+        isn't reaching this gateway (network/firewall), not a mapping problem.</li>
+      <li><strong>System</strong> &mdash; this gateway's own housekeeping events, e.g. a disconnected MQTT
+        client getting auto-removed from <a href="/incoming/clients">Client Activity</a>.</li>
     </ul>
     <p>
       Each line gets a <strong>Level</strong> badge (info/warning/error) &mdash; a best-effort guess
@@ -281,13 +322,13 @@
       Treat it as a scanning aid, not a guarantee.
     </p>
     <p>
-      Both are persisted in SQLite and purged automatically after the configured
-      <strong>retention</strong> (in days, editable on either tab) so the database doesn't grow forever.
+      All four are persisted in SQLite and purged automatically after the configured
+      <strong>retention</strong> (in days, editable on any tab) so the database doesn't grow forever.
       <strong>Export .log</strong> downloads everything currently retained as a plain-text file
       (unfiltered, always the full retained history).
     </p>
     <p>
-      Both tabs have a filter bar above the table: <strong>From</strong>/<strong>To</strong> narrow to a
+      Every tab has a filter bar above the table: <strong>From</strong>/<strong>To</strong> narrow to a
       date/time range, <strong>Level</strong> narrows to just info, warning, or error lines, and
       <strong>Contains</strong> does a plain substring search over the line text. Filters combine (all
       apply at once), stay in the URL so a filtered view can be bookmarked or shared, and survive the
@@ -312,7 +353,7 @@
     </p>
     <p>The gateway's own account (<code>gateway</code> by default) can't be edited or deleted from here
       &mdash; changing its password or role here would desync it from the credentials configured on the
-      <a href="/settings">Settings</a> page and lock the gateway itself out of the broker.</p>
+      <a href="/settings/broker">Broker connection</a> page and lock the gateway itself out of the broker.</p>
     <p><a href="/mqtt-users">Open Users &rarr;</a></p>
   </div>
 </details>
@@ -354,6 +395,35 @@
       it means any string reaching that endpoint becomes a real topic &mdash; leave it off unless you
       specifically want that behavior.
     </p>
+    <p><a href="/settings/broker">Open Broker connection &rarr;</a></p>
+  </div>
+</details>
+
+<h2>Settings</h2>
+
+<details class="add-panel" id="help-settings-general">
+  <summary>Settings &mdash; data retention and features</summary>
+  <div class="add-panel-body">
+    <p>
+      Reached from the account menu (top right). General, gateway-wide housekeeping — separate from
+      <a href="/settings/broker">Broker connection</a>, which is an MQTT-specific admin setting under
+      Administration instead.
+    </p>
+    <p><strong>Data retention</strong> — three independent purge timers, all run automatically once
+      a day:</p>
+    <ul>
+      <li><strong>Logs (days)</strong> &mdash; raw lines on the <a href="/logs">Logs</a> page (MQTT,
+        Loxone, and System tabs).</li>
+      <li><strong>Monitor history (days)</strong> &mdash; recorded readings on the
+        <a href="/monitor">Monitor</a> page.</li>
+      <li><strong>Client Activity, after disconnect (hours)</strong> &mdash; how long a disconnected
+        MQTT client stays listed on <a href="/incoming/clients">Client Activity</a> before being
+        dropped (logged on the <a href="/logs/system">System</a> log); still-connected clients are
+        never affected.</li>
+    </ul>
+    <p><strong>Features</strong> currently has one toggle: whether "Suggest dashboard" is offered on
+      <a href="/live-data">Live Data</a> at all. Turning it off just hides the button — it doesn't
+      remove any dashboard already created from a suggestion.</p>
     <p><a href="/settings">Open Settings &rarr;</a></p>
   </div>
 </details>

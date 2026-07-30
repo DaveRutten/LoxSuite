@@ -19,6 +19,12 @@ function getButtonLabel() {
   return loadSettings()?.button_label || 'Pocket ID';
 }
 
+// The break-glass local-login restriction only ever applies while SSO itself is actually usable —
+// toggling it on with SSO otherwise unconfigured/disabled would just lock everyone out.
+function isLocalLoginDisabled() {
+  return isEnabled() && !!loadSettings()?.local_login_disabled;
+}
+
 async function getClient(baseUrl) {
   const settings = loadSettings();
   if (!settings || !settings.enabled || !settings.issuer_url || !settings.client_id) {
@@ -41,4 +47,4 @@ async function getClient(baseUrl) {
   return client;
 }
 
-module.exports = { getClient, isEnabled, getButtonLabel };
+module.exports = { getClient, isEnabled, getButtonLabel, isLocalLoginDisabled };

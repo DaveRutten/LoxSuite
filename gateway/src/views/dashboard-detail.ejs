@@ -1,11 +1,16 @@
 <%- include('partials/head', { pageTitle: dashboard.name, active: 'dashboards', refresh: 5, liveSwap: true }) %>
 
-<p class="hint"><a href="/dashboards">&larr; back to My Dashboards</a></p>
+<p class="hint">
+  <a href="/dashboards">&larr; back to My Dashboards</a>
+  <% if (sharedByOwner) { %>
+    &mdash; shared with you by <%= sharedByOwner %><%= canEditPanels ? ' (you can edit)' : ' (view only)' %>
+  <% } %>
+</p>
 
 <% if (error) { %>
   <p class="error"><%= error %></p>
 <% } %>
 
-<%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEditPanels }) %>
+<%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEditPanels, defaultPanelDecimals: defaultPanelDecimals }) %>
 
 <%- include('partials/foot') %>

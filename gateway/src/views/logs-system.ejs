@@ -1,0 +1,61 @@
+<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-system', refresh: 5, liveSwap: true }) %>
+
+<div class="tabs">
+  <a href="/logs/mqtt">MQTT broker</a>
+  <a href="/logs/loxone">Loxone Miniservers</a>
+  <a href="/logs/loxone-commands">Loxone commands</a>
+  <a class="active" href="/logs/system">System</a>
+</div>
+
+<p class="hint">
+  This gateway's own housekeeping events &mdash; e.g. a disconnected MQTT client getting
+  auto-removed from <a href="/incoming/clients">Client Activity</a>. Persisted in SQLite and kept
+  for <strong><%= retentionDays %></strong> days, same retention setting as the other two tabs
+  &mdash; <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
+</p>
+
+<form method="get" action="/logs/system" class="form-grid" style="margin-bottom:1rem; align-items:end;">
+  <div>
+    <label>From</label>
+    <input type="datetime-local" name="from" value="<%= query.from || '' %>">
+  </div>
+  <div>
+    <label>To</label>
+    <input type="datetime-local" name="to" value="<%= query.to || '' %>">
+  </div>
+  <div>
+    <label>Contains</label>
+    <input type="text" name="q" value="<%= query.q || '' %>" placeholder="Search log text">
+  </div>
+  <div style="display:flex; gap:0.5rem;">
+    <button type="submit" class="btn-soft"><%- icon('filter') %> Apply</button>
+    <a href="/logs/system"><button type="button" class="btn-soft">Clear</button></a>
+  </div>
+</form>
+
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <a href="/logs/system/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Time</th><th>Line</th></tr>
+    </thead>
+    <tbody>
+      <% rows.forEach(r => { %>
+        <tr>
+          <td><%= formatDateTime(r.recordedAt) %></td>
+          <td class="log-line"><%= r.line %></td>
+        </tr>
+      <% }) %>
+      <% if (rows.length === 0) { %>
+        <tr><td colspan="2" class="empty">No system events recorded yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<%- include('partials/foot') %>

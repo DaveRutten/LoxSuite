@@ -1,11 +1,11 @@
-// Drag-and-drop column reordering + show/hide, for every table inside a
+// Drag-and-drop column reordering + show/hide + resize + click-to-sort, for every table inside a
 // .table-wrap. Preferences are saved per logged-in user on the server (not
 // localStorage), so they follow the user across browsers/devices.
 (function () {
-  // table -> { currentOrder, hiddenSet, columnCount }, so a tbody swapped in
-  // from outside (see refreshTables below) can be re-tagged and have the
-  // user's current order/hidden columns re-applied without rebuilding
-  // anything else (columns menu, drag handlers on the header).
+  // table -> { currentOrder, hiddenSet, widths, columnCount, sort: {index, dir} }, so a tbody
+  // swapped in from outside (see refreshTables below) can be re-tagged and have the user's
+  // current order/hidden/sort re-applied without rebuilding anything else (columns menu, drag
+  // handlers on the header, the colgroup).
   var registry = new WeakMap();
 
   function tableKey(index) {
@@ -16,33 +16,34 @@
     return fetch('/api/table-prefs/' + encodeURIComponent(key)).then(function (res) { return res.json(); });
   }
 
-  function savePrefs(key, order, hidden) {
+  function savePrefs(key, state) {
     fetch('/api/table-prefs/' + encodeURIComponent(key), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order: order, hidden: hidden }),
+      body: JSON.stringify({ order: state.currentOrder, hidden: Array.from(state.hiddenSet), widths: state.widths }),
     }).catch(function () { /* best-effort */ });
   }
 
-  // Cells are looked up by their stable data-original-index (tagged once in
-  // initTable) rather than by current position, so this stays correct no
-  // matter how many times it's called after previous reorders.
-  function reorderRow(row, order) {
-    var cells = Array.prototype.slice.call(row.children);
-    if (cells.length !== order.length) return; // e.g. a colspan "empty" row — leave it alone
+  // Cells (and <col>s) are looked up by their stable data-original-index (tagged once in
+  // initTable) rather than by current position, so this stays correct no matter how many times
+  // it's called after previous reorders.
+  function reorderByOriginalIndex(parent, order) {
+    var children = Array.prototype.slice.call(parent.children);
+    if (children.length !== order.length) return; // e.g. a colspan "empty" row — leave it alone
     var byOriginalIndex = {};
-    cells.forEach(function (cell) { byOriginalIndex[cell.dataset.originalIndex] = cell; });
+    children.forEach(function (child) { byOriginalIndex[child.dataset.originalIndex] = child; });
     order.forEach(function (originalIndex) {
-      var cell = byOriginalIndex[originalIndex];
-      if (cell) row.appendChild(cell);
+      var child = byOriginalIndex[originalIndex];
+      if (child) parent.appendChild(child);
     });
   }
 
-  function applyOrder(table, order) {
+  function applyOrder(table, colgroup, order) {
     var headerRow = table.querySelector('thead tr');
     if (!headerRow) return;
-    reorderRow(headerRow, order);
-    table.querySelectorAll('tbody tr').forEach(function (row) { reorderRow(row, order); });
+    reorderByOriginalIndex(headerRow, order);
+    table.querySelectorAll('tbody tr').forEach(function (row) { reorderByOriginalIndex(row, order); });
+    if (colgroup) reorderByOriginalIndex(colgroup, order);
   }
 
   function applyHidden(table, hiddenSet) {
@@ -62,21 +63,168 @@
     });
   }
 
+  function applyWidths(colgroup, widths) {
+    if (!colgroup) return;
+    var table = colgroup.closest('table');
+    if (table && Object.keys(widths).length > 0 && table.style.tableLayout !== 'fixed') {
+      // table-layout:auto only ever treats a <col>'s width as a hint — a column's own nowrap
+      // content can still force it wider regardless, which is exactly why dragging a column
+      // narrower than its text had no visible effect. Freezing every OTHER column's current
+      // (auto-computed) width into a real pixel value before switching the whole table to
+      // table-layout:fixed keeps them looking exactly as they already did, while letting the
+      // actually-resized column go narrower than its own content from here on — see th/td's
+      // overflow:hidden;text-overflow:ellipsis in style.css for what happens to text that no
+      // longer fits. Guarded so this only ever runs once per table (idempotent on later calls
+      // from a live-refresh reapplying the same saved widths).
+      var headerRow = table.querySelector('thead tr');
+      if (headerRow) {
+        Array.prototype.forEach.call(headerRow.children, function (th) {
+          var idx = th.dataset.originalIndex;
+          if (idx == null || widths[idx]) return; // this one gets its real width from the loop below
+          // A hidden column's th (display:none) measures as 0×0 — freezing that in would leave it
+          // permanently collapsed even after being shown again from the Columns menu, visually
+          // compressing every column after it and making the WRONG one line up under whichever
+          // resize handle the user thinks they're dragging. Left with no explicit width instead —
+          // table-layout:fixed gives it a share of whatever space is left over once it's visible.
+          if (th.classList.contains('col-hidden')) return;
+          var col = colgroup.querySelector('col[data-original-index="' + idx + '"]');
+          if (col) col.style.width = th.getBoundingClientRect().width + 'px';
+        });
+      }
+      table.style.tableLayout = 'fixed';
+    }
+    Array.prototype.forEach.call(colgroup.children, function (col) {
+      var px = widths[col.dataset.originalIndex];
+      if (px) col.style.width = px + 'px';
+    });
+  }
+
+  // A plain <table> has no columns to grab onto for a reliable width — table-layout:auto can
+  // still widen/shrink an individual <td> based on what's in some other row entirely. A
+  // <colgroup> with one <col> per column is the one part of the table the browser always
+  // respects a set width on, regardless of cell content — built here rather than hand-added to
+  // every view, since ~20 different table-bearing pages would otherwise all need the same markup.
+  function buildColgroup(table, columnCount) {
+    var existing = table.querySelector('colgroup');
+    if (existing) return existing;
+    var colgroup = document.createElement('colgroup');
+    for (var i = 0; i < columnCount; i++) {
+      var col = document.createElement('col');
+      col.dataset.originalIndex = i;
+      colgroup.appendChild(col);
+    }
+    table.insertBefore(colgroup, table.firstChild);
+    return colgroup;
+  }
+
+  function addResizeHandle(th, colgroup, onResized) {
+    var handle = document.createElement('span');
+    handle.className = 'col-resize-handle';
+    th.appendChild(handle);
+
+    handle.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      e.stopPropagation(); // must not also start a column drag-reorder
+      // stopPropagation only stops this file's own listeners — it doesn't stop the browser's
+      // native HTML5 drag-and-drop detection, which watches the mousedown target's whole ancestor
+      // chain for a draggable=true element (th, in this case) independently of JS event bubbling.
+      // Disabling it for the duration of the resize is the only way to actually prevent that.
+      th.draggable = false;
+      var originalIndex = th.dataset.originalIndex;
+      var col = colgroup.querySelector('col[data-original-index="' + originalIndex + '"]');
+      if (!col) { th.draggable = true; return; }
+      var startX = e.clientX;
+      var startWidth = th.getBoundingClientRect().width;
+
+      function onMove(e) {
+        var next = Math.max(60, startWidth + (e.clientX - startX));
+        col.style.width = next + 'px';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        th.draggable = true;
+        // The mouseup that ends this drag is immediately followed by a 'click' on th (its own
+        // listener checks this flag and bails) — cleared on a timeout rather than synchronously
+        // here, since 'click' fires after this handler returns but still within the same event
+        // sequence, before any timeout callback would run.
+        th.dataset.justResized = '1';
+        setTimeout(function () { delete th.dataset.justResized; }, 0);
+        onResized(originalIndex, col.style.width ? parseFloat(col.style.width) : null);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+  // Sorts by each row's cell text at the given original column index — good enough for the plain
+  // text/number/date-string content every table here actually shows; not attempted for a colspan
+  // "empty" row, which just stays wherever it already was.
+  function applySort(table, sort) {
+    if (!sort) return;
+    var headerRow = table.querySelector('thead tr');
+    var headers = Array.prototype.slice.call(headerRow.children);
+    var visualIndex = headers.findIndex(function (th) { return Number(th.dataset.originalIndex) === sort.index; });
+    if (visualIndex === -1) return;
+
+    var tbody = table.querySelector('tbody');
+    var rows = Array.prototype.slice.call(tbody.children).filter(function (row) {
+      return row.children.length === headers.length;
+    });
+
+    rows.sort(function (a, b) {
+      var av = (a.children[visualIndex].textContent || '').trim();
+      var bv = (b.children[visualIndex].textContent || '').trim();
+      var an = Number(av), bn = Number(bv);
+      var cmp = (av !== '' && bv !== '' && !isNaN(an) && !isNaN(bn))
+        ? an - bn
+        : av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+      return sort.dir === 'desc' ? -cmp : cmp;
+    });
+
+    rows.forEach(function (row) { tbody.appendChild(row); });
+  }
+
+  function updateSortIndicators(table, sort) {
+    table.querySelectorAll('thead th .sort-indicator').forEach(function (el) { el.remove(); });
+    if (!sort) return;
+    var headerRow = table.querySelector('thead tr');
+    var th = Array.prototype.slice.call(headerRow.children)
+      .find(function (t) { return Number(t.dataset.originalIndex) === sort.index; });
+    if (!th) return;
+    var indicator = document.createElement('span');
+    indicator.className = 'sort-indicator';
+    indicator.textContent = sort.dir === 'desc' ? ' ▼' : ' ▲';
+    th.appendChild(indicator);
+  }
+
   // Built synchronously (before prefs are fetched) so the button doesn't
   // flash in and out of existence on pages that auto-refresh every few
   // seconds. Returns the checkboxes so callers can sync their checked state
   // once fetched prefs arrive.
-  function buildColumnsMenu(table, headers, hiddenSet, onChange) {
+  function buildColumnsMenu(table, headers, hiddenSet, onChange, onReset) {
     var wrap = table.closest('.table-wrap');
     if (!wrap) return null;
 
+    // A page that already built its own toolbar directly above this table (see
+    // .table-toolbar/.filterable-table-card in style.css, e.g. Live Data's search bar) gets the
+    // Columns button appended into THAT toolbar instead of a second, separately-boxed strip of
+    // its own — one attached toolbar reads as a whole; two stacked ones don't. Anything else
+    // (most tables) gets the default self-contained strip, itself styled to attach to .table-wrap.
+    var existingToolbar = wrap.previousElementSibling && wrap.previousElementSibling.classList.contains('table-toolbar')
+      ? wrap.previousElementSibling
+      : null;
+
     var container = document.createElement('div');
-    container.className = 'columns-menu';
+    container.className = existingToolbar ? 'columns-menu columns-menu-inline' : 'columns-menu';
 
     var button = document.createElement('button');
     button.type = 'button';
-    button.className = 'columns-menu-btn';
-    button.textContent = 'Columns';
+    button.className = 'btn-soft';
+    // Inlined rather than reusing src/icons.js's icon() helper — this file is a plain static
+    // asset with no access to that server-side module — but kept visually identical to it
+    // (same "columns" path, same .icon class the shared button/icon spacing CSS targets).
+    button.innerHTML = '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>Columns';
     container.appendChild(button);
 
     var panel = document.createElement('div');
@@ -84,6 +232,7 @@
     panel.hidden = true;
 
     var checkboxesByIndex = {};
+    var labelsByIndex = {};
 
     headers.forEach(function (th) {
       var originalIndex = Number(th.dataset.originalIndex);
@@ -100,18 +249,124 @@
       label.appendChild(document.createTextNode(' ' + (th.textContent.trim() || 'Actions')));
       panel.appendChild(label);
       checkboxesByIndex[originalIndex] = checkbox;
+      labelsByIndex[originalIndex] = label;
     });
+
+    var resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'btn-soft columns-menu-reset';
+    resetBtn.textContent = 'Reset to default';
+    resetBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      onReset();
+      panel.hidden = true;
+    });
+    panel.appendChild(resetBtn);
+
+    // Keeps the checkbox list in the same order the columns actually appear in — dragging a
+    // column to reorder it (or a saved order from a previous session) would otherwise leave this
+    // list showing the original left-to-right order forever, no longer matching the table.
+    function resortToOrder(order) {
+      order.forEach(function (originalIndex) {
+        var label = labelsByIndex[originalIndex];
+        if (label) panel.insertBefore(label, resetBtn);
+      });
+    }
 
     button.addEventListener('click', function (e) {
       e.stopPropagation();
-      panel.hidden = !panel.hidden;
+      var wasHidden = panel.hidden;
+      panel.hidden = !wasHidden;
+      if (wasHidden) {
+        // Opens downward by default (see .columns-menu-panel in style.css); a short table (few
+        // rows, e.g. right after creating one) can leave less room below the button than this
+        // panel actually needs, running the bottom of the checkbox list off the page instead of
+        // just scrolling it into view like a taller table's page would. Flips to open upward
+        // whenever there's more room above the button than below it and the panel doesn't
+        // actually fit in what's below — measured fresh on every open since the viewport (and how
+        // many columns/rows exist) can change between opens.
+        panel.style.maxHeight = ''; // clear any previous cap before measuring this open's natural height
+        var buttonRect = button.getBoundingClientRect();
+        var panelHeight = panel.getBoundingClientRect().height;
+        var spaceBelow = window.innerHeight - buttonRect.bottom;
+        var spaceAbove = buttonRect.top;
+        var flipUp = panelHeight > spaceBelow && spaceAbove > spaceBelow;
+        panel.classList.toggle('columns-menu-panel-flip-up', flipUp);
+        // A flat 70vh (the CSS default, see .columns-menu-panel) assumes the button sits roughly
+        // mid-viewport — near the TOP of a long page (this toolbar, right under the page header)
+        // there's nowhere near that much room below before hitting the viewport edge, on either
+        // side. Capping to whatever's actually available in the direction it just opened toward
+        // (with a little breathing room, and a sane floor so it's never squashed to nothing) is
+        // what actually keeps every option reachable via the panel's own scroll instead of running
+        // off the visible page.
+        var available = (flipUp ? spaceAbove : spaceBelow) - 12;
+        panel.style.maxHeight = Math.max(120, Math.min(available, window.innerHeight * 0.7)) + 'px';
+      }
     });
     document.addEventListener('click', function () { panel.hidden = true; });
 
     container.appendChild(panel);
-    wrap.parentNode.insertBefore(container, wrap);
+    if (existingToolbar) existingToolbar.appendChild(container);
+    else wrap.parentNode.insertBefore(container, wrap);
 
-    return checkboxesByIndex;
+    return { checkboxesByIndex: checkboxesByIndex, resortToOrder: resortToOrder };
+  }
+
+  // An Actions column's .row-actions (see style.css) keeps growing as pages gain more
+  // capabilities — View/Edit/Reset password/Delete/Test, etc. — which either forces the column
+  // wide (crowding out the rest of the table) or wraps into a cramped multi-line stack. Collapses
+  // everything but a single "more actions" toggle into a dropdown, the same trigger-plus-popover
+  // shape as .columns-menu above. Scoped to `td .row-actions` specifically (not every .row-actions
+  // on the page — a card's own action row, Export/Clear above a chart, etc. stay as plain inline
+  // buttons; those aren't a growing table column the same way).
+  // A floating dropdown was tried here first, but .table-wrap needs overflow-x:auto for wide
+  // tables, and per the CSS overflow spec that silently clips the vertical axis too — a floating
+  // panel got cut off for any row near the bottom instead of overlapping the content below it.
+  // Pushing the actual table row taller instead (the same [data-toggle-row]/tr.expand-row pattern
+  // already used for Test/Rename/Reset-password elsewhere in this app) sidesteps that clipping
+  // entirely, and reads as one consistent expand-in-place convention instead of two different ones.
+  var rowActionsExpandCounter = 0;
+
+  function collapseRowActions(root) {
+    (root || document).querySelectorAll('td .row-actions').forEach(function (bar) {
+      if (bar.classList.contains('row-actions-collapsed')) return;
+      var actions = Array.prototype.slice.call(bar.children);
+      if (actions.length <= 1) return; // one action needs no menu to hide it behind
+
+      bar.classList.add('row-actions-collapsed');
+
+      var dataRow = bar.closest('tr');
+      var table = bar.closest('table');
+      var headerRow = table && table.querySelector('thead tr');
+      var columnCount = headerRow ? headerRow.children.length : (dataRow ? dataRow.children.length : 1);
+      var expandId = 'row-actions-expand-' + (++rowActionsExpandCounter);
+
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'btn-soft row-actions-toggle';
+      toggle.setAttribute('aria-label', 'More actions');
+      toggle.setAttribute('data-toggle-row', expandId);
+      toggle.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+      bar.appendChild(toggle);
+
+      var expandRow = document.createElement('tr');
+      expandRow.className = 'expand-row';
+      expandRow.id = expandId;
+      var cell = document.createElement('td');
+      cell.colSpan = columnCount;
+      var expandedActions = document.createElement('div');
+      // Both classes: .row-actions for its existing color/spacing rules and so the data-confirm
+      // handler (foot.ejs) still anchors its "are you sure?" bar the same way as before; the
+      // .row-actions-expanded modifier undoes the nowrap+flex-end an Actions-column .row-actions
+      // gets (see style.css) — this one has the whole table's width to work with, and wrapping is
+      // exactly what a row this size is meant to do.
+      expandedActions.className = 'row-actions row-actions-expanded';
+      actions.forEach(function (action) { expandedActions.appendChild(action); }); // moves, doesn't clone — every existing listener/attribute survives
+      cell.appendChild(expandedActions);
+      expandRow.appendChild(cell);
+
+      if (dataRow && dataRow.parentNode) dataRow.parentNode.insertBefore(expandRow, dataRow.nextSibling);
+    });
   }
 
   function initTable(table, index) {
@@ -132,21 +387,66 @@
       });
     });
 
+    var colgroup = buildColgroup(table, columnCount);
     var hiddenSet = new Set();
+    var widths = {};
     var headers = Array.prototype.slice.call(headerRow.children);
-
-    registry.set(table, { currentOrder: currentOrder, hiddenSet: hiddenSet, columnCount: columnCount });
-
-    var checkboxesByIndex = buildColumnsMenu(table, headers, hiddenSet, function () {
-      applyHidden(table, hiddenSet);
-      savePrefs(key, currentOrder, Array.from(hiddenSet));
+    // A <th data-default-hidden> (e.g. Token/UDP port on the Loxone -> MQTT mapping table — real
+    // but rarely-needed technical detail) starts folded away for anyone who's never touched this
+    // table's Columns menu, without having to hide it globally — someone who explicitly showed it
+    // before keeps seeing it (see the fetchPrefs callback below, which knows the difference
+    // between "never saved anything" and "saved, and chose to leave everything visible").
+    var defaultHiddenIndices = [];
+    headers.forEach(function (th) {
+      if (th.hasAttribute('data-default-hidden')) {
+        var idx = Number(th.dataset.originalIndex);
+        hiddenSet.add(idx);
+        defaultHiddenIndices.push(idx);
+      }
     });
+    var state = { currentOrder: currentOrder, hiddenSet: hiddenSet, widths: widths, columnCount: columnCount, sort: null };
+    registry.set(table, state);
+    // Applied synchronously (not left for the fetchPrefs().then() below, a network round-trip
+    // away) so a data-default-hidden column doesn't flash visible for a moment on every load.
+    if (hiddenSet.size > 0) applyHidden(table, hiddenSet);
+
+    var columnsMenu = buildColumnsMenu(table, headers, hiddenSet, function () {
+      applyHidden(table, hiddenSet);
+      savePrefs(key, state);
+    }, function () {
+      // Back to exactly initTable's own starting state — original order, only the
+      // data-default-hidden columns hidden, no custom widths, table-layout back to auto (a
+      // custom width may have switched it to 'fixed' — see applyWidths), no active sort.
+      currentOrder.length = 0;
+      for (var i = 0; i < columnCount; i++) currentOrder.push(i);
+      hiddenSet.clear();
+      defaultHiddenIndices.forEach(function (i) { hiddenSet.add(i); });
+      Object.keys(widths).forEach(function (k) { delete widths[k]; });
+      table.style.tableLayout = '';
+      Array.prototype.forEach.call(colgroup.children, function (col) { col.style.width = ''; });
+      state.sort = null;
+
+      applyOrder(table, colgroup, currentOrder);
+      applyHidden(table, hiddenSet);
+      updateSortIndicators(table, null);
+      columnsMenu.resortToOrder(currentOrder);
+      Object.keys(columnsMenu.checkboxesByIndex).forEach(function (idx) {
+        columnsMenu.checkboxesByIndex[idx].checked = !hiddenSet.has(Number(idx));
+      });
+
+      // A bare header with no body isn't reliably kept by every fetch implementation on a
+      // bodyless method like DELETE — sending an explicit (empty) JSON body is what actually
+      // guarantees the Content-Type sticks, which is what exempts this from the CSRF check below
+      // (see middleware/csrf.js) the same way the POST calls elsewhere in this file already do.
+      fetch('/api/table-prefs/' + encodeURIComponent(key), { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () {});
+    });
+    var checkboxesByIndex = columnsMenu.checkboxesByIndex;
 
     var dragSrcIndex = null;
     headers.forEach(function (th) {
       th.setAttribute('draggable', 'true');
       th.classList.add('draggable-col');
-      th.title = 'Drag to reorder columns';
+      th.title = 'Click to sort, drag to reorder columns';
 
       th.addEventListener('dragstart', function () {
         dragSrcIndex = Array.prototype.indexOf.call(headerRow.children, th);
@@ -159,9 +459,34 @@
         var targetIndex = Array.prototype.indexOf.call(headerRow.children, th);
         if (dragSrcIndex === null || dragSrcIndex === targetIndex) return;
         currentOrder.splice(targetIndex, 0, currentOrder.splice(dragSrcIndex, 1)[0]);
-        applyOrder(table, currentOrder);
+        applyOrder(table, colgroup, currentOrder);
         applyHidden(table, hiddenSet);
-        savePrefs(key, currentOrder, Array.from(hiddenSet));
+        applyWidths(colgroup, widths);
+        columnsMenu.resortToOrder(currentOrder);
+        savePrefs(key, state);
+      });
+
+      // A native HTML5 drag gesture doesn't fire 'click' on its source element, so this and the
+      // drag-to-reorder handlers above coexist without special-casing one another. The resize
+      // handle below is a plain mousedown/mousemove/mouseup drag, not native drag-and-drop — that
+      // kind DOES still fire a 'click' right after mouseup, and by then the pointer has usually
+      // moved off the handle itself (checking e.target here is not enough), so it needs its own
+      // "did a resize just happen" flag instead (set by addResizeHandle's onUp, below).
+      th.addEventListener('click', function (e) {
+        if (e.target.classList.contains('col-resize-handle') || th.dataset.justResized) return;
+        var originalIndex = Number(th.dataset.originalIndex);
+        var next = (state.sort && state.sort.index === originalIndex && state.sort.dir === 'asc')
+          ? { index: originalIndex, dir: 'desc' }
+          : { index: originalIndex, dir: 'asc' };
+        state.sort = next;
+        applySort(table, next);
+        updateSortIndicators(table, next);
+      });
+
+      addResizeHandle(th, colgroup, function (originalIndex, px) {
+        if (px) widths[originalIndex] = Math.round(px);
+        else delete widths[originalIndex];
+        savePrefs(key, state);
       });
     });
 
@@ -169,26 +494,39 @@
     // (rather than building either from scratch) so nothing disappears or
     // flashes on pages that auto-refresh.
     fetchPrefs(key).then(function (prefs) {
-      (prefs.hidden || []).forEach(function (i) {
-        hiddenSet.add(i);
-        if (checkboxesByIndex && checkboxesByIndex[i]) checkboxesByIndex[i].checked = false;
+      // prefs.order is null specifically when nothing has ever been saved for this table+user —
+      // once something HAS been saved (even just a resize, never touching visibility), prefs.hidden
+      // is the full authoritative list, including "explicitly nothing," which must be able to
+      // override a data-default-hidden seed. Only merge on top of that seed for a first-ever visit.
+      if (prefs.order !== null) hiddenSet.clear();
+      (prefs.hidden || []).forEach(function (i) { hiddenSet.add(i); });
+      headers.forEach(function (th) {
+        var i = Number(th.dataset.originalIndex);
+        if (checkboxesByIndex && checkboxesByIndex[i]) checkboxesByIndex[i].checked = !hiddenSet.has(i);
       });
 
       if (prefs.order && prefs.order.length === columnCount) {
         currentOrder.splice.apply(currentOrder, [0, currentOrder.length].concat(prefs.order));
-        applyOrder(table, currentOrder);
+        applyOrder(table, colgroup, currentOrder);
+        columnsMenu.resortToOrder(currentOrder);
       }
       applyHidden(table, hiddenSet);
+
+      if (prefs.widths) {
+        Object.keys(prefs.widths).forEach(function (i) { widths[i] = prefs.widths[i]; });
+        applyWidths(colgroup, widths);
+      }
     });
   }
 
   document.querySelectorAll('.table-wrap table').forEach(function (table, index) {
     initTable(table, index);
   });
+  collapseRowActions();
 
   // Called after something outside this file has replaced a table's <tbody>
   // (e.g. a partial-refresh fetch) with fresh, originally-ordered rows: tags
-  // them and re-applies this table's current order/hidden columns.
+  // them and re-applies this table's current order/hidden/sort columns.
   window.refreshTables = function () {
     document.querySelectorAll('.table-wrap table').forEach(function (table) {
       var state = registry.get(table);
@@ -199,8 +537,12 @@
           cell.dataset.originalIndex = i;
         });
       });
-      applyOrder(table, state.currentOrder);
+      var colgroup = table.querySelector('colgroup');
+      applyOrder(table, colgroup, state.currentOrder);
       applyHidden(table, state.hiddenSet);
+      applyWidths(colgroup, state.widths);
+      if (state.sort) applySort(table, state.sort);
     });
+    collapseRowActions();
   };
 })();

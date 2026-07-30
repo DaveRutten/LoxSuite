@@ -10,7 +10,7 @@
 <div class="card">
   <div style="display:flex; align-items:center; gap:1.1rem; margin-bottom:1.25rem;">
     <% if (profile.avatar_url) { %>
-      <img src="<%= profile.avatar_url %>" alt="" style="width:64px; height:64px; border-radius:50%; object-fit:cover; flex-shrink:0;">
+      <img src="/avatar/<%= profile.id %>" alt="" style="width:64px; height:64px; border-radius:50%; object-fit:cover; flex-shrink:0;">
     <% } else { %>
       <div style="width:64px; height:64px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:var(--accent-soft); color:var(--accent); font-size:1.5rem; font-weight:600;">
         <%= (profile.display_name || profile.username).charAt(0).toUpperCase() %>
@@ -41,6 +41,8 @@
       <div class="form-grid">
         <div><label>Display name</label><input type="text" name="display_name" value="<%= profile.display_name || '' %>" placeholder="<%= profile.username %>"></div>
         <div><label>Email</label><input type="email" name="email" value="<%= profile.email || '' %>"></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
         <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
       </div>
     </form>
@@ -53,6 +55,8 @@
         <div><label>Current password</label><input type="password" name="current_password" required></div>
         <div><label>New password</label><input type="password" name="new_password" required minlength="8"></div>
         <div><label>Confirm new password</label><input type="password" name="confirm_password" required minlength="8"></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
         <button type="submit" class="btn-edit"><%- icon('edit') %> Change password</button>
       </div>
     </form>

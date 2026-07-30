@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="<%= csrfToken %>">
+  <meta name="display-timezone" content="<%= displayTimezone %>">
   <title><%= pageTitle %> · LoxSuite</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/style.css">
@@ -43,10 +44,10 @@
       const brokerAreas = [
         { key: 'mqtt_users', href: '/mqtt-users' },
         { key: 'mqtt_roles', href: '/mqtt-roles' },
-        { key: 'settings', href: '/settings' },
+        { key: 'settings', href: '/settings/broker' },
       ];
       const brokerHref = (brokerAreas.find((a) => canView(a.key)) || {}).href;
-      const brokerActive = ['mqtt-users', 'mqtt-roles', 'settings'].includes(active);
+      const brokerActive = ['mqtt-users', 'mqtt-roles', 'broker-settings'].includes(active);
 
       const loxoneSectionVisible = canView('miniservers') || !!mappingsHref;
       const mqttSectionVisible = canView('incoming') || !!brokerHref;
@@ -59,31 +60,40 @@
     <nav>
       <% if (canView('dashboard')) { %><a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>">Dashboard</a><% } %>
 
-      <a href="<%= canView('monitor') ? '/monitor' : '/dashboards' %>" class="<%= (active === 'monitor' || active === 'dashboards') ? 'active' : '' %>">Monitor</a>
+      <% const monitorExpanded = active === 'monitor' || active === 'dashboards'; %>
+      <button type="button" class="nav-section-label" data-nav-section="monitor" aria-expanded="<%= isCollapsed('monitor', monitorExpanded) ? 'false' : 'true' %>">
+        <span>Monitor</span><%- icon('chevron') %>
+      </button>
+      <div class="nav-group" <%= isCollapsed('monitor', monitorExpanded) ? 'hidden' : '' %>>
+        <% if (canView('monitor')) { %><a href="/monitor" class="<%= active === 'monitor' ? 'active' : '' %>">Monitor</a><% } %>
+        <a href="/dashboards" class="<%= active === 'dashboards' ? 'active' : '' %>">My Dashboards</a>
+      </div>
 
       <% if (loxoneSectionVisible) { %>
-        <% const loxoneExpanded = active === 'miniservers' || mappingsActive; %>
+        <% const loxoneExpanded = active === 'miniservers' || active === 'live-data' || mappingsActive; %>
         <button type="button" class="nav-section-label" data-nav-section="loxone-mappings" aria-expanded="<%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'false' : 'true' %>">
-          <span>Loxone mappings</span><%- icon('chevron') %>
+          <span>Loxone</span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'hidden' : '' %>>
           <% if (canView('miniservers')) { %><a href="/miniservers" class="<%= active === 'miniservers' ? 'active' : '' %>">Miniservers</a><% } %>
+          <% if (canView('miniservers')) { %><a href="/live-data" class="<%= active === 'live-data' ? 'active' : '' %>">Live Data</a><% } %>
           <% if (mappingsHref) { %><a href="<%= mappingsHref %>" class="<%= mappingsActive ? 'active' : '' %>">Mappings</a><% } %>
         </div>
       <% } %>
 
       <% if (mqttSectionVisible) { %>
-        <% const brokerExpanded = active === 'incoming' || brokerActive; %>
+        <% const brokerExpanded = active === 'incoming' || active === 'incoming-clients' || brokerActive; %>
         <button type="button" class="nav-section-label" data-nav-section="mqtt-broker" aria-expanded="<%= isCollapsed('mqtt-broker', brokerExpanded) ? 'false' : 'true' %>">
-          <span>MQTT broker</span><%- icon('chevron') %>
+          <span>MQTT</span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('mqtt-broker', brokerExpanded) ? 'hidden' : '' %>>
-          <% if (canView('incoming')) { %><a href="/incoming" class="<%= active === 'incoming' ? 'active' : '' %>">Live traffic</a><% } %>
           <% if (brokerHref) { %><a href="<%= brokerHref %>" class="<%= brokerActive ? 'active' : '' %>">Broker</a><% } %>
+          <% if (canView('incoming')) { %><a href="/incoming/messages" class="<%= active === 'incoming' ? 'active' : '' %>">Live Data</a><% } %>
+          <% if (canView('incoming')) { %><a href="/incoming/clients" class="<%= active === 'incoming-clients' ? 'active' : '' %>">Client Activity</a><% } %>
         </div>
       <% } %>
 
-      <% if (canView('logs')) { %><a href="/logs" class="<%= (active === 'logs-mqtt' || active === 'logs-loxone') ? 'active' : '' %>">Logs</a><% } %>
+      <% if (canView('logs')) { %><a href="/logs" class="<%= (active === 'logs-mqtt' || active === 'logs-loxone' || active === 'logs-loxone-commands' || active === 'logs-system') ? 'active' : '' %>">Logs</a><% } %>
     </nav>
     <button type="button" id="theme-toggle" class="theme-toggle"><%- icon('theme') %> Toggle theme</button>
   </aside>
@@ -92,10 +102,10 @@
       <h1><%= pageTitle %></h1>
       <%
         const helpAnchors = {
-          dashboard: 'dashboard', monitor: 'monitor', dashboards: 'dashboards', miniservers: 'miniservers', 'mqtt-to-loxone': 'mqtt-to-loxone',
+          dashboard: 'dashboard', monitor: 'monitor', dashboards: 'dashboards', miniservers: 'miniservers', 'live-data': 'live-data', 'mqtt-to-loxone': 'mqtt-to-loxone',
           'loxone-to-mqtt': 'loxone-to-mqtt', commands: 'commands', transformations: 'transformations',
-          incoming: 'incoming', 'logs-mqtt': 'logs', 'logs-loxone': 'logs', 'mqtt-users': 'mqtt-users', 'mqtt-roles': 'mqtt-roles', settings: 'settings',
-          admin: 'admin', profile: 'profile',
+          incoming: 'incoming', 'incoming-clients': 'incoming', 'logs-mqtt': 'logs', 'logs-loxone': 'logs', 'logs-loxone-commands': 'logs', 'logs-system': 'logs', 'mqtt-users': 'mqtt-users', 'mqtt-roles': 'mqtt-roles', 'broker-settings': 'settings',
+          admin: 'admin', profile: 'profile', settings: 'settings-general',
         };
         const helpAnchor = helpAnchors[active];
       %>
@@ -109,7 +119,7 @@
           <div class="account-menu">
             <button type="button" id="account-menu-btn" class="account-menu-btn">
               <% if (currentUser.avatarUrl) { %>
-                <img src="<%= currentUser.avatarUrl %>" alt="" class="account-menu-avatar">
+                <img src="/avatar/<%= currentUser.id %>" alt="" class="account-menu-avatar">
               <% } else { %>
                 <span class="account-menu-avatar account-menu-avatar-fallback"><%= (currentUser.displayName || currentUser.username).charAt(0).toUpperCase() %></span>
               <% } %>
@@ -117,6 +127,9 @@
             </button>
             <div id="account-menu-panel" class="account-menu-panel" hidden>
               <a href="/profile" class="<%= active === 'profile' ? 'active' : '' %>">Profile</a>
+              <% if (canView('settings')) { %>
+                <a href="/settings" class="<%= active === 'settings' ? 'active' : '' %>">Settings</a>
+              <% } %>
               <% if (currentUser.isAdmin) { %>
                 <a href="/admin/users" class="<%= active === 'admin' ? 'active' : '' %>">Administration</a>
               <% } %>

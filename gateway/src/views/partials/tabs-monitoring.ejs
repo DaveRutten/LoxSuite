@@ -1,9 +1,0 @@
-<%
-  // Shared by Monitor and My Dashboards (see the sidebar's consolidated "Monitor" link in
-  // partials/head.ejs) — locals: active. My Dashboards has no Access Role gate (personal to
-  // whoever's logged in, see routes/dashboards.js), so unlike Monitor it's never hidden here.
-%>
-<div class="tabs">
-  <% if (canView('monitor')) { %><a href="/monitor" class="<%= active === 'monitor' ? 'active' : '' %>">Monitor</a><% } %>
-  <a href="/dashboards" class="<%= active === 'dashboards' ? 'active' : '' %>">My Dashboards</a>
-</div>

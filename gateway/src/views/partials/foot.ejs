@@ -42,6 +42,34 @@
   window.stampCsrfTokens();
 </script>
 <script>
+  // navigator.clipboard is only defined in a "secure context" — https, or http on localhost —
+  // so every copy-to-clipboard button silently did nothing at all when this is reached over plain
+  // http on a LAN address (e.g. http://192.168.x.x:3000), which is exactly how this self-hosted
+  // app is commonly reached. Falls back to the older execCommand('copy') via a throwaway textarea,
+  // which still works in that case. Returns a Promise either way so callers don't need to branch.
+  window.copyToClipboard = function (text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      try {
+        document.execCommand('copy') ? resolve() : reject(new Error('execCommand copy failed'));
+      } catch (err) {
+        reject(err);
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    });
+  };
+</script>
+<script>
   // A plain <meta refresh> would reload mid-interaction — e.g. closing the
   // Columns menu the moment you opened it, or losing your place in a table.
   // Refresh on the same interval instead, but postpone while a Columns menu
@@ -104,11 +132,13 @@
   })();
 </script>
 <script>
-  // Collapsible sidebar sections (see partials/head.ejs) — toggling flips the visible state
-  // immediately and persists it server-side (routes/navPrefs.js) so it follows the user across
-  // devices/browsers, same as their table column preferences.
+  // Collapsible sections, keyed by an arbitrary data-nav-section string persisted server-side
+  // (routes/navPrefs.js) so it follows the user across devices/browsers, same as their table
+  // column preferences. Started out sidebar-only (partials/head.ejs's .nav-section-label) but the
+  // same toggle-and-remember behavior applies to any [data-nav-section] button regardless of its
+  // own styling — the dashboard home page's .section-toggle headers reuse it as-is.
   (function () {
-    document.querySelectorAll('.nav-section-label[data-nav-section]').forEach(function (btn) {
+    document.querySelectorAll('[data-nav-section]').forEach(function (btn) {
       var group = btn.nextElementSibling;
       if (!group) return;
       btn.addEventListener('click', function () {
@@ -206,20 +236,40 @@
   // never overflow or get clipped the way a floated box would. Toggled via a .open class (not the
   // hidden attribute) specifically so CSS can transition it open/closed instead of an abrupt snap
   // — see tr.expand-row and .panel-settings-form in style.css.
+  // Any .truncate cell (a long topic/value/URL cut short with an ellipsis) already has the full
+  // text in its title attribute for a hover tooltip — click does the same thing more reliably,
+  // since native tooltips are slow and don't exist at all on touch devices. Toggles the text
+  // in place (wrapping within its cell) rather than popping up anything separate.
   (function () {
-    document.querySelectorAll('[data-toggle-row]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var row = document.getElementById(btn.dataset.toggleRow);
-        if (!row) return;
-        var opening = !row.classList.contains('open');
-        row.classList.toggle('open');
-        if (opening) {
-          var firstInput = row.querySelector('input, select, textarea');
-          if (firstInput) firstInput.focus();
-        }
-      });
+    document.addEventListener('click', function (e) {
+      var el = e.target.closest('.truncate');
+      if (!el) return;
+      el.classList.toggle('truncate-expanded');
     });
   })();
+</script>
+<script>
+  // Delegated on document (rather than bound to each [data-toggle-row] at load time) so this also
+  // covers a button tables.js creates dynamically after this script has already run (see its
+  // collapseRowActions) — a direct per-element bind at parse time would simply never see those.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-toggle-row]');
+    if (!btn) return;
+    var row = document.getElementById(btn.dataset.toggleRow);
+    if (!row) return;
+    var opening = !row.classList.contains('open');
+    row.classList.toggle('open');
+    if (opening) {
+      var firstInput = row.querySelector('input, select, textarea');
+      // preventScroll: a wide table (e.g. Mappings) scrolls horizontally, and this input usually
+      // sits at the LEFT of its own row while the toggle button that revealed it lives at the
+      // FAR RIGHT (the Actions column) — an ordinary .focus() call's browser-native "scroll the
+      // focused element into view" would yank the table's scroll position back toward the left to
+      // show this input, dragging whatever the user was just looking at (e.g. another expanded
+      // row's right-aligned action buttons) off-screen in the process.
+      if (firstInput) firstInput.focus({ preventScroll: true });
+    }
+  });
 </script>
 <script>
   // Any form[data-confirm="message"] gets a native-confirm()-free "are you sure?" — clicking its
@@ -227,7 +277,16 @@
   // matching the trigger's own color) right below the whole row-actions group instead of inline
   // next to the other buttons, where it fragmented across multiple wrapped lines in the cramped
   // remaining space. Placed after .row-actions when there is one, else after the form itself.
-  (function () {
+  //
+  // Deferred to DOMContentLoaded (rather than running immediately, inline, at parse time) so it
+  // runs AFTER tables.js's own deferred collapseRowActions() — that one relocates a row's whole
+  // .row-actions bar (buttons and all) into a newly-built kebab expand-row once there's more than
+  // one action, and anchoring here needs to land AFTER that final location, not the original
+  // (about to be emptied out) one. Getting this backwards left the confirm bar orphaned in the
+  // now-narrow original Actions cell instead of sitting next to the relocated buttons, where a
+  // real <td> won't clip its overflow — it visually bled into whichever column happened to sit
+  // next to that cell instead of appearing where the buttons actually ended up.
+  document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('form[data-confirm]').forEach(function (form) {
       var submitBtn = form.querySelector('button[type="submit"]');
       if (!submitBtn) return;
@@ -270,7 +329,7 @@
         setTimeout(function () { submitBtn.hidden = false; }, 200);
       });
     });
-  })();
+  });
 </script>
 </body>
 </html>

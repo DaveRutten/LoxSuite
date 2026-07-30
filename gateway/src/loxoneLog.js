@@ -13,20 +13,31 @@ const insertLogEntry = db.prepare('INSERT INTO log_entries (source, source_id, s
 // re-processing the whole file every time.
 const lastContent = new Map();
 
+const selectLastStoredLine = db.prepare(
+  "SELECT line FROM log_entries WHERE source = 'loxone' AND source_id = ? ORDER BY id DESC LIMIT 1"
+);
+
 // miniserver_id -> ISO timestamp of the newest line already persisted, mirroring mosquittoLog.js's
 // own restart-safe dedup — but Loxone's def.log lines aren't reliably timestamp-prefixed the way
-// Mosquitto's are, so this uses the gateway's own capture time instead: since every poll only ever
-// appends new-content-since-last-poll (or the last BACKFILL_LINES on first contact), there's
-// nothing to naturally re-encounter across a restart the way MQTT's byte-0 replay does — a
-// restart just resumes diffing from an empty lastContent, so at most one MiniServer's worth of the
-// existing on-disk log gets treated as "new" once (bounded by BACKFILL_LINES), never repeatedly.
+// Mosquitto's are, so this diffs against raw content instead. lastContent itself is in-memory and
+// does get wiped on every restart, but the "first contact this run" branch below reconstructs its
+// starting point from what's already in the database rather than blindly re-backfilling — a plain
+// restart used to re-insert up to BACKFILL_LINES duplicate rows every single time (confirmed: one
+// real deployment accumulated a 15x duplication factor from routine restarts alone).
 function newLines(miniserverId, fullText) {
   const previous = lastContent.get(miniserverId);
   lastContent.set(miniserverId, fullText);
 
   if (previous === undefined) {
-    // First contact with this Miniserver this process's lifetime — backfill a bounded tail
-    // instead of however much history happens to be on the SD card.
+    // First contact with this Miniserver this process's lifetime. If we've stored lines from it
+    // before (an earlier run, before this restart), find the last one we already have and only
+    // take what comes after it — otherwise fall back to a bounded tail, for genuinely first-ever
+    // contact or if the log rotated far enough that our last-known line isn't in it anymore.
+    const lastStored = selectLastStoredLine.get(miniserverId);
+    if (lastStored) {
+      const idx = fullText.lastIndexOf(lastStored.line);
+      if (idx !== -1) return fullText.slice(idx + lastStored.line.length).split('\n').filter(Boolean);
+    }
     return fullText.split('\n').filter(Boolean).slice(-BACKFILL_LINES);
   }
   if (fullText === previous) return [];

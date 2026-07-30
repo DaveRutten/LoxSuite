@@ -16,6 +16,10 @@ const ICONS = {
   chevron: '<polyline points="6 9 12 15 18 9"/>',
   upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
   filter: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
+  share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.6 15.4 6.4M8.6 13.4 15.4 17.6"/>',
   // Two sources bridging into one hub — Loxone and MQTT devices merging into this
   // gateway. An original mark (not the Loxone logo) used as the app's brand icon.
   logo: '<circle cx="7" cy="6" r="1.8" fill="currentColor" stroke="none"/><circle cx="17" cy="6" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="18" r="2.2" fill="currentColor" stroke="none"/><path d="M8.3 7.6 10.6 15.4"/><path d="M15.7 7.6 13.4 15.4"/>',

@@ -23,6 +23,8 @@
       <div class="form-grid">
         <div><label>Username</label><input type="text" name="username" required></div>
         <div><label>Password</label><input type="password" name="password" required minlength="8"></div>
+        <div><label>First name (optional)</label><input type="text" name="first_name"></div>
+        <div><label>Last name (optional)</label><input type="text" name="last_name"></div>
         <div>
           <label>Access Role</label>
           <select name="role_id">
@@ -37,13 +39,22 @@
 
 <div class="table-wrap">
   <table>
-    <thead><tr><th>Username</th><th>Signs in via</th><th>Last login</th><th>Access Role</th><th>Actions</th></tr></thead>
+    <thead><tr><th></th><th>Username</th><th>Name</th><th>Signs in via</th><th>Last login</th><th>Access Role</th><th>Actions</th></tr></thead>
     <tbody>
       <% users.forEach(u => { %>
+        <% const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.display_name || ''; %>
         <tr>
+          <td>
+            <% if (u.avatar_url) { %>
+              <img src="/avatar/<%= u.id %>" alt="" class="account-menu-avatar">
+            <% } else { %>
+              <span class="account-menu-avatar account-menu-avatar-fallback"><%= (fullName || u.username).charAt(0).toUpperCase() %></span>
+            <% } %>
+          </td>
           <td><%= u.username %></td>
+          <td><%= fullName || '-' %></td>
           <td><%= u.auth_provider === 'local' ? 'Password' : 'Pocket ID (SSO)' %></td>
-          <td><%= u.last_login_at ? new Date(u.last_login_at).toLocaleString('en-GB') : '-' %></td>
+          <td><%= u.last_login_at ? formatDateTime(u.last_login_at) : '-' %></td>
           <td>
             <form class="inline" method="post" action="/admin/users/<%= u.id %>/role" style="display:flex; gap:0.4rem; align-items:center;">
               <select name="role_id">
@@ -55,6 +66,7 @@
           <td>
             <div class="row-actions">
               <% if (u.auth_provider === 'local') { %>
+                <button type="button" class="btn-edit" data-toggle-row="admin-edit-name-<%= u.id %>"><%- icon('edit') %> Edit name</button>
                 <button type="button" class="btn-edit" data-toggle-row="admin-reset-pw-<%= u.id %>"><%- icon('edit') %> Reset password</button>
               <% } %>
               <form class="inline" method="post" action="/admin/users/<%= u.id %>/delete" data-confirm="Delete this user?">
@@ -64,8 +76,19 @@
           </td>
         </tr>
         <% if (u.auth_provider === 'local') { %>
+        <tr class="expand-row" id="admin-edit-name-<%= u.id %>">
+          <td colspan="7">
+            <form method="post" action="/admin/users/<%= u.id %>/name" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">First name:</label>
+              <input type="text" name="first_name" value="<%= u.first_name || '' %>" style="max-width:12rem;">
+              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">Last name:</label>
+              <input type="text" name="last_name" value="<%= u.last_name || '' %>" style="max-width:12rem;">
+              <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+            </form>
+          </td>
+        </tr>
         <tr class="expand-row" id="admin-reset-pw-<%= u.id %>">
-          <td colspan="5">
+          <td colspan="7">
             <form method="post" action="/admin/users/<%= u.id %>/reset-password" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
               <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">New password:</label>
               <input type="password" name="password" required minlength="8" style="max-width:14rem;">
@@ -76,7 +99,7 @@
         <% } %>
       <% }) %>
       <% if (users.length === 0) { %>
-        <tr><td colspan="5" class="empty">No users found.</td></tr>
+        <tr><td colspan="7" class="empty">No users found.</td></tr>
       <% } %>
     </tbody>
   </table>

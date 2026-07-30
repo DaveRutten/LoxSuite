@@ -120,14 +120,22 @@ function applyLoxoneToMqttTransform(mapping, rawValue) {
   return value;
 }
 
-// Looks up a mapping by its token. If none exists and auto-create is enabled
-// in Settings, the incoming token/topic string is treated as a literal MQTT
-// topic and a new passthrough mapping is created for it on the fly — this is
-// opt-in and off by default, since a mistyped token would otherwise silently
-// spawn a mapping instead of failing loudly.
+// Looks up a mapping by its token, falling back to matching the mapping's own
+// mqtt_topic — so an existing mapping can be triggered either by its opaque
+// token or by sending its real MQTT topic string, without needing auto-create
+// and without risking a duplicate mapping. If neither matches and auto-create is
+// enabled in Settings, the incoming token/topic string is treated as a literal
+// MQTT topic and a new passthrough mapping is created for it on the fly — this
+// remains opt-in and off by default, since a mistyped token would otherwise
+// silently spawn a mapping instead of failing loudly.
 function findOrAutoCreateLoxoneMapping(token, transport) {
   const existing = db.prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE token = ? AND enabled = 1').get(token);
   if (existing) return existing;
+
+  const byTopic = db
+    .prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE mqtt_topic = ? AND transport = ? AND enabled = 1')
+    .get(token, transport);
+  if (byTopic) return byTopic;
 
   const settings = db.prepare('SELECT * FROM gateway_settings WHERE id = 1').get();
   if (!settings || !settings.auto_create_loxone_mappings) return null;

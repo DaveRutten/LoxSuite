@@ -1,0 +1,484 @@
+<%- include('partials/head', { pageTitle: 'Live Data', active: 'live-data' }) %>
+
+<p class="hint">
+  Every control the selected Miniserver's structure file knows about, grouped by room and then by
+  category &mdash; the same grouping Loxone Config itself uses, so this works for any project, not
+  just this one's specific setup. Rooms, categories, and values are all only fetched once you
+  actually expand them &mdash; a structure file can list hundreds of controls, so reading all of
+  them up front just to open this page would mean hundreds of requests to the Miniserver, and
+  thousands of rows of HTML, before you've looked at any of it. Open values refresh automatically
+  every few seconds.
+</p>
+
+<% if (liveStatus) { %>
+  <p class="hint" id="live-status-hint" style="margin-bottom:1.25rem;">
+    <strong>Live connection:</strong>
+    <span class="badge badge-live <%= liveStatus.status === 'open' ? 'badge-ok' : liveStatus.status === 'connecting' ? 'badge-neutral' : 'badge-off' %>">
+      <%= liveStatus.status === 'open' ? 'Connected' : liveStatus.status === 'connecting' ? 'Connecting…' : 'Not connected' %>
+    </span>
+    <span id="live-status-detail">
+      <% if (liveStatus.status === 'open') { %>&mdash; <%= liveStatus.valueCount %> values live<% } %>
+      <% if (liveStatus.error) { %>&mdash; <%= liveStatus.error %><% } %>
+    </span>
+  </p>
+<% } %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+
+<% if (miniserverId && miniservers.length > 1) { %>
+<form method="get" action="/live-data" class="form-grid" style="max-width:20rem; margin-bottom:1.25rem;">
+  <div>
+    <label>Miniserver</label>
+    <select name="miniserver_id" onchange="this.form.submit()">
+      <% miniservers.forEach(ms => { %>
+        <option value="<%= ms.id %>" <%= ms.id === miniserverId ? 'selected' : '' %>><%= ms.name %></option>
+      <% }) %>
+    </select>
+  </div>
+</form>
+<% } %>
+
+<% if (miniservers.length === 0) { %>
+  <p class="hint">No Miniservers added yet &mdash; add one on the <a href="/miniservers">Miniservers</a> page first.</p>
+<% } else if (!error && rooms.length === 0) { %>
+  <p class="empty">This Miniserver's structure file has no controls with a readable state.</p>
+<% } %>
+
+<% if (miniserverId) { %>
+<div class="table-toolbar" style="margin-bottom:1.25rem; border-radius:var(--radius); border:1px solid var(--border);">
+  <% if (rooms.length > 0) { %>
+  <div class="search-combo" style="max-width:100%;">
+    <select id="live-data-filter-field">
+      <option value="room">Room</option>
+      <option value="control">Control / state (in opened rooms)</option>
+    </select>
+    <input type="text" id="live-data-filter-query" placeholder="Filter…">
+  </div>
+  <% } %>
+  <a href="/live-data?miniserver_id=<%= miniserverId %>&refresh=1"><button type="button" class="btn-soft" title="Re-read this Miniserver's structure file — picks up rooms/controls added in Loxone Config since the gateway last read it"><%- icon('refresh') %> Refresh</button></a>
+</div>
+<% } %>
+
+<% rooms.forEach(room => { %>
+  <details class="add-panel live-data-room" data-room-uuid="<%= room.roomUuid %>" data-miniserver-id="<%= miniserverId %>">
+    <summary>
+      <%= room.name %>
+      <span class="hint" style="margin:0;">(<%= room.categoryCount %> categor<%= room.categoryCount === 1 ? 'y' : 'ies' %>, <%= room.controlCount %> control<%= room.controlCount === 1 ? '' : 's' %>)</span>
+      <% if (suggestionsEnabled) { %>
+        <button type="button" class="btn-soft suggest-dashboard-btn" title="Generate a starter dashboard for this room">Suggest dashboard</button>
+      <% } %>
+    </summary>
+    <div class="add-panel-body live-data-room-body">
+      <p class="hint" style="margin:0;">Loading&hellip;</p>
+    </div>
+  </details>
+  <% if (suggestionsEnabled) { %>
+    <!-- Deliberately a sibling of <details>, not a child — a native <details> hides every child
+         except <summary> whenever it's closed, which would silently swallow this preview (toggled
+         via our own `hidden` attribute) any time the room itself isn't expanded. -->
+    <div class="suggest-preview" hidden></div>
+  <% } %>
+<% }) %>
+
+<script>
+  (function () {
+    function el(tag, attrs, children) {
+      var node = document.createElement(tag);
+      Object.keys(attrs || {}).forEach(function (k) {
+        if (k === 'text') node.textContent = attrs[k];
+        else node.setAttribute(k, attrs[k]);
+      });
+      (children || []).forEach(function (c) { if (c) node.appendChild(c); });
+      return node;
+    }
+
+    // Every state row gets its own tiny action forms, built here rather than server-side — there
+    // just isn't a server-rendered row until a category is actually opened. window.
+    // stampCsrfTokens() (partials/foot.ejs) only stamps forms present at page load, so it has to
+    // be re-run after inserting these or the CSRF check would reject the submit. Mirrors the pair
+    // of buttons Live Messages has for an MQTT topic (incoming-messages.ejs): "Monitor" just
+    // starts tracking history, "Widget" also pins a Current-value panel onto the Home dashboard —
+    // same green (primary), since both create something new.
+    function buildMonitorForm(miniserverId, uuid, label) {
+      var form = el('form', { method: 'post', action: '/monitor', class: 'inline' });
+      form.appendChild(el('input', { type: 'hidden', name: 'source_type', value: 'loxone' }));
+      form.appendChild(el('input', { type: 'hidden', name: 'miniserver_id', value: miniserverId }));
+      form.appendChild(el('input', { type: 'hidden', name: 'loxone_uuid', value: uuid }));
+      form.appendChild(el('input', { type: 'hidden', name: 'label', value: label }));
+      var btn = el('button', { type: 'submit', class: 'primary', title: 'Start recording this state\'s history on the Monitor page' });
+      btn.innerHTML = '+ Monitor';
+      form.appendChild(btn);
+      return form;
+    }
+
+    function buildWidgetForm(miniserverId, uuid, label) {
+      var form = el('form', { method: 'post', action: '/dashboards/quick-add-loxone', class: 'inline' });
+      form.appendChild(el('input', { type: 'hidden', name: 'miniserver_id', value: miniserverId }));
+      form.appendChild(el('input', { type: 'hidden', name: 'loxone_uuid', value: uuid }));
+      form.appendChild(el('input', { type: 'hidden', name: 'label', value: label }));
+      var btn = el('button', { type: 'submit', class: 'primary', title: 'Pin this value on the Dashboard — gets an auto-generated name' });
+      btn.innerHTML = '+ Widget';
+      form.appendChild(btn);
+      return form;
+    }
+
+    // Compact, single-line JSON rendering — {k: v, k: v} / [a, b, c] rather than an indented
+    // multi-line dump. A short array like [778] or [1, 2, 778] has no business taking three lines,
+    // and even a bigger one (moodList's array of mood objects) reads as one wrapped paragraph
+    // instead of a block that dwarfs every other row in the same table. Caps recursion depth so a
+    // deeply-nested value degrades to "…" instead of growing unbounded.
+    function compactStringify(value, depth) {
+      if (depth > 3) return typeof value === 'object' && value !== null ? '…' : String(value);
+      if (Array.isArray(value)) {
+        if (value.length === 0) return '[]';
+        return '[' + value.map(function (v) { return compactStringify(v, depth + 1); }).join(', ') + ']';
+      }
+      if (value && typeof value === 'object') {
+        var keys = Object.keys(value);
+        if (keys.length === 0) return '{}';
+        return '{' + keys.map(function (k) { return k + ': ' + compactStringify(value[k], depth + 1); }).join(', ') + '}';
+      }
+      return typeof value === 'string' ? JSON.stringify(value) : String(value);
+    }
+
+    // Loxone often reports a "state" as a JSON-encoded string (mood lists, circuit name maps,
+    // daylight config, ...) rather than a plain number/text — shown raw, that's an unreadable
+    // blob. Anything that actually parses as JSON is reformatted compactly instead; anything that
+    // doesn't (plain numbers, "on"/"off", free text) is shown exactly as before.
+    function renderValueCell(cell, v) {
+      cell.innerHTML = '';
+      if (v === null || v === undefined) {
+        cell.appendChild(document.createTextNode('(unreadable)'));
+        return;
+      }
+      var trimmed = typeof v === 'string' ? v.trim() : '';
+      var looksLikeJson = trimmed.length > 1 && (trimmed[0] === '{' || trimmed[0] === '[');
+      if (looksLikeJson) {
+        try {
+          var parsed = JSON.parse(trimmed);
+          cell.appendChild(el('code', { text: compactStringify(parsed, 0), style: 'white-space:pre-wrap; word-break:break-word; font-size:0.82em;' }));
+          return;
+        } catch (e) { /* not actually valid JSON — fall through to plain text */ }
+      }
+      cell.appendChild(document.createTextNode(String(v)));
+    }
+
+    function buildCategory(miniserverId, cat) {
+      var details = el('details', { class: 'live-data-category' });
+      var uuids = [];
+      cat.controls.forEach(function (c) { c.states.forEach(function (s) { uuids.push(s.uuid); }); });
+      details.dataset.uuids = uuids.join(',');
+      details.dataset.miniserverId = miniserverId;
+
+      var summary = el('summary');
+      summary.appendChild(document.createTextNode(cat.name + ' '));
+      if (cat.type) summary.appendChild(el('span', { class: 'badge badge-neutral', text: cat.type }));
+      summary.appendChild(el('span', { class: 'hint', style: 'margin:0;', text: ' (' + cat.controls.length + ' control' + (cat.controls.length === 1 ? '' : 's') + ')' }));
+      details.appendChild(summary);
+
+      var wrap = el('div', { class: 'table-wrap' });
+      var table = el('table', { class: 'live-data-table' });
+      // Every category builds its own independent <table> — without a shared, fixed set of column
+      // widths, each one's Control/State/Value/Actions columns end up sized by that table's own
+      // content, so two categories next to each other visually don't line up at all. A <colgroup>
+      // with fixed percentages keeps every category's table the same shape regardless of content.
+      table.appendChild(el('colgroup', {}, [
+        el('col', { style: 'width:22%;' }),
+        el('col', { style: 'width:14%;' }),
+        el('col', { style: 'width:44%;' }),
+        el('col', { style: 'width:20%;' }),
+      ]));
+      var thead = el('thead');
+      thead.appendChild(el('tr', {}, [el('th', { text: 'Control' }), el('th', { text: 'State' }), el('th', { text: 'Value' }), el('th', { text: 'Actions' })]));
+      table.appendChild(thead);
+      var tbody = el('tbody', { class: 'live-data-body' });
+
+      cat.controls.forEach(function (control) {
+        control.states.forEach(function (s) {
+          var row = el('tr');
+          row.appendChild(el('td', {}, [document.createTextNode(control.name + ' '), el('span', { class: 'hint', style: 'margin:0;', text: '(' + control.type + ')' })]));
+          row.appendChild(el('td', { text: s.stateName }));
+          row.appendChild(el('td', { 'data-value-for': s.uuid, class: 'hint' }, [document.createTextNode('…')]));
+          var label = [control.name, s.stateName].filter(Boolean).join(' / ');
+          var actions = el('div', { class: 'row-actions' }, [
+            buildMonitorForm(miniserverId, s.uuid, label),
+            buildWidgetForm(miniserverId, s.uuid, label),
+          ]);
+          row.appendChild(el('td', {}, [actions]));
+          tbody.appendChild(row);
+        });
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      details.appendChild(wrap);
+
+      function fetchValues() {
+        if (!uuids.length) return;
+        fetch('/live-data/values?miniserver_id=' + encodeURIComponent(miniserverId) + '&uuids=' + encodeURIComponent(uuids.join(',')))
+          .then(function (r) { return r.json(); })
+          .then(function (values) {
+            Object.keys(values).forEach(function (uuid) {
+              var cell = tbody.querySelector('[data-value-for="' + uuid + '"]');
+              if (!cell) return;
+              renderValueCell(cell, values[uuid]);
+              cell.classList.remove('hint');
+            });
+          })
+          .catch(function () { /* best-effort — cells just keep showing whatever they last had */ });
+      }
+
+      var loaded = false;
+      details.addEventListener('toggle', function () {
+        if (!details.open || loaded) return;
+        loaded = true;
+        fetchValues();
+      });
+      // Exposed so the page-wide refresh loop below can re-poll only categories that are both
+      // open and have actually loaded once already — no point refreshing collapsed ones, and a
+      // still-loading one will get its values from the toggle handler above instead.
+      details.refreshLiveValues = function () { if (details.open && loaded) fetchValues(); };
+
+      return details;
+    }
+
+    var RANGE_PRESETS = [['1h', 'Last hour'], ['24h', 'Last 24 hours'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['all', 'All']];
+    var POLL_INTERVALS = [[5000, '5 seconds'], [10000, '10 seconds'], [30000, '30 seconds'], [60000, '1 minute'], [300000, '5 minutes']];
+
+    // "Suggest dashboard" — the button lives inside <summary>, so a click on it has to be stopped
+    // from also toggling the room open/closed (the browser's default behaviour for any click
+    // inside a <summary>). The preview itself is a plain sibling <div>, shown/hidden by us, so it
+    // works whether the room's own detail panel is expanded or not.
+    function buildSuggestPreview(preview, miniserverId, roomUuid) {
+      preview.innerHTML = '<p class="hint" style="margin:0;">Loading suggestions&hellip;</p>';
+      preview.hidden = false;
+      fetch('/live-data/suggest?miniserver_id=' + encodeURIComponent(miniserverId) + '&room_uuid=' + encodeURIComponent(roomUuid))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.error) { preview.innerHTML = '<p class="error">' + data.error + '</p>'; return; }
+          if (!data.buckets || data.buckets.length === 0) {
+            preview.innerHTML = '<p class="hint" style="margin:0;">Nothing in this room matches a known suggestion type (lighting, climate, shading, energy).</p>';
+            return;
+          }
+          preview.innerHTML = '';
+
+          var settingsRow = el('div', { class: 'suggest-settings-grid' });
+          var nameInput = el('input', { type: 'text', value: data.roomName });
+          settingsRow.appendChild(el('div', {}, [el('label', { text: 'Dashboard name' }), nameInput]));
+
+          var rangeSelect = el('select', {}, RANGE_PRESETS.map(function (r) {
+            return el('option', { value: r[0], text: r[1] });
+          }));
+          rangeSelect.value = '24h';
+          settingsRow.appendChild(el('div', {}, [el('label', { text: 'Default range' }), rangeSelect]));
+
+          var pollSelect = el('select', {}, POLL_INTERVALS.map(function (p) {
+            return el('option', { value: String(p[0]), text: p[1] });
+          }));
+          pollSelect.value = '10000';
+          settingsRow.appendChild(el('div', {}, [el('label', { text: 'Refresh interval' }), pollSelect]));
+          preview.appendChild(settingsRow);
+
+          var list = el('div', { class: 'suggest-bucket-list' });
+          data.buckets.forEach(function (bucket) {
+            var bucketBox = el('div', { class: 'suggest-bucket' });
+            bucketBox.appendChild(el('div', { class: 'suggest-bucket-title' }, [
+              document.createTextNode(bucket.label + ' '),
+              el('span', { class: 'hint', style: 'margin:0;', text: '(' + (bucket.panelType === 'chart' ? 'chart panel' : 'current-value panel') + ')' }),
+            ]));
+
+            bucket.items.forEach(function (item, i) {
+              var rowId = 'suggest-' + roomUuid + '-' + bucket.key + '-' + i;
+              var row = el('div', { class: 'suggest-item-row' });
+              var checkbox = el('input', { type: 'checkbox', id: rowId, checked: 'checked' });
+              row.appendChild(checkbox);
+              row.appendChild(el('label', { for: rowId, text: item.controlName }));
+              var stateSelect = el('select', { 'data-bucket-key': bucket.key }, item.availableStates.map(function (s) {
+                return el('option', { value: s.uuid, text: s.stateName });
+              }));
+              stateSelect.value = item.uuid;
+              row.appendChild(stateSelect);
+              checkbox.addEventListener('change', function () { stateSelect.disabled = !checkbox.checked; });
+              bucketBox.appendChild(row);
+            });
+            list.appendChild(bucketBox);
+          });
+          preview.appendChild(list);
+
+          var createBtn = el('button', { type: 'button', class: 'primary', style: 'margin-top:0.6rem;' });
+          createBtn.innerHTML = '+ Create dashboard';
+          var status = el('span', { class: 'hint', style: 'margin-left:0.6rem;' });
+          createBtn.addEventListener('click', function () {
+            var items = [];
+            list.querySelectorAll('.suggest-item-row').forEach(function (row) {
+              var checkbox = row.querySelector('input[type="checkbox"]');
+              var stateSelect = row.querySelector('select');
+              if (checkbox.checked) items.push({ uuid: stateSelect.value, bucketKey: stateSelect.dataset.bucketKey });
+            });
+            if (items.length === 0) { status.textContent = 'Pick at least one.'; return; }
+            createBtn.disabled = true;
+            status.textContent = 'Creating…';
+            fetch('/live-data/suggest', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                miniserver_id: miniserverId,
+                room_uuid: roomUuid,
+                dashboard_name: nameInput.value,
+                range: rangeSelect.value,
+                poll_interval_ms: pollSelect.value,
+                items: items,
+              }),
+            })
+              .then(function (r) { return r.json(); })
+              .then(function (result) {
+                if (result.error) { status.textContent = result.error; createBtn.disabled = false; return; }
+                preview.innerHTML = '';
+                preview.appendChild(el('p', { class: 'hint', style: 'margin:0;', text: 'Dashboard created. ' }));
+                var link = el('a', { href: '/dashboards/' + result.dashboardId, text: 'Open it →' });
+                preview.appendChild(link);
+              })
+              .catch(function () { status.textContent = 'Something went wrong.'; createBtn.disabled = false; });
+          });
+          preview.appendChild(createBtn);
+          preview.appendChild(status);
+        })
+        .catch(function () { preview.innerHTML = '<p class="error">Could not load suggestions.</p>'; });
+    }
+
+    document.querySelectorAll('.suggest-dashboard-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var roomDetails = btn.closest('.live-data-room');
+        var preview = roomDetails.nextElementSibling;
+        if (!preview.hidden) { preview.hidden = true; return; }
+        buildSuggestPreview(preview, roomDetails.dataset.miniserverId, roomDetails.dataset.roomUuid);
+      });
+    });
+
+    document.querySelectorAll('.live-data-room').forEach(function (roomDetails) {
+      var loaded = false;
+      roomDetails.addEventListener('toggle', function () {
+        if (!roomDetails.open || loaded) return;
+        loaded = true;
+        var body = roomDetails.querySelector('.live-data-room-body');
+        var miniserverId = roomDetails.dataset.miniserverId;
+        fetch('/live-data/room?miniserver_id=' + encodeURIComponent(miniserverId) + '&room_uuid=' + encodeURIComponent(roomDetails.dataset.roomUuid))
+          .then(function (r) { return r.json(); })
+          .then(function (room) {
+            body.innerHTML = '';
+            (room.categories || []).forEach(function (cat) {
+              body.appendChild(buildCategory(miniserverId, cat));
+            });
+            if (!room.categories || room.categories.length === 0) {
+              body.appendChild(el('p', { class: 'hint', style: 'margin:0;', text: 'No categories with a readable state in this room.' }));
+            }
+            // Only now that every category (and its "+ Monitor" forms) is actually attached to
+            // the document can stampCsrfTokens() find them via its own document-wide query —
+            // calling it any earlier (e.g. inside buildCategory, on a still-detached element)
+            // silently stamps nothing, and the resulting forms fail CSRF on submit.
+            if (window.stampCsrfTokens) window.stampCsrfTokens();
+          })
+          .catch(function () {
+            body.innerHTML = '';
+            body.appendChild(el('p', { class: 'error', text: 'Could not load this room.' }));
+          });
+      });
+    });
+
+    // Values now come from the Miniserver's own live websocket push feed (see loxoneWebSocket.js)
+    // instead of a one-off fetch per category expand, so refreshing an already-open category is
+    // just re-reading our own in-memory cache — cheap enough to do every few seconds.
+    setInterval(function () {
+      document.querySelectorAll('.live-data-category[open]').forEach(function (details) {
+        if (details.refreshLiveValues) details.refreshLiveValues();
+      });
+    }, 3000);
+
+    <% if (liveStatus) { %>
+    (function () {
+      var badge = document.querySelector('#live-status-hint .badge');
+      var detail = document.getElementById('live-status-detail');
+      function poll() {
+        fetch('/live-data/status?miniserver_id=<%= miniserverId %>')
+          .then(function (r) { return r.json(); })
+          .then(function (s) {
+            badge.className = 'badge ' + (s.status === 'open' ? 'badge-ok' : s.status === 'connecting' ? 'badge-neutral' : 'badge-off');
+            badge.textContent = s.status === 'open' ? 'Connected' : s.status === 'connecting' ? 'Connecting…' : 'Not connected';
+            detail.textContent = s.status === 'open' ? ('— ' + s.valueCount + ' values live') : (s.error ? '— ' + s.error : '');
+          })
+          .catch(function () { /* leave the last known status showing */ });
+      }
+      setInterval(poll, 5000);
+    })();
+    <% } %>
+  })();
+</script>
+<script>
+  // Rooms and their categories are only fetched once expanded (see the big IIFE above) — so
+  // "Control / state" filtering can only ever act on whatever's already been loaded, and simply
+  // leaves not-yet-loaded rooms visible rather than guessing whether they'd match. "Room" filtering
+  // needs no such caveat since every room's name is already in the initial page render.
+  (function () {
+    var fieldSelect = document.getElementById('live-data-filter-field');
+    var queryInput = document.getElementById('live-data-filter-query');
+    if (!fieldSelect) return;
+
+    function applyFilter() {
+      var mode = fieldSelect.value;
+      var q = queryInput.value.trim().toLowerCase();
+      // Skip entirely once nothing is filtered — this also runs on every DOM mutation anywhere on
+      // the page (see the MutationObserver below, needed to catch lazily-loaded content), which
+      // includes every 3-second live-value refresh; newly-inserted elements need no reset since
+      // they're never given an inline display:none in the first place.
+      if (!q) return;
+      document.querySelectorAll('.live-data-room').forEach(function (roomDetails) {
+        var preview = roomDetails.nextElementSibling;
+        var hasPreview = preview && preview.classList.contains('suggest-preview');
+
+        if (!q) {
+          roomDetails.style.display = '';
+          if (hasPreview) preview.style.display = '';
+          roomDetails.querySelectorAll('.live-data-category').forEach(function (cat) { cat.style.display = ''; });
+          return;
+        }
+
+        if (mode === 'room') {
+          var roomName = roomDetails.querySelector('summary').textContent.toLowerCase();
+          var show = roomName.indexOf(q) !== -1;
+          roomDetails.style.display = show ? '' : 'none';
+          if (hasPreview) preview.style.display = show ? '' : 'none';
+          return;
+        }
+
+        // mode === 'control': the room itself always stays visible (its categories may not be
+        // loaded yet), but any already-loaded category's individual rows get filtered, and a
+        // category with zero matching rows collapses out of view entirely.
+        roomDetails.style.display = '';
+        if (hasPreview) preview.style.display = '';
+        roomDetails.querySelectorAll('.live-data-category').forEach(function (cat) {
+          var rows = cat.querySelectorAll('.live-data-body tr');
+          var anyMatch = false;
+          rows.forEach(function (row) {
+            var text = row.textContent.toLowerCase();
+            var match = text.indexOf(q) !== -1;
+            if (match) anyMatch = true;
+            row.style.display = match ? '' : 'none';
+          });
+          cat.style.display = rows.length === 0 || anyMatch ? '' : 'none';
+        });
+      });
+    }
+
+    fieldSelect.addEventListener('change', applyFilter);
+    queryInput.addEventListener('input', applyFilter);
+    // Re-applies once a room/category finishes lazily loading, so an already-typed filter keeps
+    // working on content that didn't exist yet when it was first typed.
+    new MutationObserver(applyFilter).observe(document.body, { childList: true, subtree: true });
+  })();
+</script>
+
+<%- include('partials/foot') %>

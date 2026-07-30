@@ -1,5 +1,6 @@
 const db = require('./db');
 const { fetchMiniserver } = require('./loxone');
+const { ensureConnection, getLiveValue } = require('./loxoneWebSocket');
 
 const LOXONE_POLL_TICK_MS = 5000;
 const RETENTION_TICK_MS = 60 * 60 * 1000;
@@ -44,6 +45,19 @@ async function pollLoxoneMonitor(monitor) {
   const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(monitor.miniserver_id);
   if (!miniserver) return;
 
+  // The live websocket cache (loxoneWebSocket.js) is checked first and is right almost all of the
+  // time — it's not just faster than an HTTP round trip, it's the ONLY way most states are
+  // readable at all: /jdev/sps/io/<uuid> only answers for a small slice of a control's states
+  // (measured ~8% on a real installation), so a monitor tracking anything else — active,
+  // numOpen, tempActual, activeMoodsNum, position, ... — would otherwise get exactly one reading
+  // (whatever was seeded when it was created) and then silently never update again.
+  ensureConnection(miniserver);
+  const liveValue = getLiveValue(miniserver.id, monitor.loxone_uuid);
+  if (liveValue !== undefined) {
+    if (liveValue !== null) insertHistory(monitor.id, liveValue);
+    return;
+  }
+
   try {
     const res = await fetchMiniserver(miniserver, `/jdev/sps/io/${encodeURIComponent(monitor.loxone_uuid)}`, {
       timeoutMs: 8000,
@@ -87,6 +101,13 @@ function getCurrentValue(monitorId) {
   return row;
 }
 
+// Called after wiping a monitor's history from the DB directly (routes/monitor.js's clear-history)
+// — otherwise this in-memory "last known value" would keep showing the old reading until the next
+// poll/message happens to come in and overwrite it, which for an MQTT topic could be a long wait.
+function clearCurrentValue(monitorId) {
+  currentValues.delete(monitorId);
+}
+
 function startMonitorCollector() {
   reloadMqttMonitors();
   purgeOldHistory();
@@ -99,4 +120,5 @@ module.exports = {
   reloadMqttMonitors,
   recordMqttValue,
   getCurrentValue,
+  clearCurrentValue,
 };

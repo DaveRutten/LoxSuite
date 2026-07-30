@@ -57,6 +57,24 @@
           <% }) %>
         </select>
       </div>
+    </div>
+
+    <h2 style="margin-top:1.5rem;">Security</h2>
+    <label class="toggle-row">
+      <input type="checkbox" name="local_login_disabled" <%= sso.local_login_disabled ? 'checked' : '' %>>
+      <span>
+        <strong>Require SSO from outside the local network</strong>
+        <span class="hint">
+          When on, the username/password login form is hidden for anyone NOT connecting from a
+          private/local-network address — they must sign in with SSO instead. Local-network
+          requests can still always use local login as a break-glass fallback, so you're never
+          locked out if Pocket ID itself becomes unreachable. Has no effect unless SSO is Enabled
+          above.
+        </span>
+      </span>
+    </label>
+
+    <div style="margin-top:0.9rem;">
       <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
     </div>
   </form>

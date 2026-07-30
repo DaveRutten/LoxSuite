@@ -3,24 +3,17 @@
 <div class="tabs">
   <a class="active" href="/logs/mqtt">MQTT broker</a>
   <a href="/logs/loxone">Loxone Miniservers</a>
+  <a href="/logs/loxone-commands">Loxone commands</a>
+  <a href="/logs/system">System</a>
 </div>
 
 <p class="hint">
   Raw lines from the Mosquitto broker's own log file, newest first, refreshing every 5 seconds.
-  Persisted in SQLite and kept for <strong><%= retentionDays %></strong> days &mdash; change that below.
+  Persisted in SQLite and kept for <strong><%= retentionDays %></strong> days &mdash;
+  <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
   <strong>Level</strong> is a best-effort guess from each line's wording (Mosquitto doesn't tag
   lines with a severity itself) &mdash; not a guarantee.
 </p>
-
-<% if (canEdit('logs')) { %>
-<form method="post" action="/logs/settings" class="form-grid" style="max-width:20rem; margin-bottom:1rem;">
-  <div>
-    <label>Retention (days)</label>
-    <input type="number" name="log_retention_days" min="1" value="<%= retentionDays %>">
-  </div>
-  <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
-</form>
-<% } %>
 
 <form method="get" action="/logs/mqtt" class="form-grid" style="margin-bottom:1rem; align-items:end;">
   <div>
@@ -50,11 +43,12 @@
   </div>
 </form>
 
-<div style="margin-bottom:1.25rem;">
-  <a href="/logs/mqtt/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
-</div>
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <a href="/logs/mqtt/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
+  </div>
 
-<div class="table-wrap">
+  <div class="table-wrap">
   <table>
     <thead>
       <tr><th>Time</th><th>Level</th><th>Line</th></tr>
@@ -63,7 +57,7 @@
       <% rows.forEach(r => { %>
         <% const levelBadge = r.level === 'error' ? 'badge-off' : r.level === 'warning' ? 'badge-warning' : 'badge-neutral'; %>
         <tr>
-          <td><%= new Date(r.recordedAt).toLocaleString('en-GB') %></td>
+          <td><%= formatDateTime(r.recordedAt) %></td>
           <td><span class="badge <%= levelBadge %>"><%= r.level %></span></td>
           <td class="log-line <%= r.level !== 'info' ? 'log-line-' + r.level : '' %>"><%= r.line %></td>
         </tr>
@@ -73,6 +67,7 @@
       <% } %>
     </tbody>
   </table>
+  </div>
 </div>
 
 <%- include('partials/foot') %>

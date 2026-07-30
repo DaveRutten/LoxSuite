@@ -4,6 +4,15 @@ const rateLimit = require('express-rate-limit');
 const { generators } = require('openid-client');
 const db = require('../db');
 const ssoClient = require('../ssoClient');
+const { isPrivateNetworkRequest } = require('../network');
+const { logSystemEvent } = require('../auditLog');
+
+// Local username/password login is refused when SSO's break-glass restriction is on AND the
+// request isn't coming from the local network — the local network exemption is exactly the
+// "break glass" part, so admins aren't locked out entirely if the external IdP goes down.
+function localLoginAllowed(req) {
+  return !ssoClient.isLocalLoginDisabled() || isPrivateNetworkRequest(req);
+}
 
 const router = express.Router();
 
@@ -19,17 +28,34 @@ const loginLimiter = rateLimit({
 });
 
 router.get('/login', (req, res) => {
-  res.render('login', { error: null, ssoEnabled: ssoClient.isEnabled(), ssoButtonLabel: ssoClient.getButtonLabel() });
+  res.render('login', {
+    error: null,
+    ssoEnabled: ssoClient.isEnabled(),
+    ssoButtonLabel: ssoClient.getButtonLabel(),
+    localLoginAllowed: localLoginAllowed(req),
+  });
 });
 
 router.post('/login', loginLimiter, (req, res) => {
   const { username, password, remember } = req.body;
+
+  if (!localLoginAllowed(req)) {
+    logSystemEvent(`Local sign-in blocked for "${username}" from ${req.ip} (SSO break-glass restriction, not a local address).`);
+    return res.status(403).render('login', {
+      error: 'Local sign-in is turned off from outside the local network — use Single Sign-On instead.',
+      ssoEnabled: ssoClient.isEnabled(),
+      ssoButtonLabel: ssoClient.getButtonLabel(),
+      localLoginAllowed: false,
+    });
+  }
+
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
 
   // password_hash is null for SSO-only accounts — bcrypt.compareSync would throw on a null hash,
   // so that has to be checked before comparing rather than falling through to it.
   if (!user || !user.password_hash || !bcrypt.compareSync(password || '', user.password_hash)) {
-    return res.render('login', { error: 'Invalid username or password.', ssoEnabled: ssoClient.isEnabled(), ssoButtonLabel: ssoClient.getButtonLabel() });
+    logSystemEvent(`Failed local login attempt for "${username}" from ${req.ip}.`);
+    return res.render('login', { error: 'Invalid username or password.', ssoEnabled: ssoClient.isEnabled(), ssoButtonLabel: ssoClient.getButtonLabel(), localLoginAllowed: true });
   }
 
   db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
@@ -39,11 +65,16 @@ router.post('/login', loginLimiter, (req, res) => {
   // away when the browser closes; with it, keep the login for 30 days.
   if (remember) req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
 
+  logSystemEvent(`"${user.username}" logged in (local) from ${req.ip}.`);
   res.redirect('/');
 });
 
 router.post('/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/login'));
+  const username = req.session.username;
+  req.session.destroy(() => {
+    if (username) logSystemEvent(`"${username}" logged out.`);
+    res.redirect('/login');
+  });
 });
 
 router.get('/login/sso', async (req, res) => {
@@ -93,27 +124,31 @@ router.get('/auth/sso/callback', async (req, res) => {
 
     let user = db.prepare('SELECT * FROM users WHERE sso_subject = ?').get(claims.sub);
     const displayName = claims.name || claims.preferred_username || null;
+    const firstName = claims.given_name || null;
+    const lastName = claims.family_name || null;
 
     if (!user) {
       const sso = db.prepare('SELECT default_role_id FROM sso_settings WHERE id = 1').get();
       const username = claims.preferred_username || claims.email || `pocketid-${claims.sub}`;
       const result = db.prepare(
-        `INSERT INTO users (username, role_id, auth_provider, sso_subject, email, display_name, avatar_url, last_login_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(username, sso?.default_role_id || null, 'pocket_id', claims.sub, claims.email || null, displayName, claims.picture || null, new Date().toISOString());
+        `INSERT INTO users (username, role_id, auth_provider, sso_subject, email, display_name, first_name, last_name, avatar_url, last_login_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(username, sso?.default_role_id || null, 'pocket_id', claims.sub, claims.email || null, displayName, firstName, lastName, claims.picture || null, new Date().toISOString());
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
       console.log(`Provisioned new Pocket ID user "${username}" via SSO.`);
     } else {
       // Refreshed on every login, not just once at provisioning — a name/avatar changed on the
       // Pocket ID side should show up here without needing to recreate the account.
-      db.prepare('UPDATE users SET email = ?, display_name = ?, avatar_url = ?, last_login_at = ? WHERE id = ?')
-        .run(claims.email || null, displayName, claims.picture || null, new Date().toISOString(), user.id);
+      db.prepare('UPDATE users SET email = ?, display_name = ?, first_name = ?, last_name = ?, avatar_url = ?, last_login_at = ? WHERE id = ?')
+        .run(claims.email || null, displayName, firstName, lastName, claims.picture || null, new Date().toISOString(), user.id);
     }
 
     req.session.userId = user.id;
     req.session.username = user.username;
+    logSystemEvent(`"${user.username}" logged in (SSO) from ${req.ip}.`);
     res.redirect('/');
   } catch (err) {
+    logSystemEvent(`SSO login failed from ${req.ip}: ${err.message}`);
     renderError(`Single Sign-On login failed: ${err.message}`);
   }
 });

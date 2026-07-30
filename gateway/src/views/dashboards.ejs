@@ -1,7 +1,5 @@
 <%- include('partials/head', { pageTitle: 'My Dashboards', active: 'dashboards' }) %>
 
-<%- include('partials/tabs-monitoring', { active: 'dashboards' }) %>
-
 <p class="hint">
   Build your own dashboards out of the monitors you're tracking on the <a href="/monitor">Monitor</a>
   page &mdash; charts, tables, or current-value tiles, arranged however you like. These are personal
@@ -34,6 +32,7 @@
             <div class="row-actions">
               <a class="inline" href="/dashboards/<%= d.id %>"><button type="button"><%- icon('list') %> Open</button></a>
               <button type="button" class="btn-edit" data-toggle-row="dash-rename-<%= d.id %>"><%- icon('edit') %> Rename</button>
+              <button type="button" class="btn-edit" data-toggle-row="dash-share-<%= d.id %>"><%- icon('share') %> Share<%= d.shareCount > 0 ? ` (${d.shareCount})` : '' %></button>
               <form class="inline" method="post" action="/dashboards/<%= d.id %>/delete" data-confirm="Delete this dashboard and all of its panels? Monitors themselves are not affected.">
                 <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
               </form>
@@ -49,6 +48,86 @@
             </form>
           </td>
         </tr>
+        <tr class="expand-row" id="dash-share-<%= d.id %>">
+          <td colspan="3">
+            <div style="display:flex; flex-direction:column; gap:0.5rem; max-width:28rem;">
+              <% if (shares[d.id].length > 0) { %>
+                <div style="display:flex; flex-direction:column; gap:0.3rem;">
+                  <% shares[d.id].forEach(s => { %>
+                    <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem;">
+                      <span style="flex:1;"><%= s.name %></span>
+                      <span class="badge badge-live <%= s.canEdit ? 'badge-ok' : 'badge-neutral' %>"><%= s.canEdit ? 'Editor' : 'Viewer' %></span>
+                      <form class="inline" method="post" action="/dashboards/<%= d.id %>/share/<%= s.userId %>/remove">
+                        <button type="submit" class="icon-btn icon-btn-danger" title="Remove" aria-label="Remove"><%- icon('trash') %></button>
+                      </form>
+                    </div>
+                  <% }) %>
+                </div>
+              <% } else { %>
+                <p class="hint" style="margin:0;">Not shared with anyone yet.</p>
+              <% } %>
+              <% var sharedUserIds = shares[d.id].map(s => s.userId);
+                 var candidateUsers = otherUsers.filter(u => sharedUserIds.indexOf(u.id) === -1); %>
+              <% if (candidateUsers.length > 0) { %>
+                <form method="post" action="/dashboards/<%= d.id %>/share" style="display:flex; gap:0.5rem; align-items:flex-start; flex-wrap:wrap;">
+                  <%
+                    // A <select multiple size="1"> (the one-candidate case) doesn't render as a
+                    // real listbox in every browser — Chromium collapses it into a broken
+                    // single-line "N selected" combobox instead. size=2 is the floor that keeps
+                    // it a proper multi-row listbox even with only one real option.
+                  %>
+                  <select name="user_ids" multiple required size="<%= Math.max(2, Math.min(5, candidateUsers.length)) %>" style="min-width:12rem;">
+                    <% candidateUsers.forEach(u => { %>
+                      <option value="<%= u.id %>"><%= u.display_name || u.username %></option>
+                    <% }) %>
+                  </select>
+                  <div style="display:flex; flex-direction:column; gap:0.4rem; align-self:center;">
+                    <label style="margin:0; font-size:0.82rem; display:flex; align-items:center; gap:0.3rem;">
+                      <input type="checkbox" name="can_edit"> Can edit
+                    </label>
+                    <button type="submit" class="btn-edit"><%- icon('plus') %> Add<%- ' (Ctrl/Cmd-click for multiple)' %></button>
+                  </div>
+                </form>
+              <% } else { %>
+                <p class="hint" style="margin:0;">Already shared with everyone else.</p>
+              <% } %>
+              <% if (currentUser && (currentUser.isAdmin || currentUser.permissions.dashboard_group_share?.edit)) { %>
+                <hr style="width:100%; border-color:var(--border); margin:0.2rem 0;">
+                <p class="hint" style="margin:0;">Groups (everyone with that Access Role):</p>
+                <% if (roleShares[d.id].length > 0) { %>
+                  <div style="display:flex; flex-direction:column; gap:0.3rem;">
+                    <% roleShares[d.id].forEach(rs => { %>
+                      <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem;">
+                        <span style="flex:1;"><%= rs.name %></span>
+                        <span class="badge badge-live <%= rs.canEdit ? 'badge-ok' : 'badge-neutral' %>"><%= rs.canEdit ? 'Editor' : 'Viewer' %></span>
+                        <form class="inline" method="post" action="/dashboards/<%= d.id %>/share-role/<%= rs.roleId %>/remove">
+                          <button type="submit" class="icon-btn icon-btn-danger" title="Remove" aria-label="Remove"><%- icon('trash') %></button>
+                        </form>
+                      </div>
+                    <% }) %>
+                  </div>
+                <% } %>
+                <% var sharedRoleIds = roleShares[d.id].map(rs => rs.roleId);
+                   var candidateRoles = roles.filter(r => sharedRoleIds.indexOf(r.id) === -1); %>
+                <% if (candidateRoles.length > 0) { %>
+                  <form method="post" action="/dashboards/<%= d.id %>/share-role" style="display:flex; gap:0.5rem; align-items:flex-start; flex-wrap:wrap;">
+                    <select name="role_ids" multiple required size="<%= Math.max(2, Math.min(5, candidateRoles.length)) %>" style="min-width:12rem;">
+                      <% candidateRoles.forEach(r => { %>
+                        <option value="<%= r.id %>"><%= r.name %></option>
+                      <% }) %>
+                    </select>
+                    <div style="display:flex; flex-direction:column; gap:0.4rem; align-self:center;">
+                      <label style="margin:0; font-size:0.82rem; display:flex; align-items:center; gap:0.3rem;">
+                        <input type="checkbox" name="can_edit"> Can edit
+                      </label>
+                      <button type="submit" class="btn-edit"><%- icon('plus') %> Add group(s)</button>
+                    </div>
+                  </form>
+                <% } %>
+              <% } %>
+            </div>
+          </td>
+        </tr>
       <% }) %>
       <% if (dashboards.length === 0) { %>
         <tr><td colspan="3" class="empty">No dashboards yet &mdash; create one above.</td></tr>
@@ -56,5 +135,25 @@
     </tbody>
   </table>
 </div>
+
+<% if (sharedWithMe.length > 0) { %>
+  <h3 style="margin-top:1.5rem;">Shared with me</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Shared by</th><th>Panels</th><th>Access</th><th>Actions</th></tr></thead>
+      <tbody>
+        <% sharedWithMe.forEach(d => { %>
+          <tr>
+            <td><a href="/dashboards/<%= d.id %>"><%= d.name %></a></td>
+            <td><%= d.ownerName %></td>
+            <td><%= d.panelCount %></td>
+            <td><span class="badge badge-live <%= d.canEdit ? 'badge-ok' : 'badge-neutral' %>"><%= d.canEdit ? 'Editor' : 'Viewer' %></span></td>
+            <td><a class="inline" href="/dashboards/<%= d.id %>"><button type="button"><%- icon('list') %> Open</button></a></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+<% } %>
 
 <%- include('partials/foot') %>

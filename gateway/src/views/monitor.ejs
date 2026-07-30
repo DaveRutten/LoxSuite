@@ -1,12 +1,11 @@
 <%- include('partials/head', { pageTitle: 'Monitor', active: 'monitor' }) %>
 
-<%- include('partials/tabs-monitoring', { active: 'monitor' }) %>
-
 <p class="hint">
   Track an MQTT topic or a value read directly from a Loxone Miniserver over time. History is stored
   in SQLite (so it survives a gateway restart) and kept for <strong><%= retentionDays %></strong> days
-  before being purged automatically &mdash; change that below. Open a monitor for a chart, a raw-values
-  table, and a CSV export.
+  before being purged automatically &mdash;
+  <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
+  Open a monitor for a chart, a raw-values table, and a CSV export.
 </p>
 
 <% if (error) { %>
@@ -79,25 +78,34 @@
 </details>
 <% } %>
 
-<% if (canEdit('monitor')) { %>
-<form method="post" action="/monitor/settings" class="form-grid" style="max-width:20rem; margin-bottom:1.5rem;">
-  <div>
-    <label>Retention (days)</label>
-    <input type="number" name="monitor_retention_days" min="1" value="<%= retentionDays %>">
+<div class="filterable-table-card">
+  <% if (canEdit('monitor')) { %>
+  <% var disabledCount = monitors.filter(m => !m.enabled).length; var enabledCount = monitors.length - disabledCount; %>
+  <div class="table-toolbar">
+    <form method="post" action="/monitor/enable-all" style="margin:0;">
+      <button type="submit" class="btn-edit" <%= disabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Enable all (<%= disabledCount %>)</button>
+    </form>
+    <form method="post" action="/monitor/disable-all" style="margin:0;">
+      <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Disable all (<%= enabledCount %>)</button>
+    </form>
+    <form method="post" action="/monitor/clear-unused" data-confirm="Delete every monitor not used on any dashboard (<%= unusedCount %> right now), along with its history? Monitors still on a dashboard are never touched." style="margin:0;">
+      <button type="submit" class="danger" <%= unusedCount === 0 ? 'disabled' : '' %>><%- icon('trash') %> Clear unused (<%= unusedCount %>)</button>
+    </form>
+    <form method="post" action="/monitor/clear-all" data-confirm="Delete ALL <%= monitors.length %> monitors and their history, including ones still on a dashboard? Those panels will be left with nothing to show. This can't be undone." style="margin:0;">
+      <button type="submit" class="danger" <%= monitors.length === 0 ? 'disabled' : '' %>><%- icon('trash') %> Clear all (<%= monitors.length %>)</button>
+    </form>
   </div>
-  <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
-</form>
-<% } %>
+  <% } %>
 
-<div class="table-wrap">
+  <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Status</th><th>Label</th><th>Source</th><th>Current value</th><th>Last updated</th><th>Actions</th></tr>
+      <tr><th>Status</th><th>Label</th><th>Source</th><th>Dashboard</th><th>Current value</th><th>Last updated</th><th>Actions</th></tr>
     </thead>
     <tbody>
       <% monitors.forEach(m => { %>
         <tr>
-          <td><span class="badge <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Paused' %></span></td>
+          <td><span class="badge badge-live <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
           <td><a href="/monitor/<%= m.id %>"><%= m.label %></a></td>
           <td>
             <% if (m.source_type === 'mqtt') { %>
@@ -106,14 +114,24 @@
               Loxone &middot; <%= m.miniserver_name || '-' %> <span class="hint" style="margin:0;">(every <%= Math.round(m.poll_interval_ms / 1000) %>s)</span>
             <% } %>
           </td>
+          <td>
+            <% if (m.dashboardNames) { %>
+              <% m.dashboardNames.split(',').forEach(name => { %>
+                <span class="badge badge-neutral" style="margin:0 0.2rem 0.2rem 0;"><%= name %></span>
+              <% }) %>
+            <% } else { %>
+              <span class="badge badge-neutral">Unused</span>
+            <% } %>
+          </td>
           <td><% if (m.current) { %><span class="truncate" title="<%= m.current.value %>"><%= m.current.value %></span><% } else { %>-<% } %></td>
-          <td><%= m.current ? new Date(m.current.recordedAt).toLocaleString('en-GB') : '-' %></td>
+          <td><%= m.current ? formatDateTime(m.current.recordedAt) : '-' %></td>
           <td>
             <div class="row-actions">
               <a class="inline" href="/monitor/<%= m.id %>"><button type="button"><%- icon('list') %> View</button></a>
               <% if (canEdit('monitor')) { %>
+              <button type="button" class="btn-edit" data-toggle-row="monitor-edit-<%= m.id %>"><%- icon('edit') %> Edit</button>
               <form class="inline" method="post" action="/monitor/<%= m.id %>/toggle">
-                <button type="submit" class="btn-edit"><%- icon('power') %> <%= m.enabled ? 'Pause' : 'Resume' %></button>
+                <button type="submit" class="btn-edit"><%- icon('power') %> <%= m.enabled ? 'Disable' : 'Enable' %></button>
               </form>
               <form class="inline" method="post" action="/monitor/<%= m.id %>/delete" data-confirm="Delete this monitor and all of its history?">
                 <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
@@ -122,12 +140,37 @@
             </div>
           </td>
         </tr>
+        <% if (canEdit('monitor')) { %>
+        <tr class="expand-row" id="monitor-edit-<%= m.id %>">
+          <td colspan="7">
+            <form method="post" action="/monitor/<%= m.id %>/update" class="form-grid" style="max-width:28rem;">
+              <div><label>Label</label><input type="text" name="label" value="<%= m.label %>" required></div>
+              <% if (m.source_type === 'loxone') { %>
+              <div>
+                <label>Poll interval</label>
+                <select name="poll_interval_ms">
+                  <option value="5000" <%= m.poll_interval_ms === 5000 ? 'selected' : '' %>>5 seconds</option>
+                  <option value="10000" <%= m.poll_interval_ms === 10000 ? 'selected' : '' %>>10 seconds</option>
+                  <option value="30000" <%= m.poll_interval_ms === 30000 ? 'selected' : '' %>>30 seconds</option>
+                  <option value="60000" <%= m.poll_interval_ms === 60000 ? 'selected' : '' %>>1 minute</option>
+                  <option value="300000" <%= m.poll_interval_ms === 300000 ? 'selected' : '' %>>5 minutes</option>
+                </select>
+              </div>
+              <% } else { %>
+              <div><label>MQTT topic</label><input type="text" value="<%= m.mqtt_topic %>" disabled title="The topic itself can't be changed — delete and re-add to track a different topic."></div>
+              <% } %>
+              <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+            </form>
+          </td>
+        </tr>
+        <% } %>
       <% }) %>
       <% if (monitors.length === 0) { %>
-        <tr><td colspan="6" class="empty">No monitors yet &mdash; add one above, or use the "Monitor" shortcut on a topic in <a href="/incoming/messages">Live Traffic</a>.</td></tr>
+        <tr><td colspan="7" class="empty">No monitors yet &mdash; add one above, or use the "Monitor" shortcut on a topic in <a href="/incoming/messages">Live Traffic</a>.</td></tr>
       <% } %>
     </tbody>
   </table>
+  </div>
 </div>
 
 <script>

@@ -4,12 +4,24 @@
   <p class="error"><%= error %></p>
 <% } %>
 
-<p class="hint">The token/callback URL never changes when editing &mdash; you don't need to update anything in Loxone Config.</p>
+<p class="hint">
+  The token/callback URL stays the same unless you change it below &mdash; changing it means
+  updating the command/URL configured in Loxone Config too.
+</p>
 
 <div class="card">
   <% if (canEdit('loxone_to_mqtt')) { %>
   <form method="post" action="/mappings/loxone-to-mqtt/<%= mapping.id %>/update">
     <div class="form-grid">
+      <div>
+        <label>Token</label>
+        <input type="text" name="token" value="<%= mapping.token %>" required>
+        <p class="hint" style="margin:0.3rem 0 0;">
+          The identifier used in the callback URL / UDP message. Defaults to a random string, but
+          you can set it to something readable (e.g. the topic itself) if you'd rather send
+          <code>&lt;your-token&gt;=\v</code> from Loxone than the generated one.
+        </p>
+      </div>
       <div>
         <label>MQTT topic</label>
         <input type="text" name="mqtt_topic" value="<%= mapping.mqtt_topic %>" required>

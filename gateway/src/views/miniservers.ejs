@@ -47,28 +47,39 @@
     <tbody>
       <% miniservers.forEach(ms => { %>
         <tr>
-          <td>
+          <td data-ms-status-id="<%= ms.id %>">
             <% const badgeClass = ms.status === 'online' ? 'badge-ok' : ms.status === 'offline' ? 'badge-off' : 'badge-neutral'; %>
             <% const badgeText = ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown'; %>
-            <span class="badge <%= badgeClass %>"><%= badgeText %></span>
+            <span class="badge badge-live <%= badgeClass %>"><%= badgeText %></span>
           </td>
           <td><%= ms.name %></td>
           <td><%= ms.host %></td>
           <td><%= ms.http_port %></td>
           <td><%= ms.use_https ? 'yes' : 'no' %></td>
           <td><%= ms.udp_port || '-' %></td>
-          <td><%= ms.external_url || '-' %></td>
+          <td><% if (ms.external_url) { %><span class="truncate" style="max-width:180px;" title="<%= ms.external_url %>"><%= ms.external_url %></span><% } else { %>-<% } %></td>
           <td><%= ms.username %></td>
-          <td><%= ms.last_checked_at ? new Date(ms.last_checked_at).toLocaleString('en-GB') : '-' %></td>
+          <td><%= ms.last_checked_at ? formatDateTime(ms.last_checked_at) : '-' %></td>
           <td>
             <% if (canEdit('miniservers')) { %>
-            <a class="inline" href="/miniservers/<%= ms.id %>/edit"><button type="button" class="btn-edit"><%- icon('edit') %> Edit</button></a>
-            <form class="inline" method="post" action="/miniservers/<%= ms.id %>/check">
-              <button type="submit" class="btn-test"><%- icon('refresh') %> Test now</button>
-            </form>
-            <form class="inline" method="post" action="/miniservers/<%= ms.id %>/delete" data-confirm="Delete this Miniserver?">
-              <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
-            </form>
+            <div class="row-actions">
+              <%
+                // A plain (non-button) child of .row-actions — tables.js's collapseRowActions()
+                // moves EVERY child into its auto-generated kebab expand-row indiscriminately, not
+                // just buttons, so this rides along with Edit/Test/Delete into that same row and
+                // ends up on the left of them for free (flex:1 eats the row's leftover width,
+                // pushing the actual buttons to the right — same effect .row-actions-expanded's
+                // justify-content:flex-end would give them on its own).
+              %>
+              <div class="ms-test-result" data-ms-result-for="<%= ms.id %>" style="flex:1; min-width:10rem;">
+                <p class="hint" style="margin:0;">Click "Test now" to check connectivity.</p>
+              </div>
+              <a class="inline" href="/miniservers/<%= ms.id %>/edit"><button type="button" class="btn-edit"><%- icon('edit') %> Edit</button></a>
+              <button type="button" class="btn-test ms-test-btn" data-ms-id="<%= ms.id %>"><%- icon('refresh') %> Test now</button>
+              <form class="inline" method="post" action="/miniservers/<%= ms.id %>/delete" data-confirm="Delete this Miniserver?">
+                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+              </form>
+            </div>
             <% } %>
           </td>
         </tr>
@@ -79,5 +90,58 @@
     </tbody>
   </table>
 </div>
+
+<script>
+  (function () {
+    // Renders one row of the breakdown as an icon (check/cross) + label + timing/error, matching
+    // the checkmark/cross feedback style the rest of the check* group asked for here.
+    function renderLine(label, result) {
+      if (!result) return '';
+      var color = result.ok ? 'var(--accent)' : 'var(--danger)';
+      var iconSvg = result.ok
+        ? '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+        : '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+      var detail = result.ok ? (result.ms + ' ms') : (result.error || 'failed');
+      return '<div style="display:flex; align-items:center; gap:0.4rem; color:' + color + ';">' + iconSvg
+        + '<strong style="color:var(--text);">' + label + '</strong><span>' + detail + '</span></div>';
+    }
+
+    function runTest(msId) {
+      var wrap = document.querySelector('.ms-test-result[data-ms-result-for="' + msId + '"]');
+      wrap.innerHTML = '<p class="hint" style="margin:0;">Testing&hellip;</p>';
+
+      // Content-Type: application/json (even with an empty body) is what exempts this from the
+      // CSRF form-token check server-side — see middleware/csrf.js.
+      fetch('/miniservers/' + msId + '/check', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var html = '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">';
+          html += renderLine('Local', data.local);
+          html += data.external ? renderLine('External', data.external) : '<div class="hint" style="margin:0;">External: not configured</div>';
+          html += renderLine('Logbook reachable', data.logbook);
+          html += renderLine('Live data (websocket)', data.live);
+          html += '</div>';
+          wrap.innerHTML = html;
+
+          var statusCell = document.querySelector('[data-ms-status-id="' + msId + '"]');
+          if (statusCell) {
+            var badgeClass = data.status === 'online' ? 'badge-ok' : data.status === 'offline' ? 'badge-off' : 'badge-neutral';
+            var badgeText = data.status === 'online' ? 'Online' : data.status === 'offline' ? 'Offline' : 'Unknown';
+            statusCell.innerHTML = '<span class="badge badge-live ' + badgeClass + '">' + badgeText + '</span>';
+          }
+        })
+        .catch(function () {
+          wrap.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
+        });
+    }
+
+    // "Test now" now lives inside the same already-open row-actions expand-row as Edit/Delete
+    // (see the template above) rather than toggling its own separate row, so there's no
+    // open/closing state to gate on any more — every click just (re-)runs the test.
+    document.querySelectorAll('.ms-test-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { runTest(btn.dataset.msId); });
+    });
+  })();
+</script>
 
 <%- include('partials/foot') %>

@@ -1,23 +1,33 @@
-<%- include('partials/head', { pageTitle: 'Incoming', active: 'incoming', refresh: 5, liveSwap: true }) %>
-
-<div class="tabs">
-  <a href="/incoming/messages">Live Messages</a>
-  <a class="active" href="/incoming/clients">Connected Clients</a>
-</div>
+<%- include('partials/head', { pageTitle: 'Client Activity', active: 'incoming-clients', refresh: 5, liveSwap: true }) %>
 
 <p class="hint">
   Refreshes every 5 seconds. In-memory only, so this clears on a gateway restart. The
   <strong>Device</strong> column shows the topic prefix seen in that device's own MQTT traffic when one is
   known (hover to see the raw MQTT client ID) &mdash; otherwise it falls back to the raw client ID.
+  Disconnected clients are also auto-removed after <strong><%= retentionHours %></strong> hours
+  (<% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>)
+  &mdash; each removal is logged on the <a href="/logs/system">System</a> log.
 </p>
 
-<% if (canEdit('incoming')) { %>
-<form method="post" action="/incoming/clients/clear" data-confirm="Clear disconnected clients from this list? Clients that are still actively connected stay listed." style="margin-bottom:1rem;">
-  <button type="submit" class="danger"><%- icon('trash') %> Clear list</button>
-</form>
-<% } %>
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <div class="search-combo">
+      <select id="clients-filter-field">
+        <option value="0">Device</option>
+        <option value="1">Address</option>
+        <option value="2">User</option>
+        <option value="3">Status</option>
+      </select>
+      <input type="text" id="clients-filter-query" placeholder="Filter…">
+    </div>
+    <% if (canEdit('incoming')) { %>
+    <form method="post" action="/incoming/clients/clear" data-confirm="Clear disconnected clients from this list? Clients that are still actively connected stay listed." style="margin:0;">
+      <button type="submit" class="danger"><%- icon('trash') %> Clear list</button>
+    </form>
+    <% } %>
+  </div>
 
-<div class="table-wrap">
+  <div class="table-wrap">
   <table>
     <thead>
       <tr><th>Device</th><th>Address</th><th>User</th><th>Status</th><th>Connected since</th><th>Disconnected</th><th>Actions</th></tr>
@@ -32,12 +42,12 @@
           <td><%= c.address %></td>
           <td><%= c.username || '-' %></td>
           <td>
-            <span class="badge <%= c.status === 'connected' ? 'badge-ok' : 'badge-neutral' %>">
+            <span class="badge badge-live <%= c.status === 'connected' ? 'badge-ok' : 'badge-neutral' %>">
               <%= c.status === 'connected' ? 'Connected' : 'Disconnected' %>
             </span>
           </td>
-          <td><%= new Date(c.connectedAt).toLocaleString('en-GB') %></td>
-          <td><%= c.disconnectedAt ? new Date(c.disconnectedAt).toLocaleString('en-GB') : '-' %></td>
+          <td><%= formatDateTime(c.connectedAt) %></td>
+          <td><%= c.disconnectedAt ? formatDateTime(c.disconnectedAt) : '-' %></td>
           <td>
             <% if (isShelly) { %>
               <a class="inline" href="/mappings/commands?family=shelly-gen1&device=<%= encodeURIComponent(c.displayName) %>">
@@ -52,11 +62,39 @@
       <% } %>
     </tbody>
   </table>
+  </div>
 </div>
 
 <p class="hint">
   "Suggest commands" appears for client IDs that look like a Shelly device and opens the
   <a href="/mappings/commands">Common commands</a> builder with this device type and device pre-selected.
 </p>
+
+<script>
+  // Same pattern as Live Data's filter (incoming-messages.ejs): a MutationObserver re-applies the
+  // filter after each 5s liveSwap refresh, rather than hooking window.refreshTables directly, so
+  // this doesn't depend on tables.js having already loaded by the time this inline script runs.
+  (function () {
+    var fieldSelect = document.getElementById('clients-filter-field');
+    var queryInput = document.getElementById('clients-filter-query');
+    var tbody = document.querySelector('.table-wrap tbody');
+    if (!fieldSelect || !tbody) return;
+
+    function applyFilter() {
+      var colIndex = Number(fieldSelect.value);
+      var q = queryInput.value.trim().toLowerCase();
+      tbody.querySelectorAll('tr').forEach(function (row) {
+        if (!q) { row.style.display = ''; return; }
+        var cell = row.children[colIndex];
+        var text = cell ? cell.textContent.toLowerCase() : '';
+        row.style.display = text.indexOf(q) !== -1 ? '' : 'none';
+      });
+    }
+
+    fieldSelect.addEventListener('change', applyFilter);
+    queryInput.addEventListener('input', applyFilter);
+    new MutationObserver(applyFilter).observe(tbody, { childList: true });
+  })();
+</script>
 
 <%- include('partials/foot') %>

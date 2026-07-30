@@ -9,7 +9,9 @@
 <p class="hint">
   <strong>HTTP</strong>: paste the callback URL into the Virtual Output HTTP command in Loxone Config.<br>
   <strong>UDP</strong>: send <code>&lt;token&gt;=\v</code> to the gateway on the listed UDP port from a Virtual UDP Output.
-  Loxone replaces <code>\v</code> with the actual value on every call.<br>
+  Loxone replaces <code>\v</code> with the actual value on every call. The mapping's own MQTT topic also works in place
+  of the token (e.g. <code>&lt;mqtt_topic&gt;=on</code>), so you don't have to copy the generated token if you'd rather
+  type the topic you already know.<br>
   <strong>Test</strong>: publish a value on a mapping's row to check the device reacts, without needing Loxone at all
   &mdash; any value transform (e.g. a translation table) is applied exactly as it would be for a real call.
 </p>
@@ -70,27 +72,73 @@
 </details>
 <% } %>
 
-<div class="table-wrap">
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <div class="search-combo">
+      <select id="mappings-filter-field">
+        <option value="0">Status</option>
+        <option value="1">MQTT topic</option>
+        <option value="2">Miniserver</option>
+        <option value="3">Transport</option>
+        <option value="4">Transform</option>
+        <option value="7">Token</option>
+        <option value="8">UDP port</option>
+        <option value="9">Connection info</option>
+      </select>
+      <input type="text" id="mappings-filter-query" placeholder="Filter…">
+    </div>
+    <% if (canEdit('loxone_to_mqtt')) { %>
+    <% var disabledCount = mappings.filter(m => !m.enabled).length; var enabledCount = mappings.length - disabledCount; %>
+    <form method="post" action="/mappings/loxone-to-mqtt/enable-all" style="margin:0;">
+      <button type="submit" class="btn-edit" <%= disabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Enable all (<%= disabledCount %>)</button>
+    </form>
+    <form method="post" action="/mappings/loxone-to-mqtt/disable-all" style="margin:0;">
+      <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Disable all (<%= enabledCount %>)</button>
+    </form>
+    <% } %>
+  </div>
+
+  <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Status</th><th>MQTT topic</th><th>Miniserver</th><th>Transport</th><th>Transform</th><th>QoS</th><th>Retain</th><th>Connection info</th><th>Actions</th></tr>
+      <tr><th>Status</th><th>MQTT topic</th><th>Miniserver</th><th>Transport</th><th>Transform</th><th>QoS</th><th>Retain</th><th data-default-hidden>Token</th><th data-default-hidden>UDP port</th><th>Connection info</th><th>Actions</th></tr>
     </thead>
     <tbody>
       <% mappings.forEach(m => { %>
         <tr>
-          <td><span class="badge <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
-          <td><code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
+          <td><span class="badge badge-live <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
+          <td>
+            <div style="display:flex; align-items:center; gap:0.35rem;">
+              <code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code>
+              <button type="button" class="copy-btn btn-soft" data-copy="<%= m.mqtt_topic %>" title="Copy the MQTT topic">
+                <%- icon('copy') %> <span class="btn-label">Copy</span>
+              </button>
+            </div>
+          </td>
           <td><%= m.miniserver_name || '-' %></td>
           <td><%= m.transport %></td>
           <td><%= m.value_transform %></td>
           <td><%= m.qos %></td>
           <td><%= m.retain ? 'yes' : 'no' %></td>
           <td>
+            <code class="truncate" title="<%= m.token %>"><%= m.token %></code>
             <% if (m.transport === 'udp') { %>
-              UDP port <code><%= m.udpPort %></code>, message <code class="truncate" title="<%= m.udpMessage %>"><%= m.udpMessage %></code>
-            <% } else { %>
-              <code class="truncate" title="<%= m.callbackUrl %>"><%= m.callbackUrl %></code>
+            <div class="hint" style="margin:0.3rem 0 0; display:flex; align-items:center; gap:0.35rem;">
+              UDP message: <code class="truncate" title="<%= m.udpMessage %>"><%= m.udpMessage %></code>
+              <button type="button" class="copy-btn btn-soft" data-copy="<%= m.udpMessage %>" title="Copy the exact &quot;&lt;token&gt;=&lt;value&gt;&quot; message a Virtual UDP Output should send">
+                <%- icon('copy') %> <span class="btn-label">Copy</span>
+              </button>
+            </div>
             <% } %>
+          </td>
+          <td><%= m.transport === 'udp' ? m.udpPort : '-' %></td>
+          <td>
+            <div class="hint" style="margin:0; display:flex; align-items:center; gap:0.35rem;">
+              Loxone Command: <code class="truncate" title="<%= m.mqtt_topic %> \v"><%= m.mqtt_topic %> \v</code>
+              <button type="button" class="copy-btn btn-soft" data-copy="<%= m.mqtt_topic %> \v" title="Copy for a native MQTT Virtual Output's Command Recognition field (Loxone Config 12+) — bypasses this HTTP/UDP bridge entirely">
+                <%- icon('copy') %> <span class="btn-label">Copy</span>
+              </button>
+            </div>
           </td>
           <td>
             <% if (canEdit('loxone_to_mqtt')) { %>
@@ -115,7 +163,18 @@
           <td colspan="9">
             <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
               <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">Value to send:</label>
-              <input type="text" class="test-value-input" placeholder="e.g. on" style="max-width:12rem;">
+              <% if (m.translationValues && m.translationValues.length > 0) { %>
+                <select class="test-value-input" style="max-width:12rem;">
+                  <% m.translationValues.forEach(v => { %><option value="<%= v %>"><%= v %></option><% }) %>
+                </select>
+              <% } else { %>
+                <div class="value-suggest-wrap">
+                  <input type="text" class="test-value-input value-suggest-input" autocomplete="off" placeholder="e.g. on" style="max-width:12rem;">
+                  <div class="value-suggest-list" hidden>
+                    <% ['1', '0', 'on', 'off', 'true', 'false'].forEach(v => { %><button type="button" data-value="<%= v %>"><%= v %></button><% }) %>
+                  </div>
+                </div>
+              <% } %>
               <button type="button" class="test-send-btn btn-test" data-mapping-id="<%= m.id %>"><%- icon('link') %> Send</button>
               <span class="hint test-result" style="margin:0;"></span>
             </div>
@@ -128,8 +187,90 @@
       <% } %>
     </tbody>
   </table>
+  </div>
 </div>
 
+<script>
+  // Each mapping row is followed by its own Test expand-row sibling (not a data row) — filtering
+  // hides/shows that sibling in lockstep with its mapping row rather than trying to match text in
+  // it, since it's mostly interactive inputs and its rendered text mostly duplicates the row above.
+  (function () {
+    var fieldSelect = document.getElementById('mappings-filter-field');
+    var queryInput = document.getElementById('mappings-filter-query');
+    var tbody = document.querySelector('.table-wrap tbody');
+    if (!fieldSelect || !tbody) return;
+
+    function applyFilter() {
+      var colIndex = Number(fieldSelect.value);
+      var q = queryInput.value.trim().toLowerCase();
+      tbody.querySelectorAll('tr').forEach(function (row) {
+        if (row.classList.contains('expand-row')) return;
+        var next = row.nextElementSibling;
+        var pairedExpandRow = next && next.classList.contains('expand-row') ? next : null;
+        if (!q) {
+          row.style.display = '';
+          if (pairedExpandRow) pairedExpandRow.style.display = '';
+          return;
+        }
+        var cell = row.children[colIndex];
+        var text = cell ? cell.textContent.toLowerCase() : '';
+        var show = text.indexOf(q) !== -1;
+        row.style.display = show ? '' : 'none';
+        if (pairedExpandRow) pairedExpandRow.style.display = show ? '' : 'none';
+      });
+    }
+
+    fieldSelect.addEventListener('change', applyFilter);
+    queryInput.addEventListener('input', applyFilter);
+  })();
+</script>
+<script>
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+    var label = btn.querySelector('.btn-label');
+    window.copyToClipboard(btn.getAttribute('data-copy')).then(function () {
+      var original = label.textContent;
+      label.textContent = 'Copied!';
+      setTimeout(function () { label.textContent = original; }, 1500);
+    });
+  });
+</script>
+<script>
+  // Delegated (rather than bound per-input) so this keeps working for Test rows toggled open
+  // after this script already ran, same reasoning as the copy-btn handler above.
+  // Driven by real focus transitions (focusin/focusout), not by inspecting click targets — a
+  // click-target-based "close on any click outside the wrap" approach breaks here because opening
+  // a Test row (see foot.ejs's [data-toggle-row] handler) auto-focuses this very input as part of
+  // handling the Test button's own click; that click then keeps bubbling up to document with its
+  // target still the Test button (outside any .value-suggest-wrap), which would immediately close
+  // the list the nested focus() just opened.
+  document.addEventListener('focusin', function (e) {
+    if (!e.target.classList.contains('value-suggest-input')) return;
+    var list = e.target.parentElement.querySelector('.value-suggest-list');
+    if (list) list.hidden = false;
+  });
+  document.addEventListener('focusout', function (e) {
+    if (!e.target.classList.contains('value-suggest-input')) return;
+    var wrap = e.target.closest('.value-suggest-wrap');
+    var list = wrap && wrap.querySelector('.value-suggest-list');
+    if (!list) return;
+    // Delayed so a mousedown on a suggestion button (which blurs the input first) still gets its
+    // click handled — and its own explicit input.focus() re-applied — before this fires.
+    setTimeout(function () {
+      if (!wrap.contains(document.activeElement)) list.hidden = true;
+    }, 150);
+  });
+  document.addEventListener('click', function (e) {
+    var suggestion = e.target.closest('.value-suggest-list button');
+    if (!suggestion) return;
+    var wrap = suggestion.closest('.value-suggest-wrap');
+    var input = wrap.querySelector('.value-suggest-input');
+    input.value = suggestion.dataset.value;
+    input.focus();
+    wrap.querySelector('.value-suggest-list').hidden = true;
+  });
+</script>
 <script>
   (function () {
     document.querySelectorAll('.test-send-btn').forEach(function (btn) {

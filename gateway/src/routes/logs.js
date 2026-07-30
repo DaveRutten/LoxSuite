@@ -48,13 +48,18 @@ function queryLogs({ source, sourceId, filters }) {
     params.push(filters.to);
   }
   if (filters.q) {
-    conditions.push('line LIKE ?');
-    params.push(`%${filters.q}%`);
+    // command_topic/value_from/value_to are only ever populated for the 'loxone_commands' source
+    // (see db.js's migrateLogEntriesCommandColumns) — NULL on every other source, so OR'ing them in
+    // here is a no-op for the other three Logs tabs and just widens what "Contains" matches on this one.
+    conditions.push('(line LIKE ? OR command_topic LIKE ? OR value_from LIKE ? OR value_to LIKE ?)');
+    params.push(`%${filters.q}%`, `%${filters.q}%`, `%${filters.q}%`, `%${filters.q}%`);
   }
 
   const limit = filters.level ? FILTER_CANDIDATE_ROWS : MAX_ROWS;
   const rows = db.prepare(
-    `SELECT line, source_label AS sourceLabel, recorded_at AS recordedAt FROM log_entries
+    `SELECT line, source_label AS sourceLabel, recorded_at AS recordedAt,
+            command_topic AS commandTopic, value_from AS valueFrom, value_to AS valueTo
+     FROM log_entries
      WHERE ${conditions.join(' AND ')} ORDER BY id DESC LIMIT ?`
   ).all(...params, limit).map((r) => ({ ...r, level: classifyLogLevel(r.line) }));
 
@@ -78,13 +83,23 @@ router.get('/mqtt/export.txt', (req, res) => {
   res.send(rows.map((r) => r.line).join('\n'));
 });
 
+// def.log lines each carry their own "YYYY-MM-DD HH:MM:SS.mmm;" prefix from the Miniserver — the
+// gateway's own recorded_at is only when it happened to be *fetched*, which can be much later for
+// backfilled history (e.g. hundreds of lines pulled in one poll after a restart all share one
+// recorded_at). Showing the line's own timestamp instead is what avoids a page full of distinct
+// events that all appear to have happened in the same instant.
+const LOXONE_LINE_TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3});/;
+
 router.get('/loxone', (req, res) => {
   const miniservers = db.prepare('SELECT id, name FROM miniservers ORDER BY name').all();
   const miniserverId = req.query.miniserver_id ? Number(req.query.miniserver_id) : null;
   const filters = parseFilters(req.query);
 
   const rows = queryLogs({ source: 'loxone', sourceId: miniserverId, filters })
-    .map((r) => ({ ...r, miniserverName: r.sourceLabel }));
+    .map((r) => {
+      const match = r.line.match(LOXONE_LINE_TIMESTAMP_RE);
+      return { ...r, miniserverName: r.sourceLabel, displayTime: match ? match[1] : null };
+    });
 
   const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
   res.render('logs-loxone', { rows, miniservers, miniserverId, query: req.query, retentionDays: settings.log_retention_days });
@@ -98,6 +113,38 @@ router.get('/loxone/export.txt', (req, res) => {
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="loxone.log"');
+  res.send(rows.map((r) => r.line).join('\n'));
+});
+
+router.get('/loxone-commands', (req, res) => {
+  const filters = parseFilters(req.query);
+  const rows = queryLogs({ source: 'loxone_commands', filters });
+  const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
+  res.render('logs-loxone-commands', { rows, query: req.query, retentionDays: settings.log_retention_days });
+});
+
+router.get('/loxone-commands/export.txt', (req, res) => {
+  const rows = db.prepare(
+    `SELECT recorded_at AS recordedAt, source_label AS sourceLabel, line,
+            command_topic AS commandTopic, value_from AS valueFrom, value_to AS valueTo
+     FROM log_entries WHERE source = 'loxone_commands' ORDER BY id ASC`
+  ).all();
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="loxone-commands.log"');
+  res.send(rows.map((r) => `${r.recordedAt}\t${r.sourceLabel || ''}\t${r.commandTopic || ''}\t${r.valueFrom ?? ''}\t${r.valueTo ?? ''}\t${r.line}`).join('\n'));
+});
+
+router.get('/system', (req, res) => {
+  const filters = parseFilters(req.query);
+  const rows = queryLogs({ source: 'system', filters });
+  const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
+  res.render('logs-system', { rows, query: req.query, retentionDays: settings.log_retention_days });
+});
+
+router.get('/system/export.txt', (req, res) => {
+  const rows = db.prepare('SELECT line FROM log_entries WHERE source = ? ORDER BY id ASC').all('system');
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="system.log"');
   res.send(rows.map((r) => r.line).join('\n'));
 });
 

@@ -17,6 +17,7 @@
       <% if (error) { %>
         <p class="error"><%= error %></p>
       <% } %>
+      <% if (localLoginAllowed) { %>
       <form method="post" action="/login">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <div class="form-grid">
@@ -37,13 +38,21 @@
           <button type="submit" class="primary">Log in</button>
         </div>
       </form>
+      <% } else { %>
+        <p class="hint" style="margin:0;">
+          Local sign-in is only available from the local network — from here, use Single Sign-On
+          below.
+        </p>
+      <% } %>
       <% if (ssoEnabled) { %>
+        <% if (localLoginAllowed) { %>
         <div style="display:flex; align-items:center; gap:0.75rem; margin:1.1rem 0;">
           <div style="flex:1; height:1px; background:var(--border);"></div>
           <span class="hint" style="margin:0;">or</span>
           <div style="flex:1; height:1px; background:var(--border);"></div>
         </div>
-        <a href="/login/sso"><button type="button" class="btn-soft" style="width:100%; display:flex; justify-content:center;">Log in with <%= ssoButtonLabel %></button></a>
+        <% } %>
+        <a href="/login/sso"><button type="button" class="btn-soft" style="width:100%; display:flex; justify-content:center; <%= localLoginAllowed ? '' : 'margin-top:1rem;' %>">Log in with <%= ssoButtonLabel %></button></a>
       <% } %>
     </div>
   </div>

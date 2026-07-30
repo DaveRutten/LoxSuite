@@ -163,6 +163,28 @@ db.exec(`
     PRIMARY KEY (panel_id, monitor_id)
   );
 
+  -- A personal dashboard (custom_dashboards.user_id = its owner) shared with one or more other
+  -- users, each with their own viewer/editor grant — separate from the one shared user_id IS NULL
+  -- home Dashboard above, which is already visible to everyone via the 'dashboard' Access Role
+  -- instead of a per-user row here.
+  CREATE TABLE IF NOT EXISTS dashboard_shares (
+    dashboard_id INTEGER NOT NULL REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    can_edit INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (dashboard_id, user_id)
+  );
+
+  -- Same idea as dashboard_shares above, but grants everyone in an Access Role (see
+  -- permissionAreas.js) at once instead of one user at a time — adding this is restricted to
+  -- admins (see dashboards.js), since it hands out access to a whole group in one step rather
+  -- than a single person the owner presumably already trusts individually.
+  CREATE TABLE IF NOT EXISTS dashboard_role_shares (
+    dashboard_id INTEGER NOT NULL REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+    role_id INTEGER NOT NULL REFERENCES access_roles(id) ON DELETE CASCADE,
+    can_edit INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (dashboard_id, role_id)
+  );
+
   CREATE TABLE IF NOT EXISTS log_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source TEXT NOT NULL CHECK (source IN ('mqtt', 'loxone')),
@@ -561,6 +583,18 @@ function migrateUserProfileFields() {
 
 migrateUserProfileFields();
 
+// Separate from display_name (which stays the one thing actually shown in the topbar/account
+// menu) — these exist so Administration > Users can list/sort/edit a proper first/last name
+// instead of one free-text display string. Pocket ID SSO populates them from the standard OIDC
+// given_name/family_name claims (see routes/auth.js); local users are edited from Administration.
+function migrateUserNameFields() {
+  const columns = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!columns.includes('first_name')) db.exec('ALTER TABLE users ADD COLUMN first_name TEXT');
+  if (!columns.includes('last_name')) db.exec('ALTER TABLE users ADD COLUMN last_name TEXT');
+}
+
+migrateUserNameFields();
+
 // Set on every successful login (local or SSO, see routes/auth.js) so Administration > Users can
 // show when an account was last used — nullable, so an account that's never logged in just shows
 // blank rather than a fabricated date.
@@ -592,6 +626,165 @@ function ensureBackupSettings() {
 }
 
 ensureBackupSettings();
+
+// How long a disconnected MQTT client stays listed on the Connected Clients page before
+// mosquittoLog.js's periodic sweep (see logCollector.js) drops it and logs the removal — see
+// migrateLogEntriesSystemSource below for where that removal gets logged to.
+function migrateClientRetentionSetting() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('client_retention_hours')) {
+    db.exec('ALTER TABLE gateway_settings ADD COLUMN client_retention_hours INTEGER NOT NULL DEFAULT 24');
+  }
+}
+
+migrateClientRetentionSetting();
+
+// Whether the "Suggest dashboard" button (Live Data, per room) is offered at all — a per-gateway
+// toggle rather than per-user, since it just controls whether the feature is available, not
+// personal data.
+function migrateDashboardSuggestionsSetting() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('dashboard_suggestions_enabled')) {
+    db.exec('ALTER TABLE gateway_settings ADD COLUMN dashboard_suggestions_enabled INTEGER NOT NULL DEFAULT 1');
+  }
+}
+
+migrateDashboardSuggestionsSetting();
+
+// Every date/time shown anywhere in the UI is rendered in this timezone (an IANA name, e.g.
+// "Europe/Amsterdam") rather than relying on whatever timezone the browser/OS happens to report —
+// the latter silently showed raw UTC as if it were local time on at least one real deployment
+// (container and browser both effectively reporting UTC despite the user being in CEST). Defaults
+// to UTC, the one value that's never wrong, just possibly not what you want until you set it.
+function migrateDisplayTimezone() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('display_timezone')) {
+    db.exec("ALTER TABLE gateway_settings ADD COLUMN display_timezone TEXT NOT NULL DEFAULT 'UTC'");
+  }
+}
+
+migrateDisplayTimezone();
+
+// A dashboard "Current value" panel showing e.g. a Loxone tempActual reading has no per-panel
+// rounding control at all today — it's whatever the source reported, decimal noise included.
+// Defaults to 2 (a sane general-purpose value), overridable per panel by setting a non-blank
+// decimals value in that panel's own settings (see dashboards.js's buildConfig).
+function migrateDefaultPanelDecimals() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('default_panel_decimals')) {
+    db.exec('ALTER TABLE gateway_settings ADD COLUMN default_panel_decimals INTEGER NOT NULL DEFAULT 2');
+  }
+}
+
+migrateDefaultPanelDecimals();
+
+// Break-glass: when SSO is set up and this is on, local username/password login is refused for
+// anyone NOT coming from a private/local network — forcing normal sign-in through SSO — while
+// still leaving a way in from the local network if the external IdP is ever unreachable. Off by
+// default; only has any effect at all while sso_settings.enabled is also on.
+function migrateSsoLocalLoginDisabled() {
+  const columns = db.prepare('PRAGMA table_info(sso_settings)').all().map((c) => c.name);
+  if (!columns.includes('local_login_disabled')) {
+    db.exec('ALTER TABLE sso_settings ADD COLUMN local_login_disabled INTEGER NOT NULL DEFAULT 0');
+  }
+}
+
+migrateSsoLocalLoginDisabled();
+
+// Widens log_entries.source to add 'system' (gateway housekeeping events — e.g. a disconnected
+// MQTT client getting auto-pruned) alongside the existing 'mqtt'/'loxone' — another CHECK
+// constraint change, so another table rebuild (see migrateMqttToLoxoneExtensions above).
+function migrateLogEntriesSystemSource() {
+  const tableSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'log_entries'"
+  ).get();
+  if (!tableSql || tableSql.sql.includes("'system'")) return;
+
+  db.exec(`
+    CREATE TABLE log_entries_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL CHECK (source IN ('mqtt', 'loxone', 'system')),
+      source_id INTEGER,
+      source_label TEXT,
+      line TEXT NOT NULL,
+      recorded_at TEXT NOT NULL
+    );
+
+    INSERT INTO log_entries_new (id, source, source_id, source_label, line, recorded_at)
+    SELECT id, source, source_id, source_label, line, recorded_at FROM log_entries;
+
+    DROP TABLE log_entries;
+    ALTER TABLE log_entries_new RENAME TO log_entries;
+
+    CREATE INDEX IF NOT EXISTS idx_log_entries_source_time ON log_entries(source, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_log_entries_source_id ON log_entries(source_id);
+  `);
+  console.log("Migrated log_entries: widened source CHECK to add 'system'.");
+}
+
+migrateLogEntriesSystemSource();
+
+// Widens log_entries.source again to add 'loxone_commands' — every inbound Virtual Output
+// command Loxone sends the gateway (UDP or HTTP), successful or rejected, so Logs > Loxone
+// commands can show who sent what, when, and what it resolved to. source_label carries the
+// sender ("UDP 192.168.10.50:54321" / "HTTP 192.168.10.50"); line carries the token/topic, the
+// raw value, and the outcome — see loxoneCommandLog.js. Same CHECK-widening rebuild as the
+// 'system' source above.
+function migrateLogEntriesCommandsSource() {
+  const tableSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'log_entries'"
+  ).get();
+  if (!tableSql || tableSql.sql.includes("'loxone_commands'")) return;
+
+  db.exec(`
+    CREATE TABLE log_entries_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL CHECK (source IN ('mqtt', 'loxone', 'system', 'loxone_commands')),
+      source_id INTEGER,
+      source_label TEXT,
+      line TEXT NOT NULL,
+      recorded_at TEXT NOT NULL
+    );
+
+    INSERT INTO log_entries_new (id, source, source_id, source_label, line, recorded_at)
+    SELECT id, source, source_id, source_label, line, recorded_at FROM log_entries;
+
+    DROP TABLE log_entries;
+    ALTER TABLE log_entries_new RENAME TO log_entries;
+
+    CREATE INDEX IF NOT EXISTS idx_log_entries_source_time ON log_entries(source, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_log_entries_source_id ON log_entries(source_id);
+  `);
+  console.log("Migrated log_entries: widened source CHECK to add 'loxone_commands'.");
+}
+
+migrateLogEntriesCommandsSource();
+
+// Structured columns for the 'loxone_commands' source above — plain nullable ALTER TABLE ADD
+// COLUMNs (no CHECK involved, so no rebuild needed like the source-widening migrations above).
+// Left NULL for the other three sources. command_topic is the resolved MQTT topic (or the raw
+// token/text when nothing resolved); value_from/value_to let the Logs > Loxone commands page show
+// the actual transition ("Off" -> "On") instead of just the new value on its own.
+function migrateLogEntriesCommandColumns() {
+  const columns = db.prepare('PRAGMA table_info(log_entries)').all().map((c) => c.name);
+  if (!columns.includes('command_topic')) db.exec('ALTER TABLE log_entries ADD COLUMN command_topic TEXT');
+  if (!columns.includes('value_from')) db.exec('ALTER TABLE log_entries ADD COLUMN value_from TEXT');
+  if (!columns.includes('value_to')) db.exec('ALTER TABLE log_entries ADD COLUMN value_to TEXT');
+}
+
+migrateLogEntriesCommandColumns();
+
+// Per-column pixel widths from the table header's drag-to-resize handles (public/tables.js) —
+// same simple TEXT/JSON-blob shape as column_order/hidden_columns above, so a plain ALTER TABLE
+// covers it (no CHECK constraint involved).
+function migrateTablePrefColumnWidths() {
+  const columns = db.prepare('PRAGMA table_info(user_table_prefs)').all().map((c) => c.name);
+  if (!columns.includes('column_widths')) {
+    db.exec('ALTER TABLE user_table_prefs ADD COLUMN column_widths TEXT');
+  }
+}
+
+migrateTablePrefColumnWidths();
 
 function ensureAdminUser() {
   const count = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;

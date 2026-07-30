@@ -10,16 +10,27 @@
   &mdash; <a href="/monitor">&larr; back to Monitor</a>
 </p>
 
+<% const presetRanges = ['1h', '24h', '7d', '30d', 'all']; %>
+<% const isCustomRange = !presetRanges.includes(range); %>
 <div class="tabs">
   <a class="<%= range === '1h' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=1h">Last hour</a>
   <a class="<%= range === '24h' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=24h">Last 24 hours</a>
   <a class="<%= range === '7d' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=7d">Last 7 days</a>
   <a class="<%= range === '30d' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=30d">Last 30 days</a>
   <a class="<%= range === 'all' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=all">All</a>
+  <form method="get" action="/monitor/<%= monitor.id %>" class="range-custom-form">
+    <input type="text" name="range" placeholder="Custom, e.g. 3h, 10m, 45s" value="<%= isCustomRange ? range : '' %>">
+    <button type="submit" class="<%= isCustomRange ? 'active' : '' %>">Go</button>
+  </form>
 </div>
 
-<div style="margin-bottom:1.25rem;">
+<div class="row-actions" style="justify-content:flex-end; margin-bottom:1.25rem;">
   <a href="/monitor/<%= monitor.id %>/export.csv?range=<%= range %>"><button type="button" class="btn-soft"><%- icon('copy') %> Export CSV</button></a>
+  <% if (canEdit('monitor')) { %>
+  <form method="post" action="/monitor/<%= monitor.id %>/clear-history" data-confirm="Delete all recorded history for this monitor? The monitor itself (and any dashboard panel using it) stays, just with nothing to show until the next reading comes in.">
+    <button type="submit" class="danger" <%= rows.length === 0 ? 'disabled' : '' %>><%- icon('trash') %> Clear history</button>
+  </form>
+  <% } %>
 </div>
 
 <div id="monitor-meta" data-monitor-id="<%= monitor.id %>" data-range="<%= range %>" hidden></div>
@@ -41,7 +52,7 @@
     <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
     <tbody id="monitor-history-body">
       <% rows.forEach(r => { %>
-        <tr><td><%= new Date(r.recordedAt).toLocaleString('en-GB') %></td><td><span class="truncate" title="<%= r.value %>"><%= r.value %></span></td></tr>
+        <tr><td><%= formatDateTime(r.recordedAt) %></td><td><span class="truncate" title="<%= r.value %>"><%= r.value %></span></td></tr>
       <% }) %>
       <% if (rows.length === 0) { %>
         <tr><td colspan="2" class="empty">No readings in this range yet.</td></tr>

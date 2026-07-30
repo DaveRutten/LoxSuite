@@ -23,8 +23,75 @@
       value="${isCustom ? escAttr(currentValue) : ''}" style="margin-top:0.3rem; width:100%; ${isCustom ? '' : 'display:none;'}">`;
     return html;
   }
+
+  // Grafana-style threshold ladder (see dashboards.js's parseThresholdLadder/colorForThresholdLadder)
+  // — a dynamic add/remove-row builder (value + native color picker per row), not a hand-typed
+  // "value=color" textarea; that hidden textarea still exists underneath and is what actually
+  // submits (kept in the exact same format buildConfig() already parses), just filled in by the
+  // client-side script below instead of typed directly. Collapsed by default unless there's
+  // already at least one threshold configured, so an unused feature doesn't take up space.
+  function thresholdField(fieldName, ladder) {
+    return `<details class="threshold-builder-details" style="grid-column:1/-1;" ${ladder && ladder.length > 0 ? 'open' : ''}>
+      <summary>Threshold colors (optional)</summary>
+      <div class="threshold-builder" data-name="${fieldName}">
+        <div class="threshold-builder-rows"></div>
+        <button type="button" class="btn-soft threshold-add-row">${icon('plus')} Add threshold</button>
+        <textarea name="${fieldName}" class="threshold-builder-hidden" hidden>${escAttr(serializeThresholdLadder(ladder))}</textarea>
+        <p class="hint" style="margin:0.4rem 0 0;">A reading is colored using the highest threshold it meets or exceeds.</p>
+      </div>
+    </details>`;
+  }
+
+  // Same shape as thresholdField() above (a collapsible, dynamic add/remove-row builder over a
+  // hidden textarea in the exact format dashboards.js already parses) but for an EXACT value
+  // match rather than a >= ladder — each row is a value, the name to show instead of it, and an
+  // optional color of its own (its own color wins over the threshold ladder for that one value,
+  // since it's the more specific rule — see loadPanelsWithMonitors).
+  function valueMappingField(fieldName, mappings) {
+    return `<details class="threshold-builder-details" style="grid-column:1/-1;" ${mappings && mappings.length > 0 ? 'open' : ''}>
+      <summary>Value names &amp; colors (optional)</summary>
+      <div class="value-mapping-builder" data-name="${fieldName}">
+        <div class="value-mapping-rows"></div>
+        <button type="button" class="btn-soft value-mapping-add-row">${icon('plus')} Add value</button>
+        <textarea name="${fieldName}" class="value-mapping-hidden" hidden>${escAttr(serializeValueMappings(mappings))}</textarea>
+        <p class="hint" style="margin:0.4rem 0 0;">Shows the name instead of a matching reading's raw value — give it a color too, or leave that blank to just rename it.</p>
+      </div>
+    </details>`;
+  }
+
+  const RANGE_PRESETS = [
+    ['1h', 'Last hour'], ['24h', 'Last 24 hours'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['all', 'All'],
+  ];
+  const ABS_RANGE_RE = /^abs_(\d+)_(\d+)$/;
+  function rangeField(currentValue) {
+    const presetValues = RANGE_PRESETS.map((p) => p[0]);
+    const absMatch = typeof currentValue === 'string' ? currentValue.match(ABS_RANGE_RE) : null;
+    const isCustom = !!currentValue && !presetValues.includes(currentValue) && !absMatch;
+    let html = '<select class="range-select" data-range-name="range">';
+    RANGE_PRESETS.forEach(([value, label]) => {
+      html += `<option value="${value}" ${currentValue === value ? 'selected' : ''}>${label}</option>`;
+    });
+    html += `<option value="__custom__" ${isCustom ? 'selected' : ''}>Custom&hellip;</option>`;
+    html += `<option value="__absolute__" ${absMatch ? 'selected' : ''}>Absolute range&hellip;</option></select>`;
+    html += `<input type="text" class="range-custom-input" placeholder="e.g. 3h, 10m, 45s"
+      value="${isCustom ? escAttr(currentValue) : ''}" style="margin-top:0.3rem; width:100%; ${isCustom ? '' : 'display:none;'}">`;
+    // Raw epoch ms (not a pre-formatted date string) — the actual datetime-local values are filled
+    // in by client-side JS from these, specifically so they render in the BROWSER's own local
+    // timezone. Formatting them here instead would use the server process's timezone (the Docker
+    // container, always UTC — see dateFormat.js), silently showing the wrong moment to anyone not
+    // in UTC themselves, the exact bug an earlier fix this session (Monitor's "Last updated") was
+    // for, just for a different field.
+    html += `<div class="range-absolute-wrap" data-start-ms="${absMatch ? absMatch[1] : ''}" data-end-ms="${absMatch ? absMatch[2] : ''}"
+      style="margin-top:0.3rem; display:flex; flex-direction:column; gap:0.3rem; ${absMatch ? '' : 'display:none;'}">
+      <div><label style="font-size:0.7rem; margin-bottom:0.15rem;">From</label><input type="datetime-local" class="range-absolute-start"></div>
+      <div><label style="font-size:0.7rem; margin-bottom:0.15rem;">To</label><input type="datetime-local" class="range-absolute-end"></div>
+      <input type="hidden" class="range-absolute-hidden">
+    </div>`;
+    return html;
+  }
 %>
 <% if (canEditPanels) { %>
+<div id="panel-edit-backdrop" class="panel-edit-backdrop"></div>
 <details class="add-panel">
   <summary>Add panel</summary>
   <div class="add-panel-body">
@@ -44,13 +111,7 @@
         <div><label>Title (optional)</label><input type="text" name="title" placeholder="Leave blank to auto-generate one"></div>
         <div id="panel-range-field">
           <label>Range</label>
-          <select name="range">
-            <option value="1h">Last hour</option>
-            <option value="24h" selected>Last 24 hours</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="all">All</option>
-          </select>
+          <%- rangeField('24h') %>
         </div>
       </div>
 
@@ -60,6 +121,7 @@
           <select name="legend_position">
             <option value="auto" selected>Auto (only when &gt;1 monitor)</option>
             <option value="top">Top</option>
+            <option value="bottom">Bottom</option>
             <option value="left">Left</option>
             <option value="right">Right</option>
             <option value="off">Off</option>
@@ -67,6 +129,7 @@
         </div>
         <div><label>Y-axis unit (optional)</label><%- unitField('unit_chart', '') %></div>
         <div><label>Decimals</label><input type="number" name="decimals" value="2" min="0" max="6" step="1"></div>
+        <%- thresholdField('chart_thresholds', []) %>
       </div>
 
       <div class="form-grid" id="value-layout-field" style="margin-top:0.85rem; display:none;">
@@ -77,12 +140,29 @@
             <option value="row">Row (side by side)</option>
           </select>
         </div>
+        <div><label>Unit (optional)</label><%- unitField('unit_value', '') %></div>
+        <div>
+          <label>Decimals</label>
+          <input type="number" name="decimals_value" placeholder="Default (<%= defaultPanelDecimals %>)" min="0" max="6" step="1">
+        </div>
+        <%- valueMappingField('value_labels', []) %>
+        <%- thresholdField('value_thresholds', []) %>
+        <div style="grid-column:1/-1;">
+          <label>Rename in this panel (optional)</label>
+          <textarea name="monitor_names" rows="2" placeholder="Badkamer / tempActual=Bathroom temperature" style="width:100%; font-family:monospace; font-size:0.82rem;"></textarea>
+          <p class="hint" style="margin:0.3rem 0 0;">One per line, <code>&lt;monitor's current label&gt;=&lt;name to show here&gt;</code> — only changes how it's displayed in this panel, not the Monitor's own name.</p>
+        </div>
+      </div>
+
+      <div class="form-grid" id="table-fields" style="margin-top:0.85rem; display:none;">
+        <%- thresholdField('table_thresholds', []) %>
       </div>
 
       <div class="form-grid" id="gauge-fields" style="margin-top:0.85rem; display:none;">
         <div><label>Minimum</label><input type="number" name="gauge_min" value="0" step="any"></div>
         <div><label>Maximum</label><input type="number" name="gauge_max" value="100" step="any"></div>
         <div><label>Unit (optional)</label><%- unitField('unit_gauge', '') %></div>
+        <%- thresholdField('gauge_thresholds', []) %>
       </div>
 
       <div class="form-grid" id="stat-delta-fields" style="margin-top:0.85rem; display:none;">
@@ -95,6 +175,7 @@
             <option value="down_good">Lower is better</option>
           </select>
         </div>
+        <%- thresholdField('stat_delta_thresholds', []) %>
       </div>
 
       <div class="form-grid" id="threshold-fields" style="margin-top:0.85rem; display:none;">
@@ -136,6 +217,15 @@
         </div>
       </div>
 
+      <div id="chart-series-settings" class="chart-series-settings" data-checklist-selector="#monitor-checklist" style="margin-top:0.85rem; display:none;">
+        <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);">
+          Series settings (optional)
+        </label>
+        <div class="chart-series-rows"></div>
+        <textarea class="chart-series-hidden" name="chart_series" hidden>{}</textarea>
+        <p class="hint" style="margin:0.4rem 0 0;">Appears once you've checked a monitor above — rename a series, give it its own unit, or move it to the right-hand axis.</p>
+      </div>
+
       <div style="margin-top:0.9rem;">
         <button type="submit" class="primary"><%- icon('plus') %> Add panel</button>
       </div>
@@ -165,6 +255,10 @@
 
       <% if (canEditPanels) { %>
       <form id="panel-edit-<%= p.id %>" method="post" action="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/settings" class="form-grid panel-settings-form">
+        <div class="panel-settings-form-head" style="grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; margin-bottom:0.3rem;">
+          <strong>Edit panel</strong>
+          <button type="button" class="icon-btn" data-toggle-row="panel-edit-<%= p.id %>" title="Close" aria-label="Close">&times;</button>
+        </div>
         <div>
           <label>Panel type</label>
           <select name="panel_type" class="panel-type-select">
@@ -179,13 +273,7 @@
         <div><label>Title</label><input type="text" name="title" value="<%= p.title || '' %>" placeholder="Title"></div>
         <div data-fields-for="chart,table,stat_delta">
           <label>Range</label>
-          <select name="range">
-            <option value="1h" <%= p.range === '1h' ? 'selected' : '' %>>Last hour</option>
-            <option value="24h" <%= p.range === '24h' ? 'selected' : '' %>>Last 24 hours</option>
-            <option value="7d" <%= p.range === '7d' ? 'selected' : '' %>>Last 7 days</option>
-            <option value="30d" <%= p.range === '30d' ? 'selected' : '' %>>Last 30 days</option>
-            <option value="all" <%= p.range === 'all' ? 'selected' : '' %>>All</option>
-          </select>
+          <%- rangeField(p.range) %>
         </div>
         <div data-fields-for="chart">
           <label>Legend</label>
@@ -200,6 +288,9 @@
         </div>
         <div data-fields-for="chart"><label>Y-axis unit</label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
         <div data-fields-for="chart"><label>Decimals</label><input type="number" name="decimals" value="<%= p.panel_type === 'chart' && p.config.decimals != null ? p.config.decimals : 2 %>" min="0" max="6" step="1"></div>
+        <div data-fields-for="chart" style="grid-column:1/-1;">
+          <%- thresholdField('chart_thresholds', p.panel_type === 'chart' ? p.config.thresholds : []) %>
+        </div>
         <div data-fields-for="value">
           <label>Layout</label>
           <select name="value_layout">
@@ -207,9 +298,31 @@
             <option value="row" <%= p.panel_type === 'value' && p.config.layout === 'row' ? 'selected' : '' %>>Row (side by side)</option>
           </select>
         </div>
+        <div data-fields-for="value"><label>Unit</label><%- unitField('unit_value', p.panel_type === 'value' ? (p.config.unit || '') : '') %></div>
+        <div data-fields-for="value">
+          <label>Decimals</label>
+          <input type="number" name="decimals_value" value="<%= p.panel_type === 'value' && p.config.decimals != null ? p.config.decimals : '' %>" placeholder="Default (<%= defaultPanelDecimals %>)" min="0" max="6" step="1">
+        </div>
+        <div data-fields-for="value" style="grid-column:1/-1;">
+          <%- valueMappingField('value_labels', p.panel_type === 'value' ? p.config.valueLabels : []) %>
+        </div>
+        <div data-fields-for="value" style="grid-column:1/-1;">
+          <%- thresholdField('value_thresholds', p.panel_type === 'value' ? p.config.thresholds : []) %>
+        </div>
+        <div data-fields-for="value" style="grid-column:1/-1;">
+          <label>Rename in this panel</label>
+          <textarea name="monitor_names" rows="2" placeholder="Badkamer / tempActual=Bathroom temperature" style="width:100%; font-family:monospace; font-size:0.82rem;"><%= p.panel_type === 'value' ? serializeKeyValueLines(p.config.monitorNames) : '' %></textarea>
+          <p class="hint" style="margin:0.3rem 0 0;">One per line, <code>&lt;monitor's current label&gt;=&lt;name to show here&gt;</code> — display only, doesn't rename the Monitor itself.</p>
+        </div>
+        <div data-fields-for="table" style="grid-column:1/-1;">
+          <%- thresholdField('table_thresholds', p.panel_type === 'table' ? p.config.thresholds : []) %>
+        </div>
         <div data-fields-for="gauge"><label>Minimum</label><input type="number" name="gauge_min" value="<%= p.panel_type === 'gauge' ? p.config.min : 0 %>" step="any"></div>
         <div data-fields-for="gauge"><label>Maximum</label><input type="number" name="gauge_max" value="<%= p.panel_type === 'gauge' ? p.config.max : 100 %>" step="any"></div>
         <div data-fields-for="gauge"><label>Unit</label><%- unitField('unit_gauge', p.panel_type === 'gauge' ? (p.config.unit || '') : '') %></div>
+        <div data-fields-for="gauge" style="grid-column:1/-1;">
+          <%- thresholdField('gauge_thresholds', p.panel_type === 'gauge' ? p.config.thresholds : []) %>
+        </div>
         <div data-fields-for="stat_delta"><label>Unit</label><%- unitField('unit_stat_delta', p.panel_type === 'stat_delta' ? (p.config.unit || '') : '') %></div>
         <div data-fields-for="stat_delta">
           <label>Color the change when</label>
@@ -218,6 +331,9 @@
             <option value="up_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'up_good' ? 'selected' : '' %>>Higher is better</option>
             <option value="down_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'down_good' ? 'selected' : '' %>>Lower is better</option>
           </select>
+        </div>
+        <div data-fields-for="stat_delta" style="grid-column:1/-1;">
+          <%- thresholdField('stat_delta_thresholds', p.panel_type === 'stat_delta' ? p.config.thresholds : []) %>
         </div>
         <div data-fields-for="threshold">
           <label>Alert when value is</label>
@@ -250,15 +366,27 @@
             <% } %>
           </div>
         </div>
-        <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+        <div data-fields-for="chart" class="chart-series-settings" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;">
+          <label style="display:block; font-size:0.72rem; margin-bottom:0.1rem; color:var(--text-muted);">Series settings</label>
+          <div class="chart-series-rows"></div>
+          <textarea class="chart-series-hidden" name="chart_series" hidden><%= p.panel_type === 'chart' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
+          <p class="hint" style="margin:0.3rem 0 0;">Rename a series, give it its own unit, or move it to the right-hand axis.</p>
+        </div>
+        <%
+          // No Save button — every field change auto-saves (see the script near the bottom of
+          // this file), so a button implying "nothing's saved until you click this" would just
+          // contradict what's actually happening. This status text is the only save affordance.
+        %>
+        <span class="hint panel-save-status" style="grid-column:1/-1; margin:0;">Saved</span>
       </form>
+      <span class="panel-drawer-resize-handle" title="Drag to resize"></span>
       <% } %>
 
       <% if (p.monitors.length === 0) { %>
         <p class="hint">No monitors left in this panel &mdash; they may have been deleted from the Monitor page. Remove this panel or add a new one.</p>
       <% } else if (p.panel_type === 'chart') { %>
         <div class="chart-wrap">
-          <canvas data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.range %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= p.config.decimals != null ? p.config.decimals : 2 %>"></canvas>
+          <canvas data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.range %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= p.config.decimals != null ? p.config.decimals : 2 %>" data-thresholds="<%= JSON.stringify(p.config.thresholds || []) %>" data-series="<%= JSON.stringify(p.config.series || {}) %>"></canvas>
         </div>
       <% } else if (p.panel_type === 'table') { %>
         <div class="panel-table-scroll">
@@ -266,7 +394,7 @@
             <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
             <tbody>
               <% p.rows.forEach(r => { %>
-                <tr><td><%= new Date(r.recordedAt).toLocaleString('en-GB') %></td><td><span class="truncate" title="<%= r.value %>"><%= r.value %></span></td></tr>
+                <tr><td><%= formatDateTime(r.recordedAt) %></td><td><span class="truncate" title="<%= r.value %>" <% if (r.thresholdColor) { %>style="color: <%= r.thresholdColor %>; font-weight: 600;"<% } %>><%= r.value %></span></td></tr>
               <% }) %>
               <% if (p.rows.length === 0) { %>
                 <tr><td colspan="2" class="empty">No readings in this range yet.</td></tr>
@@ -276,8 +404,8 @@
         </div>
       <% } else if (p.panel_type === 'gauge') { %>
         <div class="gauge-wrap" data-live-id="panel-<%= p.id %>-body">
-          <div class="gauge-track"><div class="gauge-fill" style="width: <%= p.percent === null ? 0 : p.percent %>%;"></div></div>
-          <div class="gauge-value"><%= p.current ? p.current.value : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+          <div class="gauge-track"><div class="gauge-fill" style="width: <%= p.percent === null ? 0 : p.percent %>%; <% if (p.thresholdColor) { %>background: <%= p.thresholdColor %>;<% } %>"></div></div>
+          <div class="gauge-value" <% if (p.thresholdColor) { %>style="color: <%= p.thresholdColor %>;"<% } %>><%= p.current ? p.current.value : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
           <div class="hint" style="margin:0;"><%= p.config.min %>&ndash;<%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
         </div>
       <% } else if (p.panel_type === 'stat_delta') { %>
@@ -290,7 +418,7 @@
            }
         %>
         <div class="stat-delta" data-live-id="panel-<%= p.id %>-body">
-          <div class="stat-delta-value"><%= p.current ? p.current.value : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+          <div class="stat-delta-value" <% if (p.thresholdColor) { %>style="color: <%= p.thresholdColor %>;"<% } %>><%= p.current ? p.current.value : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
           <% if (p.delta === null) { %>
             <p class="hint" style="margin:0;">No comparison reading yet.</p>
           <% } else { %>
@@ -309,11 +437,14 @@
         <div class="panel-value-list" data-layout="<%= p.config.layout === 'row' ? 'row' : 'stacked' %>" data-live-id="panel-<%= p.id %>-body">
           <% p.monitors.forEach(m => { %>
             <div class="panel-value-row">
-              <div class="label"><%= m.label %></div>
-              <div class="value">
-                <%= m.current ? m.current.value : '-' %>
+              <div class="label">
+                <%= m.displayLabel %>
+                <% if (m.miniserver_name) { %><span class="hint" style="margin:0;">(<%= m.miniserver_name %>)</span><% } %>
+              </div>
+              <div class="value" <% if (m.current && m.current.thresholdColor) { %>style="color: <%= m.current.thresholdColor %>;"<% } %>>
+                <%= m.current ? m.current.displayValue : '-' %><% if (m.current && !m.current.isLabel && p.config.unit) { %> <%= p.config.unit %><% } %>
                 <span class="hint" style="margin:0; display:block; font-size:0.72rem;">
-                  <%= m.current ? new Date(m.current.recordedAt).toLocaleString('en-GB') : '' %>
+                  <%= m.current ? formatDateTime(m.current.recordedAt) : '' %>
                 </span>
               </div>
             </div>
@@ -337,9 +468,11 @@
     var tableHint = document.getElementById('table-monitor-hint');
     var chartFields = document.getElementById('chart-fields');
     var valueLayoutField = document.getElementById('value-layout-field');
+    var tableFields = document.getElementById('table-fields');
     var gaugeFields = document.getElementById('gauge-fields');
     var statDeltaFields = document.getElementById('stat-delta-fields');
     var thresholdFields = document.getElementById('threshold-fields');
+    var chartSeriesSettings = document.getElementById('chart-series-settings');
     var SINGLE_MONITOR_TYPES = ['table', 'gauge', 'stat_delta', 'threshold'];
     var NO_RANGE_TYPES = ['value', 'gauge', 'threshold'];
 
@@ -349,9 +482,11 @@
       tableHint.style.display = SINGLE_MONITOR_TYPES.indexOf(type) !== -1 ? '' : 'none';
       chartFields.style.display = type === 'chart' ? '' : 'none';
       valueLayoutField.style.display = type === 'value' ? '' : 'none';
+      tableFields.style.display = type === 'table' ? '' : 'none';
       gaugeFields.style.display = type === 'gauge' ? '' : 'none';
       statDeltaFields.style.display = type === 'stat_delta' ? '' : 'none';
       thresholdFields.style.display = type === 'threshold' ? '' : 'none';
+      chartSeriesSettings.style.display = type === 'chart' ? '' : 'none';
     }
     panelTypeSelect.addEventListener('change', syncPanelType);
     syncPanelType();
@@ -428,34 +563,541 @@
 </script>
 
 <script>
-  // A small resized panel has no room to fit the settings form once it's open — grow the card to
-  // fit the form's actual measured height for the duration of editing (not a fixed guess: the
-  // field set varies a lot by panel type, and a guess that's too small just reintroduces the
-  // clipped/scrolling form this is meant to avoid), then shrink back to the saved size on close.
+  // Same "select of presets + hidden custom text input" pattern as .unit-select above, for the
+  // panel Range field — a duration like "3h" stands in for a preset, and (a third state) a fixed
+  // From/To pair stands in for both — only ONE of the select/custom-input/absolute-hidden-input
+  // ever has a `name` at a time, so the field submits exactly one "range" value regardless of
+  // which mode is active.
   (function () {
-    var ROW_UNIT_PX = 70; // must match .dash-grid's grid-auto-rows in style.css
-    var GAP_PX = 16; // must match .dash-grid's gap in style.css
-    var HEAD_ALLOWANCE_PX = 90; // .dash-panel-head + its own margin-bottom, roughly
+    document.querySelectorAll('.range-select').forEach(function (select) {
+      var customInput = select.nextElementSibling;
+      var absWrap = customInput.nextElementSibling;
+      var startInput = absWrap.querySelector('.range-absolute-start');
+      var endInput = absWrap.querySelector('.range-absolute-end');
+      var hiddenInput = absWrap.querySelector('.range-absolute-hidden');
+      var name = select.dataset.rangeName;
 
-    document.querySelectorAll('.dash-panel > .panel-settings-form').forEach(function (form) {
-      var card = form.closest('.dash-panel');
-      if (!card) return;
-      var savedRowSpan = Number(card.dataset.rowSpan) || 3;
+      function pad(n) { return String(n).padStart(2, '0'); }
+      function toLocalInputValue(ms) {
+        var d = new Date(ms);
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      }
+      // Pre-fills once from the server-supplied raw epoch ms (see rangeField() in this same file)
+      // — done here in the browser specifically so these show in ITS local timezone, not whatever
+      // timezone the Node process happens to be running in.
+      if (absWrap.dataset.startMs) startInput.value = toLocalInputValue(Number(absWrap.dataset.startMs));
+      if (absWrap.dataset.endMs) endInput.value = toLocalInputValue(Number(absWrap.dataset.endMs));
 
-      new MutationObserver(function () {
-        if (!form.classList.contains('open')) {
-          card.style.gridRow = 'span ' + savedRowSpan;
-          return;
+      function updateHidden() {
+        if (!startInput.value || !endInput.value) return;
+        hiddenInput.value = 'abs_' + new Date(startInput.value).getTime() + '_' + new Date(endInput.value).getTime();
+      }
+      updateHidden();
+
+      function sync() {
+        var mode = select.value;
+        select.removeAttribute('name');
+        customInput.removeAttribute('name');
+        hiddenInput.removeAttribute('name');
+        customInput.style.display = 'none';
+        absWrap.style.display = 'none';
+        if (mode === '__custom__') {
+          customInput.name = name;
+          customInput.style.display = '';
+        } else if (mode === '__absolute__') {
+          hiddenInput.name = name;
+          absWrap.style.display = 'flex';
+          updateHidden();
+        } else {
+          select.name = name;
         }
-        // Measured after the class flip, one frame ahead of the max-height transition finishing
-        // — scrollHeight already reflects the form's full natural content height regardless of
-        // where the transition currently is, since scrollHeight isn't clipped by max-height.
-        requestAnimationFrame(function () {
-          var neededPx = form.scrollHeight + HEAD_ALLOWANCE_PX;
-          var neededSpan = Math.ceil((neededPx + GAP_PX) / (ROW_UNIT_PX + GAP_PX));
-          card.style.gridRow = 'span ' + Math.max(savedRowSpan, neededSpan);
+      }
+      select.addEventListener('change', function () {
+        sync();
+        if (select.value === '__custom__') customInput.focus();
+      });
+      startInput.addEventListener('change', updateHidden);
+      endInput.addEventListener('change', updateHidden);
+      sync();
+    });
+  })();
+</script>
+
+<script>
+  // Drives every .threshold-builder (see thresholdField() above) — a dynamic add/remove-row UI
+  // (value + native color picker per row) that keeps a hidden textarea in sync in the exact
+  // "<value>=<color>" format the server already parses (dashboards.js's parseThresholdLadder), so
+  // nothing on the server side needed to change for this to stop being a hand-typed textarea.
+  (function () {
+    // A native <input type="color"> only accepts a strict 7-char hex value — an existing config
+    // saved as a CSS name (e.g. "orange", from before this builder existed, or hand-edited) has to
+    // be resolved to its hex equivalent before it can be shown as that row's starting color.
+    function toHexColor(color) {
+      var probe = document.createElement('div');
+      probe.style.color = color;
+      document.body.appendChild(probe);
+      var computed = getComputedStyle(probe).color;
+      document.body.removeChild(probe);
+      var m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (!m) return '#e34948';
+      function hex(n) { return Number(n).toString(16).padStart(2, '0'); }
+      return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
+    }
+
+    function serializeRows(builder) {
+      var lines = [];
+      builder.querySelectorAll('.threshold-builder-row').forEach(function (row) {
+        var value = row.querySelector('.threshold-row-value').value.trim();
+        var color = row.querySelector('.threshold-row-color').value;
+        if (value !== '' && color) lines.push(value + '=' + color);
+      });
+      builder.querySelector('.threshold-builder-hidden').value = lines.join('\n');
+    }
+
+    function addRow(builder, value, color) {
+      var row = document.createElement('div');
+      row.className = 'threshold-builder-row';
+      row.innerHTML =
+        '<input type="number" class="threshold-row-value" placeholder="Value" step="any">' +
+        '<input type="color" class="threshold-row-color">' +
+        '<button type="button" class="icon-btn icon-btn-danger threshold-row-remove" title="Remove" aria-label="Remove">&times;</button>';
+      row.querySelector('.threshold-row-value').value = value == null ? '' : value;
+      row.querySelector('.threshold-row-color').value = toHexColor(color || '#e34948');
+      builder.querySelector('.threshold-builder-rows').appendChild(row);
+
+      row.querySelector('.threshold-row-value').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.threshold-row-color').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.threshold-row-remove').addEventListener('click', function () {
+        row.remove();
+        serializeRows(builder);
+      });
+    }
+
+    document.querySelectorAll('.threshold-builder').forEach(function (builder) {
+      var hidden = builder.querySelector('.threshold-builder-hidden');
+      hidden.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
+        var idx = line.indexOf('=');
+        if (idx === -1) return;
+        addRow(builder, line.slice(0, idx), line.slice(idx + 1));
+      });
+      builder.querySelector('.threshold-add-row').addEventListener('click', function () {
+        addRow(builder, '', '#e34948');
+        serializeRows(builder);
+      });
+    });
+  })();
+</script>
+
+<script>
+  // Drives every .value-mapping-builder (see valueMappingField() above) — same idea as the
+  // threshold builder just above, a dynamic add/remove-row UI over a hidden textarea, kept in the
+  // "<value>=<label>[=<color>]" format dashboards.js's parseValueMappings already handles. The
+  // color segment is optional per row (a value can just be renamed, with no color of its own).
+  (function () {
+    function toHexColor(color) {
+      var probe = document.createElement('div');
+      probe.style.color = color;
+      document.body.appendChild(probe);
+      var computed = getComputedStyle(probe).color;
+      document.body.removeChild(probe);
+      var m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (!m) return '#e34948';
+      function hex(n) { return Number(n).toString(16).padStart(2, '0'); }
+      return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
+    }
+
+    function serializeRows(builder) {
+      var lines = [];
+      builder.querySelectorAll('.value-mapping-row').forEach(function (row) {
+        var value = row.querySelector('.value-mapping-row-value').value.trim();
+        var name = row.querySelector('.value-mapping-row-name').value.trim();
+        var hasColor = row.querySelector('.value-mapping-row-color-enabled').checked;
+        var color = hasColor ? row.querySelector('.value-mapping-row-color').value : '';
+        if (value !== '' && name !== '') lines.push(value + '=' + name + (color ? '=' + color : ''));
+      });
+      builder.querySelector('.value-mapping-hidden').value = lines.join('\n');
+    }
+
+    function addRow(builder, value, name, color) {
+      var row = document.createElement('div');
+      row.className = 'value-mapping-row';
+      row.innerHTML =
+        '<input type="text" class="value-mapping-row-value" placeholder="Value">' +
+        '<input type="text" class="value-mapping-row-name" placeholder="Name to show">' +
+        '<input type="checkbox" class="value-mapping-row-color-enabled" title="Give this value its own color">' +
+        '<input type="color" class="value-mapping-row-color">' +
+        '<button type="button" class="icon-btn icon-btn-danger value-mapping-row-remove" title="Remove" aria-label="Remove">&times;</button>';
+      row.querySelector('.value-mapping-row-value').value = value == null ? '' : value;
+      row.querySelector('.value-mapping-row-name').value = name == null ? '' : name;
+      var colorEnabled = !!color;
+      row.querySelector('.value-mapping-row-color-enabled').checked = colorEnabled;
+      row.querySelector('.value-mapping-row-color').value = toHexColor(color || '#e34948');
+      row.querySelector('.value-mapping-row-color').style.visibility = colorEnabled ? '' : 'hidden';
+      builder.querySelector('.value-mapping-rows').appendChild(row);
+
+      row.querySelector('.value-mapping-row-value').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.value-mapping-row-name').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.value-mapping-row-color').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.value-mapping-row-color-enabled').addEventListener('change', function (e) {
+        row.querySelector('.value-mapping-row-color').style.visibility = e.target.checked ? '' : 'hidden';
+        serializeRows(builder);
+      });
+      row.querySelector('.value-mapping-row-remove').addEventListener('click', function () {
+        row.remove();
+        serializeRows(builder);
+      });
+    }
+
+    document.querySelectorAll('.value-mapping-builder').forEach(function (builder) {
+      var hidden = builder.querySelector('.value-mapping-hidden');
+      hidden.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
+        var parts = line.split('=');
+        if (parts.length < 2) return;
+        var color = parts.length > 2 ? parts.slice(2).join('=').trim() : '';
+        addRow(builder, parts[0], parts[1], color);
+      });
+      builder.querySelector('.value-mapping-add-row').addEventListener('click', function () {
+        addRow(builder, '', '', '');
+        serializeRows(builder);
+      });
+    });
+  })();
+</script>
+
+<script>
+  // Drives every .chart-series-settings (Add-panel's and each panel's own Edit form both have
+  // one) — builds one row per currently-checked monitor in that SAME form's monitor checklist
+  // (found via the container's own data-checklist-selector, since the two forms use different
+  // checklist markup), keeping a hidden JSON textarea (dashboards.js's parseSeriesConfig format)
+  // in sync as rows are added, removed (by unchecking that monitor), or edited.
+  (function () {
+    // Same preset list as the panel-wide unit fields (see UNIT_PRESETS/unitField() above) — kept
+    // as its own small copy here rather than sharing that server-side const, since these rows are
+    // built entirely client-side (one per checked monitor, added/removed as checkboxes toggle).
+    var UNIT_PRESETS = ['°C', '°F', '%', 'W', 'kW', 'kWh', 'V', 'A', 'Hz', 'hPa', 'lux', 'ppm', 'bar', 'm³', 'dB'];
+
+    // Same hex-normalization helper as the threshold/value-mapping builders above — a native
+    // <input type="color"> only accepts a strict 7-char hex value, so a color already stored as a
+    // CSS name has to be resolved before it can seed that row's swatch.
+    function toHexColor(color) {
+      var probe = document.createElement('div');
+      probe.style.color = color;
+      document.body.appendChild(probe);
+      var computed = getComputedStyle(probe).color;
+      document.body.removeChild(probe);
+      var m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (!m) return '#e34948';
+      function hex(n) { return Number(n).toString(16).padStart(2, '0'); }
+      return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
+    }
+
+    function buildUnitPicker(currentValue) {
+      var wrap = document.createElement('span');
+      wrap.className = 'chart-series-row-unit-wrap';
+      var isCustom = !!currentValue && UNIT_PRESETS.indexOf(currentValue) === -1;
+      var select = document.createElement('select');
+      select.className = 'chart-series-row-unit-select';
+      var noneOpt = document.createElement('option');
+      noneOpt.value = '';
+      noneOpt.textContent = '(none)';
+      select.appendChild(noneOpt);
+      UNIT_PRESETS.forEach(function (u) {
+        var opt = document.createElement('option');
+        opt.value = u;
+        opt.textContent = u;
+        if (currentValue === u) opt.selected = true;
+        select.appendChild(opt);
+      });
+      var customOpt = document.createElement('option');
+      customOpt.value = '__custom__';
+      customOpt.textContent = 'Custom…';
+      if (isCustom) customOpt.selected = true;
+      select.appendChild(customOpt);
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'chart-series-row-unit-custom';
+      input.placeholder = 'Unit';
+      input.value = isCustom ? currentValue : '';
+      input.style.display = isCustom ? '' : 'none';
+
+      select.addEventListener('change', function () {
+        input.style.display = select.value === '__custom__' ? '' : 'none';
+        if (select.value === '__custom__') input.focus();
+      });
+
+      wrap.appendChild(select);
+      wrap.appendChild(input);
+      return wrap;
+    }
+
+    // The effective unit value is whichever of select/input currently "owns" it — mirrors
+    // .unit-select's own select-or-custom-input convention above, just read directly instead of
+    // toggling a shared `name` attribute (these rows submit as one JSON blob, not individual
+    // fields, so there's no name-collision to avoid here).
+    function unitPickerValue(wrap) {
+      var select = wrap.querySelector('.chart-series-row-unit-select');
+      var input = wrap.querySelector('.chart-series-row-unit-custom');
+      return select.value === '__custom__' ? input.value.trim() : select.value;
+    }
+
+    function buildRow(monitorId, monitorLabel, override) {
+      var row = document.createElement('div');
+      row.className = 'chart-series-row';
+      row.dataset.monitorId = monitorId;
+      row.innerHTML =
+        '<span class="chart-series-row-label"></span>' +
+        '<input type="text" class="chart-series-row-name" placeholder="Name">' +
+        '<span class="chart-series-row-unit-slot"></span>' +
+        '<select class="chart-series-row-axis"><option value="left">Left axis</option><option value="right">Right axis</option></select>' +
+        '<input type="checkbox" class="chart-series-row-color-enabled" title="Give this series its own color">' +
+        '<input type="color" class="chart-series-row-color">';
+      row.querySelector('.chart-series-row-label').textContent = monitorLabel;
+      row.querySelector('.chart-series-row-label').title = monitorLabel;
+      row.querySelector('.chart-series-row-name').value = (override && override.name) || '';
+      row.querySelector('.chart-series-row-axis').value = (override && override.axis === 'right') ? 'right' : 'left';
+
+      var unitPicker = buildUnitPicker((override && override.unit) || '');
+      row.querySelector('.chart-series-row-unit-slot').replaceWith(unitPicker);
+
+      var colorValue = override && override.color;
+      var colorEnabled = !!colorValue;
+      row.querySelector('.chart-series-row-color-enabled').checked = colorEnabled;
+      row.querySelector('.chart-series-row-color').value = toHexColor(colorValue || '#e34948');
+      row.querySelector('.chart-series-row-color').style.visibility = colorEnabled ? '' : 'hidden';
+      row.querySelector('.chart-series-row-color-enabled').addEventListener('change', function (e) {
+        row.querySelector('.chart-series-row-color').style.visibility = e.target.checked ? '' : 'hidden';
+      });
+
+      return row;
+    }
+
+    document.querySelectorAll('.chart-series-settings').forEach(function (container) {
+      var form = container.closest('form');
+      var checklist = form.querySelector(container.dataset.checklistSelector);
+      if (!checklist) return;
+      var hidden = container.querySelector('.chart-series-hidden');
+      var rowsEl = container.querySelector('.chart-series-rows');
+      var cache = {};
+      try { cache = JSON.parse(hidden.value || '{}'); } catch (e) { /* malformed — start empty */ }
+
+      function serialize() {
+        var out = {};
+        rowsEl.querySelectorAll('.chart-series-row').forEach(function (row) {
+          var id = row.dataset.monitorId;
+          var name = row.querySelector('.chart-series-row-name').value.trim();
+          var unit = unitPickerValue(row.querySelector('.chart-series-row-unit-wrap'));
+          var axis = row.querySelector('.chart-series-row-axis').value;
+          var hasColor = row.querySelector('.chart-series-row-color-enabled').checked;
+          var color = hasColor ? row.querySelector('.chart-series-row-color').value : null;
+          var entry = { name: name || null, unit: unit || null, axis: axis, color: color };
+          // Kept in the in-memory cache (not just `out`) even when blank, so unchecking a monitor
+          // and re-checking it later in the same session still shows whatever was last entered —
+          // only what actually has a real value ends up in the submitted `out`.
+          cache[id] = entry;
+          if (name || unit || axis === 'right' || color) out[id] = entry;
         });
-      }).observe(form, { attributes: true, attributeFilter: ['class'] });
+        hidden.value = JSON.stringify(out);
+      }
+
+      function rebuildRows() {
+        var checked = Array.prototype.slice.call(checklist.querySelectorAll('input[type="checkbox"]:checked'));
+        rowsEl.innerHTML = '';
+        checked.forEach(function (checkbox) {
+          var id = checkbox.value;
+          var labelEl = checkbox.closest('label');
+          // Strips a trailing " (mqtt)"/" (loxone)" source-type suffix (see the Add-panel
+          // checklist's own markup above) — the Edit form's compact checklist has no such suffix
+          // to begin with, so this simply doesn't match anything there.
+          var monitorLabel = labelEl ? labelEl.textContent.trim().replace(/\s*\([a-z_]+\)\s*$/i, '') : id;
+          var row = buildRow(id, monitorLabel, cache[id]);
+          Array.prototype.forEach.call(row.querySelectorAll('input, select'), function (el) {
+            el.addEventListener('input', serialize);
+            el.addEventListener('change', serialize);
+          });
+          rowsEl.appendChild(row);
+        });
+        serialize();
+      }
+
+      checklist.addEventListener('change', function (e) {
+        if (e.target.matches('input[type="checkbox"]')) rebuildRows();
+      });
+      rebuildRows();
+    });
+  })();
+</script>
+
+<script>
+  // The panel edit form now opens as a fixed side drawer (see .dash-panel > .panel-settings-form
+  // in style.css) instead of expanding inline, so unlike before it no longer needs the card itself
+  // to grow to fit it — this just handles the backdrop (shown behind whichever drawer is open,
+  // click or Escape to close) since the shared [data-toggle-row] handler (foot.ejs) only knows how
+  // to toggle .open on the form itself, not coordinate a backdrop across all of them.
+  (function () {
+    var backdrop = document.getElementById('panel-edit-backdrop');
+    if (!backdrop) return;
+
+    function syncBackdrop() {
+      var anyOpen = document.querySelector('.dash-panel > .panel-settings-form.open');
+      backdrop.classList.toggle('open', !!anyOpen);
+    }
+    function closeAll() {
+      document.querySelectorAll('.dash-panel > .panel-settings-form.open').forEach(function (f) { f.classList.remove('open'); });
+      backdrop.classList.remove('open');
+    }
+
+    // Deferred a tick so this runs after foot.ejs's own [data-toggle-row] click handler has
+    // already flipped .open — both are plain document click listeners, and this script runs
+    // (and so registers its listener) before that one simply because it appears earlier in the
+    // page, which would otherwise see the pre-toggle state.
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('[data-toggle-row^="panel-edit-"]')) setTimeout(syncBackdrop, 0);
+    });
+    backdrop.addEventListener('click', closeAll);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+  })();
+</script>
+
+<script>
+  // Drag-to-resize for the panel edit drawer's width — one shared handle per panel, but only the
+  // currently-open one is ever visible (see .panel-drawer-resize-handle in style.css). The width
+  // itself lives in a CSS custom property on the root element, so every panel's drawer (whichever
+  // one is open next) picks up the same value — this is a personal UI preference, not dashboard
+  // data, so localStorage is enough; no server round-trip needed.
+  (function () {
+    var STORAGE_KEY = 'panelDrawerWidth';
+    var MIN_WIDTH = 340;
+
+    function maxWidth() { return Math.min(1000, window.innerWidth * 0.92); }
+
+    var saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) document.documentElement.style.setProperty('--panel-drawer-width', Math.min(Number(saved), maxWidth()) + 'px');
+
+    document.querySelectorAll('.panel-drawer-resize-handle').forEach(function (handle) {
+      handle.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        var drawer = handle.previousElementSibling;
+        var startX = e.clientX;
+        var startWidth = drawer.getBoundingClientRect().width;
+        handle.classList.add('dragging');
+
+        function onMove(e) {
+          // Dragging left (clientX decreases) should widen the drawer — its right edge is pinned
+          // to the viewport edge, so the left edge (and this handle) are what actually move.
+          var width = Math.max(MIN_WIDTH, Math.min(maxWidth(), startWidth + (startX - e.clientX)));
+          document.documentElement.style.setProperty('--panel-drawer-width', width + 'px');
+        }
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          handle.classList.remove('dragging');
+          localStorage.setItem(STORAGE_KEY, getComputedStyle(document.documentElement).getPropertyValue('--panel-drawer-width').trim().replace('px', ''));
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    });
+  })();
+</script>
+
+<script>
+  // Auto-saves every .panel-settings-form on any field change instead of requiring the explicit
+  // Save button — the button still works (it's now just an immediate flush of the debounce below)
+  // but no longer navigates away, so the drawer stays open and the change is visible right away.
+  (function () {
+    var pending = new WeakMap(); // form -> setTimeout id, so rapid edits collapse into one save
+    var SAVE_DELAY_MS = 700;
+
+    function setStatus(form, text) {
+      var status = form.querySelector('.panel-save-status');
+      if (status) status.textContent = text;
+    }
+
+    // The one panel-type-specific element that follows the settings form in a card — a chart's
+    // .chart-wrap, a table's .panel-table-scroll, a gauge's .gauge-wrap, the "no monitors" hint,
+    // etc. Found generically, since after a type change it's not the same element it was before.
+    // Must also skip .confirm-bar — foot.ejs's data-confirm handling inserts one as a direct
+    // child of .dash-panel too (right after .dash-panel-head, for the Delete-panel button), and
+    // it's only ever present on the live DOM, never in a freshly-fetched, script-free HTML parse.
+    function getContentEl(card) {
+      return card.querySelector(':scope > *:not(.widget-drag-handle):not(.dash-panel-head):not(.confirm-bar):not(.panel-settings-form):not(.dash-panel-resize-handle)');
+    }
+
+    function applyPatch(card, freshCard) {
+      var title = card.querySelector('.dash-panel-title');
+      var freshTitle = freshCard.querySelector('.dash-panel-title');
+      if (title && freshTitle) title.textContent = freshTitle.textContent;
+
+      var content = getContentEl(card);
+      var freshContent = getContentEl(freshCard);
+      if (content && freshContent) {
+        content.replaceWith(freshContent);
+        // A chart's <canvas> needs its own refresh loop restarted — the generic content swap
+        // above only ever gives it a fresh, un-initialized element.
+        var canvas = freshContent.querySelector('canvas[data-monitor-ids]');
+        if (canvas && window.initChartCanvas) window.initChartCanvas(canvas);
+      }
+      window.stampCsrfTokens();
+    }
+
+    function doSave(form) {
+      clearTimeout(pending.get(form));
+      pending.delete(form);
+      var card = form.closest('.dash-panel');
+      setStatus(form, 'Saving…');
+      // A FormData body would send multipart/form-data, which nothing here parses (the app only
+      // wires up express.urlencoded()) — every field would arrive as undefined. URLSearchParams
+      // sends the same x-www-form-urlencoded body a normal form submit would.
+      var params = new URLSearchParams();
+      new FormData(form).forEach(function (value, key) { params.append(key, value); });
+      fetch(form.action, { method: 'POST', body: params })
+        .then(function (res) {
+          if (!res.ok) throw new Error('save failed');
+          return res.text();
+        })
+        .then(function (html) {
+          var freshDoc = new DOMParser().parseFromString(html, 'text/html');
+          var freshCard = freshDoc.querySelector('.dash-panel[data-id="' + card.dataset.id + '"]');
+          if (card && freshCard) applyPatch(card, freshCard);
+          setStatus(form, 'Saved');
+          setTimeout(function () { setStatus(form, ''); }, 1500);
+        })
+        .catch(function () { setStatus(form, 'Save failed'); });
+    }
+
+    function scheduleSave(form) {
+      setStatus(form, 'Editing…');
+      clearTimeout(pending.get(form));
+      pending.set(form, setTimeout(function () { doSave(form); }, SAVE_DELAY_MS));
+    }
+
+    function flushPending(form) {
+      if (pending.has(form)) doSave(form);
+    }
+
+    document.querySelectorAll('.panel-settings-form').forEach(function (form) {
+      form.addEventListener('submit', function (e) { e.preventDefault(); doSave(form); });
+      ['input', 'change'].forEach(function (evtName) {
+        form.addEventListener(evtName, function (e) {
+          if (e.target.classList.contains('panel-monitor-filter')) return; // client-side-only, not a real field
+          scheduleSave(form);
+        });
+      });
+    });
+
+    // Row-remove buttons (threshold/value-mapping builders) only ever fire a click, never an
+    // input/change on the (now-detached) row itself, so they need their own trigger.
+    document.addEventListener('click', function (e) {
+      var removeBtn = e.target.closest('.threshold-row-remove, .value-mapping-row-remove');
+      var form = removeBtn && removeBtn.closest('.panel-settings-form');
+      if (form) { scheduleSave(form); return; }
+
+      // Closing a drawer (backdrop or its own × — both use this same [data-toggle-row] trigger),
+      // or opening a different panel's drawer, must not silently drop a still-debounced change.
+      if (e.target.closest('#panel-edit-backdrop') || e.target.closest('[data-toggle-row^="panel-edit-"]')) {
+        document.querySelectorAll('.panel-settings-form').forEach(flushPending);
+      }
     });
   })();
 </script>
@@ -537,7 +1179,7 @@
     if (!grid) return;
     var ROW_UNIT_PX = 70; // must match .dash-grid's grid-auto-rows in style.css
     var COLUMNS = 12;
-    var MIN_COL_SPAN = 2, MAX_COL_SPAN = 12, MIN_ROW_SPAN = 2, MAX_ROW_SPAN = 8;
+    var MIN_COL_SPAN = 2, MAX_COL_SPAN = 12, MIN_ROW_SPAN = 2, MAX_ROW_SPAN = 200;
 
     function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
 

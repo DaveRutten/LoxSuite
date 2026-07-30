@@ -35,10 +35,14 @@ function recordLogLine(line, ts) {
 
 function processLine(line) {
   const lineMatch = line.match(LINE_RE);
-  const ts = lineMatch ? new Date(Number(lineMatch[1]) * 1000).toISOString() : new Date().toISOString();
+  // A genuine Mosquitto line always starts with its own Unix-timestamp prefix — anything else
+  // (a stray write to the log file from outside Mosquitto itself, a wrapped continuation of a
+  // multi-line message, ...) isn't a real log entry and would otherwise show up with a fabricated
+  // "now" timestamp and no useful content, e.g. a bare "hello" with nothing else to say about it.
+  if (!lineMatch) return;
+  const ts = new Date(Number(lineMatch[1]) * 1000).toISOString();
   recordLogLine(line, ts);
 
-  if (!lineMatch) return;
   const rest = lineMatch[2];
 
   const connectMatch = rest.match(CONNECT_RE);
@@ -103,6 +107,28 @@ function clearClients() {
   }
 }
 
+// Same "only disconnected" rule as clearClients(), just automatic and age-based instead of a
+// manual all-at-once click — each removal is logged (source='system') so there's a durable trail
+// of what got dropped and when, since the Connected Clients list itself is in-memory only.
+function pruneDisconnectedClients(hours) {
+  const cutoff = Date.now() - hours * 60 * 60 * 1000;
+  const now = new Date().toISOString();
+
+  for (const [id, client] of clients) {
+    if (client.status === 'connected' || !client.disconnectedAt) continue;
+    if (new Date(client.disconnectedAt).getTime() > cutoff) continue;
+
+    clients.delete(id);
+    const label = client.username ? `${client.clientId} (user '${client.username}')` : client.clientId;
+    insertLogEntry.run(
+      'system',
+      null,
+      `Removed disconnected MQTT client ${label} from Client Activity — disconnected since ${client.disconnectedAt}, older than the ${hours}h retention.`,
+      now
+    );
+  }
+}
+
 // Collapses the clientId-keyed `clients` map down to one entry per MQTT *username* (dynamic
 // security roles/ACLs are per-username, not per-client-id, and one username can reconnect under a
 // new client id) — used by the MQTT Users page to show when an account was last active. Same
@@ -127,4 +153,4 @@ function getLastSeenByUsername() {
   return byUsername;
 }
 
-module.exports = { startTailing, getClients, clearClients, getLastSeenByUsername };
+module.exports = { startTailing, getClients, clearClients, pruneDisconnectedClients, getLastSeenByUsername };

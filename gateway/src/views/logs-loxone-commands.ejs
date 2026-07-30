@@ -1,0 +1,80 @@
+<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-loxone-commands', refresh: 5, liveSwap: true }) %>
+
+<div class="tabs">
+  <a href="/logs/mqtt">MQTT broker</a>
+  <a href="/logs/loxone">Loxone Miniservers</a>
+  <a class="active" href="/logs/loxone-commands">Loxone commands</a>
+  <a href="/logs/system">System</a>
+</div>
+
+<p class="hint">
+  Every Virtual Output command Loxone sends this gateway (UDP or HTTP), accepted or rejected —
+  who sent it (the configured Miniserver's name when its Host matches the sender's IP, otherwise
+  just the IP), when, which MQTT topic it targeted, and the value transition (what it was before
+  &rarr; what it became). Use this to check whether a command from the Miniserver actually arrives
+  here at all before chasing the Loxone &rarr; MQTT mapping itself. Persisted in SQLite and kept
+  for <strong><%= retentionDays %></strong> days, same retention setting as the other tabs
+  &mdash; <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
+</p>
+
+<form method="get" action="/logs/loxone-commands" class="form-grid" style="margin-bottom:1rem; align-items:end;">
+  <div>
+    <label>From</label>
+    <input type="datetime-local" name="from" value="<%= query.from || '' %>">
+  </div>
+  <div>
+    <label>To</label>
+    <input type="datetime-local" name="to" value="<%= query.to || '' %>">
+  </div>
+  <div>
+    <label>Result</label>
+    <select name="level">
+      <option value="" <%= !query.level ? 'selected' : '' %>>All</option>
+      <option value="error" <%= query.level === 'error' ? 'selected' : '' %>>Rejected</option>
+      <option value="info" <%= query.level === 'info' ? 'selected' : '' %>>Accepted</option>
+    </select>
+  </div>
+  <div>
+    <label>Contains</label>
+    <input type="text" name="q" value="<%= query.q || '' %>" placeholder="Token, topic, value, client…">
+  </div>
+  <div style="display:flex; gap:0.5rem;">
+    <button type="submit" class="btn-soft"><%- icon('filter') %> Apply</button>
+    <a href="/logs/loxone-commands"><button type="button" class="btn-soft">Clear</button></a>
+  </div>
+</form>
+
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <a href="/logs/loxone-commands/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Time</th><th>Client</th><th>Command</th><th>From value</th><th>To value</th><th>Result</th></tr>
+    </thead>
+    <tbody>
+      <% rows.forEach(r => { %>
+        <% const accepted = r.level !== 'error'; %>
+        <tr>
+          <td><%= formatDateTime(r.recordedAt) %></td>
+          <td><%= r.sourceLabel || '-' %></td>
+          <td><code class="truncate" title="<%= r.commandTopic || '' %>"><%= r.commandTopic || '-' %></code></td>
+          <td><%= (r.valueFrom === null || r.valueFrom === undefined) ? '–' : `"${r.valueFrom}"` %></td>
+          <td><%= (r.valueTo === null || r.valueTo === undefined) ? '–' : `"${r.valueTo}"` %></td>
+          <td>
+            <span class="badge <%= accepted ? 'badge-ok' : 'badge-off' %>"><%= accepted ? 'Accepted' : 'Rejected' %></span>
+            <% if (!accepted) { %><div class="hint" style="margin:0.25rem 0 0;"><%= r.line.replace(/^Rejected:\s*/, '') %></div><% } %>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (rows.length === 0) { %>
+        <tr><td colspan="6" class="empty">No Loxone commands received yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<%- include('partials/foot') %>

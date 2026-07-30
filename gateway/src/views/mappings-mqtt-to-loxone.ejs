@@ -63,7 +63,31 @@
   <% } %>
 <% } %>
 
-<div class="table-wrap">
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <div class="search-combo">
+      <select id="mappings-filter-field">
+        <option value="0">Status</option>
+        <option value="1">Topic</option>
+        <option value="2">Miniserver</option>
+        <option value="3">Transport</option>
+        <option value="4">Target</option>
+        <option value="5">Transform</option>
+      </select>
+      <input type="text" id="mappings-filter-query" placeholder="Filter…">
+    </div>
+    <% if (canEdit('mqtt_to_loxone')) { %>
+    <% var disabledCount = mappings.filter(m => !m.enabled).length; var enabledCount = mappings.length - disabledCount; %>
+    <form method="post" action="/mappings/mqtt-to-loxone/enable-all" style="margin:0;">
+      <button type="submit" class="btn-edit" <%= disabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Enable all (<%= disabledCount %>)</button>
+    </form>
+    <form method="post" action="/mappings/mqtt-to-loxone/disable-all" style="margin:0;">
+      <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Disable all (<%= enabledCount %>)</button>
+    </form>
+    <% } %>
+  </div>
+
+  <div class="table-wrap">
   <table>
     <thead>
       <tr><th>Status</th><th>Topic</th><th>Miniserver</th><th>Transport</th><th>Target</th><th>Transform</th><th>Min. interval</th><th>Actions</th></tr>
@@ -71,7 +95,7 @@
     <tbody>
       <% mappings.forEach(m => { %>
         <tr>
-          <td><span class="badge <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
+          <td><span class="badge badge-live <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
           <td><code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
           <td><%= m.miniserver_name %></td>
           <td><%= m.transport %></td>
@@ -101,6 +125,30 @@
       <% } %>
     </tbody>
   </table>
+  </div>
 </div>
+
+<script>
+  (function () {
+    var fieldSelect = document.getElementById('mappings-filter-field');
+    var queryInput = document.getElementById('mappings-filter-query');
+    var tbody = document.querySelector('.table-wrap tbody');
+    if (!fieldSelect || !tbody) return;
+
+    function applyFilter() {
+      var colIndex = Number(fieldSelect.value);
+      var q = queryInput.value.trim().toLowerCase();
+      tbody.querySelectorAll('tr').forEach(function (row) {
+        if (!q) { row.style.display = ''; return; }
+        var cell = row.children[colIndex];
+        var text = cell ? cell.textContent.toLowerCase() : '';
+        row.style.display = text.indexOf(q) !== -1 ? '' : 'none';
+      });
+    }
+
+    fieldSelect.addEventListener('change', applyFilter);
+    queryInput.addEventListener('input', applyFilter);
+  })();
+</script>
 
 <%- include('partials/foot') %>

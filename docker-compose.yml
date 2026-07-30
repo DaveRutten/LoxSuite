@@ -20,7 +20,7 @@ services:
       DB_PATH: /data/gateway.db
       MOSQUITTO_LOG_PATH: /mosquitto/log/mosquitto.log
       MOSQUITTO_CONFIG_PATH: /mosquitto/config
-      LOXONE_UDP_PORT: 11884
+      LOXONE_UDP_PORT: 11885
       PORT: 3000
     volumes:
       - ./data:/data
@@ -30,7 +30,7 @@ services:
     ports:
       - "3000:3000"
       - "1883:1883"
-      - "11884:11884/udp"
+      - "11885:11885/udp"
 
 volumes:
   mosquitto_data:

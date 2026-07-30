@@ -1,0 +1,96 @@
+<%- include('partials/head', { pageTitle: 'Settings', active: 'settings' }) %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+<% if (saved) { %>
+  <p class="hint" style="color: var(--success);">Saved.</p>
+<% } %>
+
+<% if (canEdit('settings')) { %>
+<form method="post" action="/settings">
+  <div class="card">
+    <h2>Display</h2>
+    <div class="settings-field">
+      <label>Timezone</label>
+      <select name="display_timezone" style="max-width:16rem;">
+        <% timezones.forEach(tz => { %>
+          <option value="<%= tz %>" <%= tz === gatewaySettings.display_timezone ? 'selected' : '' %>><%= tz %></option>
+        <% }) %>
+      </select>
+      <p class="hint">
+        Every date and time shown anywhere in LoxSuite is rendered in this timezone — an IANA name
+        like <code>Europe/Amsterdam</code> (not a fixed offset, so daylight saving is handled
+        automatically). Defaults to <code>UTC</code>, which is always correct but rarely what you
+        actually want to see.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Data retention</h2>
+    <p class="hint">How long history is kept before being purged automatically.</p>
+
+    <div class="settings-field-list">
+      <div class="settings-field">
+        <label>Logs (days)</label>
+        <input type="number" name="log_retention_days" min="1" value="<%= gatewaySettings.log_retention_days %>">
+        <p class="hint">
+          Raw log lines on the <a href="/logs">Logs</a> page (MQTT broker log, Loxone log, and the
+          System log) older than this are deleted automatically, once a day.
+        </p>
+      </div>
+      <div class="settings-field">
+        <label>Monitor history (days)</label>
+        <input type="number" name="monitor_retention_days" min="1" value="<%= gatewaySettings.monitor_retention_days %>">
+        <p class="hint">
+          Recorded readings on the <a href="/monitor">Monitor</a> page older than this are deleted
+          automatically — keeps the database from growing forever on monitors polled frequently.
+        </p>
+      </div>
+      <div class="settings-field">
+        <label>Client Activity, after disconnect (hours)</label>
+        <input type="number" name="client_retention_hours" min="1" value="<%= gatewaySettings.client_retention_hours %>">
+        <p class="hint">
+          How long a disconnected MQTT client stays listed on
+          <a href="/incoming/clients">Client Activity</a> before being dropped from the list — each
+          removal is logged on the <a href="/logs/system">System</a> log. Clients that are still
+          actually connected are never affected by this.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Dashboards</h2>
+    <div class="settings-field">
+      <label>Default decimals for "Current value" panels</label>
+      <input type="number" name="default_panel_decimals" min="0" max="6" value="<%= gatewaySettings.default_panel_decimals %>" style="max-width:8rem;">
+      <p class="hint">
+        Used whenever a "Current value" panel doesn't set its own — override it per panel from
+        that panel's own Edit settings.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Features</h2>
+    <label class="toggle-row">
+      <input type="checkbox" name="dashboard_suggestions_enabled" <%= gatewaySettings.dashboard_suggestions_enabled ? 'checked' : '' %>>
+      <span>
+        <strong>Offer "Suggest dashboard" on <a href="/live-data">Live Data</a></strong>
+        <span class="hint">
+          Lets you generate a starter personal dashboard for a room (lighting, climate, shading,
+          energy) straight from its structure, instead of adding monitors and panels one at a time.
+        </span>
+      </span>
+    </label>
+  </div>
+
+  <div>
+    <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+  </div>
+</form>
+<% } %>
+
+<%- include('partials/foot') %>

@@ -48,14 +48,13 @@
           <td><%= c.username %></td>
           <td>
             <% if (!protectedUsernames.includes(c.username) && canEdit('mqtt_users')) { %>
-              <form class="inline" method="post" action="/mqtt-users/<%= c.username %>/role" style="display:flex; gap:0.4rem; align-items:center;">
+              <form id="role-form-<%= c.username %>" method="post" action="/mqtt-users/<%= c.username %>/role" style="display:inline;">
                 <input type="hidden" name="previous_roles" value="<%= (c.roles || []).map(r => r.rolename).join(',') %>">
                 <select name="rolename">
                   <% roles.forEach(r => { %>
                     <option value="<%= r %>" <%= (c.roles || []).some(cr => cr.rolename === r) ? 'selected' : '' %>><%= r %></option>
                   <% }) %>
                 </select>
-                <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
               </form>
             <% } else { %>
               <%= (c.roles || []).map(r => r.rolename).join(', ') || '-' %>
@@ -64,9 +63,9 @@
           <td><%= (c.connections || []).length %></td>
           <td>
             <% if (c.lastSeen && c.lastSeen.status === 'connected') { %>
-              <span class="badge badge-ok">Connected now</span>
+              <span class="badge badge-live badge-ok">Connected now</span>
             <% } else if (c.lastSeen) { %>
-              <span class="badge badge-neutral"><%= new Date(c.lastSeen.at).toLocaleString('en-GB') %></span>
+              <span class="badge badge-neutral"><%= formatDateTime(c.lastSeen.at) %></span>
             <% } else { %>
               <span class="badge badge-neutral">Not seen yet</span>
             <% } %>
@@ -74,6 +73,7 @@
           <td>
             <% if (!protectedUsernames.includes(c.username) && canEdit('mqtt_users')) { %>
               <div class="row-actions">
+                <button type="submit" form="role-form-<%= c.username %>" class="btn-edit"><%- icon('edit') %> Save role</button>
                 <button type="button" class="btn-edit" data-toggle-row="mqtt-reset-pw-<%= c.username %>"><%- icon('edit') %> Reset password</button>
                 <form class="inline" method="post" action="/mqtt-users/<%= c.username %>/delete" data-confirm="Delete this user?">
                   <button type="submit" class="danger"><%- icon('trash') %> Delete</button>

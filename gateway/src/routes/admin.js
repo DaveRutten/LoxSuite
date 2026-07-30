@@ -2,12 +2,15 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { AREAS } = require('../permissionAreas');
+const { logSystemEvent } = require('../auditLog');
 
 const router = express.Router();
 
 function listUsers() {
   return db.prepare(
-    `SELECT users.id, users.username, users.auth_provider, users.role_id, users.last_login_at, access_roles.name AS role_name
+    `SELECT users.id, users.username, users.auth_provider, users.role_id, users.last_login_at,
+            users.first_name, users.last_name, users.display_name, users.avatar_url,
+            access_roles.name AS role_name
      FROM users LEFT JOIN access_roles ON access_roles.id = users.role_id
      ORDER BY users.username`
   ).all();
@@ -48,19 +51,35 @@ router.get('/users', (req, res) => {
 });
 
 router.post('/users', (req, res) => {
-  const { username, password, role_id } = req.body;
+  const { username, password, role_id, first_name, last_name } = req.body;
   try {
     if (!username || !password || !role_id) throw new Error('Username, password, and role are required.');
     const hash = bcrypt.hashSync(password, 10);
-    db.prepare('INSERT INTO users (username, password_hash, role_id, auth_provider) VALUES (?, ?, ?, ?)')
-      .run(username, hash, role_id, 'local');
+    db.prepare('INSERT INTO users (username, password_hash, role_id, auth_provider, first_name, last_name) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(username, hash, role_id, 'local', first_name?.trim() || null, last_name?.trim() || null);
+    logSystemEvent(`"${req.user.username}" created user "${username}".`);
     res.redirect('/admin/users');
   } catch (err) {
     res.render('admin-users', { users: listUsers(), roles: db.prepare('SELECT * FROM access_roles ORDER BY name').all(), error: err.message });
   }
 });
 
+// Local users only — an SSO account's name is refreshed from Pocket ID on every login (see
+// routes/auth.js), so editing it here would just get overwritten the next time they sign in.
+router.post('/users/:id/name', (req, res) => {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!user || user.auth_provider !== 'local') {
+    return res.render('admin-users', { users: listUsers(), roles: db.prepare('SELECT * FROM access_roles ORDER BY name').all(), error: 'This account signs in via SSO — its name comes from Pocket ID and cannot be edited here.' });
+  }
+  const firstName = (req.body.first_name || '').trim() || null;
+  const lastName = (req.body.last_name || '').trim() || null;
+  db.prepare('UPDATE users SET first_name = ?, last_name = ? WHERE id = ?').run(firstName, lastName, user.id);
+  logSystemEvent(`"${req.user.username}" updated the name on user "${user.username}".`);
+  res.redirect('/admin/users');
+});
+
 router.post('/users/:id/role', (req, res) => {
+  const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   const targetRole = db.prepare('SELECT * FROM access_roles WHERE id = ?').get(req.body.role_id);
   if (!targetRole) {
     return res.render('admin-users', { users: listUsers(), roles: db.prepare('SELECT * FROM access_roles ORDER BY name').all(), error: 'Role not found.' });
@@ -73,6 +92,7 @@ router.post('/users/:id/role', (req, res) => {
     });
   }
   db.prepare('UPDATE users SET role_id = ? WHERE id = ?').run(targetRole.id, req.params.id);
+  logSystemEvent(`"${req.user.username}" changed "${targetUser?.username}"'s role to "${targetRole.name}".`);
   res.redirect('/admin/users');
 });
 
@@ -92,6 +112,7 @@ router.post('/users/:id/reset-password', (req, res) => {
 
   const hash = bcrypt.hashSync(req.body.password, 10);
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.params.id);
+  logSystemEvent(`"${req.user.username}" reset the password for user "${user.username}".`);
   res.redirect('/admin/users');
 });
 
@@ -106,7 +127,9 @@ router.post('/users/:id/delete', (req, res) => {
       error: 'This is the only remaining administrator and cannot be deleted — assign another user as administrator first.',
     });
   }
+  const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+  logSystemEvent(`"${req.user.username}" deleted user "${targetUser?.username}".`);
   res.redirect('/admin/users');
 });
 
@@ -121,6 +144,7 @@ router.post('/roles', (req, res) => {
     const result = db.prepare('INSERT INTO access_roles (name, is_admin) VALUES (?, 0)').run(name);
     const insertPerm = db.prepare('INSERT INTO access_role_permissions (role_id, area, can_view, can_edit) VALUES (?, ?, 0, 0)');
     for (const { key } of AREAS) insertPerm.run(result.lastInsertRowid, key);
+    logSystemEvent(`"${req.user.username}" created role "${name}".`);
     res.redirect('/admin/roles');
   } catch (err) {
     res.render('admin-roles', { roles: listRoles(), areas: AREAS, error: err.message });
@@ -129,7 +153,11 @@ router.post('/roles', (req, res) => {
 
 router.post('/roles/:id/rename', (req, res) => {
   const name = (req.body.name || '').trim();
-  if (name) db.prepare('UPDATE access_roles SET name = ? WHERE id = ?').run(name, req.params.id);
+  if (name) {
+    const oldRole = db.prepare('SELECT name FROM access_roles WHERE id = ?').get(req.params.id);
+    db.prepare('UPDATE access_roles SET name = ? WHERE id = ?').run(name, req.params.id);
+    logSystemEvent(`"${req.user.username}" renamed role "${oldRole?.name}" to "${name}".`);
+  }
   res.redirect('/admin/roles');
 });
 
@@ -159,6 +187,7 @@ router.post('/roles/:id/permissions', (req, res) => {
   });
   applyAll();
 
+  logSystemEvent(`"${req.user.username}" updated permissions for role "${role.name}".`);
   res.redirect('/admin/roles');
 });
 
@@ -167,7 +196,9 @@ router.post('/roles/:id/delete', (req, res) => {
   if (inUse > 0) {
     return res.render('admin-roles', { roles: listRoles(), areas: AREAS, error: `${inUse} user(s) still have this role — reassign them first.` });
   }
+  const role = db.prepare('SELECT name FROM access_roles WHERE id = ?').get(req.params.id);
   db.prepare('DELETE FROM access_roles WHERE id = ?').run(req.params.id);
+  logSystemEvent(`"${req.user.username}" deleted role "${role?.name}".`);
   res.redirect('/admin/roles');
 });
 
@@ -178,7 +209,7 @@ router.get('/sso', (req, res) => {
 });
 
 router.post('/sso', (req, res) => {
-  const { enabled, issuer_url, client_id, client_secret, default_role_id, button_label } = req.body;
+  const { enabled, issuer_url, client_id, client_secret, default_role_id, button_label, local_login_disabled } = req.body;
 
   // Blank secret field = keep the existing one; it's never shown back to the browser, so
   // re-typing is only needed to actually change it (same convention as Miniserver passwords).
@@ -186,7 +217,7 @@ router.post('/sso', (req, res) => {
   const newSecret = client_secret ? client_secret : existing?.client_secret;
 
   db.prepare(
-    `UPDATE sso_settings SET enabled = ?, issuer_url = ?, client_id = ?, client_secret = ?, default_role_id = ?, button_label = ?
+    `UPDATE sso_settings SET enabled = ?, issuer_url = ?, client_id = ?, client_secret = ?, default_role_id = ?, button_label = ?, local_login_disabled = ?
      WHERE id = 1`
   ).run(
     enabled ? 1 : 0,
@@ -194,8 +225,10 @@ router.post('/sso', (req, res) => {
     client_id || null,
     newSecret || null,
     default_role_id || null,
-    button_label || 'Pocket ID'
+    button_label || 'Pocket ID',
+    local_login_disabled ? 1 : 0
   );
+  logSystemEvent(`"${req.user.username}" updated SSO settings.`);
   const sso = db.prepare('SELECT * FROM sso_settings WHERE id = 1').get();
   const roles = db.prepare('SELECT * FROM access_roles ORDER BY name').all();
   res.render('admin-sso', { sso, roles, error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });

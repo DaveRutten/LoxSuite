@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { getCurrentValue, reloadMqttMonitors } = require('../monitorCollector');
 const { humanizeTopic } = require('../topicName');
-const { resolveRange, rangeToSince, MAX_ROWS } = require('./monitor');
+const { resolveRange, historyWindowClause, MAX_ROWS } = require('./monitor');
 
 const router = express.Router();
 
@@ -11,9 +11,12 @@ const SINGLE_MONITOR_TYPES = ['table', 'gauge', 'stat_delta', 'threshold'];
 const THRESHOLD_OPERATORS = ['gt', 'gte', 'lt', 'lte'];
 const LEGEND_POSITIONS = ['auto', 'top', 'left', 'right', 'off'];
 const MIN_COL_SPAN = 2;
-const MAX_COL_SPAN = 12;
+const MAX_COL_SPAN = 12; // the grid itself is 12 columns wide — this is a real ceiling, not an arbitrary one
 const MIN_ROW_SPAN = 2;
-const MAX_ROW_SPAN = 8;
+// Height has no equivalent structural ceiling (unlike width, which can't exceed the grid's own
+// column count) — 200 is just a sanity bound against a broken/malicious client value, not a
+// design limit on how tall a panel is allowed to get.
+const MAX_ROW_SPAN = 200;
 
 function clamp(value, min, max, fallback) {
   const n = Number(value);
@@ -40,25 +43,170 @@ function clampDecimals(value) {
   return Math.min(6, Math.max(0, Math.round(n)));
 }
 
+// null (not a number) means "no override — use the Settings-page global default", distinct from
+// an explicit 0. Only reachable from a panel type whose form actually has a decimals field with a
+// blank-is-valid "use default" option (currently just 'value' — chart's has always defaulted to a
+// bare 2 outside of the global setting, kept as-is here).
+function clampDecimalsOrNull(value) {
+  const str = fieldStr(value);
+  if (str === '') return null;
+  return clampDecimals(str);
+}
+
+function getDefaultPanelDecimals() {
+  const row = db.prepare('SELECT default_panel_decimals FROM gateway_settings WHERE id = 1').get();
+  return row && Number.isFinite(row.default_panel_decimals) ? row.default_panel_decimals : 2;
+}
+
+// Only numeric-looking values get rounded — a Loxone text state ("on"/"off"), a JSON blob, or
+// anything else non-numeric is shown exactly as reported, same as before this setting existed.
+function formatPanelValue(rawValue, decimals) {
+  if (rawValue === null || rawValue === undefined || rawValue === '') return rawValue;
+  const numeric = Number(rawValue);
+  if (!Number.isFinite(numeric)) return rawValue;
+  return numeric.toFixed(decimals);
+}
+
+// One "<key>=<value>" pair per line (mirrors the "<token>=\v" convention used elsewhere in this
+// app) rather than a full add-row/delete-row UI backed by its own DB table — reused for a value
+// panel's value labels, its threshold-color ladder, and its per-monitor name overrides alike:
+// each is a handful of rows at most, so a textarea a user edits directly is simpler for both of
+// us than reproducing loxone_mapping_translations' whole table+form machinery three more times.
+function parseKeyValueLines(text) {
+  const map = {};
+  (text || '').split('\n').forEach((line) => {
+    const idx = line.indexOf('=');
+    if (idx === -1) return;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (key && value) map[key] = value;
+  });
+  return map;
+}
+
+function serializeKeyValueLines(map) {
+  return Object.entries(map || {}).map(([key, value]) => `${key}=${value}`).join('\n');
+}
+
+// A CSS-safe-ish check, not a full validator — just enough to stop something like
+// "red; } body { display:none" (an attempted style injection via this free-text field) from ever
+// reaching a rendered inline style="color: ...". Named colors, hex, rgb()/hsl() all pass.
+const SAFE_CSS_COLOR_RE = /^[a-zA-Z][a-zA-Z0-9]*$|^#[0-9a-fA-F]{3,8}$|^(rgb|hsl)a?\([0-9.,%\s]+\)$/;
+function sanitizeColor(value) {
+  return SAFE_CSS_COLOR_RE.test(value.trim()) ? value.trim() : null;
+}
+
+// Grafana-style threshold ladder: each line is "<value>=<color>"; the color that applies to a
+// given reading is the HIGHEST threshold the reading meets or exceeds (e.g. "1=orange, 2=red,
+// 3=purple" means 0.5 stays uncolored, 1.5 is orange, 2.5 is red, 4 is purple) — not a single
+// on/off alert the way the dedicated 'threshold' panel type's own config is.
+function parseThresholdLadder(text) {
+  return Object.entries(parseKeyValueLines(text))
+    .map(([key, color]) => ({ value: Number(key), color: sanitizeColor(color) }))
+    .filter((t) => Number.isFinite(t.value) && t.color)
+    .sort((a, b) => a.value - b.value);
+}
+
+function serializeThresholdLadder(ladder) {
+  return (ladder || []).map((t) => `${t.value}=${t.color}`).join('\n');
+}
+
+function colorForThresholdLadder(numeric, ladder) {
+  if (!Number.isFinite(numeric) || !ladder || ladder.length === 0) return null;
+  let color = null;
+  for (const t of ladder) {
+    if (numeric >= t.value) color = t.color; // ladder is sorted ascending, so the last match wins
+    else break;
+  }
+  return color;
+}
+
+// Exact-value mapping (not a threshold ladder's >= comparison) — each line is
+// "<value>=<label>[=<color>]", the color segment optional since not every mapped value needs its
+// own color. A richer version of the plain parseKeyValueLines map above: this needs to carry an
+// optional third field, so it's a list of {value, label, color} instead of a plain object.
+function parseValueMappings(text) {
+  const list = [];
+  (text || '').split('\n').forEach((line) => {
+    const parts = line.split('=');
+    if (parts.length < 2) return;
+    const value = parts[0].trim();
+    const label = parts[1].trim();
+    // A label itself might validly contain "=" (e.g. "A=B state") — only the FIRST two "="
+    // delimit value/label; everything after the second is the color segment, rejoined in case it
+    // also happened to contain one.
+    const colorRaw = parts.length > 2 ? parts.slice(2).join('=').trim() : '';
+    if (!value || !label) return;
+    list.push({ value, label, color: colorRaw ? sanitizeColor(colorRaw) : null });
+  });
+  return list;
+}
+
+function serializeValueMappings(list) {
+  return (list || []).map((m) => `${m.value}=${m.label}${m.color ? '=' + m.color : ''}`).join('\n');
+}
+
+// Per-series chart overrides — keyed by monitor id (not label, unlike the value panel's
+// monitorNames/valueLabels above: this is built entirely from a dynamic UI that already knows
+// each row's monitor id directly, never hand-typed, so there's no reason to prefer the friendlier
+// but less precise label key). {name, unit, axis} per monitor id that has ANY override set; a
+// monitor with none of the three isn't stored at all, keeping this empty for the common case of
+// a chart with no per-series customization.
+function parseSeriesConfig(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text || '{}');
+  } catch (err) {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const result = {};
+  for (const id of Object.keys(parsed)) {
+    const entry = parsed[id] || {};
+    const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+    const unit = typeof entry.unit === 'string' ? entry.unit.trim() : '';
+    const axis = entry.axis === 'right' ? 'right' : 'left';
+    const color = typeof entry.color === 'string' && entry.color.trim() ? sanitizeColor(entry.color) : null;
+    if (name || unit || axis === 'right' || color) result[id] = { name: name || null, unit: unit || null, axis, color };
+  }
+  return result;
+}
+
 function buildConfig(panelType, body) {
   if (panelType === 'chart') {
     return {
       legendPosition: LEGEND_POSITIONS.includes(body.legend_position) ? body.legend_position : 'auto',
       unit: fieldStr(body.unit_chart),
       decimals: clampDecimals(body.decimals),
+      thresholds: parseThresholdLadder(fieldStr(body.chart_thresholds)),
+      series: parseSeriesConfig(body.chart_series),
     };
   }
   if (panelType === 'value') {
-    return { layout: body.value_layout === 'row' ? 'row' : 'stacked' };
+    return {
+      layout: body.value_layout === 'row' ? 'row' : 'stacked',
+      unit: fieldStr(body.unit_value),
+      decimals: clampDecimalsOrNull(body.decimals_value),
+      valueLabels: parseValueMappings(fieldStr(body.value_labels)),
+      thresholds: parseThresholdLadder(fieldStr(body.value_thresholds)),
+      // Keyed by the monitor's OWN label (not its id) — friendlier to hand-edit than an opaque id,
+      // and this is a display-only override anyway, not something anything else looks up by.
+      monitorNames: parseKeyValueLines(fieldStr(body.monitor_names)),
+    };
   }
   if (panelType === 'gauge') {
     const min = Number(body.gauge_min);
     const max = Number(body.gauge_max);
-    return { min: Number.isFinite(min) ? min : 0, max: Number.isFinite(max) ? max : 100, unit: fieldStr(body.unit_gauge) };
+    return {
+      min: Number.isFinite(min) ? min : 0,
+      max: Number.isFinite(max) ? max : 100,
+      unit: fieldStr(body.unit_gauge),
+      thresholds: parseThresholdLadder(fieldStr(body.gauge_thresholds)),
+    };
   }
   if (panelType === 'stat_delta') {
     const direction = ['up_good', 'down_good'].includes(body.direction) ? body.direction : 'neutral';
-    return { unit: fieldStr(body.unit_stat_delta), direction };
+    return { unit: fieldStr(body.unit_stat_delta), direction, thresholds: parseThresholdLadder(fieldStr(body.stat_delta_thresholds)) };
   }
   if (panelType === 'threshold') {
     const value = Number(body.threshold_value);
@@ -69,6 +217,9 @@ function buildConfig(panelType, body) {
       labelOk: fieldStr(body.label_ok) || 'Normal',
       labelAlert: fieldStr(body.label_alert) || 'Alert',
     };
+  }
+  if (panelType === 'table') {
+    return { thresholds: parseThresholdLadder(fieldStr(body.table_thresholds)) };
   }
   return {};
 }
@@ -85,24 +236,53 @@ function evaluateThreshold(numeric, config) {
 
 // Dashboards are mostly per-user (My Dashboards), but exactly one is shared: the home Dashboard,
 // a custom_dashboards row with user_id = NULL, editable by anyone with the `dashboard` Access Role
-// area (see permissionAreas.js) rather than by ownership. Every handler below loads through
-// loadAccessibleDashboard (never trusts the :id alone) and, for anything that mutates, additionally
-// checks canMutate — personal dashboards need no Access Role check at all (ownership is enough), only
-// the shared one does.
+// area (see permissionAreas.js) rather than by ownership. A personal dashboard can ALSO be shared
+// with specific other users (dashboard_shares), each granted view-only or edit access by its
+// owner — a second, narrower sharing mechanism layered on top of the same table, kept separate
+// from the Access-Role-based one above since it's per-dashboard rather than app-wide. Every
+// handler below loads through loadAccessibleDashboard (never trusts the :id alone) and, for
+// anything that mutates, additionally checks canMutate or (for owner-only actions) isOwner.
 function loadAccessibleDashboard(id, req) {
   const dashboard = db.prepare('SELECT * FROM custom_dashboards WHERE id = ?').get(id);
   if (!dashboard) return null;
   if (dashboard.user_id === req.session.userId || dashboard.user_id === null) return dashboard;
-  return null; // someone else's personal dashboard
+
+  const userShare = db.prepare('SELECT can_edit FROM dashboard_shares WHERE dashboard_id = ? AND user_id = ?').get(dashboard.id, req.session.userId);
+  const roleShare = req.user && req.user.roleId
+    ? db.prepare('SELECT can_edit FROM dashboard_role_shares WHERE dashboard_id = ? AND role_id = ?').get(dashboard.id, req.user.roleId)
+    : null;
+  if (!userShare && !roleShare) return null; // someone else's personal dashboard, not shared with this user or their role
+  // Editable if EITHER grant says so — a user individually shared as viewer but whose role was
+  // separately granted editor (or vice versa) gets the more permissive of the two.
+  const shareCanEdit = !!(userShare && userShare.can_edit) || !!(roleShare && roleShare.can_edit);
+  return { ...dashboard, shareCanEdit };
 }
 
 function isShared(dashboard) {
   return dashboard.user_id === null;
 }
 
+function isOwner(dashboard, req) {
+  return dashboard.user_id === req.session.userId;
+}
+
+// Rename / delete — owner-only for a personal dashboard, UNLESS the current user is one of its
+// shared editors AND their role carries dashboard_manage_shared (a step beyond just editing
+// panels, so opt-in per role rather than implied by edit access alone). For the one shared home
+// Dashboard (which has no single owner), gated by the `dashboard` Access Role's edit permission
+// instead, same as before per-dashboard sharing existed. Managing WHO a dashboard is shared with
+// stays strictly owner-only regardless (see the /share* routes below) — not extended here.
+function canManageDashboard(dashboard, req) {
+  if (isOwner(dashboard, req)) return true;
+  if (isShared(dashboard)) return !!req.user && (req.user.isAdmin || !!req.user.permissions.dashboard?.edit);
+  return !!dashboard.shareCanEdit && !!req.user && (req.user.isAdmin || !!req.user.permissions.dashboard_manage_shared?.edit);
+}
+
+// Panel-level edit rights (add/edit/delete/reorder/resize panels) — everything canManageDashboard
+// already allows, plus a personal dashboard's own shared editors (viewers stay read-only).
 function canMutate(dashboard, req) {
-  if (dashboard.user_id === req.session.userId) return true;
-  return isShared(dashboard) && !!req.user && (req.user.isAdmin || !!req.user.permissions.dashboard?.edit);
+  if (canManageDashboard(dashboard, req)) return true;
+  return !!dashboard.shareCanEdit;
 }
 
 function canViewShared(dashboard, req) {
@@ -146,31 +326,93 @@ router.post('/quick-add-topic', (req, res) => {
   res.redirect('/');
 });
 
+// Loxone equivalent of quick-add-topic above — same shape (find-or-create the Monitor, pin a new
+// "Current value" panel for it on the shared Home dashboard), just keyed by miniserver+uuid
+// instead of an MQTT topic string. Powers Live Data's "Widget" button (routes/liveData.js).
+router.post('/quick-add-loxone', async (req, res) => {
+  if (!(req.user && (req.user.isAdmin || req.user.permissions.dashboard?.edit))) return forbidden(res);
+
+  const miniserverId = Number(req.body.miniserver_id);
+  const uuid = (req.body.loxone_uuid || '').trim();
+  const label = (req.body.label || '').trim();
+  const sharedDashboard = db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
+  if (!miniserverId || !uuid || !sharedDashboard) return res.redirect('/live-data');
+
+  let monitor = db.prepare("SELECT id FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ? AND loxone_uuid = ?").get(miniserverId, uuid);
+  let monitorId = monitor?.id;
+  if (!monitorId) {
+    monitorId = db.prepare(
+      "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, 10000, 1, ?)"
+    ).run(label || uuid, miniserverId, uuid, new Date().toISOString()).lastInsertRowid;
+  }
+
+  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboard.id).m;
+  const panelId = db.prepare(
+    `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`
+  ).run(sharedDashboard.id, label || uuid, maxPos + 1).lastInsertRowid;
+  db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
+
+  res.redirect('/');
+});
+
 function loadPanelsWithMonitors(dashboardId) {
   const panels = db.prepare('SELECT * FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboardId);
+  // miniserver_name is only meaningful for source_type='loxone' monitors (NULL for MQTT ones,
+  // which aren't tied to any one Miniserver) — used to disambiguate when a panel combines
+  // monitors from more than one Miniserver, e.g. the same control name/label on two of them.
   const monitorsStmt = db.prepare(
-    `SELECT monitors.* FROM dashboard_panel_monitors dpm
+    `SELECT monitors.*, miniservers.name AS miniserver_name FROM dashboard_panel_monitors dpm
      JOIN monitors ON monitors.id = dpm.monitor_id
+     LEFT JOIN miniservers ON miniservers.id = monitors.miniserver_id
      WHERE dpm.panel_id = ? ORDER BY dpm.position`
   );
 
   return panels.map((panel) => {
     const monitors = monitorsStmt.all(panel.id);
     const config = JSON.parse(panel.config || '{}');
+    // valueLabels used to be stored as a plain {value: label} map (before value mappings could
+    // also carry their own color) — a panel saved under that older shape still has one sitting in
+    // the database as-is, since nothing migrates old rows on its own. Normalized back into the
+    // current {value, label, color} array shape right here, at read time, so both the render logic
+    // below AND the Edit form (which reads p.config.valueLabels straight from this same object —
+    // see panel-grid.ejs) always see the current shape, rather than each needing its own check.
+    if (config.valueLabels && !Array.isArray(config.valueLabels)) {
+      config.valueLabels = Object.entries(config.valueLabels).map(([value, label]) => ({ value, label, color: null }));
+    }
     const base = { ...panel, config, monitors };
 
     if (panel.panel_type === 'value') {
-      return { ...base, monitors: monitors.map((m) => ({ ...m, current: getCurrentValue(m.id) })) };
+      const decimals = config.decimals != null ? config.decimals : getDefaultPanelDecimals();
+      const valueMappings = config.valueLabels || [];
+      const monitorNames = config.monitorNames || {};
+      return {
+        ...base,
+        monitors: monitors.map((m) => {
+          const displayLabel = monitorNames[m.label] || m.label;
+          const current = getCurrentValue(m.id);
+          if (!current) return { ...m, displayLabel, current: null };
+          // An exact match against the value-mapping list takes priority over decimal formatting
+          // — a translated "1" -> "Actief" is a label, not a rounded number, so it skips toFixed()
+          // AND the unit suffix (see panel-grid.ejs) that a real numeric/text value would
+          // otherwise get. Its OWN color (if it set one) likewise takes priority over the more
+          // general threshold ladder, since a mapped value is a more specific rule than a range.
+          const mapping = valueMappings.find((vm) => vm.value === String(current.value));
+          const isLabel = !!mapping;
+          const displayValue = isLabel ? mapping.label : formatPanelValue(current.value, decimals);
+          const numeric = Number(current.value);
+          const thresholdColor = (mapping && mapping.color) || colorForThresholdLadder(numeric, config.thresholds);
+          return { ...m, displayLabel, current: { ...current, displayValue, isLabel, thresholdColor } };
+        }),
+      };
     }
 
     if (panel.panel_type === 'table') {
       const monitor = monitors[0] || null;
-      const since = rangeToSince(panel.range);
-      const rows = monitor
-        ? (since
-            ? db.prepare('SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ? AND recorded_at >= ? ORDER BY recorded_at DESC LIMIT ?').all(monitor.id, since, MAX_ROWS)
-            : db.prepare('SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ? ORDER BY recorded_at DESC LIMIT ?').all(monitor.id, MAX_ROWS))
+      const { sql: rangeSql, params: rangeParams } = historyWindowClause(panel.range);
+      const rawRows = monitor
+        ? db.prepare(`SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS)
         : [];
+      const rows = rawRows.map((r) => ({ ...r, thresholdColor: colorForThresholdLadder(Number(r.value), config.thresholds) }));
       return { ...base, rows };
     }
 
@@ -183,7 +425,8 @@ function loadPanelsWithMonitors(dashboardId) {
       if (panel.panel_type === 'gauge') {
         const { min, max } = config;
         const percent = hasNumeric && max > min ? Math.min(100, Math.max(0, ((numeric - min) / (max - min)) * 100)) : null;
-        return { ...base, monitor, current, percent };
+        const thresholdColor = hasNumeric ? colorForThresholdLadder(numeric, config.thresholds) : null;
+        return { ...base, monitor, current, percent, thresholdColor };
       }
       return { ...base, monitor, current, isAlert: evaluateThreshold(hasNumeric ? numeric : null, config) };
     }
@@ -193,46 +436,115 @@ function loadPanelsWithMonitors(dashboardId) {
       const current = monitor ? getCurrentValue(monitor.id) : null;
       let comparison = null;
       if (monitor) {
-        const since = rangeToSince(panel.range);
-        comparison = since
-          ? db.prepare('SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ? AND recorded_at >= ? ORDER BY recorded_at ASC LIMIT 1').get(monitor.id, since)
-          : db.prepare('SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ? ORDER BY recorded_at ASC LIMIT 1').get(monitor.id);
+        const { sql: rangeSql, params: rangeParams } = historyWindowClause(panel.range);
+        comparison = db.prepare(`SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT 1`).get(monitor.id, ...rangeParams);
       }
       const currentNumeric = current ? Number(current.value) : null;
       const comparisonNumeric = comparison ? comparison.numericValue : null;
       const delta = Number.isFinite(currentNumeric) && Number.isFinite(comparisonNumeric) ? currentNumeric - comparisonNumeric : null;
-      return { ...base, monitor, current, delta };
+      const thresholdColor = Number.isFinite(currentNumeric) ? colorForThresholdLadder(currentNumeric, config.thresholds) : null;
+      return { ...base, monitor, current, delta, thresholdColor };
     }
 
     return base; // chart: rendered client-side via /monitor/series.json
   });
 }
 
-router.get('/', (req, res) => {
-  const dashboards = db
+function listOwnedDashboards(userId) {
+  return db
     .prepare(
-      `SELECT custom_dashboards.*, COUNT(dashboard_panels.id) AS panelCount
+      `SELECT custom_dashboards.*, COUNT(dashboard_panels.id) AS panelCount,
+              (SELECT COUNT(*) FROM dashboard_shares WHERE dashboard_shares.dashboard_id = custom_dashboards.id) AS shareCount
        FROM custom_dashboards LEFT JOIN dashboard_panels ON dashboard_panels.dashboard_id = custom_dashboards.id
        WHERE custom_dashboards.user_id = ?
        GROUP BY custom_dashboards.id ORDER BY custom_dashboards.position, custom_dashboards.id`
     )
-    .all(req.session.userId);
+    .all(userId);
+}
 
-  res.render('dashboards', { dashboards, error: null });
+// Union of two grant sources — shared with this exact user, or shared with a Role they currently
+// hold — de-duplicated by dashboard (a dashboard could be reachable via both at once) with
+// MAX(canEdit) so the more permissive of the two wins, same rule loadAccessibleDashboard uses.
+function listSharedWithMe(userId, roleId) {
+  return db
+    .prepare(
+      `SELECT d.id, d.name, MAX(d.canEdit) AS canEdit, d.ownerName,
+              (SELECT COUNT(*) FROM dashboard_panels WHERE dashboard_panels.dashboard_id = d.id) AS panelCount
+       FROM (
+         SELECT custom_dashboards.id, custom_dashboards.name, dashboard_shares.can_edit AS canEdit,
+                COALESCE(users.display_name, users.username) AS ownerName
+         FROM dashboard_shares
+         JOIN custom_dashboards ON custom_dashboards.id = dashboard_shares.dashboard_id
+         JOIN users ON users.id = custom_dashboards.user_id
+         WHERE dashboard_shares.user_id = ?
+         UNION
+         SELECT custom_dashboards.id, custom_dashboards.name, dashboard_role_shares.can_edit AS canEdit,
+                COALESCE(users.display_name, users.username) AS ownerName
+         FROM dashboard_role_shares
+         JOIN custom_dashboards ON custom_dashboards.id = dashboard_role_shares.dashboard_id
+         JOIN users ON users.id = custom_dashboards.user_id
+         WHERE dashboard_role_shares.role_id = ?
+       ) d
+       GROUP BY d.id ORDER BY d.name`
+    )
+    .all(userId, roleId || 0);
+}
+
+// Everyone but the current user — the pool a dashboard's "Add" share form picks from. Small
+// enough (this app's own user base, not a customer list) that listing everyone and letting the
+// view skip already-shared ones is simpler than a NOT IN subquery per dashboard.
+function listOtherUsers(userId) {
+  return db.prepare('SELECT id, username, display_name FROM users WHERE id != ? ORDER BY username').all(userId);
+}
+
+function listShares(dashboardId) {
+  return db
+    .prepare(
+      `SELECT users.id AS userId, COALESCE(users.display_name, users.username) AS name, dashboard_shares.can_edit AS canEdit
+       FROM dashboard_shares JOIN users ON users.id = dashboard_shares.user_id
+       WHERE dashboard_shares.dashboard_id = ? ORDER BY name`
+    )
+    .all(dashboardId);
+}
+
+// Role-based grants (admin-only to add/remove, see the /share-role routes below) — every user
+// holding that Access Role gets access, without the owner picking each of them out individually.
+function listRoleShares(dashboardId) {
+  return db
+    .prepare(
+      `SELECT access_roles.id AS roleId, access_roles.name, dashboard_role_shares.can_edit AS canEdit
+       FROM dashboard_role_shares JOIN access_roles ON access_roles.id = dashboard_role_shares.role_id
+       WHERE dashboard_role_shares.dashboard_id = ? ORDER BY access_roles.name`
+    )
+    .all(dashboardId);
+}
+
+function listRoles() {
+  return db.prepare('SELECT id, name FROM access_roles ORDER BY name').all();
+}
+
+function loadDashboardsPageData(req) {
+  const dashboards = listOwnedDashboards(req.session.userId);
+  const sharedWithMe = listSharedWithMe(req.session.userId, req.user && req.user.roleId);
+  const otherUsers = listOtherUsers(req.session.userId);
+  const roles = listRoles();
+  const shares = {};
+  const roleShares = {};
+  dashboards.forEach((d) => {
+    shares[d.id] = listShares(d.id);
+    roleShares[d.id] = listRoleShares(d.id);
+  });
+  return { dashboards, sharedWithMe, otherUsers, roles, shares, roleShares };
+}
+
+router.get('/', (req, res) => {
+  res.render('dashboards', { ...loadDashboardsPageData(req), error: null });
 });
 
 router.post('/', (req, res) => {
   const name = (req.body.name || '').trim();
   if (!name) {
-    const dashboards = db
-      .prepare(
-        `SELECT custom_dashboards.*, COUNT(dashboard_panels.id) AS panelCount
-         FROM custom_dashboards LEFT JOIN dashboard_panels ON dashboard_panels.dashboard_id = custom_dashboards.id
-         WHERE custom_dashboards.user_id = ?
-         GROUP BY custom_dashboards.id ORDER BY custom_dashboards.position, custom_dashboards.id`
-      )
-      .all(req.session.userId);
-    return res.render('dashboards', { dashboards, error: 'Name is required.' });
+    return res.render('dashboards', { ...loadDashboardsPageData(req), error: 'Name is required.' });
   }
 
   const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM custom_dashboards WHERE user_id = ?').get(req.session.userId).m;
@@ -246,7 +558,7 @@ router.post('/', (req, res) => {
 router.post('/:id/rename', (req, res) => {
   const dashboard = loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
-  if (!canMutate(dashboard, req)) return forbidden(res);
+  if (!canManageDashboard(dashboard, req)) return forbidden(res);
 
   const name = (req.body.name || '').trim();
   if (name) db.prepare('UPDATE custom_dashboards SET name = ? WHERE id = ?').run(name, dashboard.id);
@@ -257,9 +569,75 @@ router.post('/:id/delete', (req, res) => {
   const dashboard = loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (isShared(dashboard)) return forbidden(res); // the shared home Dashboard can't be deleted, only its panels
-  if (!canMutate(dashboard, req)) return forbidden(res);
+  if (!canManageDashboard(dashboard, req)) return forbidden(res);
 
   db.prepare('DELETE FROM custom_dashboards WHERE id = ?').run(dashboard.id);
+  res.redirect('/dashboards');
+});
+
+// Sharing a personal dashboard is owner-only (not delegated to a shared editor, and meaningless
+// for the one user_id IS NULL home Dashboard, which is already visible app-wide) — isOwner, not
+// the broader canManageDashboard, is the right gate here.
+router.post('/:id/share', (req, res) => {
+  const dashboard = loadAccessibleDashboard(req.params.id, req);
+  if (!dashboard) return res.status(404).send('Dashboard not found');
+  if (isShared(dashboard) || !isOwner(dashboard, req)) return forbidden(res);
+
+  const rawIds = Array.isArray(req.body.user_ids) ? req.body.user_ids : (req.body.user_ids ? [req.body.user_ids] : []);
+  const canEdit = req.body.can_edit ? 1 : 0;
+  const insertShare = db.prepare(
+    `INSERT INTO dashboard_shares (dashboard_id, user_id, can_edit) VALUES (?, ?, ?)
+     ON CONFLICT(dashboard_id, user_id) DO UPDATE SET can_edit = excluded.can_edit`
+  );
+  const existsUser = db.prepare('SELECT 1 FROM users WHERE id = ?');
+  rawIds
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id !== dashboard.user_id && existsUser.get(id))
+    .forEach((id) => insertShare.run(dashboard.id, id, canEdit));
+  res.redirect('/dashboards');
+});
+
+router.post('/:id/share/:userId/remove', (req, res) => {
+  const dashboard = loadAccessibleDashboard(req.params.id, req);
+  if (!dashboard) return res.status(404).send('Dashboard not found');
+  if (isShared(dashboard) || !isOwner(dashboard, req)) return forbidden(res);
+
+  db.prepare('DELETE FROM dashboard_shares WHERE dashboard_id = ? AND user_id = ?').run(dashboard.id, req.params.userId);
+  res.redirect('/dashboards');
+});
+
+// Sharing with a whole Access Role at once needs the dashboard_group_share permission on top of
+// owner-only — handing out access to everyone in a group is a bigger, less reversible step than
+// adding one trusted person, so it's a separate opt-in per role rather than implied by ownership.
+function canManageRoleShares(dashboard, req) {
+  return !isShared(dashboard) && isOwner(dashboard, req) && !!req.user && (req.user.isAdmin || !!req.user.permissions.dashboard_group_share?.edit);
+}
+
+router.post('/:id/share-role', (req, res) => {
+  const dashboard = loadAccessibleDashboard(req.params.id, req);
+  if (!dashboard) return res.status(404).send('Dashboard not found');
+  if (!canManageRoleShares(dashboard, req)) return forbidden(res);
+
+  const rawIds = Array.isArray(req.body.role_ids) ? req.body.role_ids : (req.body.role_ids ? [req.body.role_ids] : []);
+  const canEdit = req.body.can_edit ? 1 : 0;
+  const insertRoleShare = db.prepare(
+    `INSERT INTO dashboard_role_shares (dashboard_id, role_id, can_edit) VALUES (?, ?, ?)
+     ON CONFLICT(dashboard_id, role_id) DO UPDATE SET can_edit = excluded.can_edit`
+  );
+  const existsRole = db.prepare('SELECT 1 FROM access_roles WHERE id = ?');
+  rawIds
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && existsRole.get(id))
+    .forEach((id) => insertRoleShare.run(dashboard.id, id, canEdit));
+  res.redirect('/dashboards');
+});
+
+router.post('/:id/share-role/:roleId/remove', (req, res) => {
+  const dashboard = loadAccessibleDashboard(req.params.id, req);
+  if (!dashboard) return res.status(404).send('Dashboard not found');
+  if (!canManageRoleShares(dashboard, req)) return forbidden(res);
+
+  db.prepare('DELETE FROM dashboard_role_shares WHERE dashboard_id = ? AND role_id = ?').run(dashboard.id, req.params.roleId);
   res.redirect('/dashboards');
 });
 
@@ -271,7 +649,22 @@ router.get('/:id', (req, res) => {
   const monitors = db.prepare('SELECT id, label, source_type FROM monitors ORDER BY label').all();
   const panels = loadPanelsWithMonitors(dashboard.id);
 
-  res.render('dashboard-detail', { dashboard, panels, monitors, error: null, canEditPanels: canMutate(dashboard, req) });
+  // Only meaningful for a personal dashboard someone ELSE shared with the current user — the
+  // owner sees no such hint on their own dashboards, and the shared home Dashboard has no single
+  // owner to name.
+  const sharedByOwner = !isShared(dashboard) && !isOwner(dashboard, req)
+    ? db.prepare('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = ?').get(dashboard.user_id)?.name
+    : null;
+
+  res.render('dashboard-detail', {
+    dashboard,
+    panels,
+    monitors,
+    error: null,
+    canEditPanels: canMutate(dashboard, req),
+    defaultPanelDecimals: getDefaultPanelDecimals(),
+    sharedByOwner,
+  });
 });
 
 router.post('/:id/panels', (req, res) => {
@@ -401,3 +794,7 @@ router.post('/:id/panels/reorder', (req, res) => {
 
 module.exports = router;
 module.exports.loadPanelsWithMonitors = loadPanelsWithMonitors;
+module.exports.getDefaultPanelDecimals = getDefaultPanelDecimals;
+module.exports.serializeKeyValueLines = serializeKeyValueLines;
+module.exports.serializeThresholdLadder = serializeThresholdLadder;
+module.exports.serializeValueMappings = serializeValueMappings;
