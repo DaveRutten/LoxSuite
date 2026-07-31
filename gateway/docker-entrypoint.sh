@@ -10,6 +10,30 @@ DYNSEC_FILE=/mosquitto/config/dynamic-security.json
 
 mkdir -p /mosquitto/data /mosquitto/log
 
+# First boot only, on a fresh/empty bind-mounted config volume (e.g. a brand new Unraid appdata
+# folder, or any host directory that's never had this stack running against it before). The image
+# itself has no baked-in fallback to copy from here — mosquitto/config/mosquitto.conf lives at the
+# repo root, one level above gateway/ (the Docker build context), so it's simply outside what the
+# Dockerfile can COPY at all. Embedded directly rather than restructuring the build context around
+# it — keep this in sync with mosquitto/config/mosquitto.conf in the repo if that ever changes.
+# Idempotent: never overwrites an existing file, so a user's own edits survive every later restart.
+if [ ! -f "$MOSQUITTO_CONF" ]; then
+  echo "Writing default mosquitto.conf..."
+  cat > "$MOSQUITTO_CONF" <<'MOSQUITTO_CONF_EOF'
+listener 1883
+allow_anonymous false
+
+plugin /usr/lib/mosquitto_dynamic_security.so
+plugin_opt_config_file /mosquitto/config/dynamic-security.json
+
+persistence true
+persistence_location /mosquitto/data/
+log_dest stdout
+log_dest file /mosquitto/log/mosquitto.log
+connection_messages true
+MOSQUITTO_CONF_EOF
+fi
+
 # First boot only — mosquitto_ctrl writes this file directly, it doesn't need a running broker
 # to talk to. Idempotent: does nothing once the file exists (same behavior as the old
 # mosquitto-init container).
