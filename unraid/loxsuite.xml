@@ -59,3 +59,4 @@
   <Config Name="LOXONE_UDP_PORT" Target="LOXONE_UDP_PORT" Default="11885" Mode="" Description="Must match the container-side value of the Loxone UDP Port mapping above" Type="Variable" Display="advanced" Required="false" Mask="false">11885</Config>
   <Config Name="PORT" Target="PORT" Default="5582" Mode="" Description="Port the web UI listens on inside the container - must match the container-side value of the WebUI Port mapping above" Type="Variable" Display="advanced" Required="false" Mask="false">5582</Config>
 </Container>
+

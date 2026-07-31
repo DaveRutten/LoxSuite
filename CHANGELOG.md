@@ -2,6 +2,48 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.0-alpha.1] - 2026-07-31
+
+### Added
+- **Dashboard charts**: fill-under-line, stepped lines, point markers, a linear or logarithmic
+  Y-axis with an optional fixed min/max, scroll-to-zoom/drag-to-pan, threshold lines *or* filled
+  bands, time-anchored annotations, and per-series overrides (rename, unit, scale, decimals,
+  right-hand axis, color, line style/width).
+- **Auto order**: resizes every dashboard panel to fit its own content, then repacks them with the
+  fewest gaps, in one click. Every panel type's Edit form is now grouped into the same labeled
+  sections (Appearance, Axis, Condition, ...) regardless of type.
+- **Dashboard sharing**: share a personal dashboard with specific users (viewer or editor) or with
+  an entire Access Role; **Favorite Dashboards** stars one into its own sidebar section.
+- **Notifications**: admin-wide alert rules/channels via [Apprise](https://github.com/caronc/apprise)
+  (Monitor threshold, Miniserver/MQTT client status, backup failures), plus fully independent
+  per-user notifications on the Profile page — a personal Apprise channel, personal trigger rules
+  needing no admin involvement, and the option to subscribe to admin-wide rules too.
+- **Command catalog**: 18 named Shelly Gen1 device types, Shelly Gen2/Gen3 (both the full RPC form
+  and the simpler "command/switch:N" form), a matching telemetry catalog ("Common data"), JSON/XML
+  catalog import & export, and a native Shelly RGBW/White/Tunable-white value transform for
+  Loxone &rarr; MQTT mappings.
+- **Monitor**: history table grouped by day/hour instead of one unbounded list; hover tooltips with
+  time + value on the chart.
+- Miniserver firmware version, shown alongside the existing Online/Offline status.
+- Offsite backup copy via rclone (70+ storage backends), on top of the existing local
+  scheduled/manual backups.
+- A first-boot setup wizard, a GitHub release version check in the sidebar, a shared toggle-switch
+  UI component applied across every admin settings page, and a first automated test suite.
+- A GitHub Actions workflow publishing a Docker image to GHCR on every push to `main` and on
+  version tags, and an Unraid Community Applications template (`unraid/loxsuite.xml`).
+
+### Fixed
+- Dashboard panels not visually refreshing after being edited/saved, caused by a leaked
+  `setInterval` that kept every previous edit's old chart polling in the background indefinitely.
+- Drag-and-drop panel reordering flickering/jumping, and the resize cursor not showing while
+  actively dragging a panel, drawer, or table column edge.
+- A chart's plotted line silently connecting to the wrong value at "now" when its underlying data
+  arrived newest-first, producing a spurious flat line across the whole chart.
+
+### Changed
+- Dashboard chart panels no longer set Decimals/Value scale at the panel level — every series sets
+  its own now, matching how the Current Value panel type already worked.
+
 ## [0.0.1-alpha.1] - 2026-07-29
 
 Initial alpha. First tagged snapshot after consolidating the stack into a single container.
