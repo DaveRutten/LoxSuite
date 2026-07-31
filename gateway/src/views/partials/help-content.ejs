@@ -104,6 +104,56 @@
       alert labels instead:
     </p>
     <img class="help-img" src="/images/help/add-panel-gauge.png" alt="The Add panel form with panel type set to Gauge, showing its minimum, maximum, and unit fields plus the monitor picklist.">
+    <p>
+      Once you've got more than one panel, <strong>Auto order</strong> (above the grid) resizes every
+      one to fit its own content — a value tile with ten monitors gets taller, a compact gauge stays
+      small — then packs them left-to-right with the fewest gaps. It's a one-shot layout pass, not a
+      live constraint: drag a panel afterwards and it stays wherever you put it.
+    </p>
+    <p>
+      The star button on a dashboard (both here and at the top of the dashboard itself) pins it into
+      the sidebar under <strong>Monitor &rarr; Favorite Dashboards</strong>, itself its own collapsible
+      section — a shortcut to the boards you actually check often, without digging through this list
+      first. It follows access: unfavorite happens automatically (silently, nothing to clean up) if a
+      dashboard you'd starred is later un-shared with you.
+    </p>
+    <p>
+      A <strong>Chart</strong> panel's own Edit drawer has the most to it, grouped into labeled
+      sections:
+    </p>
+    <ul>
+      <li><strong>Appearance</strong> &mdash; legend position, Y-axis unit, <strong>Stepped line</strong>
+        (right-angle steps instead of a straight slope between readings — reads better for something
+        that only ever changes in discrete jumps, like a mode number), <strong>Show points</strong>
+        (draws a dot at every actual reading, useful when they're sparse enough that the line alone
+        doesn't make each one obvious), and <strong>Fill area under line</strong> (a translucent fill
+        down to zero, one shade per series so overlapping fills stay legible).</li>
+      <li><strong>Y-axis</strong> &mdash; <strong>Linear</strong> (the default) or
+        <strong>Logarithmic</strong> scale, plus an optional fixed <strong>Minimum</strong>/<strong>Maximum</strong>
+        (left blank, either end auto-scales to the data as before). A logarithmic axis can't plot zero
+        or negative readings — those points are just skipped, not an error.</li>
+      <li><strong>Interaction</strong> &mdash; <strong>Zoom &amp; pan</strong>: once on, scroll (or
+        pinch) over the chart to zoom in/out and drag to pan sideways, bounded to the panel's own
+        selected range (you can't pan past its edges into data it never loaded).</li>
+      <li><strong>Thresholds &amp; colors</strong> &mdash; a value/color ladder every panel type
+        shares: a reading is colored using the highest threshold it meets or exceeds (e.g. 1&rarr;orange,
+        2&rarr;red means a reading of 1.5 shows orange, 2.5 shows red). A chart also gets a
+        <strong>Style</strong> per row on top of that: <strong>Line</strong> (a dashed horizontal line
+        at that value) or <strong>Band</strong> (a filled zone from that value up to the next threshold
+        above it, or to the top of the chart if it's the highest one — handy for shading
+        "normal"/"warning"/"critical" ranges at a glance).</li>
+      <li><strong>Annotations</strong> &mdash; a labeled vertical line at a fixed point in time you
+        pick (e.g. "heating turned on"), independent of the value-based thresholds above.</li>
+      <li><strong>Series settings</strong> &mdash; per monitor on the chart: rename it, give it its
+        own unit/scale/decimals, move it to the right-hand axis, and now a <strong>Style</strong>
+        (Solid, Solid (thick), Dashed, or Dotted) so two overlapping lines stay tellable apart even in
+        black and white.</li>
+    </ul>
+    <p>
+      Every other panel type's Edit drawer got the same labeled-section treatment (Appearance, Range,
+      Condition, Labels, ...) so the same kind of setting always lives under the same heading
+      regardless of panel type — the fields themselves are unchanged, just organized.
+    </p>
     <p><a href="/dashboards">Open My Dashboards &rarr;</a></p>
   </div>
 </details>
@@ -121,11 +171,15 @@
     </p>
     <p>
       The gateway pings every Miniserver's HTTP endpoint once a minute in the background and shows
-      an Online/Offline/Unknown badge. <strong>Test now</strong> triggers that same check immediately
-      instead of waiting for the next cycle, and also reports <strong>Live data (websocket)</strong>
-      &mdash; whether the persistent real-time connection used by <a href="/live-data">Live Data</a>
-      is currently up. Any HTTP response (even 401/404) counts as "online" for the Local/External
+      an Online/Offline/Unknown badge — and now also right after you add one, so it never sits on
+      "Unknown" until the next scheduled check. <strong>Test now</strong> (in the table) triggers
+      that same check immediately and also reports <strong>Live data (websocket)</strong> &mdash;
+      whether the persistent real-time connection used by <a href="/live-data">Live Data</a> is
+      currently up. Any HTTP response (even 401/404) counts as "online" for the Local/External
       checks &mdash; only a network-level failure (timeout, connection refused, DNS) counts as offline.
+      The Add and Edit forms each have their own <strong>Test</strong> button too, for trying
+      host/port/credentials before (Add) or as currently saved (Edit) — the Edit one tests what's
+      already saved, not unsaved edits still in the form, so save first if you just changed them.
     </p>
     <p>
       Editing a Miniserver never shows its stored password back to you &mdash; leave the password field
@@ -208,7 +262,7 @@
     <p>Each mapping gets a random token and publishes to one MQTT topic. Two transports:</p>
     <ul>
       <li><strong>HTTP</strong> &mdash; the mapping's row shows a ready-to-use callback URL
-        (<code>http://&lt;gateway-host&gt;:3000/api/loxone-in/&lt;token&gt;?value=\v</code>). Paste it into a
+        (<code>http://&lt;gateway-host&gt;:5582/api/loxone-in/&lt;token&gt;?value=\v</code>). Paste it into a
         Virtual Output's HTTP command in Loxone Config; Loxone replaces <code>\v</code> with the actual
         value on every call. This endpoint intentionally has no login &mdash; the Miniserver can't hold a
         session, so the token itself is the secret.</li>
@@ -323,16 +377,30 @@
     </p>
     <p>
       All four are persisted in SQLite and purged automatically after the configured
-      <strong>retention</strong> (in days, editable on any tab) so the database doesn't grow forever.
-      <strong>Export .log</strong> downloads everything currently retained as a plain-text file
-      (unfiltered, always the full retained history).
+      <strong>retention</strong> (in days, editable from <a href="/settings">Settings</a>) so the
+      database doesn't grow forever. <strong>Export .log</strong> downloads everything currently
+      retained as a plain-text file (unfiltered, always the full retained history).
     </p>
     <p>
       Every tab has a filter bar above the table: <strong>From</strong>/<strong>To</strong> narrow to a
       date/time range, <strong>Level</strong> narrows to just info, warning, or error lines, and
       <strong>Contains</strong> does a plain substring search over the line text. Filters combine (all
       apply at once), stay in the URL so a filtered view can be bookmarked or shared, and survive the
-      5-second live refresh. The table still shows at most 1000 lines even when filtered.
+      auto-refresh. The table still shows at most 1000 lines even when filtered.
+    </p>
+    <p>
+      Each tab is its own permission, separately from every other page in the app: an Access Role can
+      be trusted with, say, the System log without also seeing the MQTT broker log — and
+      <strong>viewing</strong> a tab is separate from <strong>downloading</strong> it, so a role can be
+      allowed to read a log on-screen without being able to export the full file. See Administration
+      &rarr; Access Roles' own "Logs" table.
+    </p>
+    <p>
+      Select rows with their checkbox (Shift/Ctrl-click extends the selection across a range, same as
+      a file manager) or by clicking anywhere on the row, then <strong>Copy selection</strong> copies
+      the visible columns of every selected row to the clipboard, tab-separated per column — ready to
+      paste into a spreadsheet or a chat message without needing to Export first. The auto-refresh
+      pauses for as long as anything is selected, so it can't be swapped out from under you mid-copy.
     </p>
     <p><a href="/logs">Open Logs &rarr;</a></p>
   </div>
@@ -350,6 +418,12 @@
     <p>
       Change a device's role right in the table (saves immediately), or use the pencil icon next to
       Delete to set a new password without recreating the account.
+    </p>
+    <p>
+      Adding an account (or resetting a password) immediately tries an actual MQTT connection with
+      those exact credentials and reports success/failure right on the page — the only moment this
+      is possible at all, since the broker never hands the plaintext password back afterward, so
+      there's no separate "test" button for an already-existing account.
     </p>
     <p>The gateway's own account (<code>gateway</code> by default) can't be edited or deleted from here
       &mdash; changing its password or role here would desync it from the credentials configured on the
@@ -434,20 +508,41 @@
   <summary>Profile &mdash; what's here?</summary>
   <div class="add-panel-body">
     <p>
-      Your own account: avatar, name, email, Access Role, and how you sign in. Pocket ID (SSO)
-      accounts get their avatar/name/email from Pocket ID automatically, refreshed on every login;
-      local (username/password) accounts can set a display name and email themselves and change
-      their password here. SSO accounts have no local password to change &mdash; that's managed by
-      Pocket ID instead.
+      Your own account, in two tabs. <strong>Account</strong>: avatar, name, email, Access Role, and
+      how you sign in. Pocket ID (SSO) accounts get their avatar/name/email from Pocket ID
+      automatically, refreshed on every login; local (username/password) accounts can set a display
+      name and email themselves and change their password here. SSO accounts have no local password
+      to change &mdash; that's managed by Pocket ID instead.
     </p>
+    <p>
+      <strong>Notifications</strong> is your own, personal alerting — entirely self-service, no
+      admin involvement required — on top of whatever an administrator already set up on the
+      <a href="/help#help-admin-notifications" data-help-open data-help-anchor="help-admin-notifications">Notifications admin page</a>:
+    </p>
+    <ul>
+      <li><strong>My channel</strong> &mdash; one <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener">Apprise</a>
+        URL of your own (e.g. a personal Pushover or Telegram target), entirely separate from any
+        channel an admin configured. <strong>Send test</strong> confirms it actually works before you
+        rely on it.</li>
+      <li><strong>My rules</strong> &mdash; your own trigger conditions (a Monitor crossing a
+        threshold, a Miniserver or MQTT client going online/offline, a backup failing), the same four
+        trigger types the admin page offers, always delivered to your channel above. No separate
+        on/off subscription step like the ones below need &mdash; a rule you create is always yours to
+        receive.</li>
+      <li><strong>Subscriptions</strong> &mdash; every enabled rule an administrator has already
+        created, each with its own on/off switch: turn one on and its notifications also land on your
+        channel above, on top of whichever admin-configured channel(s) it already sends to. There's
+        nothing to subscribe to if no admin-wide rules exist yet — an admin has to create at least one
+        first (your own rules above don't need this).</li>
+    </ul>
     <p><a href="/profile">Open Profile &rarr;</a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-admin">
-  <summary>Administration &mdash; Users, Access Roles, Single Sign-On, and Backups</summary>
+  <summary>Administration &mdash; Users, Access Roles, Single Sign-On, Backups, and Notifications</summary>
   <div class="add-panel-body">
-    <p>Visible only to users whose Access Role has <strong>Administrator</strong> checked. Four tabs:</p>
+    <p>Visible only to users whose Access Role has <strong>Administrator</strong> checked. Five tabs:</p>
     <ul>
       <li><strong>Users</strong> &mdash; every web UI account (not to be confused with
         <a href="/mqtt-users">MQTT Users</a>, which is about IoT devices connecting to the broker, a
@@ -455,7 +550,9 @@
         user's password, or delete an account.</li>
       <li><strong>Access Roles</strong> &mdash; named permission sets. Each role has a fixed matrix: one
         <strong>view</strong>/<strong>edit</strong> pair per page in the app (Monitor, Miniservers, MQTT
-        Users, Settings, and so on). An <strong>Administrator</strong> role bypasses the matrix entirely
+        Users, Settings, and so on), plus a separate <strong>view</strong>/<strong>download</strong> pair
+        per individual log on the <a href="/logs">Logs</a> page, so a role can be trusted with one log
+        (e.g. System) without the others. An <strong>Administrator</strong> role bypasses the matrix entirely
         and always has full access, including to this page &mdash; that flag is separate from the matrix
         specifically so a role can never accidentally grant itself more power through it. Hiding a nav
         item or button a role can't use is a convenience; the actual enforcement happens on the server
@@ -469,10 +566,16 @@
         (<code>&lt;gateway-host&gt;/auth/sso/callback</code>); if you also want LoxSuite to show up as a
         launchable app on the Pocket ID home screen, set its <strong>Client Launch URL</strong> &mdash;
         labeled <strong>User URL</strong> in some Pocket ID versions &mdash; to the gateway's own address
-        (<code>http://&lt;gateway-host&gt;:3000/</code>).</li>
+        (<code>http://&lt;gateway-host&gt;:5582/</code>).</li>
       <li><strong>Backups</strong> &mdash; back up the gateway's own database, optionally together with the
-        MQTT broker's dynamic-security file (users/roles/ACLs), into one downloadable <code>.zip</code>.
-        Runs on a cron schedule you set, on demand via <strong>Backup now</strong>, or both. See below.</li>
+        MQTT broker's own config (dynamic-security.json <em>and</em> mosquitto.conf), into one downloadable
+        <code>.zip</code>, additionally copied offsite via <a href="https://rclone.org" target="_blank" rel="noopener">rclone</a>
+        if configured. Runs on a cron schedule you set, on demand via <strong>Backup now</strong>, or both.
+        See below.</li>
+      <li><strong>Notifications</strong> &mdash; alerts to Teams, Slack, Telegram, Email, or anything else
+        <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener">Apprise</a> supports, for
+        a Monitor crossing a threshold, a Miniserver or MQTT client going online/offline, or a backup
+        failing. See below.</li>
     </ul>
     <p class="hint" style="margin-bottom:0;">
       The gateway always keeps at least one administrator: deleting, demoting, or reassigning the last
@@ -491,10 +594,11 @@
         mapping directions, Monitor history, Dashboards/panels, and Settings: everything this app itself
         manages. Taken as a consistent online snapshot (SQLite's own backup API), so it's safe to run
         while the gateway keeps handling traffic.</li>
-      <li><strong>dynamic-security.json</strong> &mdash; optional (a checkbox in the schedule settings).
-        Mosquitto's own file for MQTT Users/Roles/ACLs. Only available if this container can see
-        it (the <code>./mosquitto/config:/mosquitto/config</code> volume in <code>docker-compose.yml</code>);
-        the page tells you if it can't.</li>
+      <li><strong>dynamic-security.json</strong> and <strong>mosquitto.conf</strong> &mdash; optional (one
+        "Include MQTT config" checkbox in the schedule settings covers both). Mosquitto's own files for
+        MQTT Users/Roles/ACLs and the broker's listener/persistence/logging config. Only available if this
+        container can see them (the <code>./mosquitto/config:/mosquitto/config</code> volume in
+        <code>docker-compose.yml</code>); the page tells you if it can't.</li>
     </ul>
     <p>
       <strong>Schedule</strong> uses a standard 5-field cron expression (e.g. <code>0 3 * * *</code> for
@@ -502,10 +606,21 @@
       count, so this can run indefinitely without slowly filling the disk.
     </p>
     <p>
+      <strong>Offsite copy (rclone)</strong> additionally pushes every backup zip (scheduled or manual) to
+      a remote of your choice — any of the 70+ storage backends
+      <a href="https://rclone.org" target="_blank" rel="noopener">rclone</a> supports (S3, Backblaze,
+      Google Drive, SFTP, ...). Paste the contents of an <code>rclone.conf</code> (generated by running
+      <code>rclone config</code> anywhere convenient) plus the remote path, e.g.
+      <code>myremote:loxsuite-backups</code>, and use <strong>Test connection</strong> to confirm it's
+      reachable before relying on it. This only ever <strong>adds</strong> to the remote — it never
+      deletes anything there, so pruning old offsite copies is entirely up to your own remote-side
+      lifecycle rules, independent of the local <strong>Keep last</strong> count above.
+    </p>
+    <p>
       <strong>Restore never applies immediately</strong> &mdash; on upload, the enclosed database is
       validated (opened and integrity-checked) before anything happens. If it's a MQTT config restore too,
-      that file is written to disk right away, but Mosquitto only reads it at its own startup and otherwise
-      trusts its own in-memory state, so it has no effect until Mosquitto restarts. The gateway's own
+      those files are written to disk right away, but Mosquitto only reads them at its own startup and
+      otherwise trusts its own in-memory state, so it has no effect until Mosquitto restarts. The gateway's own
       database similarly can't be swapped out from under the connection it's already using while running.
       Both halves take effect only after you restart the container &mdash; <code>docker compose restart
       loxsuite</code> restarts Mosquitto and the gateway together, since they run inside the same
@@ -515,7 +630,79 @@
   </div>
 </details>
 
+<details class="add-panel" id="help-admin-notifications">
+  <summary>Notifications &mdash; how do Channels and Rules work together?</summary>
+  <div class="add-panel-body">
+    <p>
+      Two separate lists, deliberately kept apart: <strong>Channels</strong> are "where" (a name plus
+      one <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener">Apprise</a> URL,
+      e.g. <code>msteams://TokenA/TokenB/TokenC/</code>, <code>slack://TokenA/TokenB/TokenC/Channel</code>,
+      <code>tgram://bottoken/ChatID</code>, or <code>mailtos://user:pass@smtp.example.com?to=you@example.com</code>
+      &mdash; built by following Apprise's own docs for the service you want, not something this page
+      constructs from separate host/token fields itself), and <strong>Rules</strong> are "when" (which
+      event) and "to which channels". A rule can send to several channels at once, and a channel can be
+      reused by several rules — use <strong>Send test</strong> on a channel to confirm the URL actually
+      works before relying on it in a rule.
+    </p>
+    <p>Four trigger types, each with its own extra fields:</p>
+    <ul>
+      <li><strong>Monitor threshold breached</strong> &mdash; pick a <a href="/monitor">Monitor</a> and a
+        condition (&gt;, &ge;, &lt;, &le;, =) against a value. Fires once when a new reading first
+        crosses the line, not again on every subsequent reading while it stays crossed — optionally also
+        once more when it goes back to normal ("Also notify on recovery").</li>
+      <li><strong>Miniserver online/offline</strong> &mdash; a specific <a href="/miniservers">Miniserver</a>
+        or "Any", firing on every online&harr;offline transition the regular background check (or "Test
+        now") finds.</li>
+      <li><strong>MQTT client online/offline</strong> &mdash; a specific username or "Any", firing on every
+        connect/disconnect seen on <a href="/incoming/clients">Client Activity</a>. A gateway restart
+        replays its whole broker-log history internally to rebuild "who's currently connected" but never
+        re-fires notifications for that replayed history — only genuinely new connects/disconnects from
+        that point on.</li>
+      <li><strong>Backup failed</strong> &mdash; no extra fields; fires on any failed backup (scheduled,
+        manual, or the offsite rclone copy specifically), each failure its own notification.</li>
+    </ul>
+    <p>
+      Every user also has their own, entirely independent notifications, set from the Notifications
+      tab on their own
+      <a href="/help#help-profile" data-help-open data-help-anchor="help-profile">Profile page</a>,
+      needing no involvement from here at all: their own personal
+      <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener">Apprise</a> channel,
+      their own rules (the same four trigger types above, but private to them), and the option to
+      subscribe to any of the admin-wide rules here too, on top of whatever channels a rule already
+      sends to above.
+    </p>
+    <p><a href="/admin/notifications">Open Notifications &rarr;</a></p>
+  </div>
+</details>
+
 <h2>Other things worth knowing</h2>
+
+<details class="add-panel">
+  <summary>Can I change how often a page auto-refreshes, or turn it off?</summary>
+  <div class="add-panel-body">
+    <p>
+      Every auto-refreshing page (Dashboard, Live Data, Client Activity, the four Logs tabs) has a
+      small bordered control at the top right, next to Help: an interval dropdown (5s/10s/30s/60s, or
+      "Custom&hellip;" for any number of seconds) and a pause/resume button. Both are remembered per
+      page, per browser (not shared across devices), so pausing the MQTT broker log doesn't also pause
+      Live Data.
+    </p>
+  </div>
+</details>
+
+<details class="add-panel">
+  <summary>Is there a guided first-run setup?</summary>
+  <div class="add-panel-body">
+    <p>
+      Yes &mdash; an Administrator is walked through it automatically right after their very first
+      login (changing the default admin password, setting the timezone, optionally adding a first
+      Miniserver), but only once, install-wide. It stays reachable any time afterward from
+      <a href="/settings">Settings</a> &rarr; "Run setup wizard again" &mdash; running it again doesn't
+      undo anything already configured, it just walks through the same steps with whatever's currently
+      set pre-filled.
+    </p>
+  </div>
+</details>
 
 <details class="add-panel">
   <summary>Can I customize tables &mdash; column order, hiding columns?</summary>

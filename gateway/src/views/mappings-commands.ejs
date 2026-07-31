@@ -9,6 +9,8 @@
   new Loxone &rarr; MQTT mapping.
 </p>
 
+<% if (saved) { %><p class="hint" style="color: var(--success);">Catalog saved.</p><% } %>
+
 <div class="card" style="margin-bottom:1.5rem;">
   <div class="form-grid">
     <div>
@@ -42,39 +44,169 @@
   </div>
 
   <p style="margin:1rem 0 0.5rem;">Topic: <code id="topic-preview">&mdash;</code></p>
+  <%
+    // Only shown once a command's payload actually needs substituting anything (currently: Gen2/
+    // Gen3's {channel}-in-JSON commands) — Gen1's plain "on"/"off"/... strings have nothing to
+    // fill in, so this stayed hidden for every family before Gen2 existed, and still does for
+    // Gen1 today; no reason to show a second, identical-to-the-dropdown line for those.
+  %>
+  <p style="margin:0 0 0.5rem; display:none;" id="payload-preview-row">Payload: <code id="payload-preview">&mdash;</code></p>
   <div class="row-actions">
     <a class="inline" id="use-in-mapping-link" href="#">
       <button type="button" class="primary"><%- icon('link') %> Use in mapping</button>
     </a>
     <button type="button" id="copy-topic-btn" class="btn-soft"><%- icon('copy') %> <span class="btn-label">Copy topic</span></button>
+    <button type="button" id="copy-payload-btn" class="btn-soft" style="display:none;"><%- icon('copy') %> <span class="btn-label">Copy payload</span></button>
   </div>
 </div>
 
-<% catalog.forEach(f => { %>
-  <h2><%= f.label %></h2>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Command</th><th>Topic pattern</th><th>Payload values</th></tr>
-      </thead>
-      <tbody>
-        <% f.commands.forEach(c => { %>
-          <tr>
-            <td><%= c.label %></td>
-            <td><code><%= c.topicTemplate %></code></td>
-            <td><% c.actions.forEach((a, i) => { %><code><%= a %></code><%= i < c.actions.length - 1 ? ' / ' : '' %><% }) %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  </div>
-<% }) %>
+<% if (isCustomized) { %><p class="hint"><strong>Catalog is customized</strong> — kept even after an app update.</p><% } %>
 
-<p class="hint">
-  <code>{device}</code> is the device's own ID as it appears in its topics, <code>{channel}</code> is the
-  channel number (0-based). If Loxone sends a numeric 0/1 instead of the text values above, add a
-  <strong>translation table</strong> to the mapping after creating it (e.g. 1 &rarr; on, 0 &rarr; off).
-</p>
+<form method="post" action="/mappings/commands/catalog" id="catalog-editor-form">
+  <textarea name="commands_json" id="commands-editor-hidden" hidden></textarea>
+  <textarea name="data_json" id="data-editor-hidden" hidden></textarea>
+
+  <% if (dataCatalog && dataCatalog.length > 0) { %>
+  <h2>Common data</h2>
+  <p class="hint">
+    The mirror image of the commands above — read-only topics these devices already publish on their
+    own (power, energy, position, ...), for adding as a <a href="/monitor">Monitor</a> rather than
+    sending anything. Uses the same Device field above.
+  </p>
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div class="form-grid">
+      <div>
+        <label for="data-family-select">Device type</label>
+        <select id="data-family-select">
+          <% dataCatalog.forEach(f => { %><option value="<%= f.key %>"><%= f.label %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label for="data-point-select">Data point</label>
+        <select id="data-point-select"></select>
+      </div>
+      <div id="data-channel-field">
+        <label for="data-channel-input">Channel</label>
+        <input type="number" id="data-channel-input" min="0" value="0" style="max-width:6rem;">
+      </div>
+    </div>
+    <p style="margin:1rem 0 0.5rem;">Topic: <code id="data-topic-preview">&mdash;</code></p>
+    <div class="row-actions">
+      <a class="inline" id="use-in-monitor-link" href="#">
+        <button type="button" class="primary"><%- icon('link') %> Use as Monitor</button>
+      </a>
+      <button type="button" id="copy-data-topic-btn" class="btn-soft"><%- icon('copy') %> <span class="btn-label">Copy topic</span></button>
+    </div>
+  </div>
+
+  <%
+    function escAttr(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    // Each family's key/label/(prefix)/rows render straight as real, always-visible inputs —
+    // pre-filled from its current data — rather than a read-only table you first have to click
+    // an "Edit" button to swap out. Renaming a device or its rows is then just typing into a
+    // field that was already there the moment you expanded it, no extra click, and nothing here
+    // depends on any JS having run correctly first (unlike a toggle-driven show/hide would).
+    function familyFieldsHtml(kind, f) {
+      const rowsHtml = (kind === 'commands' ? (f.commands || []) : (f.dataPoints || [])).map((r) => {
+        const valueField = kind === 'commands'
+          ? `<textarea class="row-actions" rows="2" placeholder="One payload value per line, e.g. on / off / toggle">${escAttr((r.actions || []).join('\n'))}</textarea>`
+          : `<label class="row-channel-label"><input type="checkbox" class="row-channel" ${r.channel !== false ? 'checked' : ''}> Has channel</label>`;
+        return `<div class="catalog-editor-row">
+          <input type="text" class="row-key" placeholder="key" value="${escAttr(r.key)}">
+          <input type="text" class="row-label" placeholder="Label" value="${escAttr(r.label)}">
+          <input type="text" class="row-topic" placeholder="topic/{device}/{channel}" value="${escAttr(r.topicTemplate)}">
+          ${valueField}
+          <button type="button" class="icon-btn icon-btn-danger remove-row-btn" title="Remove" aria-label="Remove">&times;</button>
+        </div>`;
+      }).join('');
+      const prefixField = kind === 'commands'
+        ? `<div><label>Topic prefix pattern (regex, for auto-detecting the device type)</label><input type="text" class="family-prefix" placeholder="^mydevice/([^/]+)/" value="${escAttr(f.topicPrefixPattern || '')}"></div>`
+        : '';
+      return `<div class="form-grid">
+          <div><label>Device type key</label><input type="text" class="family-key" placeholder="my-device" value="${escAttr(f.key || '')}"></div>
+          <div><label>Label</label><input type="text" class="family-label" placeholder="My Device" value="${escAttr(f.label || '')}"></div>
+          ${prefixField}
+        </div>
+        <div class="catalog-editor-rows">${rowsHtml}</div>
+        <div class="catalog-editor-family-footer">
+          <button type="button" class="btn-soft add-row-btn">${kind === 'commands' ? '+ Add command' : '+ Add data point'}</button>
+          <button type="button" class="btn-soft remove-family-btn">Remove device type</button>
+          <button type="submit" class="btn-edit" style="margin-left:auto;">${icon('edit')} Save catalog</button>
+        </div>`;
+    }
+  %>
+
+  <details class="add-panel">
+    <summary>Show all data devices (<%= dataCatalog.length %>)</summary>
+    <div class="add-panel-body">
+      <div class="row-actions" style="margin-bottom:0.85rem;">
+        <button type="button" class="btn-soft" id="add-data-family-btn"><%- icon('plus') %> Add device type</button>
+        <label class="btn-soft inline-file-btn">
+          <%- icon('upload') %> Import data device (JSON/XML)
+          <input type="file" id="import-data-file" accept=".json,.xml" hidden>
+        </label>
+        <a href="#" id="download-data-example-json" class="btn-soft"><%- icon('download') %> Example .json</a>
+        <a href="#" id="download-data-example-xml" class="btn-soft"><%- icon('download') %> Example .xml</a>
+      </div>
+      <div id="data-reference-list">
+        <% dataCatalog.forEach(f => { %>
+          <details class="add-panel catalog-family-details" data-kind="data">
+            <summary>
+              <%= f.label %>
+              <span class="hint" style="margin:0;">(<%= f.dataPoints.length %> data point<%= f.dataPoints.length === 1 ? '' : 's' %>)</span>
+            </summary>
+            <div class="add-panel-body"><%- familyFieldsHtml('data', f) %></div>
+          </details>
+        <% }) %>
+      </div>
+    </div>
+  </details>
+  <% } %>
+
+  <h2>Common commands reference</h2>
+  <details class="add-panel">
+    <summary>Show all command devices (<%= catalog.length %>)</summary>
+    <div class="add-panel-body">
+      <div class="row-actions" style="margin-bottom:0.85rem;">
+        <button type="button" class="btn-soft" id="add-command-family-btn"><%- icon('plus') %> Add device type</button>
+        <label class="btn-soft inline-file-btn">
+          <%- icon('upload') %> Import command device (JSON/XML)
+          <input type="file" id="import-commands-file" accept=".json,.xml" hidden>
+        </label>
+        <a href="#" id="download-commands-example-json" class="btn-soft"><%- icon('download') %> Example .json</a>
+        <a href="#" id="download-commands-example-xml" class="btn-soft"><%- icon('download') %> Example .xml</a>
+      </div>
+      <div id="commands-reference-list">
+        <% catalog.forEach(f => { %>
+          <details class="add-panel catalog-family-details" data-kind="commands">
+            <summary>
+              <%= f.label %>
+              <span class="hint" style="margin:0;">(<%= f.commands.length %> command<%= f.commands.length === 1 ? '' : 's' %>)</span>
+            </summary>
+            <div class="add-panel-body"><%- familyFieldsHtml('commands', f) %></div>
+          </details>
+        <% }) %>
+      </div>
+    </div>
+  </details>
+
+  <p class="hint">
+    <code>{device}</code> is the device's own ID as it appears in its topics, <code>{channel}</code> is the
+    channel number (0-based) — either can appear in the topic, the payload, or both (Shelly Gen2/Gen3's
+    JSON-RPC payloads carry <code>{channel}</code> instead of the topic; a "Payload" line and Copy button
+    appear above once that's the case). If Loxone sends a numeric 0/1 instead of the text values above,
+    add a <strong>translation table</strong> to the mapping after creating it (e.g. 1 &rarr; on, 0 &rarr; off).
+  </p>
+
+</form>
+<div class="row-actions" style="margin-top:0.5rem;">
+  <button type="submit" form="catalog-editor-form" class="btn-edit"><%- icon('edit') %> Save catalog</button>
+  <form method="post" action="/mappings/commands/catalog/reset" style="margin:0;" data-confirm="Reset to the built-in defaults? Any edits you've made here will be lost.">
+    <button type="submit" class="btn-soft">Reset to built-in defaults</button>
+  </form>
+</div>
 
 <script>
   (function () {
@@ -89,8 +221,11 @@
     var channelInput = document.getElementById('channel-input');
     var actionSelect = document.getElementById('action-select');
     var topicPreview = document.getElementById('topic-preview');
+    var payloadPreviewRow = document.getElementById('payload-preview-row');
+    var payloadPreview = document.getElementById('payload-preview');
     var useInMappingLink = document.getElementById('use-in-mapping-link');
     var copyBtn = document.getElementById('copy-topic-btn');
+    var copyPayloadBtn = document.getElementById('copy-payload-btn');
 
     function currentFamily() {
       return catalog.find(function (f) { return f.key === familySelect.value; }) || catalog[0];
@@ -137,17 +272,40 @@
       return false;
     }
 
+    // Both the topic AND the payload can carry these placeholders — Gen1 Shelly only ever needs it
+    // in the topic (its payloads are bare "on"/"off"/...), but Gen2/Gen3's JSON-RPC payloads carry
+    // {channel} instead, so the same substitution is applied to whichever string it's given.
+    function substitute(str, device, channel) {
+      return str.replace('{device}', device || '<device>').replace('{channel}', channel);
+    }
+
     function currentTopic() {
       var command = currentCommand();
       var device = deviceInput.value.trim();
       var channel = channelInput.value || '0';
-      return command.topicTemplate.replace('{device}', device || '<device>').replace('{channel}', channel);
+      return substitute(command.topicTemplate, device, channel);
+    }
+
+    function currentPayload() {
+      var device = deviceInput.value.trim();
+      var channel = channelInput.value || '0';
+      return substitute(actionSelect.value || '', device, channel);
     }
 
     function update() {
       var topic = currentTopic();
       topicPreview.textContent = topic;
       useInMappingLink.href = '/mappings/loxone-to-mqtt?topic=' + encodeURIComponent(topic);
+
+      var payload = currentPayload();
+      // Only worth its own preview line/button once there's actually something to substitute —
+      // a plain "on"/"off"/... action has nothing {device}/{channel} could change, so the dropdown
+      // above already shows the exact value to use.
+      var hasPlaceholder = payload.indexOf('{device}') === -1 && actionSelect.value.indexOf('{channel}') !== -1;
+      var show = actionSelect.value.indexOf('{channel}') !== -1 || actionSelect.value.indexOf('{device}') !== -1;
+      payloadPreviewRow.style.display = show ? '' : 'none';
+      copyPayloadBtn.style.display = show ? '' : 'none';
+      payloadPreview.textContent = payload;
     }
 
     deviceInput.addEventListener('input', function () {
@@ -159,6 +317,77 @@
     channelInput.addEventListener('input', update);
     actionSelect.addEventListener('change', update);
 
+    function flashCopied(btn) {
+      var label = btn.querySelector('.btn-label');
+      var original = label.textContent;
+      label.textContent = 'Copied!';
+      setTimeout(function () { label.textContent = original; }, 1500);
+    }
+
+    copyBtn.addEventListener('click', function () {
+      window.copyToClipboard(topicPreview.textContent).then(function () { flashCopied(copyBtn); });
+    });
+    copyPayloadBtn.addEventListener('click', function () {
+      window.copyToClipboard(payloadPreview.textContent).then(function () { flashCopied(copyPayloadBtn); });
+    });
+
+    if (presetDevice) deviceInput.value = presetDevice;
+    autoDetectFamily();
+    fillCommands();
+    fillActions();
+    update();
+  })();
+
+</script>
+
+<% if (dataCatalog && dataCatalog.length > 0) { %>
+<script>
+  (function () {
+    var dataCatalog = <%- JSON.stringify(dataCatalog) %>;
+    var deviceInput = document.getElementById('device-input');
+    var familySelect = document.getElementById('data-family-select');
+    var pointSelect = document.getElementById('data-point-select');
+    var channelField = document.getElementById('data-channel-field');
+    var channelInput = document.getElementById('data-channel-input');
+    var topicPreview = document.getElementById('data-topic-preview');
+    var useInMonitorLink = document.getElementById('use-in-monitor-link');
+    var copyBtn = document.getElementById('copy-data-topic-btn');
+
+    function currentFamily() {
+      return dataCatalog.find(function (f) { return f.key === familySelect.value; }) || dataCatalog[0];
+    }
+    function currentPoint() {
+      var family = currentFamily();
+      return family.dataPoints.find(function (d) { return d.key === pointSelect.value; }) || family.dataPoints[0];
+    }
+    function fillPoints() {
+      var family = currentFamily();
+      pointSelect.innerHTML = '';
+      family.dataPoints.forEach(function (d) {
+        var opt = document.createElement('option');
+        opt.value = d.key;
+        opt.textContent = d.label;
+        pointSelect.appendChild(opt);
+      });
+    }
+    function currentTopic() {
+      var point = currentPoint();
+      var device = deviceInput.value.trim();
+      var channel = channelInput.value || '0';
+      channelField.style.display = point.channel ? '' : 'none';
+      return point.topicTemplate.replace('{device}', device || '<device>').replace('{channel}', channel);
+    }
+    function update() {
+      var topic = currentTopic();
+      topicPreview.textContent = topic;
+      useInMonitorLink.href = '/monitor?topic=' + encodeURIComponent(topic);
+    }
+
+    deviceInput.addEventListener('input', update);
+    familySelect.addEventListener('change', function () { fillPoints(); update(); });
+    pointSelect.addEventListener('change', update);
+    channelInput.addEventListener('input', update);
+
     copyBtn.addEventListener('click', function () {
       window.copyToClipboard(topicPreview.textContent).then(function () {
         var label = copyBtn.querySelector('.btn-label');
@@ -168,11 +397,246 @@
       });
     });
 
-    if (presetDevice) deviceInput.value = presetDevice;
-    autoDetectFamily();
-    fillCommands();
-    fillActions();
+    fillPoints();
     update();
+  })();
+</script>
+<% } %>
+
+<script>
+  // Every family's key/label/(prefix)/rows are real inputs rendered straight into the page (see
+  // familyFieldsHtml above) — no separate read-only-vs-edit view to toggle between, so there's
+  // nothing here that has to run correctly before you can see or use them. This script only adds
+  // the DYNAMIC behavior on top: add/remove rows and device types, import, example downloads, and
+  // collecting everything into the two hidden textareas right before the form actually submits.
+  //
+  // Event delegation throughout (one listener per list, not one per button) — a family or row
+  // added later (by "+ Add device type" or an import) needs no extra wiring of its own, it's
+  // already covered by the listener on its containing list.
+  (function () {
+    var form = document.getElementById('catalog-editor-form');
+    if (!form) return;
+
+    function slug(s) { return (s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+    function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    function rowHtml(kind, r) {
+      r = r || {};
+      var valueField = kind === 'commands'
+        ? '<textarea class="row-actions" rows="2" placeholder="One payload value per line, e.g. on / off / toggle">' + escAttr((r.actions || []).join('\n')) + '</textarea>'
+        : '<label class="row-channel-label"><input type="checkbox" class="row-channel"' + (r.channel !== false ? ' checked' : '') + '> Has channel</label>';
+      return '<div class="catalog-editor-row">' +
+        '<input type="text" class="row-key" placeholder="key" value="' + escAttr(r.key) + '">' +
+        '<input type="text" class="row-label" placeholder="Label" value="' + escAttr(r.label) + '">' +
+        '<input type="text" class="row-topic" placeholder="topic/{device}/{channel}" value="' + escAttr(r.topicTemplate) + '">' +
+        valueField +
+        '<button type="button" class="icon-btn icon-btn-danger remove-row-btn" title="Remove" aria-label="Remove">&times;</button>' +
+        '</div>';
+    }
+
+    function familyFieldsHtml(kind, f) {
+      f = f || {};
+      var rows = (kind === 'commands' ? f.commands : f.dataPoints) || [];
+      var rowsHtml = rows.map(function (r) { return rowHtml(kind, r); }).join('');
+      var prefixField = kind === 'commands'
+        ? '<div><label>Topic prefix pattern (regex, for auto-detecting the device type)</label><input type="text" class="family-prefix" placeholder="^mydevice/([^/]+)/" value="' + escAttr(f.topicPrefixPattern) + '"></div>'
+        : '';
+      return '<div class="form-grid">' +
+          '<div><label>Device type key</label><input type="text" class="family-key" placeholder="my-device" value="' + escAttr(f.key) + '"></div>' +
+          '<div><label>Label</label><input type="text" class="family-label" placeholder="My Device" value="' + escAttr(f.label) + '"></div>' +
+          prefixField +
+        '</div>' +
+        '<div class="catalog-editor-rows">' + rowsHtml + '</div>' +
+        '<div class="catalog-editor-family-footer">' +
+          '<button type="button" class="btn-soft add-row-btn">' + (kind === 'commands' ? '+ Add command' : '+ Add data point') + '</button>' +
+          '<button type="button" class="btn-soft remove-family-btn">Remove device type</button>' +
+          '<button type="submit" class="btn-edit" style="margin-left:auto;"><%- icon("edit") %> Save catalog</button>' +
+        '</div>';
+    }
+
+    function addFamilyDetails(kind, listId, family) {
+      var details = document.createElement('details');
+      details.className = 'add-panel catalog-family-details';
+      details.dataset.kind = kind;
+      details.open = true;
+      var summary = document.createElement('summary');
+      summary.textContent = (family && family.label) || 'New device type';
+      details.appendChild(summary);
+      var body = document.createElement('div');
+      body.className = 'add-panel-body';
+      body.innerHTML = familyFieldsHtml(kind, family);
+      details.appendChild(body);
+      document.getElementById(listId).appendChild(details);
+      return details;
+    }
+
+    function wireList(kind, listId) {
+      var list = document.getElementById(listId);
+      if (!list) return;
+      list.addEventListener('click', function (e) {
+        var addRowBtn = e.target.closest('.add-row-btn');
+        if (addRowBtn) {
+          var rowsEl = addRowBtn.closest('.add-panel-body').querySelector('.catalog-editor-rows');
+          rowsEl.insertAdjacentHTML('beforeend', rowHtml(kind, null));
+          return;
+        }
+        var removeRowBtn = e.target.closest('.remove-row-btn');
+        if (removeRowBtn) { removeRowBtn.closest('.catalog-editor-row').remove(); return; }
+        var removeFamilyBtn = e.target.closest('.remove-family-btn');
+        if (removeFamilyBtn) { removeFamilyBtn.closest('.catalog-family-details').remove(); return; }
+      });
+      var addBtn = document.getElementById('add-' + kind + '-family-btn');
+      if (addBtn) addBtn.addEventListener('click', function () { addFamilyDetails(kind, listId, null); });
+    }
+    wireList('commands', 'commands-reference-list');
+    wireList('data', 'data-reference-list');
+
+    // Import a device type from a JSON or XML file — either shape accepts one family object or
+    // an array of them (see the downloadable examples for the exact fields). An imported family
+    // whose key matches one already listed replaces that one's fields in place; a new key gets a
+    // brand new entry, same as "+ Add device type".
+    function parseImportedXml(text) {
+      var doc = new DOMParser().parseFromString(text, 'application/xml');
+      if (doc.querySelector('parsererror')) throw new Error('Malformed XML');
+      return Array.prototype.map.call(doc.querySelectorAll('family'), function (fEl) {
+        var family = { key: fEl.getAttribute('key') || '', label: fEl.getAttribute('label') || '' };
+        var prefix = fEl.getAttribute('topicPrefixPattern');
+        if (prefix != null) family.topicPrefixPattern = prefix;
+        var commandEls = fEl.querySelectorAll('command');
+        if (commandEls.length) {
+          family.commands = Array.prototype.map.call(commandEls, function (cEl) {
+            return {
+              key: cEl.getAttribute('key') || '',
+              label: cEl.getAttribute('label') || '',
+              topicTemplate: cEl.getAttribute('topicTemplate') || '',
+              actions: Array.prototype.map.call(cEl.querySelectorAll('action'), function (a) { return a.textContent.trim(); }),
+            };
+          });
+        }
+        var dataPointEls = fEl.querySelectorAll('dataPoint');
+        if (dataPointEls.length) {
+          family.dataPoints = Array.prototype.map.call(dataPointEls, function (dEl) {
+            return {
+              key: dEl.getAttribute('key') || '',
+              label: dEl.getAttribute('label') || '',
+              topicTemplate: dEl.getAttribute('topicTemplate') || '',
+              channel: dEl.getAttribute('channel') !== 'false',
+            };
+          });
+        }
+        return family;
+      });
+    }
+
+    function setupImport(kind, inputId, listId) {
+      var input = document.getElementById(inputId);
+      if (!input) return;
+      input.addEventListener('change', function () {
+        var file = input.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          var text = String(reader.result || '');
+          var families;
+          try {
+            families = /^\s*</.test(text) ? parseImportedXml(text) : JSON.parse(text);
+            if (!Array.isArray(families)) families = [families];
+          } catch (err) {
+            alert('Could not read that file: ' + err.message);
+            input.value = '';
+            return;
+          }
+          families.forEach(function (family) {
+            if (!family.key) family.key = slug(family.label);
+            var existing = null;
+            document.querySelectorAll('#' + listId + ' > .catalog-family-details').forEach(function (d) {
+              if (d.querySelector('.family-key').value.trim() === family.key) existing = d;
+            });
+            if (existing) {
+              existing.open = true;
+              existing.querySelector('.add-panel-body').innerHTML = familyFieldsHtml(kind, family);
+              existing.querySelector('summary').textContent = family.label || family.key;
+            } else {
+              addFamilyDetails(kind, listId, family);
+            }
+          });
+          input.value = '';
+        };
+        reader.readAsText(file);
+      });
+    }
+    setupImport('commands', 'import-commands-file', 'commands-reference-list');
+    setupImport('data', 'import-data-file', 'data-reference-list');
+
+    // Downloadable example files — exact same shape the import above expects, one made-up device
+    // per format so there's a concrete starting point instead of having to guess the schema.
+    var exampleCommandsFamily = {
+      key: 'my-device', label: 'My Device', topicPrefixPattern: '^mydevice/([^/]+)/',
+      commands: [{ key: 'switch', label: 'Switch', topicTemplate: 'mydevice/{device}/switch/{channel}/set', actions: ['on', 'off', 'toggle'] }],
+    };
+    var exampleDataFamily = {
+      key: 'my-device', label: 'My Device',
+      dataPoints: [{ key: 'power', label: 'Power (W)', topicTemplate: 'mydevice/{device}/power/{channel}', channel: true }],
+    };
+    var exampleCommandsXml = '<family key="my-device" label="My Device" topicPrefixPattern="^mydevice/([^/]+)/">\n'
+      + '  <command key="switch" label="Switch" topicTemplate="mydevice/{device}/switch/{channel}/set">\n'
+      + '    <action>on</action>\n    <action>off</action>\n    <action>toggle</action>\n  </command>\n</family>';
+    var exampleDataXml = '<family key="my-device" label="My Device">\n'
+      + '  <dataPoint key="power" label="Power (W)" topicTemplate="mydevice/{device}/power/{channel}" channel="true" />\n</family>';
+
+    function wireDownload(id, filename, mime, content) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        var blob = new Blob([content], { type: mime });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      });
+    }
+    wireDownload('download-commands-example-json', 'example-command-device.json', 'application/json', JSON.stringify([exampleCommandsFamily], null, 2));
+    wireDownload('download-commands-example-xml', 'example-command-device.xml', 'application/xml', exampleCommandsXml);
+    wireDownload('download-data-example-json', 'example-data-device.json', 'application/json', JSON.stringify([exampleDataFamily], null, 2));
+    wireDownload('download-data-example-xml', 'example-data-device.xml', 'application/xml', exampleDataXml);
+
+    // Save — walk every family <details> currently listed and read its inputs directly (they're
+    // real, always-present form fields now, not something built lazily on first edit).
+    function serializeCatalog(kind, listId) {
+      var families = [];
+      document.querySelectorAll('#' + listId + ' > .catalog-family-details').forEach(function (details) {
+        var key = details.querySelector('.family-key').value.trim();
+        var label = details.querySelector('.family-label').value.trim();
+        if (!key && !label) return;
+        var family = { key: key || slug(label), label: label || key };
+        var prefixInput = details.querySelector('.family-prefix');
+        if (prefixInput) family.topicPrefixPattern = prefixInput.value.trim();
+        var rows = [];
+        details.querySelectorAll('.catalog-editor-row').forEach(function (row) {
+          var rKey = row.querySelector('.row-key').value.trim();
+          var rLabel = row.querySelector('.row-label').value.trim();
+          var rTopic = row.querySelector('.row-topic').value.trim();
+          if (!rKey && !rLabel && !rTopic) return;
+          var entry = { key: rKey || slug(rLabel), label: rLabel || rKey, topicTemplate: rTopic };
+          if (kind === 'commands') {
+            entry.actions = row.querySelector('.row-actions').value.split('\n').map(function (a) { return a.trim(); }).filter(Boolean);
+          } else {
+            entry.channel = row.querySelector('.row-channel').checked;
+          }
+          rows.push(entry);
+        });
+        if (kind === 'commands') family.commands = rows; else family.dataPoints = rows;
+        families.push(family);
+      });
+      return families;
+    }
+
+    form.addEventListener('submit', function () {
+      document.getElementById('commands-editor-hidden').value = JSON.stringify(serializeCatalog('commands', 'commands-reference-list'));
+      document.getElementById('data-editor-hidden').value = JSON.stringify(serializeCatalog('data', 'data-reference-list'));
+    });
   })();
 </script>
 

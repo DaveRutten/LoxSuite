@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" width="480" height="120" role="img" aria-label="LoxSuite">
+  <defs>
+    <linearGradient id="hub" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5CA83F"/>
+      <stop offset="1" stop-color="#8ED17E"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Connection mark: Loxone (left) and MQTT/other services (right) bridged through the
+       LoxSuite hub in the middle - the two outer nodes are deliberately smaller/softer than the
+       hub, so the eye reads "in -> through LoxSuite -> out" left to right. -->
+  <g stroke-linecap="round">
+    <line x1="34" y1="60" x2="60" y2="60" stroke="#5CA83F" stroke-width="4"/>
+    <line x1="84" y1="60" x2="110" y2="60" stroke="#5CA83F" stroke-width="4"/>
+    <circle cx="24" cy="60" r="11" fill="#EAF7E4" stroke="#5CA83F" stroke-width="3"/>
+    <circle cx="120" cy="60" r="11" fill="#EAF7E4" stroke="#5CA83F" stroke-width="3"/>
+    <circle cx="72" cy="60" r="21" fill="url(#hub)"/>
+  </g>
+
+  <text x="156" y="76" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="46" font-weight="700">
+    <tspan fill="#1a1d23">Lox</tspan><tspan fill="#5CA83F">Suite</tspan>
+  </text>
+</svg>

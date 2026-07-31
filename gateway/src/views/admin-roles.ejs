@@ -5,6 +5,7 @@
   <a class="active" href="/admin/roles">Access Roles</a>
   <a href="/admin/sso">Single Sign-On</a>
   <a href="/admin/backup">Backups</a>
+  <a href="/admin/notifications">Notifications</a>
 </div>
 
 <% if (error) { %>
@@ -64,6 +65,27 @@
             <thead><tr><th>Page</th><th>View</th><th>Edit</th></tr></thead>
             <tbody>
               <% areas.forEach(area => { %>
+                <tr>
+                  <td><%= area.label %></td>
+                  <td><input type="checkbox" name="perm[<%= area.key %>][view]" <%= role.permissions[area.key].view ? 'checked' : '' %>></td>
+                  <td><input type="checkbox" name="perm[<%= area.key %>][edit]" <%= role.permissions[area.key].edit ? 'checked' : '' %>></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 style="margin-top:1.25rem;">Logs</h2>
+        <p class="hint">
+          Each log is its own toggle &mdash; a role can be trusted with, say, the System log without
+          also seeing the MQTT broker log. <strong>Download</strong> exports the full, unfiltered
+          <code>.log</code> file and implies View.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Log</th><th>View</th><th>Download</th></tr></thead>
+            <tbody>
+              <% logAreas.forEach(area => { %>
                 <tr>
                   <td><%= area.label %></td>
                   <td><input type="checkbox" name="perm[<%= area.key %>][view]" <%= role.permissions[area.key].view ? 'checked' : '' %>></td>

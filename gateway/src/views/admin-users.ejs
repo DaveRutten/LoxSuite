@@ -5,6 +5,7 @@
   <a href="/admin/roles">Access Roles</a>
   <a href="/admin/sso">Single Sign-On</a>
   <a href="/admin/backup">Backups</a>
+  <a href="/admin/notifications">Notifications</a>
 </div>
 
 <% if (error) { %>
@@ -56,7 +57,7 @@
           <td><%= u.auth_provider === 'local' ? 'Password' : 'Pocket ID (SSO)' %></td>
           <td><%= u.last_login_at ? formatDateTime(u.last_login_at) : '-' %></td>
           <td>
-            <form class="inline" method="post" action="/admin/users/<%= u.id %>/role" style="display:flex; gap:0.4rem; align-items:center;">
+            <form class="inline" method="post" action="/admin/users/<%= u.id %>/role" style="display:flex; gap:0.6rem; align-items:center;">
               <select name="role_id">
                 <% roles.forEach(r => { %><option value="<%= r.id %>" <%= r.id === u.role_id ? 'selected' : '' %>><%= r.name %></option><% }) %>
               </select>

@@ -29,10 +29,7 @@
       </div>
       <div>
         <label>TLS</label>
-        <select name="use_tls">
-          <option value="" <%= !settings.use_tls ? 'selected' : '' %>>No</option>
-          <option value="1" <%= settings.use_tls ? 'selected' : '' %>>Yes</option>
-        </select>
+        <%- toggleSwitch('use_tls', settings.use_tls) %>
       </div>
     </div>
     <div class="form-grid" style="margin-top:0.85rem;">
@@ -49,10 +46,7 @@
     <h2 style="margin-top:1.5rem;">Features</h2>
     <div class="settings-field">
       <label>Loxone &rarr; MQTT auto-create</label>
-      <select name="auto_create_enabled" style="max-width:10rem;">
-        <option value="" <%= !gatewaySettings.auto_create_loxone_mappings ? 'selected' : '' %>>Off</option>
-        <option value="1" <%= gatewaySettings.auto_create_loxone_mappings ? 'selected' : '' %>>On</option>
-      </select>
+      <%- toggleSwitch('auto_create_enabled', gatewaySettings.auto_create_loxone_mappings) %>
       <p class="hint">
         Off by default: an unrecognised token/topic sent from Loxone (HTTP or UDP) is rejected (404
         or a log warning). On, the gateway creates a new passthrough mapping on the fly instead —

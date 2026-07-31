@@ -2,9 +2,9 @@
 
 <div class="tabs">
   <a class="active" href="/logs/mqtt">MQTT broker</a>
-  <a href="/logs/loxone">Loxone Miniservers</a>
-  <a href="/logs/loxone-commands">Loxone commands</a>
-  <a href="/logs/system">System</a>
+  <% if (canView('logs_loxone')) { %><a href="/logs/loxone">Loxone Miniservers</a><% } %>
+  <% if (canView('logs_loxone_commands')) { %><a href="/logs/loxone-commands">Loxone commands</a><% } %>
+  <% if (canView('logs_system')) { %><a href="/logs/system">System</a><% } %>
 </div>
 
 <p class="hint">
@@ -45,29 +45,35 @@
 
 <div class="filterable-table-card">
   <div class="table-toolbar">
+    <span class="log-selection-count hint" style="margin:0;"></span>
+    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label">Copy selection</span></button>
+    <% if (canEdit('logs_mqtt')) { %>
     <a href="/logs/mqtt/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
+    <% } %>
   </div>
 
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Time</th><th>Level</th><th>Line</th></tr>
+      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th>Time</th><th>Level</th><th>Line</th></tr>
     </thead>
     <tbody>
       <% rows.forEach(r => { %>
         <% const levelBadge = r.level === 'error' ? 'badge-off' : r.level === 'warning' ? 'badge-warning' : 'badge-neutral'; %>
         <tr>
+          <td class="col-select"><input type="checkbox"></td>
           <td><%= formatDateTime(r.recordedAt) %></td>
           <td><span class="badge <%= levelBadge %>"><%= r.level %></span></td>
           <td class="log-line <%= r.level !== 'info' ? 'log-line-' + r.level : '' %>"><%= r.line %></td>
         </tr>
       <% }) %>
       <% if (rows.length === 0) { %>
-        <tr><td colspan="3" class="empty">No log lines recorded yet.</td></tr>
+        <tr><td colspan="4" class="empty">No log lines recorded yet.</td></tr>
       <% } %>
     </tbody>
   </table>
   </div>
 </div>
 
+<script src="/log-select.js" defer></script>
 <%- include('partials/foot') %>

@@ -87,6 +87,43 @@ function historyWindowClause(range) {
   return { sql: clauses.length ? ' AND ' + clauses.join(' AND ') : '', params };
 }
 
+// Hour groups for a short/dense range (readings every few seconds over 1h/24h would otherwise be
+// one endless flat list), day groups for anything longer (hour groups over 30d would just be
+// hundreds of mostly-empty buckets instead of a useful overview).
+function chooseGroupMode(range) {
+  if (range === '1h' || range === '24h') return 'hour';
+  const ms = RANGE_MS[range] || customRangeMs(range);
+  if (ms && ms <= 48 * 60 * 60 * 1000) return 'hour';
+  return 'day';
+}
+
+// Buckets already-DESC-sorted history rows into calendar day/hour groups (in the configured
+// display timezone, not server-local) — same shape the client-side live-refresh in
+// monitor-chart.js rebuilds independently, so a group's key format must stay in sync with that.
+function groupHistoryRows(rows, mode, tz, dateField) {
+  const groups = [];
+  let current = null;
+  for (const row of rows) {
+    const date = new Date(row[dateField]);
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
+    }).formatToParts(date).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+    // Node's ICU renders midnight as hour "24" (not "00") under hour12:false — normalize so
+    // grouping/labels don't split midnight readings into their own inconsistent bucket.
+    const hour = parts.hour === '24' ? '00' : parts.hour;
+    const key = mode === 'hour' ? `${parts.year}-${parts.month}-${parts.day}-${hour}` : `${parts.year}-${parts.month}-${parts.day}`;
+    if (!current || current.key !== key) {
+      const label = mode === 'hour'
+        ? `${parts.day}/${parts.month}/${parts.year}, ${hour}:00–${String((Number(hour) + 1) % 24).padStart(2, '0')}:00`
+        : `${parts.day}/${parts.month}/${parts.year}`;
+      current = { key, label, rows: [] };
+      groups.push(current);
+    }
+    current.rows.push(row);
+  }
+  return groups;
+}
+
 function csvField(value) {
   const s = String(value);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -129,6 +166,7 @@ router.get('/', (req, res) => {
     knownTopics: getTopicOverview().map((t) => t.topic),
     retentionDays: retention.monitor_retention_days,
     unusedCount,
+    prefillTopic: req.query.topic || '',
     error: null,
   });
 });
@@ -305,17 +343,27 @@ router.get('/:id', (req, res) => {
 
   const range = resolveRange(req.query.range);
   const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
+  // Only the range's fixed END is passed to the view (see rangeUntilMs in monitor-chart.js) — the
+  // chart's own left edge auto-scales to the earliest surviving data point instead of this range's
+  // nominal start, so a monitor that hasn't been running the full range (or has more history than
+  // monitor_history's MAX_ROWS cap keeps) doesn't leave a big blank gap eating most of the chart.
+  const { until } = rangeToWindow(range);
 
   const rows = db.prepare(`SELECT recorded_at AS recordedAt, value, numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS);
 
   const hasNumeric = rows.some((r) => r.numericValue !== null);
+  const groupMode = chooseGroupMode(range);
+  const groups = groupHistoryRows(rows, groupMode, res.locals.displayTimezone, 'recordedAt');
 
   res.render('monitor-detail', {
     monitor,
     range,
     rows,
+    groups,
+    groupMode,
     hasNumeric,
     truncated: rows.length >= MAX_ROWS,
+    rangeUntilMs: until ? new Date(until).getTime() : null,
   });
 });
 

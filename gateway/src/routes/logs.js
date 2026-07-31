@@ -67,16 +67,26 @@ function queryLogs({ source, sourceId, filters }) {
   return filtered.slice(0, MAX_ROWS);
 }
 
-router.get('/', (req, res) => res.redirect('/logs/mqtt'));
+// Each of the four tabs is now its own permission area (see permissionAreas.js's LOG_AREAS) — a
+// role viewable on, say, only the System log would otherwise get bounced to a 403 by this
+// redirect always pointing at MQTT. Send it to the first tab (in the same order they're tabbed
+// in the UI) this user can actually see instead.
+const LOG_TAB_AREAS = ['logs_mqtt', 'logs_loxone', 'logs_loxone_commands', 'logs_system'];
+const LOG_TAB_PATHS = { logs_mqtt: '/logs/mqtt', logs_loxone: '/logs/loxone', logs_loxone_commands: '/logs/loxone-commands', logs_system: '/logs/system' };
 
-router.get('/mqtt', (req, res) => {
+router.get('/', (req, res) => {
+  const area = LOG_TAB_AREAS.find((a) => req.user?.isAdmin || req.user?.permissions[a]?.view);
+  res.redirect(area ? LOG_TAB_PATHS[area] : '/logs/mqtt');
+});
+
+router.get('/mqtt', requirePermission('logs_mqtt', 'view'), (req, res) => {
   const filters = parseFilters(req.query);
   const rows = queryLogs({ source: 'mqtt', filters });
   const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
   res.render('logs-mqtt', { rows, query: req.query, retentionDays: settings.log_retention_days });
 });
 
-router.get('/mqtt/export.txt', (req, res) => {
+router.get('/mqtt/export.txt', requirePermission('logs_mqtt', 'edit'), (req, res) => {
   const rows = db.prepare('SELECT recorded_at AS recordedAt, line FROM log_entries WHERE source = ? ORDER BY id ASC').all('mqtt');
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="mqtt.log"');
@@ -90,7 +100,7 @@ router.get('/mqtt/export.txt', (req, res) => {
 // events that all appear to have happened in the same instant.
 const LOXONE_LINE_TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3});/;
 
-router.get('/loxone', (req, res) => {
+router.get('/loxone', requirePermission('logs_loxone', 'view'), (req, res) => {
   const miniservers = db.prepare('SELECT id, name FROM miniservers ORDER BY name').all();
   const miniserverId = req.query.miniserver_id ? Number(req.query.miniserver_id) : null;
   const filters = parseFilters(req.query);
@@ -105,7 +115,7 @@ router.get('/loxone', (req, res) => {
   res.render('logs-loxone', { rows, miniservers, miniserverId, query: req.query, retentionDays: settings.log_retention_days });
 });
 
-router.get('/loxone/export.txt', (req, res) => {
+router.get('/loxone/export.txt', requirePermission('logs_loxone', 'edit'), (req, res) => {
   const miniserverId = req.query.miniserver_id ? Number(req.query.miniserver_id) : null;
   const rows = miniserverId
     ? db.prepare('SELECT line FROM log_entries WHERE source = ? AND source_id = ? ORDER BY id ASC').all('loxone', miniserverId)
@@ -116,14 +126,14 @@ router.get('/loxone/export.txt', (req, res) => {
   res.send(rows.map((r) => r.line).join('\n'));
 });
 
-router.get('/loxone-commands', (req, res) => {
+router.get('/loxone-commands', requirePermission('logs_loxone_commands', 'view'), (req, res) => {
   const filters = parseFilters(req.query);
   const rows = queryLogs({ source: 'loxone_commands', filters });
   const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
   res.render('logs-loxone-commands', { rows, query: req.query, retentionDays: settings.log_retention_days });
 });
 
-router.get('/loxone-commands/export.txt', (req, res) => {
+router.get('/loxone-commands/export.txt', requirePermission('logs_loxone_commands', 'edit'), (req, res) => {
   const rows = db.prepare(
     `SELECT recorded_at AS recordedAt, source_label AS sourceLabel, line,
             command_topic AS commandTopic, value_from AS valueFrom, value_to AS valueTo
@@ -134,26 +144,18 @@ router.get('/loxone-commands/export.txt', (req, res) => {
   res.send(rows.map((r) => `${r.recordedAt}\t${r.sourceLabel || ''}\t${r.commandTopic || ''}\t${r.valueFrom ?? ''}\t${r.valueTo ?? ''}\t${r.line}`).join('\n'));
 });
 
-router.get('/system', (req, res) => {
+router.get('/system', requirePermission('logs_system', 'view'), (req, res) => {
   const filters = parseFilters(req.query);
   const rows = queryLogs({ source: 'system', filters });
   const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
   res.render('logs-system', { rows, query: req.query, retentionDays: settings.log_retention_days });
 });
 
-router.get('/system/export.txt', (req, res) => {
+router.get('/system/export.txt', requirePermission('logs_system', 'edit'), (req, res) => {
   const rows = db.prepare('SELECT line FROM log_entries WHERE source = ? ORDER BY id ASC').all('system');
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="system.log"');
   res.send(rows.map((r) => r.line).join('\n'));
-});
-
-router.post('/settings', requirePermission('logs', 'edit'), (req, res) => {
-  const days = Number(req.body.log_retention_days);
-  if (Number.isFinite(days) && days > 0) {
-    db.prepare('UPDATE gateway_settings SET log_retention_days = ? WHERE id = 1').run(Math.round(days));
-  }
-  res.redirect(req.get('referer') || '/logs/mqtt');
 });
 
 module.exports = router;

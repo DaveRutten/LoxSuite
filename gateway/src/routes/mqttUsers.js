@@ -7,6 +7,7 @@ const {
   addClientRole,
   removeClientRole,
   listRoles,
+  testClientConnection,
 } = require('../dynamicSecurity');
 const { getLastSeenByUsername } = require('../mosquittoLog');
 const { requirePermission } = require('../middleware/requirePermission');
@@ -25,12 +26,23 @@ function withLastSeen(clients) {
   return clients.map((c) => ({ ...c, lastSeen: lastSeen.get(c.username) || null }));
 }
 
+async function renderPage(res, extra = {}) {
+  const [clients, roles] = await Promise.all([listClients().catch(() => []), listRoles().catch(() => ['client'])]);
+  res.render('mqttUsers', {
+    clients: withLastSeen(clients),
+    roles,
+    protectedUsernames: PROTECTED_USERNAMES,
+    error: null,
+    testResult: null,
+    ...extra,
+  });
+}
+
 router.get('/', async (req, res) => {
   try {
-    const [clients, roles] = await Promise.all([listClients(), listRoles()]);
-    res.render('mqttUsers', { clients: withLastSeen(clients), roles, protectedUsernames: PROTECTED_USERNAMES, error: null });
+    await renderPage(res);
   } catch (err) {
-    res.render('mqttUsers', { clients: [], roles: ['client'], protectedUsernames: PROTECTED_USERNAMES, error: err.message });
+    res.render('mqttUsers', { clients: [], roles: ['client'], protectedUsernames: PROTECTED_USERNAMES, error: err.message, testResult: null });
   }
 });
 
@@ -39,10 +51,13 @@ router.post('/', requirePermission('mqtt_users', 'edit'), async (req, res) => {
   try {
     if (!username || !password) throw new Error('Username and password are required.');
     await createClient(username, password, rolename || 'client');
-    res.redirect('/mqtt-users');
+    // The only moment the plaintext password is ever in hand (see dynamicSecurity.js's
+    // testClientConnection comment) — test it right away instead of leaving "does this actually
+    // work" to be discovered only once a real device tries and silently fails to connect.
+    const test = await testClientConnection(username, password);
+    await renderPage(res, { testResult: { username, ...test } });
   } catch (err) {
-    const [clients, roles] = await Promise.all([listClients().catch(() => []), listRoles().catch(() => ['client'])]);
-    res.render('mqttUsers', { clients: withLastSeen(clients), roles, protectedUsernames: PROTECTED_USERNAMES, error: err.message });
+    await renderPage(res, { error: err.message });
   }
 });
 
@@ -55,10 +70,10 @@ router.post('/:username/password', requirePermission('mqtt_users', 'edit'), asyn
     }
     if (!password) throw new Error('Password is required.');
     await setClientPassword(username, password);
-    res.redirect('/mqtt-users');
+    const test = await testClientConnection(username, password);
+    await renderPage(res, { testResult: { username, ...test } });
   } catch (err) {
-    const [clients, roles] = await Promise.all([listClients().catch(() => []), listRoles().catch(() => ['client'])]);
-    res.render('mqttUsers', { clients: withLastSeen(clients), roles, protectedUsernames: PROTECTED_USERNAMES, error: err.message });
+    await renderPage(res, { error: err.message });
   }
 });
 
@@ -79,27 +94,19 @@ router.post('/:username/role', requirePermission('mqtt_users', 'edit'), async (r
 
     res.redirect('/mqtt-users');
   } catch (err) {
-    const [clients, roles] = await Promise.all([listClients().catch(() => []), listRoles().catch(() => ['client'])]);
-    res.render('mqttUsers', { clients: withLastSeen(clients), roles, protectedUsernames: PROTECTED_USERNAMES, error: err.message });
+    await renderPage(res, { error: err.message });
   }
 });
 
 router.post('/:username/delete', requirePermission('mqtt_users', 'edit'), async (req, res) => {
   if (PROTECTED_USERNAMES.includes(req.params.username)) {
-    const [clients, roles] = await Promise.all([listClients().catch(() => []), listRoles().catch(() => ['client'])]);
-    return res.render('mqttUsers', {
-      clients: withLastSeen(clients),
-      roles,
-      protectedUsernames: PROTECTED_USERNAMES,
-      error: `"${req.params.username}" is the gateway's own account and cannot be deleted.`,
-    });
+    return renderPage(res, { error: `"${req.params.username}" is the gateway's own account and cannot be deleted.` });
   }
 
   try {
     await deleteClient(req.params.username);
   } catch (err) {
-    const [clients, roles] = await Promise.all([listClients().catch(() => []), listRoles().catch(() => ['client'])]);
-    return res.render('mqttUsers', { clients: withLastSeen(clients), roles, protectedUsernames: PROTECTED_USERNAMES, error: err.message });
+    return renderPage(res, { error: err.message });
   }
   res.redirect('/mqtt-users');
 });

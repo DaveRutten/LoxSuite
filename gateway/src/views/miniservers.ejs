@@ -8,41 +8,59 @@
 <details class="add-panel">
   <summary>Add Miniserver</summary>
   <div class="add-panel-body">
-    <form method="post" action="/miniservers">
+    <form method="post" action="/miniservers" id="add-ms-form">
       <div class="form-grid">
         <div><label>Name</label><input type="text" name="name" required></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.85rem;">
         <div><label>Host / IP</label><input type="text" name="host" required></div>
         <div><label>HTTP port</label><input type="number" name="http_port" value="80" required></div>
         <div>
           <label>HTTPS</label>
-          <select name="use_https">
-            <option value="">No</option>
-            <option value="1">Yes (self-signed certificate allowed)</option>
-          </select>
+          <%- toggleSwitch('use_https', false) %>
+          <p class="hint" style="margin:0.3rem 0 0;">Self-signed certificates are allowed.</p>
         </div>
-        <div><label>UDP port (optional)</label><input type="number" name="udp_port"></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.85rem;">
         <div><label>Username</label><input type="text" name="username" required></div>
         <div><label>Password</label><input type="password" name="password" required></div>
+      </div>
+
+      <h2 style="margin-top:1.5rem;">Features</h2>
+      <div class="form-grid">
+        <div><label>UDP port (optional)</label><input type="number" name="udp_port"></div>
         <div>
           <label>External URL (optional)</label>
           <input type="text" name="external_url" placeholder="https://myhome.dyndns.org:8080">
         </div>
+      </div>
+      <p class="hint" style="margin-top:0.5rem;">
+        <strong>UDP port</strong> is the port <em>on the Miniserver itself</em> that Loxone listens
+        on for Virtual UDP Output commands sent by this gateway (configured in Loxone Config's
+        Virtual UDP Output, not here) &mdash; purely outbound from the gateway's side, so nothing
+        needs to change in <code>docker-compose.yml</code> for it. That file's own
+        <code>11885/udp</code> mapping is a separate, single, global port this gateway listens on
+        for the opposite direction (Loxone &rarr; gateway), configured once for every Miniserver at
+        once (see the Loxone &rarr; MQTT mappings page), not per Miniserver here.
+        <strong>External URL</strong> is used as a fallback whenever the local Host/IP can't be
+        reached (e.g. from outside the home network) &mdash; Monitor polling, Common commands, log
+        fetching and "Test"/"Test now" all try it automatically if the local address fails.
+      </p>
+
+      <div style="margin-top:0.9rem; display:flex; align-items:center; gap:0.5rem;">
+        <button type="button" id="add-ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
         <button type="submit" class="primary"><%- icon('plus') %> Add</button>
       </div>
+      <div id="add-ms-test-result" style="margin-top:0.6rem;"></div>
     </form>
   </div>
 </details>
-<p class="hint">
-  <strong>External URL</strong> is used as a fallback whenever the local Host/IP can't be reached
-  (e.g. from outside the home network) — Monitor polling, Common commands, log fetching and the
-  "Test now" check all try it automatically if the local address fails.
-</p>
 <% } %>
 
 <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Status</th><th>Name</th><th>Host</th><th>HTTP port</th><th>HTTPS</th><th>UDP port</th><th>External URL</th><th>User</th><th>Last checked</th><th>Actions</th></tr>
+      <tr><th>Status</th><th>Firmware</th><th>Name</th><th>Host</th><th>HTTP port</th><th>HTTPS</th><th>UDP port</th><th>External URL</th><th>User</th><th>Last checked</th><th>Actions</th></tr>
     </thead>
     <tbody>
       <% miniservers.forEach(ms => { %>
@@ -52,6 +70,7 @@
             <% const badgeText = ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown'; %>
             <span class="badge badge-live <%= badgeClass %>"><%= badgeText %></span>
           </td>
+          <td data-ms-firmware-id="<%= ms.id %>"><%= ms.firmware_version || '-' %></td>
           <td><%= ms.name %></td>
           <td><%= ms.host %></td>
           <td><%= ms.http_port %></td>
@@ -85,7 +104,7 @@
         </tr>
       <% }) %>
       <% if (miniservers.length === 0) { %>
-        <tr><td colspan="10" class="empty">No miniservers added yet.</td></tr>
+        <tr><td colspan="11" class="empty">No miniservers added yet.</td></tr>
       <% } %>
     </tbody>
   </table>
@@ -129,6 +148,8 @@
             var badgeText = data.status === 'online' ? 'Online' : data.status === 'offline' ? 'Offline' : 'Unknown';
             statusCell.innerHTML = '<span class="badge badge-live ' + badgeClass + '">' + badgeText + '</span>';
           }
+          var firmwareCell = document.querySelector('[data-ms-firmware-id="' + msId + '"]');
+          if (firmwareCell) firmwareCell.textContent = data.firmwareVersion || '-';
         })
         .catch(function () {
           wrap.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
@@ -141,6 +162,50 @@
     document.querySelectorAll('.ms-test-btn').forEach(function (btn) {
       btn.addEventListener('click', function () { runTest(btn.dataset.msId); });
     });
+
+    // Tests whatever's currently typed into the Add-Miniserver form itself, before it's been
+    // saved — same renderLine feedback style as the per-row "Test now" above, just against
+    // POST /miniservers/test (no id yet, no live-connection leg — see that route's own comment).
+    var addForm = document.getElementById('add-ms-form');
+    var addTestBtn = document.getElementById('add-ms-test-btn');
+    var addTestResult = document.getElementById('add-ms-test-result');
+    if (addForm && addTestBtn) {
+      addTestBtn.addEventListener('click', function () {
+        var data = new FormData(addForm);
+        var payload = {
+          host: data.get('host'),
+          http_port: data.get('http_port'),
+          username: data.get('username'),
+          password: data.get('password'),
+          use_https: data.get('use_https'),
+          external_url: data.get('external_url'),
+        };
+        if (!payload.host || !payload.username || !payload.password) {
+          addTestResult.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Fill in Host, Username and Password first.</p>';
+          return;
+        }
+        addTestResult.innerHTML = '<p class="hint" style="margin:0;">Testing&hellip;</p>';
+        // Content-Type: application/json exempts this from the CSRF form-token check server-side
+        // (see middleware/csrf.js), same as the per-row test above.
+        fetch('/miniservers/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.error) {
+              addTestResult.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">' + data.error + '</p>';
+              return;
+            }
+            var html = '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">';
+            html += renderLine('Local', data.local);
+            html += data.external ? renderLine('External', data.external) : '<div class="hint" style="margin:0;">External: not configured</div>';
+            html += renderLine('Logbook reachable', data.logbook);
+            html += '</div>';
+            addTestResult.innerHTML = html;
+          })
+          .catch(function () {
+            addTestResult.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
+          });
+      });
+    }
   })();
 </script>
 

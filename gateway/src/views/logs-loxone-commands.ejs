@@ -1,10 +1,10 @@
 <%- include('partials/head', { pageTitle: 'Logs', active: 'logs-loxone-commands', refresh: 5, liveSwap: true }) %>
 
 <div class="tabs">
-  <a href="/logs/mqtt">MQTT broker</a>
-  <a href="/logs/loxone">Loxone Miniservers</a>
+  <% if (canView('logs_mqtt')) { %><a href="/logs/mqtt">MQTT broker</a><% } %>
+  <% if (canView('logs_loxone')) { %><a href="/logs/loxone">Loxone Miniservers</a><% } %>
   <a class="active" href="/logs/loxone-commands">Loxone commands</a>
-  <a href="/logs/system">System</a>
+  <% if (canView('logs_system')) { %><a href="/logs/system">System</a><% } %>
 </div>
 
 <p class="hint">
@@ -46,18 +46,23 @@
 
 <div class="filterable-table-card">
   <div class="table-toolbar">
+    <span class="log-selection-count hint" style="margin:0;"></span>
+    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label">Copy selection</span></button>
+    <% if (canEdit('logs_loxone_commands')) { %>
     <a href="/logs/loxone-commands/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
+    <% } %>
   </div>
 
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Time</th><th>Client</th><th>Command</th><th>From value</th><th>To value</th><th>Result</th></tr>
+      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th>Time</th><th>Client</th><th>Command</th><th>From value</th><th>To value</th><th>Result</th></tr>
     </thead>
     <tbody>
       <% rows.forEach(r => { %>
         <% const accepted = r.level !== 'error'; %>
         <tr>
+          <td class="col-select"><input type="checkbox"></td>
           <td><%= formatDateTime(r.recordedAt) %></td>
           <td><%= r.sourceLabel || '-' %></td>
           <td><code class="truncate" title="<%= r.commandTopic || '' %>"><%= r.commandTopic || '-' %></code></td>
@@ -70,11 +75,12 @@
         </tr>
       <% }) %>
       <% if (rows.length === 0) { %>
-        <tr><td colspan="6" class="empty">No Loxone commands received yet.</td></tr>
+        <tr><td colspan="7" class="empty">No Loxone commands received yet.</td></tr>
       <% } %>
     </tbody>
   </table>
   </div>
 </div>
 
+<script src="/log-select.js" defer></script>
 <%- include('partials/foot') %>

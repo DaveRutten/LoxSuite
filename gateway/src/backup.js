@@ -1,9 +1,12 @@
 const path = require('path');
+const os = require('os');
 const fs = require('fs');
+const { execFile } = require('child_process');
 const Database = require('better-sqlite3');
 const AdmZip = require('adm-zip');
 const cronParser = require('cron-parser');
 const db = require('./db');
+const { notifyBackupFailed } = require('./notifications');
 
 // Recomputed independently rather than imported from db.js, same convention already used by
 // mosquittoLog.js/loxone.js for their own env-configured paths (see MOSQUITTO_LOG_PATH there) —
@@ -17,6 +20,12 @@ const PENDING_RESTORE_PATH = `${DB_PATH}.restore`; // mirrors db.js's own consta
 // rather than failing the whole operation.
 const MOSQUITTO_CONFIG_DIR = process.env.MOSQUITTO_CONFIG_PATH || '/mosquitto/config';
 const DYNSEC_FILENAME = 'dynamic-security.json';
+// The broker's own static config (listener, persistence, logging, any custom TLS/tuning) — kept
+// alongside dynamic-security.json under the same "Include MQTT config" checkbox/manifest flag
+// rather than a separate toggle, since both live in the same mounted directory and are really one
+// "MQTT broker config" concept from a backup's point of view. Previously omitted entirely: a
+// restore only ever brought back users/roles/ACLs, silently dropping any hand-tuned mosquitto.conf.
+const MOSQUITTO_CONF_FILENAME = 'mosquitto.conf';
 
 const BACKUP_FILENAME_RE = /^backup-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.zip$/;
 
@@ -37,7 +46,9 @@ function updateSettings(fields) {
   const next = { ...current, ...fields };
   db.prepare(
     `UPDATE backup_settings SET enabled = ?, schedule_cron = ?, retention_count = ?, include_mqtt_config = ?,
-     last_run_at = ?, last_status = ?, last_error = ? WHERE id = 1`
+     last_run_at = ?, last_status = ?, last_error = ?,
+     rclone_enabled = ?, rclone_remote = ?, rclone_config = ?,
+     rclone_last_run_at = ?, rclone_last_status = ?, rclone_last_error = ? WHERE id = 1`
   ).run(
     next.enabled ? 1 : 0,
     next.schedule_cron,
@@ -45,7 +56,13 @@ function updateSettings(fields) {
     next.include_mqtt_config ? 1 : 0,
     next.last_run_at,
     next.last_status,
-    next.last_error
+    next.last_error,
+    next.rclone_enabled ? 1 : 0,
+    next.rclone_remote,
+    next.rclone_config,
+    next.rclone_last_run_at,
+    next.rclone_last_status,
+    next.rclone_last_error
   );
   return getSettings();
 }
@@ -72,6 +89,14 @@ async function createBackup({ includeMqttConfig = true, reason = 'manual' } = {}
       zip.addLocalFile(dynsecPath, '', DYNSEC_FILENAME);
       mqttConfigIncluded = true;
     }
+    // mosquitto.conf (listener/persistence/logging/any custom tuning) lives in the same mounted
+    // directory as dynamic-security.json — bundled under this same flag rather than a second
+    // checkbox, since from a backup's point of view they're one "MQTT broker config" concept.
+    const confPath = path.join(MOSQUITTO_CONFIG_DIR, MOSQUITTO_CONF_FILENAME);
+    if (fs.existsSync(confPath)) {
+      zip.addLocalFile(confPath, '', MOSQUITTO_CONF_FILENAME);
+      mqttConfigIncluded = true;
+    }
   }
 
   zip.addFile(
@@ -82,6 +107,20 @@ async function createBackup({ includeMqttConfig = true, reason = 'manual' } = {}
   fs.rmSync(tmpDbPath, { force: true });
 
   enforceRetention();
+
+  // Additive offsite copy — failing here must not fail the backup itself (the local zip already
+  // exists and retention already ran), just surface the failure on its own status fields so it's
+  // visible on the Backups page without silently pretending the offsite copy succeeded.
+  const settings = getSettings();
+  if (settings.rclone_enabled) {
+    try {
+      await uploadToRclone(finalPath, settings);
+      updateSettings({ rclone_last_run_at: new Date().toISOString(), rclone_last_status: 'ok', rclone_last_error: null });
+    } catch (err) {
+      updateSettings({ rclone_last_run_at: new Date().toISOString(), rclone_last_status: 'error', rclone_last_error: err.message });
+      notifyBackupFailed(err.message, 'offsite copy (rclone)');
+    }
+  }
 
   return { filename: path.basename(finalPath), createdAt: now.toISOString(), includesMqttConfig: mqttConfigIncluded };
 }
@@ -202,7 +241,85 @@ function stageRestore(zipBuffer) {
     }
   }
 
+  // Same "write now, only takes effect on the shared container's next restart" reasoning as
+  // dynamic-security.json above — no structural validation attempted here (unlike that file's
+  // clients/roles array check) since a plain-text broker config has no equivalently simple shape
+  // to check; a malformed one just fails loudly when mosquitto itself tries to load it after the
+  // restart, same as hand-editing it directly would.
+  const confEntry = zip.getEntry(MOSQUITTO_CONF_FILENAME);
+  if (confEntry && fs.existsSync(MOSQUITTO_CONFIG_DIR)) {
+    const confPath = path.join(MOSQUITTO_CONFIG_DIR, MOSQUITTO_CONF_FILENAME);
+    const content = zip.readFile(confEntry);
+    let ownership = null;
+    if (fs.existsSync(confPath)) {
+      const stat = fs.statSync(confPath);
+      ownership = { uid: stat.uid, gid: stat.gid, mode: stat.mode };
+    }
+    fs.writeFileSync(confPath, content);
+    if (ownership) {
+      fs.chownSync(confPath, ownership.uid, ownership.gid);
+      fs.chmodSync(confPath, ownership.mode);
+    }
+    mqttConfigRestored = true;
+  }
+
   return { restartTargets, mqttConfigRestored };
+}
+
+// rclone_config holds a whole rclone.conf's worth of text (an admin runs `rclone config`
+// wherever's convenient — their own machine, another server — and pastes the result in) — written
+// to a throwaway temp file only for the lifetime of a single rclone invocation, never left sitting
+// on disk as its own file, since it carries the remote's own credentials.
+function writeTempRcloneConfig(configContent) {
+  const tmpPath = path.join(os.tmpdir(), `loxsuite-rclone-${Date.now()}-${Math.random().toString(36).slice(2)}.conf`);
+  fs.writeFileSync(tmpPath, configContent || '', { mode: 0o600 });
+  return tmpPath;
+}
+
+function runRclone(args, configPath, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    execFile('rclone', ['--config', configPath, ...args], { timeout: timeoutMs }, (err, stdout, stderr) => {
+      if (err) {
+        // rclone's own error text (stderr) is far more useful here than execFile's generic
+        // "Command failed" — trimmed to its last few lines since a config/auth failure can print a
+        // fair amount of preceding diagnostic noise before the actual reason.
+        const detail = (stderr || err.message || '').toString().trim().split('\n').slice(-3).join(' ');
+        reject(new Error(detail || 'rclone failed'));
+        return;
+      }
+      resolve(stdout ? stdout.toString() : '');
+    });
+  });
+}
+
+// Additive-only upload of one already-created local backup zip — deliberately never deletes or
+// mirrors anything on the remote side (rclone `copyto`, not `sync`), so this can't ever prune an
+// offsite copy the local retention settings above have already aged out; that stays entirely up to
+// whatever lifecycle rules (or manual cleanup) the admin sets on the remote itself.
+async function uploadToRclone(localZipPath, settings) {
+  const s = settings || getSettings();
+  if (!s.rclone_remote) throw new Error('No rclone remote configured.');
+  const configPath = writeTempRcloneConfig(s.rclone_config);
+  try {
+    const dest = `${s.rclone_remote.replace(/\/+$/, '')}/${path.basename(localZipPath)}`;
+    await runRclone(['copyto', localZipPath, dest], configPath, 120000);
+  } finally {
+    fs.rmSync(configPath, { force: true });
+  }
+}
+
+// Backs the Backups page's "Test connection" button — lists the remote path's own contents without
+// touching any files, the lightest read-only operation that still proves both the pasted config and
+// the remote path actually work end to end.
+async function testRcloneConnection(settings) {
+  const s = settings || getSettings();
+  if (!s.rclone_remote) throw new Error('No rclone remote configured.');
+  const configPath = writeTempRcloneConfig(s.rclone_config);
+  try {
+    await runRclone(['lsd', s.rclone_remote], configPath, 20000);
+  } finally {
+    fs.rmSync(configPath, { force: true });
+  }
 }
 
 let scheduledTimer = null;
@@ -239,6 +356,7 @@ function scheduleNext() {
         updateSettings({ last_run_at: new Date().toISOString(), last_status: 'ok', last_error: null });
       } catch (err) {
         updateSettings({ last_run_at: new Date().toISOString(), last_status: 'error', last_error: err.message });
+        notifyBackupFailed(err.message, 'scheduled backup');
       }
     }
     scheduleNext();
@@ -267,4 +385,5 @@ module.exports = {
   updateSettings,
   startScheduler,
   rescheduleFromSettings,
+  testRcloneConnection,
 };

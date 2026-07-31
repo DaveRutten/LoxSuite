@@ -20,6 +20,11 @@ const ICONS = {
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
   share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.6 15.4 6.4M8.6 13.4 15.4 17.6"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+  // Outline by default like every other icon here — a favorited dashboard's own button toggles a
+  // CSS class (.is-favorited, see style.css) that fills it instead, rather than this needing a
+  // second icon definition just for that.
+  star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
   // Two sources bridging into one hub — Loxone and MQTT devices merging into this
   // gateway. An original mark (not the Loxone logo) used as the app's brand icon.
   logo: '<circle cx="7" cy="6" r="1.8" fill="currentColor" stroke="none"/><circle cx="17" cy="6" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="18" r="2.2" fill="currentColor" stroke="none"/><path d="M8.3 7.6 10.6 15.4"/><path d="M15.7 7.6 13.4 15.4"/>',

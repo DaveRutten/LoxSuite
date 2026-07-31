@@ -36,21 +36,28 @@ const logsRoutes = require('./routes/logs');
 const dashboardsRoutes = require('./routes/dashboards');
 const adminRoutes = require('./routes/admin');
 const backupRoutes = require('./routes/backup');
+const notificationsRoutes = require('./routes/notifications');
+const setupRoutes = require('./routes/setup');
 const profileRoutes = require('./routes/profile');
 const avatarRoutes = require('./routes/avatar');
 const { icon } = require('./icons');
+const { toggleSwitch } = require('./toggleSwitch');
 const backup = require('./backup');
 const { formatDateTime, getDisplayTimezone } = require('./dateFormat');
+const { getVersionStatus, startVersionCheck } = require('./versionCheck');
 
 const app = express();
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.locals.icon = icon;
+app.locals.toggleSwitch = toggleSwitch;
 app.locals.formatDateTime = formatDateTime;
+app.locals.getVersionStatus = getVersionStatus;
 app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
 app.locals.serializeThresholdLadder = dashboardsRoutes.serializeThresholdLadder;
 app.locals.serializeValueMappings = dashboardsRoutes.serializeValueMappings;
+app.locals.serializeAnnotations = dashboardsRoutes.serializeAnnotations;
 // Exposed as a global for the client-side chart (public/monitor-chart.js) — everything
 // server-rendered uses formatDateTime() directly and never needs this.
 app.use((req, res, next) => { res.locals.displayTimezone = getDisplayTimezone(); next(); });
@@ -102,7 +109,7 @@ app.get('/', requireAuth, requirePermission('dashboard', 'view'), (req, res) => 
     sharedDashboard = { id: result.lastInsertRowid };
   }
   const dashboardMonitors = db.prepare('SELECT id, label, source_type FROM monitors ORDER BY label').all();
-  const panels = dashboardsRoutes.loadPanelsWithMonitors(sharedDashboard.id);
+  const panels = dashboardsRoutes.loadPanelsWithMonitors(sharedDashboard.id, req.query.range);
 
   res.render('dashboard', {
     username: req.session.username,
@@ -130,17 +137,25 @@ app.use('/mqtt-users', requireAuth, requirePermission('mqtt_users', 'view'), mqt
 app.use('/mqtt-roles', requireAuth, requirePermission('mqtt_roles', 'view'), mqttRolesRoutes);
 app.use('/transformations', requireAuth, requirePermission('transformations', 'view'), transformationsRoutes);
 app.use('/monitor', requireAuth, requirePermission('monitor', 'view'), monitorRoutes);
-app.use('/logs', requireAuth, requirePermission('logs', 'view'), logsRoutes);
+// logs.js serves four distinct areas (one per tab: logs_mqtt/logs_loxone/logs_loxone_commands/
+// logs_system), so it's gated per-route inside that file instead of once here — same reasoning as
+// mappings.js above.
+app.use('/logs', requireAuth, logsRoutes);
 // Serves both personal My Dashboards (ownership-gated, not part of the Access Roles matrix) and
 // the shared home Dashboard's panel mutations (gated internally by the `dashboard` area) — see
 // loadAccessibleDashboard/canMutate in routes/dashboards.js.
 app.use('/dashboards', requireAuth, dashboardsRoutes);
 app.use('/api/table-prefs', requireAuth, tablePrefsRoutes);
 app.use('/api/nav-prefs', requireAuth, navPrefsRoutes);
-// Mounted before the general '/admin' router below so its routes take precedence without relying
-// on that router falling through for a path it doesn't recognize.
+// Mounted before the general '/admin' router below so their routes take precedence without
+// relying on that router falling through for a path it doesn't recognize.
 app.use('/admin/backup', requireAuth, requireAdmin, backupRoutes);
+app.use('/admin/notifications', requireAuth, requireAdmin, notificationsRoutes);
 app.use('/admin', requireAuth, requireAdmin, adminRoutes);
+// Admin-only, same as the routes just above — the wizard changes global settings (timezone) and
+// adds Miniservers, not personal preferences, so it needs the same standing an Administrator's
+// own hands-on setup of those would.
+app.use('/setup', requireAuth, requireAdmin, setupRoutes);
 app.use('/profile', requireAuth, profileRoutes);
 app.use('/avatar', requireAuth, avatarRoutes);
 app.get('/help', requireAuth, (req, res) => res.render('help'));
@@ -153,8 +168,9 @@ startMonitorCollector();
 startLogCollector();
 startLiveConnections();
 backup.startScheduler();
+startVersionCheck();
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5582;
 app.listen(port, () => {
   console.log(`LoxSuite listening on port ${port}.`);
 });

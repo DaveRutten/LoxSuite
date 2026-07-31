@@ -107,6 +107,74 @@ function commandRecognitionString(topic) {
   return `MQTT:\\i${topic}=\\i\\v`;
 }
 
+// Loxone's RGB virtual output (Lighting Controller / Lumitech's own color half) sends its value
+// as a plain "H,S,V" string — Hue 0-360, Saturation 0-100, brightness (Value) 0-100 — a convention
+// shared across pretty much every third-party Loxone integration (Home Assistant's own Loxone
+// integration, node-red-contrib-loxone, ...), not something specific to this app. Converted here
+// to 0-255 RGB since that's what Shelly's own color/N/set JSON body expects.
+function loxoneHsvToRgb(raw) {
+  const parts = String(raw).split(',').map(Number);
+  if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return null;
+  const [h, s, v] = parts;
+  const c = (v / 100) * (s / 100);
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v / 100 - c;
+  let r1;
+  let g1;
+  let b1;
+  if (h < 60) [r1, g1, b1] = [c, x, 0];
+  else if (h < 120) [r1, g1, b1] = [x, c, 0];
+  else if (h < 180) [r1, g1, b1] = [0, c, x];
+  else if (h < 240) [r1, g1, b1] = [0, x, c];
+  else if (h < 300) [r1, g1, b1] = [x, 0, c];
+  else [r1, g1, b1] = [c, 0, x];
+  return {
+    red: Math.round((r1 + m) * 255),
+    green: Math.round((g1 + m) * 255),
+    blue: Math.round((b1 + m) * 255),
+  };
+}
+
+// Shelly RGBW-family devices (RGBW2/Bulb in color mode) — same conversion LoxBerry's own
+// "shelly_rgb&w" UDP transformer does, built natively here instead of needing that separate
+// plugin. transform_arg picks which of the three independent Loxone outputs this mapping carries
+// (white/rgb/tunablew); each publishes its own partial JSON body to the SAME color/N/set topic,
+// same as LoxBerry's own transformer does — Shelly itself is what merges partial updates onto
+// whatever it's already showing, this doesn't need to send a complete state every time.
+//
+// Best-effort against community-documented field names (Shelly's own official RGBW2 API doc isn't
+// something this app has direct access to) — verify actual color output against a real device
+// before relying on this, and it's easy to adjust once confirmed.
+function applyShellyRgbwTransform(mode, rawValue) {
+  if (mode === 'white') {
+    const pct = Math.max(0, Math.min(100, Math.round(Number(rawValue))));
+    if (!Number.isFinite(pct)) return String(rawValue);
+    return JSON.stringify({ white: pct, turn: pct > 0 ? 'on' : 'off' });
+  }
+  if (mode === 'rgb') {
+    const rgb = loxoneHsvToRgb(rawValue);
+    // Passes the raw value through unchanged rather than sending a malformed color command when
+    // it doesn't parse as "H,S,V" — a mapping mid-setup (nothing wired to it yet) shouldn't spam
+    // the device with a broken publish.
+    if (!rgb) return String(rawValue).trim();
+    return JSON.stringify({ ...rgb, turn: 'on' });
+  }
+  if (mode === 'tunablew') {
+    // Loxone's Lumitech output sends "brightness,kelvin" (brightness 0-100, kelvin 2700-6500).
+    // Shelly's own tunable-white range is narrower (3000-6500K), so this scales linearly across
+    // that instead of just clamping — a clamp would flatten every value below 3000K to the exact
+    // same output, losing the low end of Lumitech's range entirely instead of just compressing it.
+    const parts = String(rawValue).split(',').map(Number);
+    if (parts.length < 2 || parts.some((n) => !Number.isFinite(n))) return String(rawValue).trim();
+    const [brightness, kelvin] = parts;
+    const clampedKelvin = Math.max(2700, Math.min(6500, kelvin));
+    const scaledTemp = Math.round(3000 + ((clampedKelvin - 2700) / (6500 - 2700)) * (6500 - 3000));
+    const pct = Math.max(0, Math.min(100, Math.round(brightness)));
+    return JSON.stringify({ white: pct, temp: scaledTemp, turn: pct > 0 ? 'on' : 'off' });
+  }
+  return String(rawValue).trim();
+}
+
 // For the Loxone -> MQTT direction (e.g. Loxone sends a raw 0/1, but a Shelly
 // command topic expects the text "off"/"on").
 function applyLoxoneToMqttTransform(mapping, rawValue) {
@@ -116,6 +184,9 @@ function applyLoxoneToMqttTransform(mapping, rawValue) {
       .prepare('SELECT output_value FROM loxone_mapping_translations WHERE mapping_id = ? AND match_value = ?')
       .get(mapping.id, value);
     return row ? row.output_value : value;
+  }
+  if (mapping.value_transform === 'shelly_rgbw') {
+    return applyShellyRgbwTransform(mapping.transform_arg, rawValue);
   }
   return value;
 }

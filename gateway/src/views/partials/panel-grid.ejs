@@ -54,7 +54,22 @@
         <div class="value-mapping-rows"></div>
         <button type="button" class="btn-soft value-mapping-add-row">${icon('plus')} Add value</button>
         <textarea name="${fieldName}" class="value-mapping-hidden" hidden>${escAttr(serializeValueMappings(mappings))}</textarea>
-        <p class="hint" style="margin:0.4rem 0 0;">Shows the name instead of a matching reading's raw value — give it a color too, or leave that blank to just rename it.</p>
+        <p class="hint" style="margin:0.4rem 0 0;">Shows the name instead of a matching reading's raw value — every row gets a color too, starting from a default you can pick your own instead of.</p>
+      </div>
+    </details>`;
+  }
+
+  // Chart-only: a labeled vertical line at a fixed moment in time (see parseAnnotations in
+  // dashboards.js) — same collapsible dynamic-row-builder shape as thresholdField/valueMappingField
+  // above, just keyed by a datetime instead of a reading value/threshold.
+  function annotationField(fieldName, list) {
+    return `<details class="threshold-builder-details" style="grid-column:1/-1;" ${list && list.length > 0 ? 'open' : ''}>
+      <summary>Annotations (optional)</summary>
+      <div class="annotation-builder" data-name="${fieldName}">
+        <div class="annotation-builder-rows"></div>
+        <button type="button" class="btn-soft annotation-add-row">${icon('plus')} Add annotation</button>
+        <textarea name="${fieldName}" class="annotation-builder-hidden" hidden>${escAttr(serializeAnnotations(list))}</textarea>
+        <p class="hint" style="margin:0.4rem 0 0;">Marks a specific moment on the chart with a vertical line and label &mdash; e.g. "heating turned on".</p>
       </div>
     </details>`;
   }
@@ -128,8 +143,20 @@
           </select>
         </div>
         <div><label>Y-axis unit (optional)</label><%- unitField('unit_chart', '') %></div>
-        <div><label>Decimals</label><input type="number" name="decimals" value="2" min="0" max="6" step="1"></div>
+        <div><label>Stepped line</label><%- toggleSwitch('stepped_line', false) %></div>
+        <div><label>Show points on line</label><%- toggleSwitch('show_points', false) %></div>
+        <div><label>Fill area under line</label><%- toggleSwitch('fill_area', false) %></div>
+        <div><label>Y-axis scale</label>
+          <select name="y_scale_type">
+            <option value="linear">Linear</option>
+            <option value="logarithmic">Logarithmic</option>
+          </select>
+        </div>
+        <div><label>Y-axis min (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto"></div>
+        <div><label>Y-axis max (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto"></div>
+        <div><label>Zoom &amp; pan</label><%- toggleSwitch('enable_zoom', false) %></div>
         <%- thresholdField('chart_thresholds', []) %>
+        <%- annotationField('chart_annotations', []) %>
       </div>
 
       <div class="form-grid" id="value-layout-field" style="margin-top:0.85rem; display:none;">
@@ -141,20 +168,12 @@
           </select>
         </div>
         <div><label>Unit (optional)</label><%- unitField('unit_value', '') %></div>
-        <div>
-          <label>Decimals</label>
-          <input type="number" name="decimals_value" placeholder="Default (<%= defaultPanelDecimals %>)" min="0" max="6" step="1">
-        </div>
         <%- valueMappingField('value_labels', []) %>
         <%- thresholdField('value_thresholds', []) %>
-        <div style="grid-column:1/-1;">
-          <label>Rename in this panel (optional)</label>
-          <textarea name="monitor_names" rows="2" placeholder="Badkamer / tempActual=Bathroom temperature" style="width:100%; font-family:monospace; font-size:0.82rem;"></textarea>
-          <p class="hint" style="margin:0.3rem 0 0;">One per line, <code>&lt;monitor's current label&gt;=&lt;name to show here&gt;</code> — only changes how it's displayed in this panel, not the Monitor's own name.</p>
-        </div>
       </div>
 
       <div class="form-grid" id="table-fields" style="margin-top:0.85rem; display:none;">
+        <div><label>Value scale (multiplier, optional)</label><input type="number" name="scale_table" value="1" step="any"></div>
         <%- thresholdField('table_thresholds', []) %>
       </div>
 
@@ -162,6 +181,7 @@
         <div><label>Minimum</label><input type="number" name="gauge_min" value="0" step="any"></div>
         <div><label>Maximum</label><input type="number" name="gauge_max" value="100" step="any"></div>
         <div><label>Unit (optional)</label><%- unitField('unit_gauge', '') %></div>
+        <div><label>Value scale (multiplier, optional)</label><input type="number" name="scale_gauge" value="1" step="any"></div>
         <%- thresholdField('gauge_thresholds', []) %>
       </div>
 
@@ -175,6 +195,7 @@
             <option value="down_good">Lower is better</option>
           </select>
         </div>
+        <div><label>Value scale (multiplier, optional)</label><input type="number" name="scale_stat_delta" value="1" step="any"></div>
         <%- thresholdField('stat_delta_thresholds', []) %>
       </div>
 
@@ -190,11 +211,27 @@
         </div>
         <div><label>Threshold</label><input type="number" name="threshold_value" value="0" step="any"></div>
         <div><label>Unit (optional)</label><%- unitField('unit_threshold', '') %></div>
+        <div><label>Value scale (multiplier, optional)</label><input type="number" name="scale_threshold" value="1" step="any"></div>
+        <p class="hint" style="grid-column:1/-1; margin:0;">The threshold above is compared against the value <em>after</em> scaling.</p>
         <div><label>Label when normal</label><input type="text" name="label_ok" placeholder="Normal"></div>
         <div><label>Label when alert</label><input type="text" name="label_alert" placeholder="Alert"></div>
       </div>
 
       <p class="hint" style="margin-top:0.6rem;">New panels start at a default size &mdash; drag a panel's bottom-right corner afterwards to resize it.</p>
+
+      <details id="chart-series-settings" class="chart-series-settings threshold-builder-details" data-checklist-selector="#monitor-checklist" style="margin-top:0.85rem; display:none;">
+        <summary>Series settings (optional)</summary>
+        <div class="chart-series-rows"></div>
+        <textarea class="chart-series-hidden" name="chart_series" hidden>{}</textarea>
+        <p class="hint" style="margin:0.4rem 0 0;">Appears once you've checked a monitor below — rename a series, give it its own unit/scale/decimals, or move it to the right-hand axis.</p>
+      </details>
+
+      <details id="value-series-settings" class="value-series-settings threshold-builder-details" data-checklist-selector="#monitor-checklist" style="margin-top:0.85rem; display:none;">
+        <summary>Per-value name, unit, scale &amp; decimals (optional)</summary>
+        <div class="value-series-rows"></div>
+        <textarea class="value-series-hidden" name="value_series" hidden>{}</textarea>
+        <p class="hint" style="margin:0.4rem 0 0;">Appears once you've checked a monitor below — rename a value, give it its own unit, or scale/round it independently from the others.</p>
+      </details>
 
       <div style="margin-top:0.85rem;">
         <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);">
@@ -217,21 +254,20 @@
         </div>
       </div>
 
-      <div id="chart-series-settings" class="chart-series-settings" data-checklist-selector="#monitor-checklist" style="margin-top:0.85rem; display:none;">
-        <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);">
-          Series settings (optional)
-        </label>
-        <div class="chart-series-rows"></div>
-        <textarea class="chart-series-hidden" name="chart_series" hidden>{}</textarea>
-        <p class="hint" style="margin:0.4rem 0 0;">Appears once you've checked a monitor above — rename a series, give it its own unit, or move it to the right-hand axis.</p>
-      </div>
-
       <div style="margin-top:0.9rem;">
         <button type="submit" class="primary"><%- icon('plus') %> Add panel</button>
       </div>
     </form>
   </div>
 </details>
+<% } %>
+
+<% if (canEditPanels && panels.length > 1) { %>
+<div class="row-actions" style="justify-content:flex-end; margin-bottom:0.75rem;">
+  <button type="button" id="dash-auto-order-btn" class="btn-soft" title="Resize every panel to fit its own content, then pack them tightly with the fewest gaps">
+    <%- icon('grid') %> Auto order
+  </button>
+</div>
 <% } %>
 
 <div class="dash-grid" id="dash-grid">
@@ -275,33 +311,66 @@
           <label>Range</label>
           <%- rangeField(p.range) %>
         </div>
-        <div data-fields-for="chart">
-          <label>Legend</label>
-          <select name="legend_position">
-            <% var legendPos = p.panel_type === 'chart' ? (p.config.legendPosition || 'auto') : 'auto'; %>
-            <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto (only when &gt;1 monitor)</option>
-            <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
-            <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
-            <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
-            <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
-          </select>
+
+        <%
+          // Chart-only appearance/axis/interaction settings — grouped under a shared, always-shown
+          // (display:contents, see .panel-section in style.css) wrapper carrying ONE data-fields-for
+          // instead of repeating it on every field div: same toggle mechanism (the script below still
+          // just queries every [data-fields-for] and shows/hides by type), fewer places to keep in
+          // sync when a field moves between sections.
+          var legendPos = p.panel_type === 'chart' ? (p.config.legendPosition || 'auto') : 'auto';
+          var yScaleType = p.panel_type === 'chart' ? (p.config.yScaleType || 'linear') : 'linear';
+        %>
+        <div class="panel-section" data-fields-for="chart">
+          <div class="panel-section-title">Appearance</div>
+          <div>
+            <label>Legend</label>
+            <select name="legend_position">
+              <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto (only when &gt;1 monitor)</option>
+              <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
+              <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
+              <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
+              <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
+            </select>
+          </div>
+          <div><label>Y-axis unit</label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
+          <div><label>Stepped line</label><%- toggleSwitch('stepped_line', p.panel_type === 'chart' && !!p.config.stepped) %></div>
+          <div><label>Show points on line</label><%- toggleSwitch('show_points', p.panel_type === 'chart' && !!p.config.points) %></div>
+          <div><label>Fill area under line</label><%- toggleSwitch('fill_area', p.panel_type === 'chart' && !!p.config.fill) %></div>
         </div>
-        <div data-fields-for="chart"><label>Y-axis unit</label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
-        <div data-fields-for="chart"><label>Decimals</label><input type="number" name="decimals" value="<%= p.panel_type === 'chart' && p.config.decimals != null ? p.config.decimals : 2 %>" min="0" max="6" step="1"></div>
+        <div class="panel-section" data-fields-for="chart">
+          <div class="panel-section-title">Y-axis</div>
+          <div>
+            <label>Scale</label>
+            <select name="y_scale_type">
+              <option value="linear" <%= yScaleType === 'linear' ? 'selected' : '' %>>Linear</option>
+              <option value="logarithmic" <%= yScaleType === 'logarithmic' ? 'selected' : '' %>>Logarithmic</option>
+            </select>
+          </div>
+          <div><label>Minimum (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMin != null ? p.config.yMin : '' %>"></div>
+          <div><label>Maximum (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMax != null ? p.config.yMax : '' %>"></div>
+        </div>
+        <div class="panel-section" data-fields-for="chart">
+          <div class="panel-section-title">Interaction</div>
+          <div><label>Zoom &amp; pan (scroll to zoom, drag to pan)</label><%- toggleSwitch('enable_zoom', p.panel_type === 'chart' && !!p.config.zoom) %></div>
+        </div>
         <div data-fields-for="chart" style="grid-column:1/-1;">
           <%- thresholdField('chart_thresholds', p.panel_type === 'chart' ? p.config.thresholds : []) %>
         </div>
-        <div data-fields-for="value">
-          <label>Layout</label>
-          <select name="value_layout">
-            <option value="stacked" <%= !(p.panel_type === 'value' && p.config.layout === 'row') ? 'selected' : '' %>>Stacked (one per line)</option>
-            <option value="row" <%= p.panel_type === 'value' && p.config.layout === 'row' ? 'selected' : '' %>>Row (side by side)</option>
-          </select>
+        <div data-fields-for="chart" style="grid-column:1/-1;">
+          <%- annotationField('chart_annotations', p.panel_type === 'chart' ? p.config.annotations : []) %>
         </div>
-        <div data-fields-for="value"><label>Unit</label><%- unitField('unit_value', p.panel_type === 'value' ? (p.config.unit || '') : '') %></div>
-        <div data-fields-for="value">
-          <label>Decimals</label>
-          <input type="number" name="decimals_value" value="<%= p.panel_type === 'value' && p.config.decimals != null ? p.config.decimals : '' %>" placeholder="Default (<%= defaultPanelDecimals %>)" min="0" max="6" step="1">
+
+        <div class="panel-section" data-fields-for="value">
+          <div class="panel-section-title">Appearance</div>
+          <div>
+            <label>Layout</label>
+            <select name="value_layout">
+              <option value="stacked" <%= !(p.panel_type === 'value' && p.config.layout === 'row') ? 'selected' : '' %>>Stacked (one per line)</option>
+              <option value="row" <%= p.panel_type === 'value' && p.config.layout === 'row' ? 'selected' : '' %>>Row (side by side)</option>
+            </select>
+          </div>
+          <div><label>Unit</label><%- unitField('unit_value', p.panel_type === 'value' ? (p.config.unit || '') : '') %></div>
         </div>
         <div data-fields-for="value" style="grid-column:1/-1;">
           <%- valueMappingField('value_labels', p.panel_type === 'value' ? p.config.valueLabels : []) %>
@@ -309,52 +378,87 @@
         <div data-fields-for="value" style="grid-column:1/-1;">
           <%- thresholdField('value_thresholds', p.panel_type === 'value' ? p.config.thresholds : []) %>
         </div>
-        <div data-fields-for="value" style="grid-column:1/-1;">
-          <label>Rename in this panel</label>
-          <textarea name="monitor_names" rows="2" placeholder="Badkamer / tempActual=Bathroom temperature" style="width:100%; font-family:monospace; font-size:0.82rem;"><%= p.panel_type === 'value' ? serializeKeyValueLines(p.config.monitorNames) : '' %></textarea>
-          <p class="hint" style="margin:0.3rem 0 0;">One per line, <code>&lt;monitor's current label&gt;=&lt;name to show here&gt;</code> — display only, doesn't rename the Monitor itself.</p>
+        <details data-fields-for="value" class="value-series-settings threshold-builder-details" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;" <%= p.panel_type === 'value' && Object.keys(p.config.series || {}).length > 0 ? 'open' : '' %>>
+          <summary>Per-value name, unit, scale &amp; decimals</summary>
+          <div class="value-series-rows"></div>
+          <textarea class="value-series-hidden" name="value_series" hidden><%= p.panel_type === 'value' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
+          <p class="hint" style="margin:0.3rem 0 0;">Rename a value, give it its own unit, or scale/round it independently from the others &mdash; display only, doesn't rename the Monitor itself.</p>
+        </details>
+        <details data-fields-for="chart" class="chart-series-settings threshold-builder-details" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;" <%= p.panel_type === 'chart' && Object.keys(p.config.series || {}).length > 0 ? 'open' : '' %>>
+          <summary>Series settings</summary>
+          <div class="chart-series-rows"></div>
+          <textarea class="chart-series-hidden" name="chart_series" hidden><%= p.panel_type === 'chart' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
+          <p class="hint" style="margin:0.3rem 0 0;">Rename a series, give it its own unit/scale/decimals/line style, or move it to the right-hand axis.</p>
+        </details>
+
+        <div class="panel-section" data-fields-for="table">
+          <div class="panel-section-title">Appearance</div>
+          <div>
+            <label>Value scale (multiplier)</label>
+            <input type="number" name="scale_table" value="<%= p.panel_type === 'table' && p.config.scale != null ? p.config.scale : 1 %>" step="any">
+          </div>
         </div>
         <div data-fields-for="table" style="grid-column:1/-1;">
           <%- thresholdField('table_thresholds', p.panel_type === 'table' ? p.config.thresholds : []) %>
         </div>
-        <div data-fields-for="gauge"><label>Minimum</label><input type="number" name="gauge_min" value="<%= p.panel_type === 'gauge' ? p.config.min : 0 %>" step="any"></div>
-        <div data-fields-for="gauge"><label>Maximum</label><input type="number" name="gauge_max" value="<%= p.panel_type === 'gauge' ? p.config.max : 100 %>" step="any"></div>
-        <div data-fields-for="gauge"><label>Unit</label><%- unitField('unit_gauge', p.panel_type === 'gauge' ? (p.config.unit || '') : '') %></div>
+
+        <div class="panel-section" data-fields-for="gauge">
+          <div class="panel-section-title">Range</div>
+          <div><label>Minimum</label><input type="number" name="gauge_min" value="<%= p.panel_type === 'gauge' ? p.config.min : 0 %>" step="any"></div>
+          <div><label>Maximum</label><input type="number" name="gauge_max" value="<%= p.panel_type === 'gauge' ? p.config.max : 100 %>" step="any"></div>
+          <div><label>Unit</label><%- unitField('unit_gauge', p.panel_type === 'gauge' ? (p.config.unit || '') : '') %></div>
+          <div><label>Value scale (multiplier)</label><input type="number" name="scale_gauge" value="<%= p.panel_type === 'gauge' && p.config.scale != null ? p.config.scale : 1 %>" step="any"></div>
+        </div>
         <div data-fields-for="gauge" style="grid-column:1/-1;">
           <%- thresholdField('gauge_thresholds', p.panel_type === 'gauge' ? p.config.thresholds : []) %>
         </div>
-        <div data-fields-for="stat_delta"><label>Unit</label><%- unitField('unit_stat_delta', p.panel_type === 'stat_delta' ? (p.config.unit || '') : '') %></div>
-        <div data-fields-for="stat_delta">
-          <label>Color the change when</label>
-          <select name="direction">
-            <option value="neutral" <%= !(p.panel_type === 'stat_delta' && p.config.direction !== 'neutral') ? 'selected' : '' %>>Neutral (no color)</option>
-            <option value="up_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'up_good' ? 'selected' : '' %>>Higher is better</option>
-            <option value="down_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'down_good' ? 'selected' : '' %>>Lower is better</option>
-          </select>
+
+        <div class="panel-section" data-fields-for="stat_delta">
+          <div class="panel-section-title">Appearance</div>
+          <div><label>Unit</label><%- unitField('unit_stat_delta', p.panel_type === 'stat_delta' ? (p.config.unit || '') : '') %></div>
+          <div>
+            <label>Color the change when</label>
+            <select name="direction">
+              <option value="neutral" <%= !(p.panel_type === 'stat_delta' && p.config.direction !== 'neutral') ? 'selected' : '' %>>Neutral (no color)</option>
+              <option value="up_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'up_good' ? 'selected' : '' %>>Higher is better</option>
+              <option value="down_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'down_good' ? 'selected' : '' %>>Lower is better</option>
+            </select>
+          </div>
+          <div><label>Value scale (multiplier)</label><input type="number" name="scale_stat_delta" value="<%= p.panel_type === 'stat_delta' && p.config.scale != null ? p.config.scale : 1 %>" step="any"></div>
         </div>
         <div data-fields-for="stat_delta" style="grid-column:1/-1;">
           <%- thresholdField('stat_delta_thresholds', p.panel_type === 'stat_delta' ? p.config.thresholds : []) %>
         </div>
-        <div data-fields-for="threshold">
-          <label>Alert when value is</label>
-          <select name="threshold_operator">
-            <option value="gt" <%= !(p.panel_type === 'threshold') || p.config.operator === 'gt' ? 'selected' : '' %>>Above</option>
-            <option value="gte" <%= p.panel_type === 'threshold' && p.config.operator === 'gte' ? 'selected' : '' %>>Above or equal to</option>
-            <option value="lt" <%= p.panel_type === 'threshold' && p.config.operator === 'lt' ? 'selected' : '' %>>Below</option>
-            <option value="lte" <%= p.panel_type === 'threshold' && p.config.operator === 'lte' ? 'selected' : '' %>>Below or equal to</option>
-          </select>
+
+        <div class="panel-section" data-fields-for="threshold">
+          <div class="panel-section-title">Condition</div>
+          <div>
+            <label>Alert when value is</label>
+            <select name="threshold_operator">
+              <option value="gt" <%= !(p.panel_type === 'threshold') || p.config.operator === 'gt' ? 'selected' : '' %>>Above</option>
+              <option value="gte" <%= p.panel_type === 'threshold' && p.config.operator === 'gte' ? 'selected' : '' %>>Above or equal to</option>
+              <option value="lt" <%= p.panel_type === 'threshold' && p.config.operator === 'lt' ? 'selected' : '' %>>Below</option>
+              <option value="lte" <%= p.panel_type === 'threshold' && p.config.operator === 'lte' ? 'selected' : '' %>>Below or equal to</option>
+            </select>
+          </div>
+          <div><label>Threshold</label><input type="number" name="threshold_value" value="<%= p.panel_type === 'threshold' ? p.config.value : 0 %>" step="any"></div>
+          <div><label>Unit</label><%- unitField('unit_threshold', p.panel_type === 'threshold' ? (p.config.unit || '') : '') %></div>
+          <div><label>Value scale (multiplier)</label><input type="number" name="scale_threshold" value="<%= p.panel_type === 'threshold' && p.config.scale != null ? p.config.scale : 1 %>" step="any"></div>
+          <p class="hint" style="grid-column:1/-1; margin:0;">The threshold above is compared against the value <em>after</em> scaling.</p>
         </div>
-        <div data-fields-for="threshold"><label>Threshold</label><input type="number" name="threshold_value" value="<%= p.panel_type === 'threshold' ? p.config.value : 0 %>" step="any"></div>
-        <div data-fields-for="threshold"><label>Unit</label><%- unitField('unit_threshold', p.panel_type === 'threshold' ? (p.config.unit || '') : '') %></div>
-        <div data-fields-for="threshold"><label>Label when normal</label><input type="text" name="label_ok" value="<%= p.panel_type === 'threshold' ? p.config.labelOk : 'Normal' %>"></div>
-        <div data-fields-for="threshold"><label>Label when alert</label><input type="text" name="label_alert" value="<%= p.panel_type === 'threshold' ? p.config.labelAlert : 'Alert' %>"></div>
-        <div>
-          <label style="display:block; font-size:0.72rem; margin-bottom:0.1rem; color:var(--text-muted);">Monitors</label>
+        <div class="panel-section" data-fields-for="threshold">
+          <div class="panel-section-title">Labels</div>
+          <div><label>When normal</label><input type="text" name="label_ok" value="<%= p.panel_type === 'threshold' ? p.config.labelOk : 'Normal' %>"></div>
+          <div><label>When alert</label><input type="text" name="label_alert" value="<%= p.panel_type === 'threshold' ? p.config.labelAlert : 'Alert' %>"></div>
+        </div>
+
+        <div class="panel-section-title" style="grid-column:1/-1;">Monitors</div>
+        <div style="grid-column:1/-1;">
           <p class="hint panel-single-monitor-hint" data-fields-for="table,gauge,stat_delta,threshold" style="display:none; margin:0 0 0.25rem; font-size:0.7rem;">
             This panel type only uses the first checked monitor.
           </p>
           <input type="text" class="panel-monitor-filter" placeholder="Filter monitors&hellip;" style="margin-bottom:0.25rem; width:100%;">
-          <div class="panel-monitor-checklist" style="display:flex; flex-direction:column; max-height:100px; overflow-y:auto; overflow-x:hidden; padding:0.2rem; border:1px solid var(--border); border-radius:6px;">
+          <div class="panel-monitor-checklist" style="display:flex; flex-direction:column; max-height:220px; overflow-y:auto; overflow-x:hidden; padding:0.2rem; border:1px solid var(--border); border-radius:6px;">
             <% monitors.forEach(m => { %>
               <label class="panel-monitor-check-row" data-label="<%= m.label.toLowerCase() %>" style="display:flex; align-items:center; gap:0.3rem; font-size:0.75rem; min-width:0; padding:0.05rem 0;">
                 <input type="checkbox" name="monitor_ids" value="<%= m.id %>" style="flex-shrink:0;" <%= p.monitors.some(pm => pm.id === m.id) ? 'checked' : '' %>>
@@ -365,12 +469,6 @@
               <p class="hint" style="margin:0;">No monitors yet.</p>
             <% } %>
           </div>
-        </div>
-        <div data-fields-for="chart" class="chart-series-settings" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;">
-          <label style="display:block; font-size:0.72rem; margin-bottom:0.1rem; color:var(--text-muted);">Series settings</label>
-          <div class="chart-series-rows"></div>
-          <textarea class="chart-series-hidden" name="chart_series" hidden><%= p.panel_type === 'chart' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
-          <p class="hint" style="margin:0.3rem 0 0;">Rename a series, give it its own unit, or move it to the right-hand axis.</p>
         </div>
         <%
           // No Save button — every field change auto-saves (see the script near the bottom of
@@ -386,7 +484,16 @@
         <p class="hint">No monitors left in this panel &mdash; they may have been deleted from the Monitor page. Remove this panel or add a new one.</p>
       <% } else if (p.panel_type === 'chart') { %>
         <div class="chart-wrap">
-          <canvas data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.range %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= p.config.decimals != null ? p.config.decimals : 2 %>" data-thresholds="<%= JSON.stringify(p.config.thresholds || []) %>" data-series="<%= JSON.stringify(p.config.series || {}) %>"></canvas>
+          <%
+            // No panel-wide Decimals/Value scale for chart any more — every series can set its
+            // own of both in "Series settings" now, so the panel-wide ones were just a redundant
+            // extra step (same reasoning that already dropped them from the Current value panel
+            // type once its own per-value equivalents existed). data-decimals still needs ONE
+            // shared value here (not per-series) purely for the axis TICK labels, which really are
+            // shared across every series on that axis — falls back to the same Settings-page
+            // global default the Current value panel type's own per-value Decimals already does.
+          %>
+          <canvas data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.displayRange || p.range %>" data-range-until="<%= p.chartUntilMs || '' %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>" data-scale="1" data-fill="<%= p.config.fill ? '1' : '' %>" data-stepped="<%= p.config.stepped ? '1' : '' %>" data-points="<%= p.config.points ? '1' : '' %>" data-y-scale-type="<%= p.config.yScaleType || 'linear' %>" data-y-min="<%= p.config.yMin != null ? p.config.yMin : '' %>" data-y-max="<%= p.config.yMax != null ? p.config.yMax : '' %>" data-zoom="<%= p.config.zoom ? '1' : '' %>" data-thresholds="<%= JSON.stringify(p.config.thresholds || []) %>" data-annotations="<%= JSON.stringify(p.config.annotations || []) %>" data-series="<%= JSON.stringify(p.config.series || {}) %>"></canvas>
         </div>
       <% } else if (p.panel_type === 'table') { %>
         <div class="panel-table-scroll">
@@ -394,7 +501,7 @@
             <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
             <tbody>
               <% p.rows.forEach(r => { %>
-                <tr><td><%= formatDateTime(r.recordedAt) %></td><td><span class="truncate" title="<%= r.value %>" <% if (r.thresholdColor) { %>style="color: <%= r.thresholdColor %>; font-weight: 600;"<% } %>><%= r.value %></span></td></tr>
+                <tr><td><%= formatDateTime(r.recordedAt) %></td><td><span class="truncate" title="<%= r.displayValue %>" <% if (r.thresholdColor) { %>style="color: <%= r.thresholdColor %>; font-weight: 600;"<% } %>><%= r.displayValue %></span></td></tr>
               <% }) %>
               <% if (p.rows.length === 0) { %>
                 <tr><td colspan="2" class="empty">No readings in this range yet.</td></tr>
@@ -405,7 +512,7 @@
       <% } else if (p.panel_type === 'gauge') { %>
         <div class="gauge-wrap" data-live-id="panel-<%= p.id %>-body">
           <div class="gauge-track"><div class="gauge-fill" style="width: <%= p.percent === null ? 0 : p.percent %>%; <% if (p.thresholdColor) { %>background: <%= p.thresholdColor %>;<% } %>"></div></div>
-          <div class="gauge-value" <% if (p.thresholdColor) { %>style="color: <%= p.thresholdColor %>;"<% } %>><%= p.current ? p.current.value : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+          <div class="gauge-value" <% if (p.thresholdColor) { %>style="color: <%= p.thresholdColor %>;"<% } %>><%= p.current ? p.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
           <div class="hint" style="margin:0;"><%= p.config.min %>&ndash;<%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
         </div>
       <% } else if (p.panel_type === 'stat_delta') { %>
@@ -418,19 +525,19 @@
            }
         %>
         <div class="stat-delta" data-live-id="panel-<%= p.id %>-body">
-          <div class="stat-delta-value" <% if (p.thresholdColor) { %>style="color: <%= p.thresholdColor %>;"<% } %>><%= p.current ? p.current.value : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+          <div class="stat-delta-value" <% if (p.thresholdColor) { %>style="color: <%= p.thresholdColor %>;"<% } %>><%= p.current ? p.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
           <% if (p.delta === null) { %>
             <p class="hint" style="margin:0;">No comparison reading yet.</p>
           <% } else { %>
             <div class="stat-delta-change <%= deltaClass %>">
               <%- p.delta > 0 ? '&#9650;' : (p.delta < 0 ? '&#9660;' : '&#8212;') %> <%= Math.abs(p.delta).toFixed(2) %><%= p.config.unit ? ' ' + p.config.unit : '' %>
             </div>
-            <p class="hint" style="margin:0;">vs <%= RANGE_LABELS[p.range] || p.range %> ago</p>
+            <p class="hint" style="margin:0;">vs <%= RANGE_LABELS[p.displayRange || p.range] || p.displayRange || p.range %> ago</p>
           <% } %>
         </div>
       <% } else if (p.panel_type === 'threshold') { %>
         <div class="threshold-wrap" data-live-id="panel-<%= p.id %>-body">
-          <div class="gauge-value"><%= p.current ? p.current.value : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+          <div class="gauge-value"><%= p.current ? p.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
           <span class="badge <%= p.isAlert ? 'badge-off' : 'badge-ok' %>"><%= p.isAlert ? p.config.labelAlert : p.config.labelOk %></span>
         </div>
       <% } else { %>
@@ -442,7 +549,7 @@
                 <% if (m.miniserver_name) { %><span class="hint" style="margin:0;">(<%= m.miniserver_name %>)</span><% } %>
               </div>
               <div class="value" <% if (m.current && m.current.thresholdColor) { %>style="color: <%= m.current.thresholdColor %>;"<% } %>>
-                <%= m.current ? m.current.displayValue : '-' %><% if (m.current && !m.current.isLabel && p.config.unit) { %> <%= p.config.unit %><% } %>
+                <%= m.current ? m.current.displayValue : '-' %><% if (m.current && !m.current.isLabel && m.effectiveUnit) { %> <%= m.effectiveUnit %><% } %>
                 <span class="hint" style="margin:0; display:block; font-size:0.72rem;">
                   <%= m.current ? formatDateTime(m.current.recordedAt) : '' %>
                 </span>
@@ -473,6 +580,7 @@
     var statDeltaFields = document.getElementById('stat-delta-fields');
     var thresholdFields = document.getElementById('threshold-fields');
     var chartSeriesSettings = document.getElementById('chart-series-settings');
+    var valueSeriesSettings = document.getElementById('value-series-settings');
     var SINGLE_MONITOR_TYPES = ['table', 'gauge', 'stat_delta', 'threshold'];
     var NO_RANGE_TYPES = ['value', 'gauge', 'threshold'];
 
@@ -487,6 +595,7 @@
       statDeltaFields.style.display = type === 'stat_delta' ? '' : 'none';
       thresholdFields.style.display = type === 'threshold' ? '' : 'none';
       chartSeriesSettings.style.display = type === 'chart' ? '' : 'none';
+      valueSeriesSettings.style.display = type === 'value' ? '' : 'none';
     }
     panelTypeSelect.addEventListener('change', syncPanelType);
     syncPanelType();
@@ -625,9 +734,12 @@
 
 <script>
   // Drives every .threshold-builder (see thresholdField() above) — a dynamic add/remove-row UI
-  // (value + native color picker per row) that keeps a hidden textarea in sync in the exact
-  // "<value>=<color>" format the server already parses (dashboards.js's parseThresholdLadder), so
-  // nothing on the server side needed to change for this to stop being a hand-typed textarea.
+  // (value + native color picker + line/band style per row) that keeps a hidden textarea in sync
+  // in the exact "<value>=<color>=<style>" format the server already parses (dashboards.js's
+  // parseThresholdLadder), so nothing on the server side needed to change for this to stop being a
+  // hand-typed textarea. The Style column only visibly changes anything on a Chart panel (drawn as
+  // either a dashed line or a filled band — see makeThresholdPlugin in monitor-chart.js); every
+  // other panel type that reuses this same builder for value-coloring just ignores it.
   (function () {
     // A native <input type="color"> only accepts a strict 7-char hex value — an existing config
     // saved as a CSS name (e.g. "orange", from before this builder existed, or hand-edited) has to
@@ -649,23 +761,30 @@
       builder.querySelectorAll('.threshold-builder-row').forEach(function (row) {
         var value = row.querySelector('.threshold-row-value').value.trim();
         var color = row.querySelector('.threshold-row-color').value;
-        if (value !== '' && color) lines.push(value + '=' + color);
+        var style = row.querySelector('.threshold-row-style').value;
+        if (value !== '' && color) lines.push(value + '=' + color + '=' + style);
       });
       builder.querySelector('.threshold-builder-hidden').value = lines.join('\n');
     }
 
-    function addRow(builder, value, color) {
+    function addRow(builder, value, color, style) {
       var row = document.createElement('div');
       row.className = 'threshold-builder-row';
       row.innerHTML =
         '<input type="number" class="threshold-row-value" placeholder="Value" step="any">' +
+        '<select class="threshold-row-style" title="Line: a dashed line at this value. Band: a filled zone from this value up to the next threshold.">' +
+          '<option value="line">Line</option>' +
+          '<option value="band">Band</option>' +
+        '</select>' +
         '<input type="color" class="threshold-row-color">' +
         '<button type="button" class="icon-btn icon-btn-danger threshold-row-remove" title="Remove" aria-label="Remove">&times;</button>';
       row.querySelector('.threshold-row-value').value = value == null ? '' : value;
+      row.querySelector('.threshold-row-style').value = style === 'band' ? 'band' : 'line';
       row.querySelector('.threshold-row-color').value = toHexColor(color || '#e34948');
       builder.querySelector('.threshold-builder-rows').appendChild(row);
 
       row.querySelector('.threshold-row-value').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.threshold-row-style').addEventListener('change', function () { serializeRows(builder); });
       row.querySelector('.threshold-row-color').addEventListener('input', function () { serializeRows(builder); });
       row.querySelector('.threshold-row-remove').addEventListener('click', function () {
         row.remove();
@@ -676,12 +795,12 @@
     document.querySelectorAll('.threshold-builder').forEach(function (builder) {
       var hidden = builder.querySelector('.threshold-builder-hidden');
       hidden.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
-        var idx = line.indexOf('=');
-        if (idx === -1) return;
-        addRow(builder, line.slice(0, idx), line.slice(idx + 1));
+        var parts = line.split('=');
+        if (parts.length < 2) return;
+        addRow(builder, parts[0], parts[1], parts[2]);
       });
       builder.querySelector('.threshold-add-row').addEventListener('click', function () {
-        addRow(builder, '', '#e34948');
+        addRow(builder, '', '#e34948', 'line');
         serializeRows(builder);
       });
     });
@@ -711,37 +830,34 @@
       builder.querySelectorAll('.value-mapping-row').forEach(function (row) {
         var value = row.querySelector('.value-mapping-row-value').value.trim();
         var name = row.querySelector('.value-mapping-row-name').value.trim();
-        var hasColor = row.querySelector('.value-mapping-row-color-enabled').checked;
-        var color = hasColor ? row.querySelector('.value-mapping-row-color').value : '';
-        if (value !== '' && name !== '') lines.push(value + '=' + name + (color ? '=' + color : ''));
+        var color = row.querySelector('.value-mapping-row-color').value;
+        if (value !== '' && name !== '') lines.push(value + '=' + name + '=' + color);
       });
       builder.querySelector('.value-mapping-hidden').value = lines.join('\n');
     }
 
+    // Every row always carries a color — starting from a default (rotated through a small fixed
+    // palette so several rows added in one go don't all start out identical) rather than gated
+    // behind its own "give this value a color" checkbox, which was one more click for what's the
+    // common case anyway and, on top of that, rendered as a plain unthemed white box in dark mode.
+    var DEFAULT_ROW_COLORS = ['#e34948', '#5CA83F', '#2f7fd6', '#b45309', '#7c3aed', '#0891b2'];
     function addRow(builder, value, name, color) {
+      var index = builder.querySelectorAll('.value-mapping-row').length;
       var row = document.createElement('div');
       row.className = 'value-mapping-row';
       row.innerHTML =
         '<input type="text" class="value-mapping-row-value" placeholder="Value">' +
         '<input type="text" class="value-mapping-row-name" placeholder="Name to show">' +
-        '<input type="checkbox" class="value-mapping-row-color-enabled" title="Give this value its own color">' +
         '<input type="color" class="value-mapping-row-color">' +
         '<button type="button" class="icon-btn icon-btn-danger value-mapping-row-remove" title="Remove" aria-label="Remove">&times;</button>';
       row.querySelector('.value-mapping-row-value').value = value == null ? '' : value;
       row.querySelector('.value-mapping-row-name').value = name == null ? '' : name;
-      var colorEnabled = !!color;
-      row.querySelector('.value-mapping-row-color-enabled').checked = colorEnabled;
-      row.querySelector('.value-mapping-row-color').value = toHexColor(color || '#e34948');
-      row.querySelector('.value-mapping-row-color').style.visibility = colorEnabled ? '' : 'hidden';
+      row.querySelector('.value-mapping-row-color').value = toHexColor(color || DEFAULT_ROW_COLORS[index % DEFAULT_ROW_COLORS.length]);
       builder.querySelector('.value-mapping-rows').appendChild(row);
 
       row.querySelector('.value-mapping-row-value').addEventListener('input', function () { serializeRows(builder); });
       row.querySelector('.value-mapping-row-name').addEventListener('input', function () { serializeRows(builder); });
       row.querySelector('.value-mapping-row-color').addEventListener('input', function () { serializeRows(builder); });
-      row.querySelector('.value-mapping-row-color-enabled').addEventListener('change', function (e) {
-        row.querySelector('.value-mapping-row-color').style.visibility = e.target.checked ? '' : 'hidden';
-        serializeRows(builder);
-      });
       row.querySelector('.value-mapping-row-remove').addEventListener('click', function () {
         row.remove();
         serializeRows(builder);
@@ -758,6 +874,86 @@
       });
       builder.querySelector('.value-mapping-add-row').addEventListener('click', function () {
         addRow(builder, '', '', '');
+        serializeRows(builder);
+      });
+    });
+  })();
+</script>
+
+<script>
+  // Drives every .annotation-builder (see annotationField() above) — same dynamic add/remove-row
+  // shape as the value-mapping builder just above, keyed by a datetime instead of a reading value,
+  // kept in the "<epoch-ms>=<label>[=<color>]" format dashboards.js's parseAnnotations expects.
+  (function () {
+    function toHexColor(color) {
+      var probe = document.createElement('div');
+      probe.style.color = color;
+      document.body.appendChild(probe);
+      var computed = getComputedStyle(probe).color;
+      document.body.removeChild(probe);
+      var m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (!m) return '#5b6472';
+      function hex(n) { return Number(n).toString(16).padStart(2, '0'); }
+      return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
+    }
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+    // datetime-local reads/writes in whatever timezone the BROWSER is in, same as the Range field's
+    // own absolute-range inputs elsewhere in this file — the value stored server-side is always a
+    // plain epoch ms, so this is purely a display-time conversion.
+    function toLocalInputValue(ms) {
+      var d = new Date(ms);
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    function serializeRows(builder) {
+      var lines = [];
+      builder.querySelectorAll('.annotation-row').forEach(function (row) {
+        var timeStr = row.querySelector('.annotation-row-time').value;
+        var label = row.querySelector('.annotation-row-label').value.trim();
+        var color = row.querySelector('.annotation-row-color').value;
+        if (!timeStr || !label) return;
+        var ms = new Date(timeStr).getTime();
+        if (!Number.isFinite(ms)) return;
+        lines.push(ms + '=' + label + '=' + color);
+      });
+      builder.querySelector('.annotation-builder-hidden').value = lines.join('\n');
+    }
+
+    function addRow(builder, ms, label, color) {
+      var row = document.createElement('div');
+      row.className = 'annotation-row';
+      row.innerHTML =
+        '<input type="datetime-local" class="annotation-row-time">' +
+        '<input type="text" class="annotation-row-label" placeholder="Label">' +
+        '<input type="color" class="annotation-row-color">' +
+        '<button type="button" class="icon-btn icon-btn-danger annotation-row-remove" title="Remove" aria-label="Remove">&times;</button>';
+      row.querySelector('.annotation-row-time').value = toLocalInputValue(ms != null ? ms : Date.now());
+      row.querySelector('.annotation-row-label').value = label == null ? '' : label;
+      row.querySelector('.annotation-row-color').value = toHexColor(color || '#5b6472');
+      builder.querySelector('.annotation-builder-rows').appendChild(row);
+
+      row.querySelector('.annotation-row-time').addEventListener('change', function () { serializeRows(builder); });
+      row.querySelector('.annotation-row-label').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.annotation-row-color').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.annotation-row-remove').addEventListener('click', function () {
+        row.remove();
+        serializeRows(builder);
+      });
+    }
+
+    document.querySelectorAll('.annotation-builder').forEach(function (builder) {
+      var hidden = builder.querySelector('.annotation-builder-hidden');
+      hidden.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
+        var parts = line.split('=');
+        if (parts.length < 2) return;
+        var ms = Number(parts[0]);
+        if (!Number.isFinite(ms)) return;
+        var color = parts.length > 2 ? parts.slice(2).join('=').trim() : '';
+        addRow(builder, ms, parts[1], color);
+      });
+      builder.querySelector('.annotation-add-row').addEventListener('click', function () {
+        addRow(builder, Date.now(), '', '#5b6472');
         serializeRows(builder);
       });
     });
@@ -841,6 +1037,56 @@
       return select.value === '__custom__' ? input.value.trim() : select.value;
     }
 
+    // Same select-or-custom-input shape as buildUnitPicker just above — a bare number input made
+    // "×0.001 for Wh → kWh" something you had to already know to type correctly, where a preset
+    // list gets you there by picking the unit conversion you actually want.
+    var SCALE_PRESETS = [0.001, 0.01, 0.1, 1, 10, 100, 1000];
+    function buildScalePicker(currentValue) {
+      var wrap = document.createElement('span');
+      wrap.className = 'chart-series-row-scale-wrap';
+      var value = currentValue == null || currentValue === '' ? 1 : Number(currentValue);
+      var isCustom = SCALE_PRESETS.indexOf(value) === -1;
+      var select = document.createElement('select');
+      select.className = 'chart-series-row-scale-select';
+      SCALE_PRESETS.forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s === 1 ? '×1 (none)' : '×' + s;
+        if (value === s) opt.selected = true;
+        select.appendChild(opt);
+      });
+      var customOpt = document.createElement('option');
+      customOpt.value = '__custom__';
+      customOpt.textContent = 'Custom…';
+      if (isCustom) customOpt.selected = true;
+      select.appendChild(customOpt);
+
+      var input = document.createElement('input');
+      input.type = 'number';
+      input.step = 'any';
+      input.className = 'chart-series-row-scale-custom';
+      input.placeholder = 'Scale';
+      input.value = isCustom ? value : '';
+      input.style.display = isCustom ? '' : 'none';
+
+      select.addEventListener('change', function () {
+        input.style.display = select.value === '__custom__' ? '' : 'none';
+        if (select.value === '__custom__') input.focus();
+      });
+
+      wrap.appendChild(select);
+      wrap.appendChild(input);
+      return wrap;
+    }
+
+    function scalePickerValue(wrap) {
+      var select = wrap.querySelector('.chart-series-row-scale-select');
+      var input = wrap.querySelector('.chart-series-row-scale-custom');
+      var raw = select.value === '__custom__' ? input.value : select.value;
+      var n = Number(raw);
+      return Number.isFinite(n) && n !== 0 ? n : null;
+    }
+
     function buildRow(monitorId, monitorLabel, override) {
       var row = document.createElement('div');
       row.className = 'chart-series-row';
@@ -849,24 +1095,39 @@
         '<span class="chart-series-row-label"></span>' +
         '<input type="text" class="chart-series-row-name" placeholder="Name">' +
         '<span class="chart-series-row-unit-slot"></span>' +
-        '<select class="chart-series-row-axis"><option value="left">Left axis</option><option value="right">Right axis</option></select>' +
+        '<span class="chart-series-row-scale-slot"></span>' +
+        '<input type="number" class="chart-series-row-decimals" placeholder="Dec." min="0" max="6" step="1" title="Decimals for this series\' tooltip — blank uses the panel\'s own Decimals setting">' +
+        '<select class="chart-series-row-axis" title="Which Y-axis this series is plotted against"><option value="left">Left axis</option><option value="right">Right axis</option></select>' +
+        '<select class="chart-series-row-style" title="Line style — blank uses a plain solid line">' +
+          '<option value="">Solid</option>' +
+          '<option value="solid-thick">Solid (thick)</option>' +
+          '<option value="dashed">Dashed</option>' +
+          '<option value="dotted">Dotted</option>' +
+        '</select>' +
         '<input type="checkbox" class="chart-series-row-color-enabled" title="Give this series its own color">' +
         '<input type="color" class="chart-series-row-color">';
       row.querySelector('.chart-series-row-label').textContent = monitorLabel;
       row.querySelector('.chart-series-row-label').title = monitorLabel;
       row.querySelector('.chart-series-row-name').value = (override && override.name) || '';
+      row.querySelector('.chart-series-row-decimals').value = (override && override.decimals != null) ? override.decimals : '';
       row.querySelector('.chart-series-row-axis').value = (override && override.axis === 'right') ? 'right' : 'left';
+      row.querySelector('.chart-series-row-style').value = (override && override.style) || '';
 
       var unitPicker = buildUnitPicker((override && override.unit) || '');
       row.querySelector('.chart-series-row-unit-slot').replaceWith(unitPicker);
+      var scalePicker = buildScalePicker(override && override.scale);
+      row.querySelector('.chart-series-row-scale-slot').replaceWith(scalePicker);
 
       var colorValue = override && override.color;
       var colorEnabled = !!colorValue;
       row.querySelector('.chart-series-row-color-enabled').checked = colorEnabled;
       row.querySelector('.chart-series-row-color').value = toHexColor(colorValue || '#e34948');
-      row.querySelector('.chart-series-row-color').style.visibility = colorEnabled ? '' : 'hidden';
+      // .is-disabled dims the swatch rather than hiding it outright — see that class in style.css
+      // for why: its circular border stayed the row's only visual hint a color picker lives there
+      // at all, so hiding the whole element along with the fill left a blank gap in its place.
+      row.querySelector('.chart-series-row-color').classList.toggle('is-disabled', !colorEnabled);
       row.querySelector('.chart-series-row-color-enabled').addEventListener('change', function (e) {
-        row.querySelector('.chart-series-row-color').style.visibility = e.target.checked ? '' : 'hidden';
+        row.querySelector('.chart-series-row-color').classList.toggle('is-disabled', !e.target.checked);
       });
 
       return row;
@@ -887,15 +1148,20 @@
           var id = row.dataset.monitorId;
           var name = row.querySelector('.chart-series-row-name').value.trim();
           var unit = unitPickerValue(row.querySelector('.chart-series-row-unit-wrap'));
+          var scale = scalePickerValue(row.querySelector('.chart-series-row-scale-wrap'));
+          var decimalsRaw = row.querySelector('.chart-series-row-decimals').value.trim();
+          var decimals = decimalsRaw === '' ? null : Number(decimalsRaw);
+          if (!Number.isFinite(decimals)) decimals = null;
           var axis = row.querySelector('.chart-series-row-axis').value;
+          var style = row.querySelector('.chart-series-row-style').value;
           var hasColor = row.querySelector('.chart-series-row-color-enabled').checked;
           var color = hasColor ? row.querySelector('.chart-series-row-color').value : null;
-          var entry = { name: name || null, unit: unit || null, axis: axis, color: color };
+          var entry = { name: name || null, unit: unit || null, scale: scale === 1 ? null : scale, decimals: decimals, axis: axis, color: color, style: style || null };
           // Kept in the in-memory cache (not just `out`) even when blank, so unchecking a monitor
           // and re-checking it later in the same session still shows whatever was last entered —
           // only what actually has a real value ends up in the submitted `out`.
           cache[id] = entry;
-          if (name || unit || axis === 'right' || color) out[id] = entry;
+          if (name || unit || entry.scale != null || decimals != null || axis === 'right' || color || style) out[id] = entry;
         });
         hidden.value = JSON.stringify(out);
       }
@@ -925,6 +1191,81 @@
       });
       rebuildRows();
     });
+
+    // A "Current value" panel's per-monitor rename + unit override — same checked-monitor-driven
+    // row builder as .chart-series-settings just above (reusing its buildUnitPicker/unitPickerValue
+    // helpers directly, since neither cares which panel type it's called from), minus the
+    // chart-only axis/color fields a value panel has no use for.
+    function buildValueSeriesRow(monitorId, monitorLabel, override) {
+      var row = document.createElement('div');
+      row.className = 'chart-series-row value-series-row';
+      row.dataset.monitorId = monitorId;
+      row.innerHTML =
+        '<span class="chart-series-row-label"></span>' +
+        '<input type="text" class="chart-series-row-name" placeholder="Name">' +
+        '<span class="chart-series-row-unit-slot"></span>' +
+        '<span class="chart-series-row-scale-slot"></span>' +
+        '<input type="number" class="value-series-row-decimals" placeholder="Dec." min="0" max="6" step="1" title="Decimals — blank uses the panel/global default">';
+      row.querySelector('.chart-series-row-label').textContent = monitorLabel;
+      row.querySelector('.chart-series-row-label').title = monitorLabel;
+      row.querySelector('.chart-series-row-name').value = (override && override.name) || '';
+      var unitPicker = buildUnitPicker((override && override.unit) || '');
+      row.querySelector('.chart-series-row-unit-slot').replaceWith(unitPicker);
+      var scalePicker = buildScalePicker(override && override.scale);
+      row.querySelector('.chart-series-row-scale-slot').replaceWith(scalePicker);
+      row.querySelector('.value-series-row-decimals').value = (override && override.decimals != null) ? override.decimals : '';
+      return row;
+    }
+
+    document.querySelectorAll('.value-series-settings').forEach(function (container) {
+      var form = container.closest('form');
+      var checklist = form.querySelector(container.dataset.checklistSelector);
+      if (!checklist) return;
+      var hidden = container.querySelector('.value-series-hidden');
+      var rowsEl = container.querySelector('.value-series-rows');
+      var cache = {};
+      try { cache = JSON.parse(hidden.value || '{}'); } catch (e) { /* malformed — start empty */ }
+
+      function serialize() {
+        var out = {};
+        rowsEl.querySelectorAll('.value-series-row').forEach(function (row) {
+          var id = row.dataset.monitorId;
+          var name = row.querySelector('.chart-series-row-name').value.trim();
+          var unit = unitPickerValue(row.querySelector('.chart-series-row-unit-wrap'));
+          var scale = scalePickerValue(row.querySelector('.chart-series-row-scale-wrap'));
+          if (scale === 1) scale = null;
+          var decimalsRaw = row.querySelector('.value-series-row-decimals').value.trim();
+          var decimals = decimalsRaw === '' ? null : Number(decimalsRaw);
+          if (!Number.isFinite(decimals)) decimals = null;
+          var entry = { name: name || null, unit: unit || null, scale: scale, decimals: decimals };
+          cache[id] = entry;
+          if (name || unit || entry.scale != null || entry.decimals != null) out[id] = entry;
+        });
+        hidden.value = JSON.stringify(out);
+      }
+
+      function rebuildRows() {
+        var checked = Array.prototype.slice.call(checklist.querySelectorAll('input[type="checkbox"]:checked'));
+        rowsEl.innerHTML = '';
+        checked.forEach(function (checkbox) {
+          var id = checkbox.value;
+          var labelEl = checkbox.closest('label');
+          var monitorLabel = labelEl ? labelEl.textContent.trim().replace(/\s*\([a-z_]+\)\s*$/i, '') : id;
+          var row = buildValueSeriesRow(id, monitorLabel, cache[id]);
+          Array.prototype.forEach.call(row.querySelectorAll('input, select'), function (el) {
+            el.addEventListener('input', serialize);
+            el.addEventListener('change', serialize);
+          });
+          rowsEl.appendChild(row);
+        });
+        serialize();
+      }
+
+      checklist.addEventListener('change', function (e) {
+        if (e.target.matches('input[type="checkbox"]')) rebuildRows();
+      });
+      rebuildRows();
+    });
   })();
 </script>
 
@@ -938,12 +1279,85 @@
     var backdrop = document.getElementById('panel-edit-backdrop');
     if (!backdrop) return;
 
+    // The panel currently being edited stays lifted above the backdrop's own blur/dim (see
+    // .dash-panel.editing in style.css) instead of getting blurred out along with the rest of the
+    // dashboard — so a live-refresh change made while the drawer is open is actually visible
+    // without closing it first, which is the whole point of a live-editing drawer. Its natural
+    // grid position is often a bad fit for this though — it can land partly behind the drawer
+    // itself, or squeezed into a thin sliver at the very edge of the remaining visible area — so
+    // it's also re-centered within whatever space is actually left once the drawer's own width is
+    // subtracted (the drawer itself always stays put, pinned to the right edge — only the panel
+    // moves, into the middle of what's left on the LEFT of it).
+    //
+    // Deliberately position:fixed + left/top, NOT a transform — .panel-settings-form (the drawer)
+    // is `position: fixed` and a DIRECT CHILD of .dash-panel, and a `transform` on ANY ancestor
+    // creates a new containing block for a fixed-positioned descendant per the CSS spec. Putting a
+    // transform on .dash-panel.editing dragged the drawer along with it (off the right edge, into
+    // the middle of the screen) instead of leaving it pinned to the viewport — this shipped once
+    // already. Plain `position` on an ancestor carries no such caveat, so switching the PANEL
+    // itself to `fixed` (leaving the drawer alone) sidesteps the whole problem.
+    function centerEditingPanel(panel) {
+      var openForm = document.querySelector('.dash-panel > .panel-settings-form.open');
+      var drawerWidth = openForm ? openForm.getBoundingClientRect().width : 0;
+      var availableWidth = window.innerWidth - drawerWidth;
+      // Reads the panel's CURRENT box — its natural grid size the first time this runs (right as
+      // .editing/fixed positioning is applied), or its own already-fixed size on a later resize
+      // recompute, either way the right thing to hold onto as "the panel's width/height" here.
+      var rect = panel.getBoundingClientRect();
+      // Nothing useful to center against once the panel's own footprint doesn't even fit the
+      // leftover space (a very narrow window) — leave it at its natural grid position instead of
+      // fighting for room that isn't there.
+      if (rect.width >= availableWidth || rect.height >= window.innerHeight) {
+        panel.style.position = '';
+        panel.style.left = '';
+        panel.style.top = '';
+        panel.style.width = '';
+        panel.style.margin = '';
+        return;
+      }
+      var left = Math.max(0, Math.round((availableWidth - rect.width) / 2));
+      var top = Math.max(0, Math.round((window.innerHeight - rect.height) / 2));
+      panel.style.position = 'fixed';
+      panel.style.left = left + 'px';
+      panel.style.top = top + 'px';
+      panel.style.width = Math.round(rect.width) + 'px';
+      panel.style.margin = '0';
+    }
+
+    function resetEditingPanelPosition(panel) {
+      panel.style.position = '';
+      panel.style.left = '';
+      panel.style.top = '';
+      panel.style.width = '';
+      panel.style.margin = '';
+      // Restores whatever draggable value the grid's own reorder script set (see
+      // "draggable" further below) — dragging a panel around while its OWN drawer is still open
+      // (fixed-positioned, centered mid-screen) has no sensible meaning, so it's turned off for
+      // exactly as long as .editing is, same lifetime as the position override right above.
+      if (panel.dataset.draggableBase != null) panel.draggable = panel.dataset.draggableBase === 'true';
+    }
+
     function syncBackdrop() {
-      var anyOpen = document.querySelector('.dash-panel > .panel-settings-form.open');
-      backdrop.classList.toggle('open', !!anyOpen);
+      var openForm = document.querySelector('.dash-panel > .panel-settings-form.open');
+      backdrop.classList.toggle('open', !!openForm);
+      document.querySelectorAll('.dash-panel.editing').forEach(function (p) {
+        p.classList.remove('editing');
+        resetEditingPanelPosition(p);
+      });
+      if (openForm) {
+        var panel = openForm.closest('.dash-panel');
+        panel.classList.add('editing');
+        if (panel.dataset.draggableBase == null) panel.dataset.draggableBase = String(panel.draggable);
+        panel.draggable = false;
+        centerEditingPanel(panel);
+      }
     }
     function closeAll() {
       document.querySelectorAll('.dash-panel > .panel-settings-form.open').forEach(function (f) { f.classList.remove('open'); });
+      document.querySelectorAll('.dash-panel.editing').forEach(function (p) {
+        p.classList.remove('editing');
+        resetEditingPanelPosition(p);
+      });
       backdrop.classList.remove('open');
     }
 
@@ -956,6 +1370,17 @@
     });
     backdrop.addEventListener('click', closeAll);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+    // Keeps the centering correct as the window resizes or the drawer itself gets dragged wider/
+    // narrower (see the drag-to-resize script further below) — both change how much space is
+    // actually left to center within.
+    window.addEventListener('resize', function () {
+      var editing = document.querySelector('.dash-panel.editing');
+      if (editing) centerEditingPanel(editing);
+    });
+    window.recenterEditingPanel = function () {
+      var editing = document.querySelector('.dash-panel.editing');
+      if (editing) centerEditingPanel(editing);
+    };
   })();
 </script>
 
@@ -981,17 +1406,31 @@
         var startX = e.clientX;
         var startWidth = drawer.getBoundingClientRect().width;
         handle.classList.add('dragging');
+        // The handle's own CSS cursor:ew-resize (see style.css) only actually shows while the
+        // mouse is hovering that thin 6px strip — which it immediately isn't, the moment a real
+        // drag starts moving the mouse away from it. Forcing it on <body> for the drag's duration
+        // is what keeps the resize cursor showing everywhere the mouse passes over, not just
+        // there; unset again on mouseup, once the drag itself no longer dictates what the cursor
+        // means.
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
 
         function onMove(e) {
           // Dragging left (clientX decreases) should widen the drawer — its right edge is pinned
           // to the viewport edge, so the left edge (and this handle) are what actually move.
           var width = Math.max(MIN_WIDTH, Math.min(maxWidth(), startWidth + (startX - e.clientX)));
           document.documentElement.style.setProperty('--panel-drawer-width', width + 'px');
+          // The editing panel is centered against exactly this leftover space (see
+          // recenterEditingPanel above) — keeps it centered live as the drawer's own width changes
+          // instead of only catching up once the drag ends.
+          if (window.recenterEditingPanel) window.recenterEditingPanel();
         }
         function onUp() {
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
           handle.classList.remove('dragging');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
           localStorage.setItem(STORAGE_KEY, getComputedStyle(document.documentElement).getPropertyValue('--panel-drawer-width').trim().replace('px', ''));
         }
         document.addEventListener('mousemove', onMove);
@@ -1020,8 +1459,12 @@
     // Must also skip .confirm-bar — foot.ejs's data-confirm handling inserts one as a direct
     // child of .dash-panel too (right after .dash-panel-head, for the Delete-panel button), and
     // it's only ever present on the live DOM, never in a freshly-fetched, script-free HTML parse.
+    // And .panel-drawer-resize-handle — the drawer-width drag handle sits as its OWN direct child
+    // right after .panel-settings-form, not nested inside it, so it was quietly the first match
+    // here (silently "fixing" every panel's content at whatever tiny size that handle renders at)
+    // until this was added.
     function getContentEl(card) {
-      return card.querySelector(':scope > *:not(.widget-drag-handle):not(.dash-panel-head):not(.confirm-bar):not(.panel-settings-form):not(.dash-panel-resize-handle)');
+      return card.querySelector(':scope > *:not(.widget-drag-handle):not(.dash-panel-head):not(.confirm-bar):not(.panel-settings-form):not(.panel-drawer-resize-handle):not(.dash-panel-resize-handle)');
     }
 
     function applyPatch(card, freshCard) {
@@ -1032,6 +1475,14 @@
       var content = getContentEl(card);
       var freshContent = getContentEl(freshCard);
       if (content && freshContent) {
+        // The OLD canvas's own Chart.js instance + its 15s refresh loop (see monitor-chart.js)
+        // otherwise just kept running forever in the background after being detached here —
+        // every edit left one more of these piled up, each still fetching/rendering into a chart
+        // object nothing on screen points at any more. Explicit teardown before the swap, not
+        // just after — a background refresh landing between the swap and the new chart existing
+        // would have nothing to update anyway, so ordering it first is what actually matters.
+        var oldCanvas = content.querySelector('canvas[data-monitor-ids]');
+        if (oldCanvas && oldCanvas._loxsuiteCleanup) oldCanvas._loxsuiteCleanup();
         content.replaceWith(freshContent);
         // A chart's <canvas> needs its own refresh loop restarted — the generic content swap
         // above only ever gives it a fresh, un-initialized element.
@@ -1113,7 +1564,11 @@
     var dragEl = null;
 
     function getDragAfterElement(x, y) {
-      var cards = Array.prototype.slice.call(grid.querySelectorAll('.dash-panel:not(.dragging)'));
+      // .editing is excluded for the same reason .dragging already is — that one panel's
+      // getBoundingClientRect() is wherever centerEditingPanel() (see the drawer script above)
+      // put it on the screen, not its real grid slot, so measuring distance to it would throw off
+      // every reorder decision made while its own drawer happens to still be open.
+      var cards = Array.prototype.slice.call(grid.querySelectorAll('.dash-panel:not(.dragging):not(.editing)'));
       var closestCard = null;
       var closestCenterX = 0;
       var closestDistance = Infinity;
@@ -1151,6 +1606,18 @@
         if (e.target.closest('.dash-panel-resize-handle')) { e.preventDefault(); return; }
         dragEl = card;
         card.classList.add('dragging');
+        // Left to its own default, the browser builds the drag-ghost by rendering this card's
+        // whole subtree — including its own .panel-settings-form, a position:fixed, near-
+        // full-viewport edit drawer that's only invisible day-to-day because it's translated off
+        // to the right (see .dash-panel > .panel-settings-form in style.css). Some browsers'
+        // default ghost snapshot ignores that transform and paints the drawer at its in-flow
+        // position instead, which is what made a single dragged panel look like the entire
+        // dashboard was sliding. An explicit, contained image (just this panel's own header bar)
+        // sidesteps that entirely instead of depending on the browser to get it right.
+        if (e.dataTransfer && e.dataTransfer.setDragImage) {
+          var head = card.querySelector('.dash-panel-head');
+          if (head) e.dataTransfer.setDragImage(head, 20, 20);
+        }
       });
       card.addEventListener('dragend', function () {
         card.classList.remove('dragging');
@@ -1197,6 +1664,11 @@
         var startColSpan = Number(card.dataset.colSpan) || 4;
         var startRowSpan = Number(card.dataset.rowSpan) || 3;
         var colSpan = startColSpan, rowSpan = startRowSpan;
+        // Same reasoning as the panel-drawer-resize-handle fix above — the handle's own CSS
+        // cursor only shows while actually hovering its small hit area, which a real drag moves
+        // off of instantly. Forced on <body> for the drag's duration instead.
+        document.body.style.cursor = 'nwse-resize';
+        document.body.style.userSelect = 'none';
 
         function onMove(e) {
           colSpan = clamp(startColSpan + Math.round((e.clientX - startX) / colStep), MIN_COL_SPAN, MAX_COL_SPAN);
@@ -1208,6 +1680,8 @@
         function onUp() {
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
           card.dataset.colSpan = colSpan;
           card.dataset.rowSpan = rowSpan;
           fetch('/dashboards/<%= dashboardId %>/panels/' + card.dataset.id + '/resize', {
@@ -1224,5 +1698,124 @@
   })();
 </script>
 
+<script>
+  // "Auto order": resize every panel to fit its own content, then let CSS Grid's dense auto-flow
+  // (see .dash-grid in style.css) pack them with the fewest gaps — a client-side approximation of
+  // Grafana-style auto-layout, built from the same col_span/row_span grid model the manual
+  // drag-resize handle above already uses (same /resize and /reorder endpoints, just computed here
+  // instead of read from a mouse drag).
+  (function () {
+    var btn = document.getElementById('dash-auto-order-btn');
+    if (!btn) return;
+    var grid = document.getElementById('dash-grid');
+    if (!grid) return;
+
+    var ROW_UNIT_PX = 70; // must match .dash-grid's grid-auto-rows in style.css
+    var MIN_ROW_SPAN = 2, MAX_ROW_SPAN = 200, MIN_COL_SPAN = 2, MAX_COL_SPAN = 12;
+
+    function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+
+    // Same selector as applyPatch's getContentEl above (a separate IIFE, hence duplicated rather
+    // than shared) — the one element that's actually this panel's own body, everything else being
+    // chrome (drag handle, header, the edit drawer, the resize handle).
+    function getContentEl(card) {
+      return card.querySelector(':scope > *:not(.widget-drag-handle):not(.dash-panel-head):not(.confirm-bar):not(.panel-settings-form):not(.panel-drawer-resize-handle):not(.dash-panel-resize-handle)');
+    }
+
+    // Width by content shape, not measured — a chart reads better wide (time axis resolution), a
+    // table's timestamp+value columns want more room than a compact gauge/stat/threshold tile
+    // needs. Height (see below) is what's actually measured from real content, since "how many
+    // rows/values does this panel have" varies per panel far more than "what type is it" does.
+    function guessColSpan(card) {
+      var content = getContentEl(card);
+      if (!content) return 4;
+      if (content.classList.contains('chart-wrap')) return 6;
+      if (content.classList.contains('panel-table-scroll')) return 5;
+      if (content.classList.contains('panel-value-list')) return 4;
+      return 3; // gauge, stat_delta, threshold — compact, roughly square tiles
+    }
+
+    btn.addEventListener('click', function () {
+      var cards = Array.prototype.slice.call(grid.querySelectorAll('.dash-panel'));
+      if (cards.length === 0) return;
+      btn.disabled = true;
+
+      // Pass 1 (writes only): assign a content-appropriate width and force one reflow, so pass 2's
+      // measurements below reflect real wrapping at the new width instead of whatever it was
+      // before (reading in a loop instead of once here would thrash layout for a big dashboard).
+      cards.forEach(function (card) {
+        var colSpan = guessColSpan(card);
+        card.style.gridColumn = 'span ' + colSpan;
+        card.dataset.pendingColSpan = colSpan;
+      });
+      grid.getBoundingClientRect();
+
+      var gapPx = parseFloat(getComputedStyle(grid).rowGap) || parseFloat(getComputedStyle(grid).columnGap) || 0;
+
+      // Pass 2: measure each panel's own content element directly (.chart-wrap,
+      // .panel-table-scroll, ...), NOT the outer .dash-panel card. A table/value-list panel's
+      // content has its own overflow-y:auto + min-height:0 (see style.css) specifically so it can
+      // scroll internally instead of forcing the card to grow — which means the card's OWN
+      // scrollHeight never reflects that overflow at all, it just reports back whatever (possibly
+      // far too small) height the card already happens to be. The content element's scrollHeight
+      // doesn't have that problem: it always reports its true natural extent regardless of its own
+      // current box size, for every panel type here (chart/gauge/stat/threshold's plain
+      // overflow:visible content behaves the same way, just via visible overflow instead of an
+      // internal scrollbar). Head height + card padding (both fixed, not content-dependent) are
+      // added back on top since neither is part of the content element itself.
+      var sized = cards.map(function (card) {
+        var content = getContentEl(card);
+        var contentH = content ? content.scrollHeight : 20;
+        var headEl = card.querySelector('.dash-panel-head');
+        var cardStyle = getComputedStyle(card);
+        var paddingV = (parseFloat(cardStyle.paddingTop) || 0) + (parseFloat(cardStyle.paddingBottom) || 0);
+        var headOuter = 0;
+        if (headEl) {
+          var headStyle = getComputedStyle(headEl);
+          headOuter = headEl.getBoundingClientRect().height + (parseFloat(headStyle.marginBottom) || 0);
+        }
+        var neededPx = paddingV + headOuter + contentH + 6; // +6: corner resize-handle / border rounding margin
+        var rowSpan = clamp(Math.ceil((neededPx + gapPx) / (ROW_UNIT_PX + gapPx)), MIN_ROW_SPAN, MAX_ROW_SPAN);
+        var colSpan = clamp(Number(card.dataset.pendingColSpan) || 4, MIN_COL_SPAN, MAX_COL_SPAN);
+        return { card: card, colSpan: colSpan, rowSpan: rowSpan, area: colSpan * rowSpan };
+      });
+
+      // First-fit-decreasing: placing the largest panels first gives sparse row-major placement
+      // the best shot at tucking later, smaller panels into whatever gaps they leave — the
+      // standard bin-packing approximation for this kind of layout (exact packing is NP-hard).
+      // (Not grid-auto-flow: dense — see the comment on .dash-grid in style.css for why that broke
+      // live drag-reorder.)
+      sized.sort(function (a, b) { return b.area - a.area; });
+
+      sized.forEach(function (item) {
+        item.card.style.gridColumn = 'span ' + item.colSpan;
+        item.card.style.gridRow = 'span ' + item.rowSpan;
+        item.card.dataset.colSpan = item.colSpan;
+        item.card.dataset.rowSpan = item.rowSpan;
+        delete item.card.dataset.pendingColSpan;
+        grid.appendChild(item.card); // re-insert in the new order; dense packing does the rest
+      });
+
+      var order = sized.map(function (item) { return Number(item.card.dataset.id); });
+
+      Promise.all(sized.map(function (item) {
+        return fetch('/dashboards/<%= dashboardId %>/panels/' + item.card.dataset.id + '/resize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ colSpan: item.colSpan, rowSpan: item.rowSpan }),
+        });
+      })).then(function () {
+        return fetch('/dashboards/<%= dashboardId %>/panels/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order: order }),
+        });
+      }).catch(function () { /* best-effort — the layout above is already applied client-side either way */ })
+        .then(function () { btn.disabled = false; });
+    });
+  })();
+</script>
+
 <script src="/vendor/chart.umd.min.js"></script>
+<script src="/vendor/chartjs-plugin-zoom.min.js"></script>
 <script src="/monitor-chart.js" defer></script>

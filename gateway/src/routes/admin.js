@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
-const { AREAS } = require('../permissionAreas');
+const { AREAS, MAIN_AREAS, LOG_AREAS } = require('../permissionAreas');
 const { logSystemEvent } = require('../auditLog');
 
 const router = express.Router();
@@ -128,13 +128,22 @@ router.post('/users/:id/delete', (req, res) => {
     });
   }
   const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  // No PRAGMA foreign_keys enforcement in this DB (see db.js) — cleaned up explicitly rather than
+  // relying on the schema's own ON DELETE CASCADE to do it. Their own personal notification rules
+  // (routes/profile.js's "My rules") go too, not just their subscriptions to admin-wide ones —
+  // otherwise an orphaned, still-enabled rule would keep matching readings forever with nobody left
+  // to deliver to.
+  db.prepare('DELETE FROM notification_rule_subscribers WHERE user_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM notification_rule_channels WHERE rule_id IN (SELECT id FROM notification_rules WHERE owner_user_id = ?)').run(req.params.id);
+  db.prepare('DELETE FROM notification_rules WHERE owner_user_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM dashboard_favorites WHERE user_id = ?').run(req.params.id);
   db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
   logSystemEvent(`"${req.user.username}" deleted user "${targetUser?.username}".`);
   res.redirect('/admin/users');
 });
 
 router.get('/roles', (req, res) => {
-  res.render('admin-roles', { roles: listRoles(), areas: AREAS, error: null });
+  res.render('admin-roles', { roles: listRoles(), areas: MAIN_AREAS, logAreas: LOG_AREAS, error: null });
 });
 
 router.post('/roles', (req, res) => {
@@ -147,7 +156,7 @@ router.post('/roles', (req, res) => {
     logSystemEvent(`"${req.user.username}" created role "${name}".`);
     res.redirect('/admin/roles');
   } catch (err) {
-    res.render('admin-roles', { roles: listRoles(), areas: AREAS, error: err.message });
+    res.render('admin-roles', { roles: listRoles(), areas: MAIN_AREAS, logAreas: LOG_AREAS, error: err.message });
   }
 });
 
@@ -170,7 +179,7 @@ router.post('/roles/:id/permissions', (req, res) => {
   const wasOnlyAdminRole = role.is_admin && db.prepare('SELECT COUNT(*) AS c FROM access_roles WHERE is_admin = 1').get().c === 1;
   const stillAdmin = !!req.body.is_admin;
   if (wasOnlyAdminRole && !stillAdmin && db.prepare('SELECT COUNT(*) AS c FROM users WHERE role_id = ?').get(roleId).c > 0) {
-    return res.render('admin-roles', { roles: listRoles(), areas: AREAS, error: 'This is the only administrator role and still has users on it — assign them elsewhere first.' });
+    return res.render('admin-roles', { roles: listRoles(), areas: MAIN_AREAS, logAreas: LOG_AREAS, error: 'This is the only administrator role and still has users on it — assign them elsewhere first.' });
   }
 
   const applyAll = db.transaction(() => {
@@ -194,7 +203,7 @@ router.post('/roles/:id/permissions', (req, res) => {
 router.post('/roles/:id/delete', (req, res) => {
   const inUse = db.prepare('SELECT COUNT(*) AS c FROM users WHERE role_id = ?').get(req.params.id).c;
   if (inUse > 0) {
-    return res.render('admin-roles', { roles: listRoles(), areas: AREAS, error: `${inUse} user(s) still have this role — reassign them first.` });
+    return res.render('admin-roles', { roles: listRoles(), areas: MAIN_AREAS, logAreas: LOG_AREAS, error: `${inUse} user(s) still have this role — reassign them first.` });
   }
   const role = db.prepare('SELECT name FROM access_roles WHERE id = ?').get(req.params.id);
   db.prepare('DELETE FROM access_roles WHERE id = ?').run(req.params.id);

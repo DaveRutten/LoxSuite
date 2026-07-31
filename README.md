@@ -1,4 +1,7 @@
-# LoxSuite
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+  <img src="docs/logo-light.svg" alt="LoxSuite" width="360">
+</picture>
 
 A self-hosted Docker stack for Loxone Miniservers: an MQTT gateway, log viewing, value monitoring,
 and a web UI to manage all of it — with more planned (backup/restore among it).
@@ -43,12 +46,27 @@ the web UI without restarting the broker. The entire first-boot process is autom
      few seconds.
 
    These steps are idempotent — restarting with an existing `dynamic-security.json` does nothing again.
-3. Open the web UI at `http://<host>:3000` and log in with `ADMIN_USERNAME`/`ADMIN_PASSWORD` from
+3. Open the web UI at `http://<host>:5582` and log in with `ADMIN_USERNAME`/`ADMIN_PASSWORD` from
    `.env`. This web UI admin account (separate from any MQTT account) is created automatically on
    first boot.
 
 Add new devices (e.g. a Shelly) afterwards from the **Users** page in the web UI — no CLI commands
 or restarts needed.
+
+### Unraid
+
+An Unraid Community Applications template is at [`unraid/loxsuite.xml`](unraid/loxsuite.xml) —
+same single container, same env vars as above. It pulls a pre-built image from
+`ghcr.io/daverutten/loxsuite`, published by [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml)
+on every push to `main` and on version tags — that workflow needs to have run at least once
+before the template can pull anything.
+
+To install it before it's listed in Community Applications: Unraid's **Docker** tab &rarr;
+**Add Container** &rarr; **Template repositories** &rarr; add this file's raw GitHub URL (or copy
+it directly into `/boot/config/plugins/dockerMan/templates-user/` on the Unraid box). Fill in the
+same passwords/secrets the `.env` steps above ask for, and set the three path mappings to real
+appdata locations — the config one especially, since MQTT Users/Roles management and MQTT-config
+backups need it to actually persist.
 
 ## Features
 
@@ -93,32 +111,46 @@ Monitor page — the same panel system the shared home Dashboard above uses, jus
 account instead of shared, and always editable by you regardless of Access Role (ownership is enough).
 Create any number of named dashboards, each holding **panels**:
 
-- **Chart** — a line chart; pick more than one monitor to overlay them for comparison.
+- **Chart** — a line chart; pick more than one monitor to overlay them for comparison. Per panel:
+  legend position, Y-axis unit, straight or stepped line, optional point markers, fill-under-line,
+  linear or logarithmic Y-axis with an optional fixed min/max, scroll-to-zoom/drag-to-pan, threshold
+  lines *or* filled bands, and time-anchored annotations. Per series: rename, its own unit/scale/
+  decimals, the right-hand axis, a fixed color, and a line style (solid/thick/dashed/dotted).
 - **Table** — one monitor's raw values (single-monitor by design — a true multi-series comparison
   table would need aligning independently-sampled timestamps, which a chart panel already covers).
 - **Current value** — a compact tile listing the latest reading for one or more monitors, stacked or
-  in a row.
+  in a row, each with its own optional rename/unit/scale/decimals override.
 - **Gauge** — a fill-bar meter against a configurable min/max range, with an optional unit.
 - **Stat with change** — current value plus the change vs. the start of the panel's time range, with
   an up/down arrow; optionally colored once you specify whether higher or lower is "better".
 - **Threshold indicator** — a colored badge (with customizable normal/alert labels) that flips once
   the value crosses a configured limit.
 
+Every panel type's Edit form is grouped into the same labeled sections (Appearance, Axis, Range,
+Condition, ...) regardless of type, so a given kind of setting always lives under the same heading.
 Chart and current-value panels can hold several monitors at once; gauge/stat/threshold panels are
 single-monitor, since each is inherently one number. Panels are drag-reorderable (top-left handle) and
 drag-resizable (bottom-right corner), snapped to a 12-column grid so a size means the same thing
-regardless of window width. Chart panels refresh via their own polling loop; every other panel type
-rides the same 5-second auto-refresh the home Dashboard uses. Deleting a monitor removes it from any
-panel referencing it automatically.
+regardless of window width — or click **Auto order** to resize every panel to fit its own content and
+repack them with the fewest gaps in one pass. Chart panels refresh via their own polling loop; every
+other panel type rides the same 5-second auto-refresh the home Dashboard uses. Deleting a monitor
+removes it from any panel referencing it automatically.
+
+A dashboard can be **shared** with specific other users (viewer or editor access) or with an entire
+Access Role, from the list's own **Share** button — the owner keeps full control regardless of what a
+shared editor changes. The star button on any dashboard (in the list, or at the top of the dashboard
+itself) pins it into the sidebar under **Monitor → Favorite Dashboards**, its own collapsible section,
+for quick access to the boards you actually check often.
 
 ### Miniservers
 
 Add one entry per physical Miniserver: name, host, HTTP port (with an HTTPS toggle for
 self-signed-certificate Miniservers — certificate errors are ignored for this connection only),
 optional UDP port, and a webservice username/password. The gateway pings every Miniserver once a
-minute in the background and shows an Online/Offline/Unknown badge; **Test now** runs that check
-immediately. Editing a Miniserver never displays its stored password — leave the field blank to
-keep it, or type a new one to change it.
+minute in the background and shows an Online/Offline/Unknown badge plus its firmware version (read
+from the same cached structure export used for Monitor's Loxone controls, not a separate API call);
+**Test now** runs that check immediately. Editing a Miniserver never displays its stored password —
+leave the field blank to keep it, or type a new one to change it.
 
 An optional **External URL** (a full base address — DynDNS hostname with port, or a Loxone
 DNS/Cloud address) can also be set. Every HTTP call this gateway makes to that Miniserver — Virtual
@@ -150,7 +182,7 @@ Miniserver — messages arriving sooner than the interval since the last forward
 Each mapping gets a random token and publishes to one MQTT topic.
 
 - **HTTP** — the mapping's row shows a ready-to-use callback URL
-  (`http://<gateway-host>:3000/api/loxone-in/<token>?value=\v`) for a Virtual Output's HTTP command
+  (`http://<gateway-host>:5582/api/loxone-in/<token>?value=\v`) for a Virtual Output's HTTP command
   in Loxone Config; `\v` is replaced with the actual value on every call. This endpoint
   intentionally has no login (the Miniserver can't hold a session) — the unpredictable token is
   the security boundary.
@@ -164,16 +196,24 @@ Every mapping also has a **Test** action: publish a value straight to its topic 
 Loxone at all, running through the same transform a real call would use — useful for confirming a
 device reacts before wiring up the actual Virtual Output.
 
-### Common commands
+### Common commands & Common data
 
-An interactive builder for devices with well-known MQTT command topics (currently Shelly Gen1:
-relay, roller, and light channels). Pick a device — from every device the broker has actually seen
-traffic for, across all known types, not necessarily the same string as its raw MQTT client ID,
-which can differ from its configured topic prefix — and its device type fills in automatically;
-correct it manually if it guessed wrong or the device hasn't been seen yet. Then pick a command and
-channel number; the composed topic can be sent straight into a new Loxone &rarr; MQTT mapping. On
-**Live traffic** → *Connected Clients*, devices that look like a Shelly link here with the device
-pre-selected.
+An interactive builder for devices with well-known MQTT topic shapes — 18 named Shelly Gen1 device
+types (Plug, Plug S, Dimmer, Bulb, Bulb Duo, RGBW2, EM, 3EM, Uni, ...) plus Shelly Gen2/Gen3 (both
+the full JSON-RPC form and the simpler `command/switch:N`/`command/cover:N` form some devices also
+support). **Common commands** covers relay/roller/light/color/white commands; **Common data** covers
+the matching telemetry (power, energy, temperature, position, ...). Pick a device — from every device
+the broker has actually seen traffic for — and its type fills in automatically; correct it manually
+if it guessed wrong or the device hasn't been seen yet. Each device entry is individually editable
+(rename it, add/remove its own commands or data points), and the whole catalog can be exported to —
+or re-imported from — JSON or XML, or reset back to the built-in defaults at any time. On **Live
+traffic** → *Connected Clients*, devices that look like a Shelly link here with the device
+pre-selected; a data point's "Use as Monitor" link jumps straight to a pre-filled Monitor form.
+
+A Loxone &rarr; MQTT mapping also has a **Shelly RGBW/White/Tunable-white** value transform, which
+converts Loxone's own RGB ("H,S,V") or Lumitech tunable-white ("brightness,kelvin") output format
+into the JSON payload a Shelly RGBW2/Bulb/Duo actually expects — built in, no separate LoxBerry-style
+UDP transformer needed.
 
 ### Transformations
 
@@ -250,7 +290,7 @@ edited like any other role.
 
 ### Administration & Access Roles
 
-Visible only to users whose Access Role has **Administrator** checked. Three tabs:
+Visible only to users whose Access Role has **Administrator** checked. Five tabs:
 
 - **Users** — every web UI account (distinct from **Users (MQTT accounts)** above, which is about
   IoT devices connecting to the broker). Add a local account, change anyone's Access Role, reset a
@@ -266,17 +306,35 @@ Visible only to users whose Access Role has **Administrator** checked. Three tab
   can log in with it *alongside* (not instead of) the existing username/password login. The first
   sign-in via Pocket ID auto-creates an account with a configurable default Access Role. When
   creating the OIDC client in Pocket ID, set the **Callback URL** to
-  `http://<gateway-host>:3000/auth/sso/callback` (shown on the Single Sign-On admin page) and, if
+  `http://<gateway-host>:5582/auth/sso/callback` (shown on the Single Sign-On admin page) and, if
   you want LoxSuite to appear as a launchable app on the Pocket ID home screen, set the **Client
-  Launch URL** ("User URL") to `http://<gateway-host>:3000/`.
+  Launch URL** ("User URL") to `http://<gateway-host>:5582/`.
+- **Backups** — schedule (a standard 5-field cron expression) or manually trigger a zip of the
+  gateway's own SQLite database and, optionally, Mosquitto's dynamic-security/broker config, with a
+  **Keep last** retention count so it can run indefinitely without slowly filling the disk. An
+  optional **offsite copy (rclone)** step additionally pushes every backup to any of rclone's 70+
+  supported storage backends right after it's created.
+- **Notifications** — alert rules for a Monitor crossing a threshold, a Miniserver or MQTT client
+  going online/offline, or a backup failing, sent through
+  [Apprise](https://github.com/caronc/apprise) to Teams, Slack, Telegram, Email, or 100+ other
+  services. **Channels** (a name plus one Apprise URL) and **Rules** (which event, and which
+  channel(s) it fires to) are kept as two separate, reusable lists. Every user can *also* set up
+  their own, entirely independent notifications — see Profile below.
 
 ### Profile
 
-Every logged-in user's own account page: avatar, display name, email, Access Role, and sign-in
-method. Pocket ID (SSO) accounts get their avatar/name/email from Pocket ID automatically (refreshed
-on every login); local (username/password) accounts can set a display name/email themselves and
-change their password here — SSO accounts have no local password to change, that's managed by
-Pocket ID.
+Every logged-in user's own account, in two tabs. **Account**: avatar, display name, email, Access
+Role, and sign-in method. Pocket ID (SSO) accounts get their avatar/name/email from Pocket ID
+automatically (refreshed on every login); local (username/password) accounts can set a display
+name/email themselves and change their password here — SSO accounts have no local password to
+change, that's managed by Pocket ID.
+
+**Notifications** is personal, self-service alerting, independent of anything an administrator sets
+up: your own [Apprise](https://github.com/caronc/apprise) channel URL (**My channel**), your own
+trigger rules (**My rules** — the same four trigger types the admin Notifications page offers, but
+private to you and needing no admin involvement, always delivered to your own channel), and the
+option to subscribe yourself to any of the admin-configured rules too (**Subscriptions**), on top of
+whatever channel(s) they already send to.
 
 ### Other UI features
 

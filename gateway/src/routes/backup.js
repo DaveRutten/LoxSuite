@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const multer = require('multer');
 const backup = require('../backup');
+const { notifyBackupFailed } = require('../notifications');
 const { verifyCsrfToken } = require('../middleware/csrf');
 
 const router = express.Router();
@@ -14,6 +15,7 @@ function renderPage(res, extra = {}) {
     mqttConfigMounted: fs.existsSync(backup.MOSQUITTO_CONFIG_DIR),
     error: null,
     restored: null,
+    rcloneTestResult: null,
     ...extra,
   });
 }
@@ -44,6 +46,33 @@ router.post('/settings', (req, res) => {
   res.redirect('/admin/backup');
 });
 
+router.post('/rclone/settings', (req, res) => {
+  const { rclone_enabled: rcloneEnabled, rclone_remote: rcloneRemote, rclone_config: rcloneConfig } = req.body;
+
+  if (rcloneEnabled && !(rcloneRemote || '').trim()) {
+    return renderPage(res, { error: 'Set a remote (e.g. "myremote:loxsuite-backups") before enabling the offsite copy.' });
+  }
+
+  backup.updateSettings({
+    rclone_enabled: !!rcloneEnabled,
+    rclone_remote: (rcloneRemote || '').trim(),
+    rclone_config: rcloneConfig || '',
+  });
+  res.redirect('/admin/backup');
+});
+
+// Uses whatever's currently saved (not whatever's still unsaved in the form) — same "save first,
+// then test" convention as the Miniservers edit page's own Test button, and for the same reason:
+// this exercises the real config the next scheduled/manual backup will actually use.
+router.post('/rclone/test', async (req, res) => {
+  try {
+    await backup.testRcloneConnection();
+    renderPage(res, { rcloneTestResult: { ok: true } });
+  } catch (err) {
+    renderPage(res, { rcloneTestResult: { ok: false, error: err.message } });
+  }
+});
+
 router.post('/run', async (req, res) => {
   try {
     await backup.createBackup({ includeMqttConfig: !!backup.getSettings().include_mqtt_config, reason: 'manual' });
@@ -51,6 +80,7 @@ router.post('/run', async (req, res) => {
     res.redirect('/admin/backup');
   } catch (err) {
     backup.updateSettings({ last_run_at: new Date().toISOString(), last_status: 'error', last_error: err.message });
+    notifyBackupFailed(err.message, 'manual backup');
     renderPage(res, { error: `Backup failed: ${err.message}` });
   }
 });

@@ -1,3 +1,17 @@
+// The four Logs tabs, each its own area so a role can be trusted with one log (e.g. System) but
+// not another (e.g. MQTT broker, which can contain client IDs/topics some roles shouldn't see) —
+// 'view' and 'edit' mean "see this log" and "export/download it" respectively (there's nothing
+// else on a Logs tab to edit; retention itself lives under the single, unrelated 'settings' area).
+// Rendered as their own View/Download table in Access Roles (see admin-roles.ejs) rather than
+// folded into the main matrix, where a bare "Edit" column would misleadingly suggest they can be
+// changed rather than just read back out.
+const LOG_AREAS = [
+  { key: 'logs_mqtt', label: 'MQTT broker' },
+  { key: 'logs_loxone', label: 'Loxone Miniservers' },
+  { key: 'logs_loxone_commands', label: 'Loxone commands' },
+  { key: 'logs_system', label: 'System' },
+];
+
 // The fixed set of view/edit-gated pages (Access Roles' permission matrix). Shared between the
 // DB seed (db.js), the permission-check middleware, and the Administration UI so the list only
 // exists in one place.
@@ -10,7 +24,7 @@ const AREAS = [
   { key: 'commands', label: 'Common commands' },
   { key: 'transformations', label: 'Transformations' },
   { key: 'incoming', label: 'Live Data (MQTT)' },
-  { key: 'logs', label: 'Logs' },
+  ...LOG_AREAS,
   { key: 'mqtt_users', label: 'MQTT Users' },
   { key: 'mqtt_roles', label: 'MQTT Roles' },
   { key: 'settings', label: 'Settings' },
@@ -29,4 +43,8 @@ const AREAS = [
 
 const AREA_KEYS = AREAS.map((a) => a.key);
 
-module.exports = { AREAS, AREA_KEYS };
+// The main Access Roles matrix renders this (AREAS minus the Logs tabs, which get their own
+// View/Download table instead) — kept as a derived list so LOG_AREAS only has to be defined once.
+const MAIN_AREAS = AREAS.filter((a) => !LOG_AREAS.includes(a));
+
+module.exports = { AREAS, AREA_KEYS, LOG_AREAS, MAIN_AREAS };

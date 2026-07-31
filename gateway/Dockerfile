@@ -10,6 +10,21 @@ FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Backs the Backups page's optional rclone offsite copy (see backup.js's uploadToRclone) — invoked
+# as a plain child process rather than an npm rclone wrapper, since the real binary supports every
+# backend (S3, Google Drive, SFTP, Backblaze, ...) rclone itself does, with no per-backend code of
+# our own to maintain.
+RUN apk add --no-cache rclone
+
+# Backs the Notifications feature's Teams/Slack/Telegram/Email sending (see notifications.js) —
+# same reasoning as rclone above: apprise already speaks 100+ notification services' own APIs
+# correctly, shelled out to as a CLI rather than reimplemented per service here. Alpine's Python
+# marks its system interpreter "externally managed" (PEP 668) by default, refusing a bare `pip
+# install`; --break-system-packages is safe here since this image has no other Python use that a
+# dependency conflict could break.
+RUN apk add --no-cache python3 py3-pip && \
+    pip install --no-cache-dir --break-system-packages apprise
+
 # Mosquitto runs inside this same container, so the whole stack is a single container from the
 # outside — docker-entrypoint.sh starts and supervises both processes. Vendored directly from the
 # eclipse-mosquitto image (same Alpine 3.23 base as node:20-alpine, so musl/openssl/etc. are
@@ -59,10 +74,10 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
 VOLUME ["/data"]
-EXPOSE 3000 1883
+EXPOSE 5582 1883
 # Checks the gateway's own HTTP server only — Mosquitto's own listener isn't probed here, but a
 # wedged Node process (which also carries mosquitto's supervision loop, see
 # docker-entrypoint.sh) is the failure mode that actually matters for auto-recovery.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -q -O /dev/null http://127.0.0.1:3000/healthz || exit 1
+  CMD wget -q -O /dev/null http://127.0.0.1:5582/healthz || exit 1
 ENTRYPOINT ["./docker-entrypoint.sh"]

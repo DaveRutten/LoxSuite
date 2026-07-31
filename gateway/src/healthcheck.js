@@ -1,5 +1,7 @@
 const db = require('./db');
 const { fetchMiniserver, miniserverBaseUrl, insecureAgent } = require('./loxone');
+const { checkMiniserverStatus } = require('./notifications');
+const { getStructure } = require('./loxoneStructure');
 
 const TIMEOUT_MS = 4000;
 
@@ -45,6 +47,27 @@ async function runDetailedCheck(miniserver) {
   return { local, external, logbook };
 }
 
+// The Miniserver's firmware version lives in LoxAPP3.json's msInfo block, not behind a plain
+// /jdev/cfg/* call — newer firmware gates /jdev/cfg/* endpoints behind the token-based
+// /jdev/sys/getkey2 auth flow (plain Basic auth silently gets nothing useful back there), while
+// /data/LoxAPP3.json accepts the same Basic auth every other Miniserver read in this app already
+// uses. Reuses loxoneStructure's own cache (getMonitorableStates/getRoomCategoryTree already rely
+// on the exact same fetch+cache), so every healthcheck after the very first one for a given
+// Miniserver reads this for free instead of re-fetching the (potentially large) structure file on
+// every 60s sweep. swVersion is an array (e.g. [12, 3, 4, 20]) on some firmware and a plain string
+// on others — normalized to a dotted string either way.
+async function fetchFirmwareVersion(miniserver) {
+  try {
+    const structure = await getStructure(miniserver);
+    const swVersion = structure?.msInfo?.swVersion;
+    if (Array.isArray(swVersion)) return swVersion.join('.');
+    if (typeof swVersion === 'string' && swVersion) return swVersion;
+    return null;
+  } catch (err) {
+    return null;
+  }
+}
+
 async function checkMiniserver(miniserver) {
   const now = new Date().toISOString();
 
@@ -53,10 +76,18 @@ async function checkMiniserver(miniserver) {
     // Only a network-level failure (timeout, refused, DNS) counts as offline
     // — and fetchMiniserver already tries external_url as a fallback for that case.
     await fetchMiniserver(miniserver, '/', { timeoutMs: TIMEOUT_MS });
-    db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = NULL WHERE id = ?').run('online', now, miniserver.id);
+    const firmwareVersion = await fetchFirmwareVersion(miniserver);
+    if (firmwareVersion) {
+      db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = NULL, firmware_version = ? WHERE id = ?')
+        .run('online', now, firmwareVersion, miniserver.id);
+    } else {
+      db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = NULL WHERE id = ?').run('online', now, miniserver.id);
+    }
+    checkMiniserverStatus(miniserver, 'online');
   } catch (err) {
     db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = ? WHERE id = ?')
       .run('offline', now, err.message, miniserver.id);
+    checkMiniserverStatus(miniserver, 'offline');
   }
 }
 

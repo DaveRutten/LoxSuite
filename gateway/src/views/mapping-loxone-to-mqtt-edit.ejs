@@ -52,17 +52,28 @@
       </div>
       <div>
         <label>Retain</label>
-        <select name="retain">
-          <option value="" <%= !mapping.retain ? 'selected' : '' %>>No</option>
-          <option value="1" <%= mapping.retain ? 'selected' : '' %>>Yes</option>
-        </select>
+        <%- toggleSwitch('retain', mapping.retain) %>
       </div>
       <div>
         <label>Value transform</label>
-        <select name="value_transform">
+        <select name="value_transform" id="value-transform-select">
           <option value="passthrough" <%= mapping.value_transform === 'passthrough' ? 'selected' : '' %>>Pass through unchanged</option>
           <option value="translation_table" <%= mapping.value_transform === 'translation_table' ? 'selected' : '' %>>Translation table (manage separately)</option>
+          <option value="shelly_rgbw" <%= mapping.value_transform === 'shelly_rgbw' ? 'selected' : '' %>>Shelly RGBW/White (color/N/set JSON)</option>
         </select>
+      </div>
+      <div id="shelly-rgbw-mode-field" style="<%= mapping.value_transform === 'shelly_rgbw' ? '' : 'display:none;' %>">
+        <label>Shelly RGBW mode</label>
+        <select name="transform_arg">
+          <option value="rgb" <%= mapping.transform_arg === 'rgb' ? 'selected' : '' %>>RGB (from Loxone's RGB output, "H,S,V")</option>
+          <option value="white" <%= mapping.transform_arg === 'white' ? 'selected' : '' %>>White (0-100%)</option>
+          <option value="tunablew" <%= mapping.transform_arg === 'tunablew' ? 'selected' : '' %>>Tunable white (from Loxone Lumitech, "brightness,kelvin")</option>
+        </select>
+        <p class="hint" style="margin:0.3rem 0 0;">
+          For an RGBW2/Bulb in color mode. RGB and White/Tunable-white are two separate Loxone
+          outputs each with their own mapping to this same topic — set up one mapping per output
+          you actually use. See Help for the exact Loxone output each mode expects.
+        </p>
       </div>
       <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
     </div>
@@ -73,5 +84,16 @@
 </div>
 
 <p><a href="/mappings/loxone-to-mqtt">&larr; Back to mappings</a></p>
+
+<script>
+  (function () {
+    var select = document.getElementById('value-transform-select');
+    var modeField = document.getElementById('shelly-rgbw-mode-field');
+    if (!select || !modeField) return;
+    select.addEventListener('change', function () {
+      modeField.style.display = select.value === 'shelly_rgbw' ? '' : 'none';
+    });
+  })();
+</script>
 
 <%- include('partials/foot') %>

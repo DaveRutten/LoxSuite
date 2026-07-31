@@ -14,6 +14,18 @@ function localLoginAllowed(req) {
   return !ssoClient.isLocalLoginDisabled() || isPrivateNetworkRequest(req);
 }
 
+// Sends a freshly-logged-in Administrator through the setup wizard (routes/setup.js) instead of
+// straight to the Dashboard, but only once ever, install-wide (see db.js's setup_wizard_completed
+// column) and only for an admin — a non-admin role has no business being walked through changing
+// global settings/adding Miniservers. The wizard itself stays reachable any time afterward from
+// Settings, this is just the one-time nudge toward it.
+function postLoginRedirect(user) {
+  const settings = db.prepare('SELECT setup_wizard_completed FROM gateway_settings WHERE id = 1').get();
+  if (settings.setup_wizard_completed) return '/';
+  const role = user.role_id ? db.prepare('SELECT is_admin FROM access_roles WHERE id = ?').get(user.role_id) : null;
+  return role && role.is_admin ? '/setup' : '/';
+}
+
 const router = express.Router();
 
 // Password guessing is the only real brute-force surface here — SSO login has no password to
@@ -66,7 +78,7 @@ router.post('/login', loginLimiter, (req, res) => {
   if (remember) req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
 
   logSystemEvent(`"${user.username}" logged in (local) from ${req.ip}.`);
-  res.redirect('/');
+  res.redirect(postLoginRedirect(user));
 });
 
 router.post('/logout', (req, res) => {
@@ -146,7 +158,7 @@ router.get('/auth/sso/callback', async (req, res) => {
     req.session.userId = user.id;
     req.session.username = user.username;
     logSystemEvent(`"${user.username}" logged in (SSO) from ${req.ip}.`);
-    res.redirect('/');
+    res.redirect(postLoginRedirect(user));
   } catch (err) {
     logSystemEvent(`SSO login failed from ${req.ip}: ${err.message}`);
     renderError(`Single Sign-On login failed: ${err.message}`);

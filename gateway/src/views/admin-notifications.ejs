@@ -1,0 +1,282 @@
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+
+<div class="tabs">
+  <a href="/admin/users">Users</a>
+  <a href="/admin/roles">Access Roles</a>
+  <a href="/admin/sso">Single Sign-On</a>
+  <a href="/admin/backup">Backups</a>
+  <a class="active" href="/admin/notifications">Notifications</a>
+</div>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<p class="hint">
+  Sends alerts for a Monitor crossing a threshold, a Miniserver or MQTT client going online/offline,
+  or a backup failing &mdash; to Teams, Slack, Telegram, Email, or anything else
+  <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noopener">Apprise</a>
+  supports, via a rule per event you care about and the channel(s) it should go to.
+</p>
+
+<div class="card">
+  <h2>Channels</h2>
+  <p class="hint">
+    Each channel is a name plus one <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noopener">Apprise URL</a>
+    &mdash; built by following Apprise's own docs for the service you want (e.g.
+    <code>msteams://TokenA/TokenB/TokenC/</code>, <code>slack://TokenA/TokenB/TokenC/Channel</code>,
+    <code>tgram://bottoken/ChatID</code>, <code>mailtos://user:pass@smtp.example.com?to=you@example.com</code>).
+  </p>
+
+  <details class="add-panel">
+    <summary>Add channel</summary>
+    <div class="add-panel-body">
+      <form method="post" action="/admin/notifications/channels" class="form-grid">
+        <div><label>Name</label><input type="text" name="name" placeholder="e.g. Family Teams" required></div>
+        <div><label>Apprise URL</label><input type="text" name="url" placeholder="msteams://TokenA/TokenB/TokenC/" required></div>
+        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+      </form>
+    </div>
+  </details>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>URL</th><th>Enabled</th><th>Actions</th></tr></thead>
+      <tbody>
+        <% channels.forEach(c => { %>
+          <tr>
+            <td><%= c.name %></td>
+            <td><code class="truncate" title="<%= c.url %>"><%= c.url %></code></td>
+            <td><span class="badge <%= c.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= c.enabled ? 'Yes' : 'No' %></span></td>
+            <td>
+              <div class="row-actions">
+                <form class="inline" method="post" action="/admin/notifications/channels/<%= c.id %>/test">
+                  <button type="submit" class="btn-test"><%- icon('refresh') %> Send test</button>
+                </form>
+                <button type="button" class="btn-edit" data-toggle-row="channel-edit-<%= c.id %>"><%- icon('edit') %> Edit</button>
+                <form class="inline" method="post" action="/admin/notifications/channels/<%= c.id %>/delete" data-confirm="Delete this channel? Any rule using it will just stop sending through it.">
+                  <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+                </form>
+              </div>
+              <% if (testResult && testResult.channelId === c.id) { %>
+                <div class="hint" style="margin:0.4rem 0 0; <%= testResult.ok ? 'color: var(--success);' : 'color: var(--danger);' %>">
+                  <% if (testResult.ok) { %>Test message sent.<% } else { %>Test failed: <%= testResult.error %><% } %>
+                </div>
+              <% } %>
+            </td>
+          </tr>
+          <tr class="expand-row" id="channel-edit-<%= c.id %>">
+            <td colspan="4">
+              <form method="post" action="/admin/notifications/channels/<%= c.id %>/update" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+                <input type="text" name="name" value="<%= c.name %>" required style="max-width:14rem;">
+                <input type="text" name="url" value="<%= c.url %>" required style="max-width:22rem; flex:1;">
+                <span style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem;">
+                  <%- toggleSwitch('enabled', c.enabled) %> Enabled
+                </span>
+                <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+        <% if (channels.length === 0) { %>
+          <tr><td colspan="4" class="empty">No channels yet &mdash; add one above.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Rules</h2>
+
+  <details class="add-panel">
+    <summary>Add rule</summary>
+    <div class="add-panel-body">
+      <form method="post" action="/admin/notifications/rules" class="rule-form">
+        <div class="form-grid">
+          <div><label>Name</label><input type="text" name="name" placeholder="e.g. Freezer too warm" required></div>
+          <div>
+            <label>Trigger</label>
+            <select name="trigger_type" class="rule-trigger-select">
+              <% triggerTypes.forEach(t => { %><option value="<%= t.key %>"><%= t.label %></option><% }) %>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid rule-fields" data-for="monitor_threshold" style="margin-top:0.85rem;">
+          <div>
+            <label>Monitor</label>
+            <select name="monitor_id">
+              <option value="">Choose a monitor&hellip;</option>
+              <% monitors.forEach(m => { %><option value="<%= m.id %>"><%= m.label %></option><% }) %>
+            </select>
+          </div>
+          <div>
+            <label>Condition</label>
+            <select name="operator">
+              <option value="gt">&gt; (greater than)</option>
+              <option value="gte">&ge; (at least)</option>
+              <option value="lt">&lt; (less than)</option>
+              <option value="lte">&le; (at most)</option>
+              <option value="eq">= (equals)</option>
+            </select>
+          </div>
+          <div><label>Value</label><input type="number" step="any" name="threshold_value"></div>
+        </div>
+        <label class="toggle-row rule-fields" data-for="monitor_threshold" style="margin-top:0.5rem;">
+          <input type="checkbox" name="notify_on_recover">
+          <span><strong>Also notify on recovery</strong><span class="hint">Send a second message once the value is back within range, not just when it first crosses the line.</span></span>
+        </label>
+
+        <div class="form-grid rule-fields" data-for="miniserver_status" style="margin-top:0.85rem;">
+          <div>
+            <label>Miniserver</label>
+            <select name="miniserver_id">
+              <option value="">Any Miniserver</option>
+              <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid rule-fields" data-for="mqtt_client_status" style="margin-top:0.85rem;">
+          <div><label>MQTT username (blank = any client)</label><input type="text" name="mqtt_username" placeholder="e.g. shelly-livingroom"></div>
+        </div>
+
+        <div style="margin-top:0.9rem;">
+          <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.4rem; color:var(--text-muted);">Send via</label>
+          <% if (channels.length === 0) { %>
+            <p class="hint" style="margin:0;">No channels yet &mdash; add one above first.</p>
+          <% } %>
+          <% channels.forEach(c => { %>
+            <label style="display:inline-flex; align-items:center; gap:0.3rem; margin:0 1rem 0.4rem 0; font-size:0.87rem;">
+              <input type="checkbox" name="channel_ids" value="<%= c.id %>"> <%= c.name %>
+            </label>
+          <% }) %>
+        </div>
+
+        <div style="margin-top:0.9rem;">
+          <button type="submit" class="primary"><%- icon('plus') %> Add rule</button>
+        </div>
+      </form>
+    </div>
+  </details>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Trigger</th><th>Channels</th><th>Enabled</th><th>Actions</th></tr></thead>
+      <tbody>
+        <% rules.forEach(r => { %>
+          <% const triggerLabel = (triggerTypes.find(t => t.key === r.trigger_type) || {}).label || r.trigger_type; %>
+          <tr>
+            <td><%= r.name %></td>
+            <td><%= triggerLabel %></td>
+            <td><%= r.channels.map(c => c.name).join(', ') || '-' %></td>
+            <td><span class="badge <%= r.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= r.enabled ? 'Yes' : 'No' %></span></td>
+            <td>
+              <div class="row-actions">
+                <button type="button" class="btn-edit" data-toggle-row="rule-edit-<%= r.id %>"><%- icon('edit') %> Edit</button>
+                <form class="inline" method="post" action="/admin/notifications/rules/<%= r.id %>/delete" data-confirm="Delete this rule?">
+                  <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          <tr class="expand-row" id="rule-edit-<%= r.id %>">
+            <td colspan="5">
+              <form method="post" action="/admin/notifications/rules/<%= r.id %>/update" class="rule-form">
+                <div class="form-grid">
+                  <div><label>Name</label><input type="text" name="name" value="<%= r.name %>" required></div>
+                  <div>
+                    <label>Trigger</label>
+                    <select name="trigger_type" class="rule-trigger-select">
+                      <% triggerTypes.forEach(t => { %><option value="<%= t.key %>" <%= t.key === r.trigger_type ? 'selected' : '' %>><%= t.label %></option><% }) %>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Enabled</label>
+                    <%- toggleSwitch('enabled', r.enabled) %>
+                  </div>
+                </div>
+
+                <div class="form-grid rule-fields" data-for="monitor_threshold" style="margin-top:0.85rem;">
+                  <div>
+                    <label>Monitor</label>
+                    <select name="monitor_id">
+                      <option value="">Choose a monitor&hellip;</option>
+                      <% monitors.forEach(m => { %><option value="<%= m.id %>" <%= r.config.monitor_id === m.id ? 'selected' : '' %>><%= m.label %></option><% }) %>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Condition</label>
+                    <select name="operator">
+                      <option value="gt" <%= r.config.operator === 'gt' ? 'selected' : '' %>>&gt; (greater than)</option>
+                      <option value="gte" <%= r.config.operator === 'gte' ? 'selected' : '' %>>&ge; (at least)</option>
+                      <option value="lt" <%= r.config.operator === 'lt' ? 'selected' : '' %>>&lt; (less than)</option>
+                      <option value="lte" <%= r.config.operator === 'lte' ? 'selected' : '' %>>&le; (at most)</option>
+                      <option value="eq" <%= r.config.operator === 'eq' ? 'selected' : '' %>>= (equals)</option>
+                    </select>
+                  </div>
+                  <div><label>Value</label><input type="number" step="any" name="threshold_value" value="<%= r.config.value ?? '' %>"></div>
+                </div>
+                <label class="toggle-row rule-fields" data-for="monitor_threshold" style="margin-top:0.5rem;">
+                  <input type="checkbox" name="notify_on_recover" <%= r.config.notify_on_recover ? 'checked' : '' %>>
+                  <span><strong>Also notify on recovery</strong></span>
+                </label>
+
+                <div class="form-grid rule-fields" data-for="miniserver_status" style="margin-top:0.85rem;">
+                  <div>
+                    <label>Miniserver</label>
+                    <select name="miniserver_id">
+                      <option value="">Any Miniserver</option>
+                      <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-grid rule-fields" data-for="mqtt_client_status" style="margin-top:0.85rem;">
+                  <div><label>MQTT username (blank = any client)</label><input type="text" name="mqtt_username" value="<%= r.config.username || '' %>"></div>
+                </div>
+
+                <div style="margin-top:0.9rem;">
+                  <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.4rem; color:var(--text-muted);">Send via</label>
+                  <% channels.forEach(c => { %>
+                    <label style="display:inline-flex; align-items:center; gap:0.3rem; margin:0 1rem 0.4rem 0; font-size:0.87rem;">
+                      <input type="checkbox" name="channel_ids" value="<%= c.id %>" <%= r.channelIds.includes(c.id) ? 'checked' : '' %>> <%= c.name %>
+                    </label>
+                  <% }) %>
+                </div>
+
+                <div style="margin-top:0.6rem;">
+                  <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+                </div>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+        <% if (rules.length === 0) { %>
+          <tr><td colspan="5" class="empty">No rules yet &mdash; add one above.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  // Shows only the field group matching the currently-selected trigger type — mirrors the same
+  // toggle-by-select-value pattern used for the Monitor add form's MQTT/Loxone field groups.
+  (function () {
+    document.querySelectorAll('.rule-form').forEach(function (form) {
+      var select = form.querySelector('.rule-trigger-select');
+      if (!select) return;
+      function applyVisibility() {
+        form.querySelectorAll('.rule-fields').forEach(function (el) {
+          el.hidden = el.dataset.for !== select.value;
+        });
+      }
+      select.addEventListener('change', applyVisibility);
+      applyVisibility();
+    });
+  })();
+</script>
+
+<%- include('partials/foot') %>

@@ -6,7 +6,8 @@
   "description": "LoxSuite: MQTT gateway, logging, monitoring, and backup/restore for Loxone Miniservers",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test test/"
   },
   "overrides": {
     "brace-expansion": "^5.0.8"

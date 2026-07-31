@@ -135,6 +135,11 @@
       if (!col) { th.draggable = true; return; }
       var startX = e.clientX;
       var startWidth = th.getBoundingClientRect().width;
+      // The handle's own CSS cursor:col-resize (see style.css) only shows while the mouse is
+      // hovering its thin 10px strip — which a real drag moves off of immediately. Forced on
+      // <body> for the drag's duration instead.
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
 
       function onMove(e) {
         var next = Math.max(60, startWidth + (e.clientX - startX));
@@ -143,6 +148,8 @@
       function onUp() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
         th.draggable = true;
         // The mouseup that ends this drag is immediately followed by a 'click' on th (its own
         // listener checks this flag and bails) — cleared on a timeout rather than synchronously
@@ -235,6 +242,12 @@
     var labelsByIndex = {};
 
     headers.forEach(function (th) {
+      // A utility column with nothing to sort/resize/hide (e.g. the Logs pages' row-select
+      // checkbox, see log-select.js) opts out via this attribute — listing it here would show a
+      // blank-labelled ("Actions", the generic empty-header fallback below) entry that just hides
+      // the one column a user can never actually want to hide, since it'd strand any already-
+      // checked rows with no visible way to uncheck them.
+      if (th.hasAttribute('data-no-controls')) return;
       var originalIndex = Number(th.dataset.originalIndex);
       var label = document.createElement('label');
       var checkbox = document.createElement('input');
@@ -278,13 +291,12 @@
       var wasHidden = panel.hidden;
       panel.hidden = !wasHidden;
       if (wasHidden) {
-        // Opens downward by default (see .columns-menu-panel in style.css); a short table (few
-        // rows, e.g. right after creating one) can leave less room below the button than this
-        // panel actually needs, running the bottom of the checkbox list off the page instead of
-        // just scrolling it into view like a taller table's page would. Flips to open upward
-        // whenever there's more room above the button than below it and the panel doesn't
-        // actually fit in what's below — measured fresh on every open since the viewport (and how
-        // many columns/rows exist) can change between opens.
+        // Opens downward by default; a short table (few rows, e.g. right after creating one) can
+        // leave less room below the button than this panel actually needs, running the bottom of
+        // the checkbox list off the page instead of just scrolling it into view like a taller
+        // table's page would. Flips to open upward whenever there's more room above the button
+        // than below it and the panel doesn't actually fit in what's below — measured fresh on
+        // every open since the viewport (and how many columns/rows exist) can change between opens.
         panel.style.maxHeight = ''; // clear any previous cap before measuring this open's natural height
         var buttonRect = button.getBoundingClientRect();
         var panelHeight = panel.getBoundingClientRect().height;
@@ -292,6 +304,21 @@
         var spaceAbove = buttonRect.top;
         var flipUp = panelHeight > spaceBelow && spaceAbove > spaceBelow;
         panel.classList.toggle('columns-menu-panel-flip-up', flipUp);
+
+        // position:fixed (see .columns-menu-panel's own comment for why) has no positioned
+        // ancestor to anchor a CSS top/right percentage against any more — set viewport-relative
+        // coordinates here instead, right-aligned to the button's own right edge either way, with
+        // only top vs. bottom flipping between the two open directions.
+        panel.style.left = 'auto';
+        panel.style.right = (window.innerWidth - buttonRect.right) + 'px';
+        if (flipUp) {
+          panel.style.top = 'auto';
+          panel.style.bottom = (window.innerHeight - buttonRect.top + 6) + 'px';
+        } else {
+          panel.style.top = (buttonRect.bottom + 6) + 'px';
+          panel.style.bottom = 'auto';
+        }
+
         // A flat 70vh (the CSS default, see .columns-menu-panel) assumes the button sits roughly
         // mid-viewport — near the TOP of a long page (this toolbar, right under the page header)
         // there's nowhere near that much room below before hitting the viewport edge, on either
@@ -304,6 +331,16 @@
       }
     });
     document.addEventListener('click', function () { panel.hidden = true; });
+    // Fixed positioning no longer scrolls together with the button/table beneath it the way the
+    // old absolute-inside-a-positioned-ancestor panel did — without this, scrolling the page while
+    // the menu is open leaves it visually stranded, floating over whatever content scrolled up
+    // underneath it instead of tracking the button it belongs to. Excludes scrolls that originate
+    // from the panel's own checkbox list (its overflow-y:auto, see .columns-menu-panel) — otherwise
+    // scrolling through a long column list to find one to toggle would close the menu on itself.
+    window.addEventListener('scroll', function (e) {
+      if (e.target === panel) return;
+      panel.hidden = true;
+    }, true);
 
     container.appendChild(panel);
     if (existingToolbar) existingToolbar.appendChild(container);
@@ -444,6 +481,9 @@
 
     var dragSrcIndex = null;
     headers.forEach(function (th) {
+      // Same opt-out as buildColumnsMenu above — no drag-reorder, click-to-sort, or resize handle
+      // for a utility column either.
+      if (th.hasAttribute('data-no-controls')) return;
       th.setAttribute('draggable', 'true');
       th.classList.add('draggable-col');
       th.title = 'Click to sort, drag to reorder columns';

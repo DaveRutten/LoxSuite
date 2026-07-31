@@ -18,6 +18,7 @@
     <%- include('help-content') %>
   </div>
 </aside>
+<span class="help-drawer-resize-handle" title="Drag to resize"></span>
 
 <script src="/tables.js" defer></script>
 <script>
@@ -44,7 +45,7 @@
 <script>
   // navigator.clipboard is only defined in a "secure context" — https, or http on localhost —
   // so every copy-to-clipboard button silently did nothing at all when this is reached over plain
-  // http on a LAN address (e.g. http://192.168.x.x:3000), which is exactly how this self-hosted
+  // http on a LAN address (e.g. http://192.168.x.x:5582), which is exactly how this self-hosted
   // app is commonly reached. Falls back to the older execCommand('copy') via a throwaway textarea,
   // which still works in that case. Returns a Promise either way so callers don't need to branch.
   window.copyToClipboard = function (text) {
@@ -75,12 +76,27 @@
   // Refresh on the same interval instead, but postpone while a Columns menu
   // is open, and prefer a content-only swap over a full navigation wherever
   // the page opts in (data-live-swap) so scroll position and open panels
-  // survive.
+  // survive. The interval itself and an outright pause are both a personal
+  // display preference, not app data — kept in localStorage, same convention
+  // already used for the panel/help drawers' own remembered widths — keyed
+  // by path so every auto-refreshing page (Live Data, Client Activity, Logs
+  // x4, ...) remembers its own choice independently of the others.
   (function () {
-    var seconds = Number(document.body.dataset.refresh);
-    if (!seconds) return;
-    var ms = seconds * 1000;
+    var defaultSeconds = Number(document.body.dataset.refresh);
+    if (!defaultSeconds) return;
     var liveSwap = document.body.dataset.liveSwap === 'true';
+
+    var PRESETS = [5, 10, 30, 60];
+    var INTERVAL_KEY = 'refreshInterval:' + location.pathname;
+    var PAUSED_KEY = 'refreshPaused:' + location.pathname;
+
+    function loadSeconds() {
+      var saved = Number(localStorage.getItem(INTERVAL_KEY));
+      return saved > 0 ? saved : defaultSeconds;
+    }
+    function isPaused() {
+      return localStorage.getItem(PAUSED_KEY) === '1';
+    }
 
     function menuOpen() {
       return Array.prototype.some.call(
@@ -115,9 +131,15 @@
       if (window.refreshTables) window.refreshTables();
     }
 
+    function selectionActive() {
+      // Optional hook, only defined on pages that load log-select.js — postpones the same way
+      // menuOpen() does, so a mid-selection swap doesn't wipe out a Logs page's checked rows.
+      return !!(window.hasActiveLogSelection && window.hasActiveLogSelection());
+    }
+
     function tick() {
       setTimeout(function () {
-        if (menuOpen()) { tick(); return; }
+        if (isPaused() || menuOpen() || selectionActive()) { tick(); return; }
         if (!liveSwap) { location.reload(); return; }
         fetch(location.pathname + location.search)
           .then(function (res) { return res.text(); })
@@ -126,9 +148,268 @@
             tick();
           })
           .catch(function () { tick(); });
-      }, ms);
+      }, loadSeconds() * 1000); // re-read every tick so a change made mid-visit takes effect on the very next cycle, not just after a reload
     }
     tick();
+
+    // Interval select + pause toggle, injected into the topbar rather than hand-added to each of
+    // the ~8 auto-refreshing pages' own markup — this one shared script already knows which pages
+    // those are (data-refresh is only ever set on them, see partials/head.ejs), so building the
+    // control here covers all of them, present and future, for free. One bordered pill (matching
+    // .topbar-help right next to it) rather than two loose floating controls, with the same
+    // preset-dropdown-plus-"Custom…"-fallback shape already used for panel unit fields
+    // (see unitField() in panel-grid.ejs) for entering an arbitrary interval.
+    var topbarRight = document.querySelector('.topbar-right');
+    if (topbarRight) {
+      var wrap = document.createElement('div');
+      wrap.className = 'refresh-control';
+
+      var select = document.createElement('select');
+      select.title = 'Auto-refresh interval';
+      PRESETS.forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s + 's';
+        select.appendChild(opt);
+      });
+      var customOpt = document.createElement('option');
+      customOpt.value = '__custom__';
+      customOpt.textContent = 'Custom…';
+      select.appendChild(customOpt);
+
+      // A bare number ("90"), or one suffixed with a unit ("5m", "90s", "2 min") — text rather
+      // than type="number" specifically so a trailing letter is even possible to type at all.
+      function parseCustomSeconds(raw) {
+        var match = String(raw).trim().match(/^(\d+(?:\.\d+)?)\s*(m|min|mins|minutes|s|sec|secs|seconds)?$/i);
+        if (!match) return null;
+        var amount = Number(match[1]);
+        var isMinutes = (match[2] || 's').charAt(0).toLowerCase() === 'm';
+        var seconds = Math.round(isMinutes ? amount * 60 : amount);
+        return seconds > 0 ? seconds : null;
+      }
+
+      var customInput = document.createElement('input');
+      customInput.type = 'text';
+      customInput.inputMode = 'numeric';
+      customInput.placeholder = 'e.g. 90s or 5m';
+      customInput.className = 'refresh-custom-input';
+      customInput.title = 'Custom interval — a plain number of seconds, or e.g. "5m" for minutes';
+
+      var savedSeconds = loadSeconds();
+      var isCustom = PRESETS.indexOf(savedSeconds) === -1;
+      select.value = isCustom ? '__custom__' : savedSeconds;
+      customInput.value = savedSeconds;
+      customInput.hidden = !isCustom;
+
+      select.addEventListener('change', function () {
+        if (select.value === '__custom__') {
+          customInput.hidden = false;
+          customInput.focus();
+          return;
+        }
+        customInput.hidden = true;
+        localStorage.setItem(INTERVAL_KEY, select.value);
+      });
+      customInput.addEventListener('change', function () {
+        var seconds = parseCustomSeconds(customInput.value);
+        if (seconds) localStorage.setItem(INTERVAL_KEY, seconds);
+      });
+
+      var toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'icon-btn refresh-toggle-btn';
+      // Inlined rather than using the server-side icon() helper — this is a plain static asset
+      // with no access to that (same reasoning as tables.js's own inlined Columns-button icon).
+      var PAUSE_SVG = '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
+      var PLAY_SVG = '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>';
+      function renderToggle() {
+        var paused = isPaused();
+        toggleBtn.innerHTML = paused ? PLAY_SVG : PAUSE_SVG;
+        toggleBtn.title = paused ? 'Resume auto-refresh' : 'Pause auto-refresh';
+        toggleBtn.setAttribute('aria-label', toggleBtn.title);
+        toggleBtn.classList.toggle('refresh-paused', paused);
+      }
+      toggleBtn.addEventListener('click', function () {
+        localStorage.setItem(PAUSED_KEY, isPaused() ? '0' : '1');
+        renderToggle();
+      });
+      renderToggle();
+
+      wrap.appendChild(select);
+      wrap.appendChild(customInput);
+      wrap.appendChild(toggleBtn);
+      topbarRight.insertBefore(wrap, topbarRight.firstChild);
+    }
+
+  })();
+</script>
+<script>
+  // Dashboard-wide time filter, next to the auto-refresh control above — only on pages that opt
+  // in (data-dash-range, see dashboard.ejs/dashboard-detail.ejs's own head include). Drives every
+  // time-series panel's *display* window via a plain ?range= query param on the dashboard's own
+  // URL, read server-side by loadPanelsWithMonitors() (routes/dashboards.js) — a real navigation
+  // rather than a fetch-and-swap, so it's a shareable/bookmarkable link and rides along for free
+  // on every live-refresh cycle after that (partials/foot.ejs's own tick() already re-fetches
+  // location.pathname + location.search on every tick). Each panel keeps its own saved range
+  // untouched in the database; this only overrides what's computed for display while active.
+  (function () {
+    if (document.body.dataset.dashRange !== 'true') return;
+    var topbarRight = document.querySelector('.topbar-right');
+    if (!topbarRight) return;
+
+    var PRESETS = [['1h', 'Last hour'], ['24h', 'Last 24 hours'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['all', 'All']];
+    var ABS_RE = /^abs_(\d+)_(\d+)$/;
+    var current = new URLSearchParams(location.search).get('range') || '';
+    var absMatch = current.match(ABS_RE);
+
+    function navigate(range) {
+      var params = new URLSearchParams(location.search);
+      if (range) params.set('range', range); else params.delete('range');
+      var qs = params.toString();
+      location.href = location.pathname + (qs ? '?' + qs : '');
+    }
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function toDateInputValue(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    function formatShort(ms) {
+      var d = new Date(ms);
+      return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    // A single popover per field — a native <input type="date"> (Chrome's own calendar picker is
+    // already good, no reason to rebuild that part) plus hour/minute <select>s instead of the
+    // datetime-local widget's own time half, which has no equivalent click-to-pick UI and has to
+    // be typed digit by digit instead. Same floating-popover shape as .columns-menu-panel.
+    function buildDateTimePicker(label, initialMs) {
+      var ms = initialMs || null;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-soft';
+      function renderLabel() { btn.textContent = ms ? formatShort(ms) : label; }
+      renderLabel();
+
+      var panel = document.createElement('div');
+      panel.className = 'columns-menu-panel dash-datetime-panel';
+      panel.hidden = true;
+
+      var dateInput = document.createElement('input');
+      dateInput.type = 'date';
+
+      var hourSelect = document.createElement('select');
+      for (var h = 0; h < 24; h++) {
+        var hOpt = document.createElement('option');
+        hOpt.value = h;
+        hOpt.textContent = pad(h);
+        hourSelect.appendChild(hOpt);
+      }
+      var minuteSelect = document.createElement('select');
+      for (var m = 0; m < 60; m += 5) {
+        var mOpt = document.createElement('option');
+        mOpt.value = m;
+        mOpt.textContent = pad(m);
+        minuteSelect.appendChild(mOpt);
+      }
+
+      var seed = new Date(ms || Date.now());
+      dateInput.value = toDateInputValue(seed);
+      hourSelect.value = seed.getHours();
+      minuteSelect.value = Math.min(55, Math.round(seed.getMinutes() / 5) * 5);
+
+      var row = document.createElement('div');
+      row.className = 'dash-datetime-row';
+      row.appendChild(dateInput);
+      row.appendChild(hourSelect);
+      row.appendChild(document.createTextNode(':'));
+      row.appendChild(minuteSelect);
+      var setBtn = document.createElement('button');
+      setBtn.type = 'button';
+      setBtn.className = 'primary';
+      setBtn.textContent = 'Set';
+      panel.appendChild(row);
+      panel.appendChild(setBtn);
+
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var wasHidden = panel.hidden;
+        document.querySelectorAll('.dash-datetime-panel').forEach(function (p) { p.hidden = true; });
+        if (wasHidden) {
+          // .columns-menu-panel is position:fixed with no static top/left of its own (see
+          // style.css's own comment on that rule) — tables.js computes those from its trigger
+          // button on each open; this reused panel needs the same treatment, right-aligned under
+          // its own button same as that one.
+          var rect = btn.getBoundingClientRect();
+          panel.style.top = (rect.bottom + 6) + 'px';
+          panel.style.left = 'auto';
+          panel.style.right = (window.innerWidth - rect.right) + 'px';
+        }
+        panel.hidden = !wasHidden;
+      });
+      panel.addEventListener('click', function (e) { e.stopPropagation(); });
+      setBtn.addEventListener('click', function () {
+        if (!dateInput.value) return;
+        var d = new Date(dateInput.value + 'T00:00:00');
+        d.setHours(Number(hourSelect.value), Number(minuteSelect.value), 0, 0);
+        ms = d.getTime();
+        renderLabel();
+        panel.hidden = true;
+      });
+
+      return { btn: btn, panel: panel, getMs: function () { return ms; } };
+    }
+
+    var wrap = document.createElement('div');
+    wrap.className = 'refresh-control';
+
+    var select = document.createElement('select');
+    select.title = 'Time range for chart/table/comparison panels — leave on Default to let each panel use its own saved range';
+    var defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'Default range';
+    select.appendChild(defaultOpt);
+    PRESETS.forEach(function (p) {
+      var opt = document.createElement('option');
+      opt.value = p[0];
+      opt.textContent = p[1];
+      select.appendChild(opt);
+    });
+    var customOpt = document.createElement('option');
+    customOpt.value = '__custom__';
+    customOpt.textContent = 'Custom…';
+    select.appendChild(customOpt);
+
+    var isPreset = PRESETS.some(function (p) { return p[0] === current; });
+    select.value = absMatch ? '__custom__' : (isPreset ? current : '');
+
+    var startPicker = buildDateTimePicker('From', absMatch ? Number(absMatch[1]) : null);
+    var endPicker = buildDateTimePicker('To', absMatch ? Number(absMatch[2]) : null);
+    var goBtn = document.createElement('button');
+    goBtn.type = 'button';
+    goBtn.className = 'btn-soft';
+    goBtn.textContent = 'Go';
+    var customGroup = [startPicker.btn, endPicker.btn, goBtn];
+    customGroup.forEach(function (el) { el.hidden = !absMatch; });
+
+    select.addEventListener('change', function () {
+      var isCustom = select.value === '__custom__';
+      customGroup.forEach(function (el) { el.hidden = !isCustom; });
+      if (!isCustom) navigate(select.value);
+    });
+    goBtn.addEventListener('click', function () {
+      var startMs = startPicker.getMs();
+      var endMs = endPicker.getMs();
+      if (!startMs || !endMs || !(startMs < endMs)) return;
+      navigate('abs_' + startMs + '_' + endMs);
+    });
+    document.addEventListener('click', function () {
+      document.querySelectorAll('.dash-datetime-panel').forEach(function (p) { p.hidden = true; });
+    });
+
+    wrap.appendChild(select);
+    wrap.appendChild(startPicker.btn);
+    wrap.appendChild(startPicker.panel);
+    wrap.appendChild(endPicker.btn);
+    wrap.appendChild(endPicker.panel);
+    wrap.appendChild(goBtn);
+    topbarRight.insertBefore(wrap, topbarRight.firstChild);
   })();
 </script>
 <script>
@@ -209,6 +490,53 @@
     backdrop.addEventListener('click', closeDrawer);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closeDrawer();
+    });
+  })();
+</script>
+<script>
+  // Drag-to-resize for the Help drawer's width — same handle-and-CSS-variable mechanic as the
+  // dash-panel edit drawer's own .panel-drawer-resize-handle (see panel-grid.ejs), just a separate
+  // width/localStorage key since the two drawers hold very different content and there's no reason
+  // a preferred width for one should carry over to the other.
+  (function () {
+    var handle = document.querySelector('.help-drawer-resize-handle');
+    if (!handle) return;
+    var STORAGE_KEY = 'helpDrawerWidth';
+    var MIN_WIDTH = 320;
+
+    function maxWidth() { return Math.min(900, window.innerWidth * 0.92); }
+
+    var saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) document.documentElement.style.setProperty('--help-drawer-width', Math.min(Number(saved), maxWidth()) + 'px');
+
+    handle.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      var startX = e.clientX;
+      var startWidth = document.getElementById('help-drawer').getBoundingClientRect().width;
+      handle.classList.add('dragging');
+      // The handle's own CSS cursor:ew-resize (see style.css) only shows while the mouse is
+      // hovering its thin 6px strip — which a real drag moves off of immediately. Forced on
+      // <body> for the drag's duration instead, so the resize cursor keeps showing wherever the
+      // mouse actually passes over while dragging.
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+
+      function onMove(e) {
+        // Dragging left (clientX decreases) should widen the drawer — its right edge is pinned to
+        // the viewport edge, so the left edge (and this handle) are what actually move.
+        var width = Math.max(MIN_WIDTH, Math.min(maxWidth(), startWidth + (startX - e.clientX)));
+        document.documentElement.style.setProperty('--help-drawer-width', width + 'px');
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        handle.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        localStorage.setItem(STORAGE_KEY, getComputedStyle(document.documentElement).getPropertyValue('--help-drawer-width').trim().replace('px', ''));
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
     });
   })();
 </script>

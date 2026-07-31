@@ -13,7 +13,7 @@
 <% } %>
 
 <% if (canEdit('monitor')) { %>
-<details class="add-panel">
+<details class="add-panel" <%= prefillTopic ? 'open' : '' %>>
   <summary>Add monitor</summary>
   <div class="add-panel-body">
     <form method="post" action="/monitor" id="add-monitor-form">
@@ -31,7 +31,7 @@
       <div class="form-grid" id="mqtt-fields" style="margin-top:0.85rem;">
         <div>
           <label>MQTT topic</label>
-          <input type="text" name="topic" list="known-topics" placeholder="shellies/.../energy">
+          <input type="text" name="topic" list="known-topics" placeholder="shellies/.../energy" value="<%= prefillTopic %>">
           <datalist id="known-topics">
             <% knownTopics.forEach(t => { %><option value="<%= t %>"></option><% }) %>
           </datalist>

@@ -12,9 +12,31 @@ function makeHelpers(user) {
   };
 }
 
+// Every dashboard this user has starred (dashboard_favorites) AND can still actually reach —
+// favoriting doesn't survive losing access, so a dashboard un-shared with them (or whose owner
+// left) just quietly stops appearing here instead of leaving a dead link in the sidebar. Mirrors
+// loadAccessibleDashboard's own three ways in (owner, direct share, role share) rather than
+// importing it from routes/dashboards.js, since that module in turn requires this one indirectly
+// (server.js wiring) — pulling it in here would risk a require cycle for a handful of lines of SQL.
+function loadFavoriteDashboards(userId, roleId) {
+  return db.prepare(`
+    SELECT custom_dashboards.id, custom_dashboards.name
+    FROM dashboard_favorites
+    JOIN custom_dashboards ON custom_dashboards.id = dashboard_favorites.dashboard_id
+    WHERE dashboard_favorites.user_id = ?
+      AND (
+        custom_dashboards.user_id = ?
+        OR EXISTS (SELECT 1 FROM dashboard_shares WHERE dashboard_shares.dashboard_id = custom_dashboards.id AND dashboard_shares.user_id = ?)
+        OR (? IS NOT NULL AND EXISTS (SELECT 1 FROM dashboard_role_shares WHERE dashboard_role_shares.dashboard_id = custom_dashboards.id AND dashboard_role_shares.role_id = ?))
+      )
+    ORDER BY custom_dashboards.name
+  `).all(userId, userId, userId, roleId, roleId);
+}
+
 module.exports = function loadUserContext(req, res, next) {
   res.locals.currentUser = null; // always defined so every view can safely reference it
   res.locals.collapsedSections = []; // ditto — which sidebar sections (see partials/head.ejs) this user has collapsed
+  res.locals.favoriteDashboards = []; // ditto — this user's starred dashboards (see partials/head.ejs's sidebar)
   Object.assign(res.locals, makeHelpers(null));
 
   if (!req.session || !req.session.userId) return next();
@@ -48,6 +70,7 @@ module.exports = function loadUserContext(req, res, next) {
   Object.assign(res.locals, makeHelpers(req.user));
   res.locals.collapsedSections = db.prepare('SELECT section_key FROM user_nav_prefs WHERE user_id = ? AND collapsed = 1')
     .all(user.id).map((r) => r.section_key);
+  res.locals.favoriteDashboards = loadFavoriteDashboards(user.id, req.user.roleId);
 
   next();
 };

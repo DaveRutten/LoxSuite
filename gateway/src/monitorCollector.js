@@ -1,6 +1,7 @@
 const db = require('./db');
 const { fetchMiniserver } = require('./loxone');
 const { ensureConnection, getLiveValue } = require('./loxoneWebSocket');
+const { checkMonitorThreshold } = require('./notifications');
 
 const LOXONE_POLL_TICK_MS = 5000;
 const RETENTION_TICK_MS = 60 * 60 * 1000;
@@ -33,6 +34,7 @@ function insertHistory(monitorId, value) {
   db.prepare('INSERT INTO monitor_history (monitor_id, recorded_at, value, numeric_value) VALUES (?, ?, ?, ?)')
     .run(monitorId, recordedAt, String(value), numericValue);
   currentValues.set(monitorId, { value: String(value), recordedAt });
+  if (numericValue !== null) checkMonitorThreshold(monitorId, numericValue);
 }
 
 function recordMqttValue(topic, rawValue) {

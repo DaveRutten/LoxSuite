@@ -110,6 +110,21 @@
 
 * { box-sizing: border-box; }
 
+/* Tells the browser which palette its own natively-drawn form controls (checkbox/radio tick,
+   <select> popup, scrollbars, ...) should render in — without this, an unchecked checkbox is a
+   plain white box with a light-grey border no matter how dark the rest of the page is, since the
+   browser has no other way to know this page is currently dark. Mirrors the same
+   :root/[data-theme="dark"]/[data-theme="light"] three-way split as every color variable above:
+   default follows the OS preference, an explicit in-app theme choice overrides it either way. */
+:root { color-scheme: light dark; }
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
+
+/* The *checked* fill still needs its own color — color-scheme above only fixes the unchecked
+   state's border/background, a checked native checkbox/radio otherwise defaults to a generic
+   browser blue that clashes with this app's own accent green. */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+
 /* Nearly everything in this stylesheet is sized in rem, so scaling the root font-size scales
    text, padding, gaps, icons, etc. all together — the same effect as the browser's own zoom,
    just applied once here instead of needing to be set per-browser/per-visit. */
@@ -285,6 +300,26 @@ button:not(.icon-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35r
 .theme-toggle:hover { background: rgba(255, 255, 255, 0.08); color: #fff; border-color: rgba(255, 255, 255, 0.25); }
 .theme-toggle:active { transform: scale(0.98); }
 
+/* Sits right under .theme-toggle (see versionCheck.js) — its own margin-top:auto already pushes
+   both of them to the bottom of the sidebar together, so no extra positioning needed here. */
+.sidebar-version {
+  margin-top: 0.6rem;
+  text-align: center;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.35);
+}
+.sidebar-version-update {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+.sidebar-version-update:hover { text-decoration: underline; }
+
 .content {
   flex: 1;
   min-width: 0;
@@ -301,7 +336,17 @@ button:not(.icon-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35r
   position: sticky;
   top: 0;
   z-index: 10;
-  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  /* Same fixed-to-viewport radial glow as <body> (see its own comment), layered under this same
+     translucent wash rather than a flat tint of its own — with just a flat color here the glow
+     stopped dead at the topbar's own top edge instead of reading as one continuous background
+     across the seam. Both use the same background-attachment:fixed "circle at top" image, which
+     is computed against the viewport itself (not each element's own box) when fixed, so they land
+     on exactly the same pixels regardless of the topbar's own offset (past the sidebar) or how
+     far the page has scrolled. */
+  background-color: color-mix(in srgb, var(--bg) 55%, transparent);
+  background-image: radial-gradient(circle at top, var(--accent-soft), transparent 60%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
@@ -312,14 +357,20 @@ button:not(.icon-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35r
   margin: 0 0 1.25rem;
 }
 
+/* .topbar-help, .refresh-control, and .account-menu-btn (further below) are the same row of
+   bordered topbar pills — explicit height + font-size on all three (rather than letting each
+   size itself from its own padding/content) is what actually keeps them visually level with each
+   other, since their internal content otherwise differs enough (an icon+text link vs. a
+   select+button group vs. an avatar+name) to size slightly differently left to their own devices. */
 .topbar-help {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.85rem;
+  height: 2.25rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
   text-decoration: none;
-  padding: 0.3rem 0.6rem;
+  padding: 0 0.6rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   white-space: nowrap;
@@ -337,33 +388,110 @@ button:not(.icon-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35r
   flex-shrink: 0;
 }
 
+/* Interval select + pause toggle for auto-refreshing pages, injected into .topbar-right by
+   partials/foot.ejs — one bordered pill (matching .topbar-help right next to it) rather than two
+   loose floating controls, so it reads as a single grouped thing rather than stray leftovers.
+   Also reused as-is by the dashboard time filter right next to it (same file) — a select plus,
+   once "Custom…" is picked, two date/time picker buttons and a Go button, all inside this same
+   one bordered pill instead of a second one glued on next to it. */
+.refresh-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 2.25rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+/* Every direct child keeps its own natural (content) width instead of the flex default of
+   shrinking to fit — a shrunk button/select wraps its text onto a second line while still stuck
+   at this pill's fixed height, clipping it, instead of the pill simply growing wider to fit. */
+.refresh-control > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+/* Sized down from the generic select/input to sit comfortably inside this compact pill. */
+.refresh-control select, .refresh-control input {
+  padding: 0 1.5rem 0 0.5rem;
+  height: 1.75rem;
+  font-size: 0.82rem;
+  border: none;
+  background: none;
+}
+.refresh-control select { background-position: right 0.5rem center; background-size: 0.7rem; }
+.refresh-control input[type="text"] { width: 4.6rem; padding-right: 0.5rem; }
+.refresh-control select:focus, .refresh-control input:focus { box-shadow: none; }
+.refresh-toggle-btn.refresh-paused { color: var(--warning); background: var(--warning-soft); }
+/* The shared button rule (button.primary/.btn-soft/...) gives every button a fixed 1.85rem
+   height — taller than this pill's own 2.25rem outer height would comfortably fit, so buttons
+   inside here (the dashboard time filter's date pickers + Go) get sized down to match. */
+.refresh-control button.btn-soft, .refresh-control button.primary {
+  height: 1.75rem;
+  padding: 0 0.5rem;
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+/* The dashboard time filter's date/time popovers (see buildDateTimePicker() in partials/foot.ejs)
+   — reuses .columns-menu-panel's own floating-panel look, just with its own compact content. */
+.dash-datetime-panel { padding: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; min-width: auto; }
+/* Same [hidden]-vs-author-display specificity clash as .dash-range-custom below (and
+   .value-suggest-list/.rule-fields elsewhere) — .dash-datetime-panel's own `display: flex` above
+   ties with the UA `[hidden] { display: none }` rule and wins on source order, so without this
+   override BOTH the "From" and "To" popovers stayed visibly stacked on top of each other at all
+   times regardless of which one JS actually toggled open. */
+.dash-datetime-panel[hidden] { display: none; }
+.dash-datetime-row { display: flex; align-items: center; gap: 0.3rem; }
+.dash-datetime-row input[type="date"] { font-size: 0.82rem; padding: 0.35rem 0.5rem; }
+.dash-datetime-row select { font-size: 0.82rem; padding: 0.35rem 1.4rem 0.35rem 0.5rem; width: auto; }
+.dash-datetime-panel button.primary { width: 100%; justify-content: center; }
+
+/* The dashboard time filter's "Custom…" fallback (see partials/foot.ejs) — same bordered-pill
+   base as .refresh-control, just with two datetime-local fields and a Go button instead of a
+   single select, so the datetime inputs need their own (wider, no dropdown-arrow gap) padding. */
+.dash-range-custom input[type="datetime-local"] { width: 11rem; padding-right: 0.5rem; }
+.dash-range-custom button { height: 1.6rem; padding: 0.2rem 0.55rem; font-size: 0.78rem; margin: 0; }
+/* .refresh-control's own `display: inline-flex` (its base class, see above) has the same
+   specificity as the browser's `[hidden] { display: none }` UA rule and wins on source order —
+   same fix already needed for .value-suggest-list/.rule-fields elsewhere in this file — so toggling
+   .hidden via JS on this element did nothing visually without this override. */
+.dash-range-custom[hidden] { display: none; }
+
 .account-menu { position: relative; }
 
+/* Flat/borderless like .topbar-help and .refresh-control right next to it — used to have its own
+   filled background + drop shadow, which read as a visually separate, more "prominent" control
+   than the rest of this row instead of matching its neighbors. */
 .account-menu-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: var(--surface);
+  height: 2.25rem;
+  background: none;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0.3rem 0.9rem 0.3rem 0.3rem;
+  /* Extra left padding (vs. a plain rectangular pill) — the avatar's own accent-soft ring (see
+     .account-menu-avatar below) reads as part of its edge, and on :hover/open both that ring and
+     this border turn the same accent color, so anything less clearance here reads as the avatar
+     touching the border even where there's technically still a sliver of a gap. */
+  padding: 0 0.9rem 0 0.5rem;
   cursor: pointer;
   color: var(--text);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 500;
-  box-shadow: var(--shadow);
-  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+  white-space: nowrap;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
 }
 
-.account-menu-btn:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
+.account-menu-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 .account-menu-avatar {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent-soft);
 }
 
 .account-menu-avatar-fallback {
@@ -534,6 +662,17 @@ h2 {
   margin-bottom: 1.5rem;
 }
 
+/* Same card look as .table-wrap, deliberately a different class — see the comment on
+   #monitor-history-groups in monitor-detail.ejs for why it can't just be .table-wrap. */
+.history-groups-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 1.5rem;
+}
+
 /* A filter/search toolbar that reads as physically attached to the table below it — one card,
    not two separate floating pieces with a gap between them. The toolbar gets the card's own
    border/shadow/radius; the nested .table-wrap sheds its own (border-top especially, so the
@@ -563,9 +702,13 @@ h2 {
   border-bottom: 1px solid var(--border);
 }
 /* Same reasoning as .row-actions above — the shared button rule's own margin-right would
-   otherwise stack on top of this toolbar's own gap between e.g. Clear list and Columns. */
-.table-toolbar > button, .table-toolbar > .btn-soft, .table-toolbar > form > button,
-.table-toolbar > .columns-menu-inline > button { margin-right: 0; }
+   otherwise stack on top of this toolbar's own gap between e.g. Clear list and Columns.
+   !important on the Columns button specifically: it's built by tables.js and appended one level
+   deeper (.table-toolbar > .columns-menu-inline > button) than the other toolbar buttons, and in
+   practice kept showing a visibly bigger gap before it than between the rest — this pins its
+   margin to 0 unconditionally rather than trying to out-specificity whatever was still winning. */
+.table-toolbar > button, .table-toolbar > .btn-soft, .table-toolbar > form > button { margin-right: 0; }
+.table-toolbar > .columns-menu-inline, .table-toolbar > .columns-menu-inline > button { margin: 0 !important; }
 
 .filterable-table-card .table-wrap {
   border: none;
@@ -590,8 +733,8 @@ h2 {
   border-bottom-right-radius: 0;
   border-right: none;
   max-width: 11rem;
-  /* Extra breathing room so the native dropdown arrow doesn't sit flush against the seam's
-     divider line — the generic select's 0.6rem right padding put it almost touching it. */
+  /* Extra breathing room so the custom chevron (see select:not([multiple]) above) doesn't sit
+     flush against the seam's divider line. */
   padding-right: 3.1rem;
 }
 .search-combo input[type="text"] {
@@ -637,6 +780,11 @@ h2 {
 /* Our own `display: flex` above has the same specificity as the browser's `[hidden] { display:
    none }` UA rule and wins on source order, so the [hidden] attribute alone does nothing here. */
 .value-suggest-list[hidden] { display: none; }
+/* Same fix, same reason — the Notifications rule form's per-trigger-type field groups (see
+   admin-notifications.ejs) are toggled via el.hidden in JS, but each one is also a .form-grid
+   (display:grid) or .toggle-row (display:flex), both of which otherwise silently override the
+   native hidden-attribute behavior. */
+.rule-fields[hidden] { display: none; }
 .value-suggest-list button {
   background: none;
   border: none;
@@ -678,6 +826,14 @@ th {
 tbody tr:last-child td { border-bottom: none; }
 tbody tr { transition: background 0.12s var(--ease); }
 tbody tr:hover { background: var(--surface-alt); }
+
+/* Row-select checkbox column on the Logs pages (see log-select.js) — a plain narrow, centered
+   utility column, deliberately excluded from tables.js's drag/sort/resize/hide system via
+   [data-no-controls] (see buildColumnsMenu/initTable there). :hover is repeated on the selected
+   rule so a selected row keeps reading as selected while the mouse happens to be over it, rather
+   than :hover's own background silently winning for as long as the pointer sits there. */
+th.col-select, td.col-select { width: 2rem; text-align: center; }
+tbody tr.log-row-selected, tbody tr.log-row-selected:hover { background: var(--accent-soft); }
 
 th.draggable-col { cursor: pointer; user-select: none; position: relative; padding-right: 1.1rem; }
 th.draggable-col:hover { color: var(--accent); }
@@ -745,10 +901,19 @@ th.col-hidden, td.col-hidden { display: none; }
   border-radius: 0;
 }
 
+/* position:fixed (viewport-relative), not absolute — its containing .columns-menu is routinely
+   nested inside a .filterable-table-card, which needs overflow:hidden for its own rounded-corner
+   seam with .table-wrap below (see that rule's own comment). An absolutely-positioned panel is
+   still clipped by an ancestor's overflow:hidden despite floating outside normal document flow —
+   a well-known CSS gotcha (position takes an element out of *layout* flow, not out of *painting*
+   containment) — which is exactly what made this panel vanish/get cut off for any short table,
+   worst of all a .filterable-table-card one (Live Data, Monitor, Logs, ...) barely taller than its
+   own toolbar. Fixed positioning has no such ancestor-clipping problem (the same technique the
+   dash-panel edit drawer and Help drawer already use) — its top/left/right/bottom are computed
+   and set directly in tables.js's buildColumnsMenu, from the button's own getBoundingClientRect(),
+   since there's no longer a positioned ancestor for a CSS top/right percentage to anchor against. */
 .columns-menu-panel {
-  position: absolute;
-  top: 110%;
-  right: 0;
+  position: fixed;
   z-index: 20;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -759,11 +924,6 @@ th.col-hidden, td.col-hidden { display: none; }
   max-height: 70vh;
   overflow-y: auto;
 }
-/* Opens upward instead — a short table (few columns/rows, or the page not scrolled) can leave
-   less room below the Columns button than this checkbox list needs, running it off the bottom of
-   the page instead of just scrolling into view the way a taller page would (tables.js measures
-   and toggles this on every open). */
-.columns-menu-panel.columns-menu-panel-flip-up { top: auto; bottom: 110%; }
 
 .columns-menu-panel label {
   display: flex;
@@ -1045,6 +1205,27 @@ code.recognition-string {
 
 .form-grid > button { align-self: end; }
 
+/* Groups a panel-type's fields under a small labeled header inside the Edit panel drawer (see
+   panel-grid.ejs) — display:contents makes the wrapper itself invisible to layout, so its children
+   (the title below, plus whatever field divs it wraps) become direct items of the SAME .form-grid
+   as everything else, laid out exactly as if the wrapper weren't there at all. That's what lets the
+   existing per-type show/hide script keep working completely unchanged: it already just toggles
+   `display: none` on any [data-fields-for] element, whether that's a single field or, now, one of
+   these whole sections — `display: none` hides a display:contents element and its children just
+   the same as it would a normal one. */
+.panel-section { display: contents; }
+.panel-section-title {
+  grid-column: 1 / -1;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
 /* A checkbox paired with a title + muted description below it (e.g. Settings > Features) — the
    checkbox sits beside the whole text block rather than just the first line, so the description
    reads as clearly subordinate to the title instead of a separate line glued underneath it. */
@@ -1058,7 +1239,7 @@ code.recognition-string {
    explanation rather than just a label (e.g. Settings > Data retention). */
 .settings-field-list { display: flex; flex-direction: column; gap: 1.1rem; }
 .settings-field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
-.settings-field input { width: 100%; max-width: 10rem; }
+.settings-field input, .settings-field select { width: 100%; max-width: 10rem; }
 .settings-field .hint { margin: 0.35rem 0 0; max-width: 40rem; }
 
 .form-grid label {
@@ -1071,9 +1252,12 @@ code.recognition-string {
 
 /* Themed text-like inputs and selects everywhere, not just inside .form-grid — a plain
    `<select>` or `<input>` dropped into a table row or inline form (e.g. the Roles dropdown on
-   MQTT Users) would otherwise render with the unstyled native browser look. */
+   MQTT Users) would otherwise render with the unstyled native browser look. textarea belongs in
+   this same list for the same reason — left out until now, so every <textarea> in the app (e.g.
+   a dash panel's "Rename in this panel" box) rendered with a plain white native background
+   regardless of theme, the one glaringly unthemed control on an otherwise dark page. */
 input[type="text"], input[type="password"], input[type="number"], input[type="email"],
-input[type="file"], input[type="date"], input[type="datetime-local"], select {
+input[type="file"], input[type="date"], input[type="datetime-local"], select, textarea {
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -1085,10 +1269,27 @@ input[type="file"], input[type="date"], input[type="datetime-local"], select {
 
 input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus,
 input[type="email"]:focus, input[type="file"]:focus, input[type="date"]:focus,
-input[type="datetime-local"]:focus, select:focus {
+input[type="datetime-local"]:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* The box above (border/radius/background) is themed, but a plain <select> still falls back to
+   the browser/OS's own dropdown arrow — unstyleable, doesn't react to dark mode, and looks out of
+   place next to the app's own hand-drawn chevrons elsewhere (sidebar section toggles, Live Data's
+   room/category disclosure). Replace it with a flat SVG chevron instead. Excludes [multiple] — a
+   multi-row listbox (see the dashboard-sharing user/role pickers) has no native arrow to begin
+   with, so painting one on just floats a stray chevron in the corner of a tall box. */
+select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2.1rem;
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 0.85rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%238a92a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='5 8 10 13 15 8'/%3E%3C/svg%3E");
 }
 
 /* The native "Choose file" button is its own pseudo-element, styled separately from the
@@ -1132,6 +1333,44 @@ input[type="file"]::file-selector-button:hover { background: var(--text-muted); 
 }
 .panel-settings-form label { margin-bottom: 0.1rem; font-size: 0.72rem; }
 
+/* Shared on/off switch (see toggleSwitch() in src/toggleSwitch.js) — every plain boolean setting
+   in the app (SSO/rclone/backup-schedule Enabled, MQTT TLS, Retain, Miniserver HTTPS, ...) used to
+   be a two-option <select>; this renders the same underlying checkbox as an iOS-style switch
+   instead, which reads at a glance as on/off rather than needing to open a dropdown to tell.
+   Deliberately placed here (not up near the plain input[type=checkbox] rule) and keyed off
+   `label.switch` rather than plain `.switch` — .form-grid/.settings-field/.panel-settings-form
+   label ABOVE all set their own `display: block` at the exact same (class + element) specificity,
+   and a tie resolves by source order, so this has to be both that specific AND declared after all
+   three or `display: inline-flex` below silently loses and the switch collapses into a bare dot
+   (its track/thumb children with nothing sizing them) — this exact bug shipped once already. */
+label.switch { display: inline-flex; align-items: center; cursor: pointer; margin-bottom: 0; }
+.switch input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.switch-track {
+  position: relative;
+  width: 2.5rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.15s var(--ease);
+}
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s var(--ease);
+}
+.switch input:checked + .switch-track { background: var(--accent); }
+.switch input:checked + .switch-track .switch-thumb { transform: translateX(1.05rem); }
+.switch input:focus-visible + .switch-track { box-shadow: 0 0 0 2px var(--accent-soft); }
+.switch input:disabled + .switch-track { opacity: 0.5; cursor: not-allowed; }
+.switch:has(input:disabled) { cursor: not-allowed; }
+
 /* Grafana-style threshold ladder builder (see thresholdField() in panel-grid.ejs) — collapsible
    so an unused feature doesn't take up permanent space, with one row per rule: a value and a
    native color picker, plus a remove button. */
@@ -1152,7 +1391,26 @@ input[type="file"]::file-selector-button:hover { background: var(--text-muted); 
 }
 .threshold-builder-details[open] summary::before { transform: rotate(90deg); }
 .threshold-builder-rows,
-.value-mapping-rows { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.5rem; }
+.value-mapping-rows,
+.annotation-builder-rows { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.5rem; }
+
+.annotation-row { display: flex; align-items: center; gap: 0.5rem; }
+.annotation-row input.annotation-row-time[type="datetime-local"] { flex: 2; min-width: 0; width: auto; }
+.annotation-row input.annotation-row-label[type="text"] { flex: 2; min-width: 0; width: auto; }
+.annotation-row input.annotation-row-color[type="color"] {
+  flex: 0 0 auto;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+.annotation-row input.annotation-row-color[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 50%; overflow: hidden; }
+.annotation-row input.annotation-row-color[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
+.annotation-row input.annotation-row-color[type="color"]::-moz-color-swatch { border: none; border-radius: 50%; }
+.annotation-row .annotation-row-remove { flex-shrink: 0; }
 .threshold-builder-row,
 .value-mapping-row { display: flex; align-items: center; gap: 0.5rem; }
 /* The global "form-grid input isn't a checkbox/radio -> width:100%" rule (see further up this
@@ -1167,6 +1425,7 @@ input[type="file"]::file-selector-button:hover { background: var(--text-muted); 
    winning instead) while the value/name fields got squeezed into whatever space was left over —
    the exact reverse of the intended "text fields are wide, color is a small dot" layout. */
 .threshold-builder-row input.threshold-row-value[type="number"] { flex: 3; min-width: 0; width: auto; }
+.threshold-builder-row select.threshold-row-style { flex: 0 0 auto; width: auto; }
 /* Value is usually short (a raw number/state like "1"); Name is the actual descriptive text
    ("Actief") and typically needs more room, hence the narrower/wider split rather than an even one. */
 .value-mapping-row input.value-mapping-row-value[type="text"] { flex: 1; min-width: 0; width: auto; }
@@ -1201,7 +1460,7 @@ input[type="file"]::file-selector-button:hover { background: var(--text-muted); 
 /* One row per currently-checked monitor (see chart series settings JS in panel-grid.ejs) — a
    chart-only feature, so this only ever appears once at least one monitor is checked, and stays
    in sync with the checklist above it (checking/unchecking a monitor adds/removes its row). */
-.chart-series-rows { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.4rem 0; }
+.chart-series-rows, .value-series-rows { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.4rem 0; }
 .chart-series-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .chart-series-row .chart-series-row-label {
   flex: 0 0 auto;
@@ -1213,13 +1472,40 @@ input[type="file"]::file-selector-button:hover { background: var(--text-muted); 
   color: var(--text-muted);
 }
 .chart-series-row input.chart-series-row-name[type="text"] { flex: 2; min-width: 0; width: auto; }
-.chart-series-row select.chart-series-row-axis { flex: 0 0 auto; width: auto; }
+.chart-series-row select.chart-series-row-axis,
+.chart-series-row select.chart-series-row-style { flex: 0 0 auto; width: auto; }
+/* A value-series row has no axis/color columns to share space with (chart-only), so its label
+   gets noticeably more room than .chart-series-row's own 7rem before falling back to the ellipsis
+   + hover-title truncation both rows already share. A fixed width (not just a max-width the label
+   shrinks below for shorter monitor names) is what actually keeps the Name/Unit/Scale/Dec. columns
+   lined up row to row — .chart-series-row-label's own base rule is content-sized (flex: 0 0 auto),
+   so two rows with differently-long monitor names would otherwise start their Name field at two
+   different x-positions. */
+.value-series-row .chart-series-row-label { flex: 0 0 11rem; width: 11rem; max-width: 11rem; }
+/* Decimals is the one field left as a bare number spinner (not a dropdown, unlike Unit/Scale
+   right next to it) — its whole range (0-6) fits on a stepper with no presets worth naming, and
+   this exact size is shared by both the chart per-series row and the value per-monitor row so the
+   two builders line up identically wherever they show the same field (see the "make every panel
+   type's properties look the same" note on .chart-series-row-scale-wrap below). */
+.chart-series-row input.chart-series-row-decimals[type="number"],
+.value-series-row input.value-series-row-decimals[type="number"] {
+  flex: 0 0 auto;
+  width: 4.2rem;
+  min-width: 0;
+}
 /* Same preset-dropdown + free-text-fallback shape as the panel-wide .unit-select fields (see
    unitField() above), just built client-side per row instead of server-rendered once — see the
-   chart-series-settings script below. */
-.chart-series-row-unit-wrap { display: flex; align-items: center; gap: 0.3rem; flex: 1; min-width: 0; }
-.chart-series-row select.chart-series-row-unit-select { flex: 1; min-width: 0; width: auto; }
-.chart-series-row input.chart-series-row-unit-custom[type="text"] { flex: 1; min-width: 0; width: auto; }
+   chart-series-settings script below. Scale (buildScalePicker) reuses this exact same shape/CSS
+   for the same reason .value-series-row reuses .chart-series-row-label above: a chart panel's
+   per-series settings and a value panel's per-monitor settings are two instances of the same
+   underlying row builder, so wherever both have a given field (Name, Unit, Scale — Decimals just
+   above, Axis/Color chart-only) it renders identically in both rather than each inventing its own
+   look for the same kind of control. */
+.chart-series-row-unit-wrap, .chart-series-row-scale-wrap { display: flex; align-items: center; gap: 0.3rem; flex: 1; min-width: 0; }
+.chart-series-row select.chart-series-row-unit-select,
+.chart-series-row select.chart-series-row-scale-select { flex: 1; min-width: 0; width: auto; }
+.chart-series-row input.chart-series-row-unit-custom[type="text"],
+.chart-series-row input.chart-series-row-scale-custom[type="number"] { flex: 1; min-width: 0; width: auto; }
 /* Same circular color-swatch treatment as .threshold-row-color/.value-mapping-row-color above —
    see that block's comment for why the specificity/::-webkit-color-swatch overrides look like this. */
 .chart-series-row input.chart-series-row-color[type="color"] {
@@ -1236,9 +1522,39 @@ input[type="file"]::file-selector-button:hover { background: var(--text-muted); 
 .chart-series-row input.chart-series-row-color[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 50%; overflow: hidden; }
 .chart-series-row input.chart-series-row-color[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
 .chart-series-row input.chart-series-row-color[type="color"]::-moz-color-swatch { border: none; border-radius: 50%; }
+/* Unchecking "give this series its own color" used to visibility:hidden this swatch entirely —
+   its circular border (the row's only hint that a color picker lives here at all) disappeared
+   along with the fill, leaving a blank gap instead. Dimmed instead: the ring stays visible so the
+   control itself is still legible, and pointer-events:none stops a click from opening the native
+   picker and changing a color that wouldn't even be submitted until the checkbox is on anyway. */
+.chart-series-row input.chart-series-row-color[type="color"].is-disabled { opacity: 0.35; pointer-events: none; }
+
+/* "Manage catalog" editor (see mappings-commands.ejs) — one .catalog-editor-family card per
+   device type, each holding a dynamic list of .catalog-editor-row entries (commands or data
+   points, add/remove exactly like the threshold/chart-series builders above). */
+.catalog-editor-family { margin-bottom: 0.85rem; }
+.catalog-editor-rows { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.6rem 0; }
+.catalog-editor-row { display: flex; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; }
+.catalog-editor-row .row-key { flex: 0 0 auto; width: 8rem; }
+.catalog-editor-row .row-label { flex: 0 0 auto; width: 11rem; }
+.catalog-editor-row .row-topic { flex: 2; min-width: 14rem; }
+.catalog-editor-row .row-actions { flex: 1; min-width: 10rem; font-family: 'SF Mono', Consolas, monospace; font-size: 0.78rem; }
+.catalog-editor-row .row-channel-label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; white-space: nowrap; flex: 0 0 auto; }
+.catalog-editor-family-footer { display: flex; align-items: center; gap: 0.5rem; }
+/* A <label class="btn-soft"> wrapping a hidden file input (see the Import buttons in
+   mappings-commands.ejs) — .btn-soft's own rule gives it the right look already, this just
+   restores the pointer cursor a <label> doesn't get by default the way a real <button> does. */
+.inline-file-btn { cursor: pointer; }
 .panel-settings-form input, .panel-settings-form select {
   padding: 0.3rem 0.45rem;
   font-size: 0.8rem;
+}
+/* The compact padding above also flattens the chevron's own breathing room from the base
+   select:not([multiple]) rule — restore just enough of it to keep the arrow off the text. */
+.panel-settings-form select:not([multiple]) {
+  padding-right: 1.5rem;
+  background-position: right 0.5rem center;
+  background-size: 0.7rem;
 }
 
 /* ---- Buttons ----
@@ -1471,6 +1787,14 @@ main > .hint:first-child { margin-top: 0; }
 .icon-btn::-webkit-details-marker { display: none; }
 .icon-btn:hover { color: var(--accent); background: var(--accent-soft); }
 
+/* Toggles a dashboard's own pin into the sidebar (see "Favorite Dashboards" under Monitor in
+   partials/head.ejs; the forms this button belongs to live in dashboards.ejs and
+   dashboard-detail.ejs). The star icon itself (see icons.js) is a plain outline like every other
+   icon here; filling it in is purely this class, not a second icon definition. */
+.favorite-toggle-btn.is-favorited { color: var(--warning); }
+.favorite-toggle-btn.is-favorited .icon { fill: currentColor; }
+.favorite-toggle-btn.is-favorited:hover { color: var(--warning); }
+
 /* Colored at rest (not just on hover) so an icon-only edit/delete action is recognizable by
    color + icon alone, matching the colored .btn-edit/.danger pill buttons elsewhere. */
 .icon-btn-edit { color: var(--warning); background: var(--warning-soft); border-color: var(--warning); }
@@ -1614,6 +1938,48 @@ main > .hint:first-child { margin-top: 0; }
 
 .add-panel summary::-webkit-details-marker { display: none; }
 
+/* Monitor detail page's history table, bucketed per day/hour (see groupHistoryRows in
+   routes/monitor.js) so a monitor polled every few seconds doesn't render one endless flat list —
+   same nested-collapsible feel as .live-data-category, since these groups live directly inside the
+   .table-wrap card rather than being cards of their own. */
+.history-group { border-top: 1px solid var(--border); }
+.history-group:first-child { border-top: none; }
+
+.history-group summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 1rem 0.65rem 1.7rem;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--text);
+  transition: background 0.12s var(--ease);
+}
+.history-group summary:hover { background: var(--surface-alt); }
+.history-group summary::-webkit-details-marker { display: none; }
+
+.history-group summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s var(--ease);
+  flex-shrink: 0;
+}
+.history-group[open] > summary::before { transform: rotate(45deg); margin-top: 0.2rem; }
+/* .hint's own margin (meant for its usual standalone block use as a page caption — see the base
+   .hint rule) makes its flex-item margin box tall enough that align-items:center visibly pushes
+   the "(N readings)" text down and away from the date/hour label beside it instead of sitting on
+   the same line. Neutralized only in this one context. */
+.history-group summary .hint { margin: 0; }
+
+.history-group table { margin: 0; }
+.history-group th, .history-group td { padding: 0.5rem 1rem; }
+
 .add-panel .add-panel-body {
   padding: 0 1.4rem 1.4rem;
   border-top: 1px solid var(--border);
@@ -1639,6 +2005,13 @@ main > .hint:first-child { margin-top: 0; }
   grid-auto-rows: 70px;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  /* Deliberately NOT grid-auto-flow: dense — tried it to make Auto order's packing tighter, but it
+     broke live drag-reorder: that logic works by physically moving the dragged card in the DOM on
+     every dragover (see getDragAfterElement below), and with dense active the grid re-packs OTHER
+     cards into the gap the dragged one leaves *during* that same drag, which reads as multiple
+     panels sliding at once instead of just the one being dragged. Auto order's own
+     largest-panel-first DOM ordering (see its script below) already gives sparse flow a
+     reasonably tight result without that side effect. */
 }
 
 .dash-panel {
@@ -1724,6 +2097,18 @@ main > .hint:first-child { margin-top: 0; }
   transition: opacity 0.25s var(--ease);
 }
 .panel-edit-backdrop.open { display: block; opacity: 1; }
+
+/* The one panel whose drawer is currently open (see the editing/syncBackdrop JS in
+   panel-grid.ejs) — lifted above the backdrop's z-index so it stays sharp/undimmed while every
+   other panel is blurred behind it, letting a live-refresh or auto-saved change actually be seen
+   without closing the drawer first. */
+/* position/left/top (set inline by centerEditingPanel() in panel-grid.ejs, NOT a transform — see
+   that function's own comment for why a transform here would drag the drawer along with it) re-
+   center this panel within whatever space is left once the drawer's own width is subtracted,
+   rather than leaving it wherever the grid happened to place it — which can otherwise land it
+   partly behind the drawer itself, or squeezed into a thin sliver at the edge of the remaining
+   visible area. */
+.dash-panel.editing { z-index: 95; box-shadow: 0 0 0 2px var(--accent), var(--shadow-lg); transition: left 0.2s var(--ease), top 0.2s var(--ease); }
 
 .dash-panel-resize-handle {
   position: absolute;
@@ -1896,7 +2281,7 @@ main > .hint:first-child { margin-top: 0; }
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(480px, 92vw);
+  width: var(--help-drawer-width, min(480px, 92vw));
   background: var(--surface);
   border-left: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
@@ -1907,6 +2292,24 @@ main > .hint:first-child { margin-top: 0; }
   transition: transform 0.28s var(--ease);
 }
 .help-drawer.open { transform: translateX(0); }
+
+/* Drag-to-resize, same handle-on-the-left-edge trick as .panel-drawer-resize-handle (see that
+   rule's own comment) — this drawer is also right-anchored, so its left edge is what visibly
+   moves when it's resized. Only shown while the drawer itself is open. */
+.help-drawer-resize-handle {
+  display: none;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: calc(100% - var(--help-drawer-width, min(480px, 92vw)));
+  width: 6px;
+  margin-left: -3px;
+  cursor: ew-resize;
+  z-index: 92;
+  transition: background 0.15s var(--ease);
+}
+.help-drawer-resize-handle:hover, .help-drawer-resize-handle.dragging { background: var(--accent-soft); }
+.help-drawer.open ~ .help-drawer-resize-handle { display: block; }
 
 .help-drawer-head {
   flex-shrink: 0;

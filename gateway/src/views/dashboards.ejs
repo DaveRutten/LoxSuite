@@ -26,7 +26,13 @@
     <tbody>
       <% dashboards.forEach(d => { %>
         <tr>
-          <td><a href="/dashboards/<%= d.id %>"><%= d.name %></a></td>
+          <td>
+            <form class="inline" method="post" action="/dashboards/<%= d.id %>/<%= d.isFavorited ? 'unfavorite' : 'favorite' %>">
+              <input type="hidden" name="redirect_to" value="/dashboards">
+              <button type="submit" class="icon-btn favorite-toggle-btn <%= d.isFavorited ? 'is-favorited' : '' %>" title="<%= d.isFavorited ? 'Remove from sidebar' : 'Add to sidebar (Monitor → Favorite Dashboards)' %>" aria-label="<%= d.isFavorited ? 'Remove from sidebar' : 'Add to sidebar' %>"><%- icon('star') %></button>
+            </form>
+            <a href="/dashboards/<%= d.id %>"><%= d.name %></a>
+          </td>
           <td><%= d.panelCount %></td>
           <td>
             <div class="row-actions">
@@ -144,7 +150,13 @@
       <tbody>
         <% sharedWithMe.forEach(d => { %>
           <tr>
-            <td><a href="/dashboards/<%= d.id %>"><%= d.name %></a></td>
+            <td>
+              <form class="inline" method="post" action="/dashboards/<%= d.id %>/<%= d.isFavorited ? 'unfavorite' : 'favorite' %>">
+                <input type="hidden" name="redirect_to" value="/dashboards">
+                <button type="submit" class="icon-btn favorite-toggle-btn <%= d.isFavorited ? 'is-favorited' : '' %>" title="<%= d.isFavorited ? 'Remove from sidebar' : 'Add to sidebar (Monitor → Favorite Dashboards)' %>" aria-label="<%= d.isFavorited ? 'Remove from sidebar' : 'Add to sidebar' %>"><%- icon('star') %></button>
+              </form>
+              <a href="/dashboards/<%= d.id %>"><%= d.name %></a>
+            </td>
             <td><%= d.ownerName %></td>
             <td><%= d.panelCount %></td>
             <td><span class="badge badge-live <%= d.canEdit ? 'badge-ok' : 'badge-neutral' %>"><%= d.canEdit ? 'Editor' : 'Viewer' %></span></td>

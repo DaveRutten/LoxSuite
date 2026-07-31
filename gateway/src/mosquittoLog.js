@@ -1,5 +1,6 @@
 const fs = require('fs');
 const db = require('./db');
+const { checkMqttClientStatus } = require('./notifications');
 
 const LOG_PATH = process.env.MOSQUITTO_LOG_PATH || '/mosquitto/log/mosquitto.log';
 
@@ -33,6 +34,13 @@ function recordLogLine(line, ts) {
   lastPersistedAt = ts;
 }
 
+// startTailing() replays the whole log from byte 0 on every gateway restart (see its own comment)
+// — without this guard, that replay would fire a notification for every connect/disconnect in the
+// entire log history on every single restart, not just genuinely new ones. Flips to true once the
+// first poll() (the full backlog replay) finishes; every connect/disconnect matched after that is
+// live/new and fires normally.
+let replayComplete = false;
+
 function processLine(line) {
   const lineMatch = line.match(LINE_RE);
   // A genuine Mosquitto line always starts with its own Unix-timestamp prefix — anything else
@@ -56,6 +64,7 @@ function processLine(line) {
       disconnectedAt: null,
       status: 'connected',
     });
+    if (replayComplete) checkMqttClientStatus(username || null, 'connected');
     return;
   }
 
@@ -65,6 +74,7 @@ function processLine(line) {
     if (existing) {
       existing.disconnectedAt = ts;
       existing.status = 'disconnected';
+      if (replayComplete) checkMqttClientStatus(existing.username, 'disconnected');
     }
   }
 }
@@ -73,7 +83,7 @@ function poll() {
   fs.stat(LOG_PATH, (err, stats) => {
     if (err) return;
     if (stats.size < position) position = 0; // log file was rotated/truncated
-    if (stats.size === position) return;
+    if (stats.size === position) { replayComplete = true; return; }
 
     const stream = fs.createReadStream(LOG_PATH, { start: position, end: stats.size - 1, encoding: 'utf8' });
     let buffer = '';
@@ -81,6 +91,7 @@ function poll() {
     stream.on('end', () => {
       position = stats.size;
       buffer.split('\n').filter(Boolean).forEach(processLine);
+      replayComplete = true;
     });
   });
 }

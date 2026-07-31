@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="<%= csrfToken %>">
+  <title>Setup · LoxSuite</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    (function () {
+      var saved = localStorage.getItem('theme');
+      if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+</head>
+<body class="login-page">
+  <div class="login-box" style="max-width:60rem;">
+    <div class="brand">
+      <span class="brand-icon"><%- icon('logo', { size: 18 }) %></span>
+      <span>LoxSuite setup</span>
+    </div>
+
+    <div class="tabs" style="justify-content:center; margin-bottom:1.25rem;">
+      <% steps.forEach(function (s, i) { %>
+        <span class="badge <%= s === step ? 'badge-ok' : 'badge-neutral' %>"><%= i + 1 %>. <%= s.charAt(0).toUpperCase() + s.slice(1) %></span>
+      <% }) %>
+    </div>
+
+    <div class="card">
+      <% if (error) { %>
+        <p class="error"><%= error %></p>
+      <% } %>
+
+      <% if (step === 'welcome') { %>
+        <h2>Welcome</h2>
+        <p class="hint">
+          A quick guided setup — change the default admin password, set your timezone, and
+          optionally add your first Miniserver. Everything here is also reachable individually
+          later (Profile, Settings, Miniservers), and this wizard itself stays reachable any time
+          from Settings &rarr; "Run setup wizard again", so nothing here is a one-shot, locked-in
+          decision.
+        </p>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
+          <form method="post" action="/setup/skip">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit" class="btn-soft">Skip setup entirely</button>
+          </form>
+          <a href="/setup?step=password"><button type="button" class="primary" style="width:auto;">Get started</button></a>
+        </div>
+      <% } %>
+
+      <% if (step === 'password') { %>
+        <h2>Admin password</h2>
+        <p class="hint">
+          You're currently signed in with whatever <code>ADMIN_PASSWORD</code> was set in
+          <code>.env</code> at first boot — change it to something only you know, or leave both
+          fields blank to keep it as-is.
+        </p>
+        <form method="post" action="/setup/password" id="password-form" class="form-grid">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div><label>New password</label><input type="password" name="new_password" minlength="8" placeholder="Leave blank to keep the current one"></div>
+          <div><label>Confirm new password</label><input type="password" name="confirm_password" minlength="8"></div>
+        </form>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
+          <a href="/setup?step=timezone"><button type="button" class="btn-soft">Skip</button></a>
+          <button type="submit" form="password-form" class="primary" style="width:auto;">Continue</button>
+        </div>
+      <% } %>
+
+      <% if (step === 'timezone') { %>
+        <h2>Timezone</h2>
+        <p class="hint">
+          Every date and time shown anywhere in LoxSuite is rendered in this timezone. Defaults to
+          <code>UTC</code>, which is always correct but rarely what you actually want to see.
+        </p>
+        <form method="post" action="/setup/timezone" id="timezone-form" class="form-grid">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div>
+            <label>Timezone</label>
+            <select name="display_timezone">
+              <% timezones.forEach(tz => { %>
+                <option value="<%= tz %>" <%= tz === gatewaySettings.display_timezone ? 'selected' : '' %>><%= tz %></option>
+              <% }) %>
+            </select>
+          </div>
+        </form>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
+          <a href="/setup?step=miniserver"><button type="button" class="btn-soft">Skip</button></a>
+          <button type="submit" form="timezone-form" class="primary" style="width:auto;">Continue</button>
+        </div>
+      <% } %>
+
+      <% if (step === 'miniserver') { %>
+        <h2>Add your first Miniserver</h2>
+        <% if (miniserverCount > 0) { %>
+          <p class="hint">You already have <%= miniserverCount %> Miniserver<%= miniserverCount === 1 ? '' : 's' %> configured — nothing more needed here.</p>
+        <% } else { %>
+        <p class="hint">Leave every field blank to skip this and add one later from the Miniservers page.</p>
+        <form method="post" action="/setup/miniserver" id="miniserver-form" class="form-grid">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div><label>Name</label><input type="text" name="name"></div>
+          <div><label>Host / IP</label><input type="text" name="host"></div>
+          <div><label>HTTP port</label><input type="number" name="http_port" value="80"></div>
+          <div>
+            <label>HTTPS</label>
+            <select name="use_https">
+              <option value="">No</option>
+              <option value="1">Yes (self-signed certificate allowed)</option>
+            </select>
+          </div>
+          <div><label>Username</label><input type="text" name="username"></div>
+          <div><label>Password</label><input type="password" name="password"></div>
+        </form>
+        <% } %>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
+          <a href="/setup?step=done"><button type="button" class="btn-soft">Skip</button></a>
+          <% if (miniserverCount > 0) { %>
+            <a href="/setup?step=done"><button type="button" class="primary" style="width:auto;">Continue</button></a>
+          <% } else { %>
+            <button type="submit" form="miniserver-form" class="primary" style="width:auto;">Add &amp; continue</button>
+          <% } %>
+        </div>
+      <% } %>
+
+      <% if (step === 'done') { %>
+        <h2>All set</h2>
+        <p class="hint">
+          You can dig further into Notifications (Teams/Slack/Telegram/Email alerts) and offsite
+          backups (rclone) any time under Administration &mdash; both are optional and skipped
+          here on purpose, since they need details specific to your own setup. Run this wizard
+          again any time from Settings.
+        </p>
+        <form method="post" action="/setup/finish">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="primary" style="width:100%;"><%- icon('check') %> Go to Dashboard</button>
+        </form>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

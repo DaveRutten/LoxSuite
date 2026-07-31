@@ -5,6 +5,7 @@
   <a href="/admin/roles">Access Roles</a>
   <a class="active" href="/admin/sso">Single Sign-On</a>
   <a href="/admin/backup">Backups</a>
+  <a href="/admin/notifications">Notifications</a>
 </div>
 
 <% if (error) { %>
@@ -27,11 +28,18 @@
     <div class="form-grid">
       <div>
         <label>Enabled</label>
-        <select name="enabled">
-          <option value="" <%= !sso.enabled ? 'selected' : '' %>>Off</option>
-          <option value="1" <%= sso.enabled ? 'selected' : '' %>>On</option>
-        </select>
+        <%- toggleSwitch('enabled', sso.enabled, { id: 'sso-enabled-toggle' }) %>
       </div>
+    </div>
+
+    <%
+      // Everything below only matters once SSO is actually turned on — kept hidden until then
+      // (toggled client-side by #sso-enabled-toggle's own change handler, see the script below)
+      // instead of showing a pile of fields for a feature that's off. Wrapped in its own
+      // .form-grid (rather than continuing the one above) since the Enabled field needs to stay
+      // visible/reachable even while everything after it is hidden.
+    %>
+    <div id="sso-properties" class="form-grid" style="margin-top:0.85rem; <%= sso.enabled ? '' : 'display:none;' %>">
       <div>
         <label>Button label</label>
         <input type="text" name="button_label" value="<%= sso.button_label %>">
@@ -59,25 +67,43 @@
       </div>
     </div>
 
-    <h2 style="margin-top:1.5rem;">Security</h2>
-    <label class="toggle-row">
-      <input type="checkbox" name="local_login_disabled" <%= sso.local_login_disabled ? 'checked' : '' %>>
-      <span>
-        <strong>Require SSO from outside the local network</strong>
-        <span class="hint">
-          When on, the username/password login form is hidden for anyone NOT connecting from a
-          private/local-network address — they must sign in with SSO instead. Local-network
-          requests can still always use local login as a break-glass fallback, so you're never
-          locked out if Pocket ID itself becomes unreachable. Has no effect unless SSO is Enabled
-          above.
+    <div id="sso-security" style="<%= sso.enabled ? '' : 'display:none;' %>">
+      <h2 style="margin-top:1.5rem;">Security</h2>
+      <label class="toggle-row">
+        <input type="checkbox" name="local_login_disabled" <%= sso.local_login_disabled ? 'checked' : '' %>>
+        <span>
+          <strong>Require SSO from outside the local network</strong>
+          <span class="hint">
+            When on, the username/password login form is hidden for anyone NOT connecting from a
+            private/local-network address — they must sign in with SSO instead. Local-network
+            requests can still always use local login as a break-glass fallback, so you're never
+            locked out if Pocket ID itself becomes unreachable.
+          </span>
         </span>
-      </span>
-    </label>
+      </label>
+    </div>
 
-    <div style="margin-top:0.9rem;">
+    <div id="sso-save-row" style="margin-top:0.9rem; <%= sso.enabled ? '' : 'display:none;' %>">
       <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
     </div>
   </form>
+  <script>
+    (function () {
+      var toggle = document.getElementById('sso-enabled-toggle');
+      var properties = document.getElementById('sso-properties');
+      var security = document.getElementById('sso-security');
+      var saveRow = document.getElementById('sso-save-row');
+      toggle.addEventListener('change', function () {
+        properties.style.display = toggle.checked ? '' : 'none';
+        security.style.display = toggle.checked ? '' : 'none';
+        saveRow.style.display = toggle.checked ? '' : 'none';
+        // Turning it off has nothing left to fill in — save that state right away instead of
+        // making it disappear along with the very button that would have persisted it. Turning it
+        // ON only reveals the fields (no auto-submit) so there's a chance to fill them in first.
+        if (!toggle.checked) toggle.closest('form').submit();
+      });
+    })();
+  </script>
 </div>
 
 <p class="hint">

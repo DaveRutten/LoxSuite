@@ -2,7 +2,7 @@ const express = require('express');
 const dgram = require('dgram');
 const { nanoid } = require('nanoid');
 const db = require('../db');
-const { CATALOG } = require('../commandCatalog');
+const { CATALOG, DATA_CATALOG } = require('../commandCatalog');
 const { getClient } = require('../mqttClient');
 const { applyLoxoneToMqttTransform } = require('../loxone');
 const { discoverDevices } = require('../deviceDiscovery');
@@ -130,17 +130,71 @@ router.post('/mqtt-to-loxone/:id/translations/:translationId/delete', requirePer
   res.redirect(`/mappings/mqtt-to-loxone/${req.params.id}/translations`);
 });
 
+// User edits to "Common commands"/"Common data" (see commandCatalog.js's own comment) replace the
+// built-in catalog wholesale once saved — not merged field-by-field — so the Edit UI always seeds
+// itself from whichever of these two is actually in effect, never straight from the hardcoded
+// defaults once an override exists.
+function loadCommandCatalogs() {
+  const row = db.prepare('SELECT commands_json, data_json FROM command_catalog_overrides WHERE id = 1').get();
+  let catalog = CATALOG;
+  let dataCatalog = DATA_CATALOG;
+  let isCustomized = false;
+  if (row) {
+    if (row.commands_json) {
+      try { catalog = JSON.parse(row.commands_json); isCustomized = true; } catch (err) { /* corrupt — fall back to built-in */ }
+    }
+    if (row.data_json) {
+      try { dataCatalog = JSON.parse(row.data_json); isCustomized = true; } catch (err) { /* corrupt — fall back to built-in */ }
+    }
+  }
+  return { catalog, dataCatalog, isCustomized };
+}
+
 router.get('/commands', (req, res) => {
   const { devicesByFamily, deviceFamily, allDevices } = discoverDevices();
+  const { catalog, dataCatalog, isCustomized } = loadCommandCatalogs();
 
   res.render('mappings-commands', {
-    catalog: CATALOG,
+    catalog,
+    dataCatalog,
+    isCustomized,
     devicesByFamily,
     deviceFamily,
     allDevices,
-    presetFamily: req.query.family || (CATALOG[0] && CATALOG[0].key) || '',
+    presetFamily: req.query.family || (catalog[0] && catalog[0].key) || '',
     presetDevice: req.query.device || '',
+    saved: req.query.saved === '1',
   });
+});
+
+// Saved as one complete replacement for each catalog (see loadCommandCatalogs's own comment) —
+// built by the structured editor in mappings-commands.ejs, which always submits its FULL current
+// state (both catalogs) on every save, so there's never a partial/merged write to reason about
+// here. Barely-there validation (must parse, must be an array) since the editor itself is what
+// builds this JSON — a real hand-crafted-JSON upload path would need much stricter checking.
+router.post('/commands/catalog', requirePermission('commands', 'edit'), (req, res) => {
+  const { commands_json: commandsJson, data_json: dataJson } = req.body;
+  let commandsParsed;
+  let dataParsed;
+  try {
+    commandsParsed = JSON.parse(commandsJson || '[]');
+    dataParsed = JSON.parse(dataJson || '[]');
+  } catch (err) {
+    return res.status(400).send('Malformed catalog JSON — nothing was saved.');
+  }
+  if (!Array.isArray(commandsParsed) || !Array.isArray(dataParsed)) {
+    return res.status(400).send('Catalog JSON must be an array — nothing was saved.');
+  }
+  db.prepare(
+    `INSERT INTO command_catalog_overrides (id, commands_json, data_json, updated_at) VALUES (1, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET commands_json = excluded.commands_json, data_json = excluded.data_json, updated_at = excluded.updated_at`
+  ).run(JSON.stringify(commandsParsed), JSON.stringify(dataParsed), new Date().toISOString());
+  res.redirect('/mappings/commands?saved=1');
+});
+
+router.post('/commands/catalog/reset', requirePermission('commands', 'edit'), (req, res) => {
+  db.prepare('DELETE FROM command_catalog_overrides WHERE id = 1').run();
+  res.redirect('/mappings/commands');
 });
 
 router.get('/loxone-to-mqtt', (req, res) => {
@@ -150,13 +204,26 @@ router.get('/loxone-to-mqtt', (req, res) => {
   res.render('mappings-loxone-to-mqtt', { mappings, miniservers, error: null, prefillTopic: req.query.topic || '' });
 });
 
+// value_transform for this (Loxone -> MQTT) direction: 'passthrough' (default), 'translation_table'
+// (managed separately, see its own routes), or 'shelly_rgbw' (native equivalent of LoxBerry's own
+// "shelly_rgb&w" UDP transformer — see applyShellyRgbwTransform in loxone.js), whose transform_arg
+// picks which of the three independent Loxone outputs this one mapping carries.
+const LOXONE_TO_MQTT_TRANSFORMS = ['passthrough', 'translation_table', 'shelly_rgbw'];
+const SHELLY_RGBW_MODES = ['white', 'rgb', 'tunablew'];
+function normalizeLoxoneToMqttTransform(body) {
+  const transform = LOXONE_TO_MQTT_TRANSFORMS.includes(body.value_transform) ? body.value_transform : 'passthrough';
+  const transformArg = transform === 'shelly_rgbw' && SHELLY_RGBW_MODES.includes(body.transform_arg) ? body.transform_arg : null;
+  return { transform, transformArg };
+}
+
 router.post('/loxone-to-mqtt', requirePermission('loxone_to_mqtt', 'edit'), (req, res) => {
-  const { miniserver_id, mqtt_topic, qos, retain, transport, value_transform } = req.body;
+  const { miniserver_id, mqtt_topic, qos, retain, transport } = req.body;
+  const { transform, transformArg } = normalizeLoxoneToMqttTransform(req.body);
   const token = nanoid(16);
 
   db.prepare(
-    `INSERT INTO mappings_loxone_to_mqtt (miniserver_id, token, mqtt_topic, qos, retain, transport, value_transform)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO mappings_loxone_to_mqtt (miniserver_id, token, mqtt_topic, qos, retain, transport, value_transform, transform_arg)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     miniserver_id ? Number(miniserver_id) : null,
     token,
@@ -164,7 +231,8 @@ router.post('/loxone-to-mqtt', requirePermission('loxone_to_mqtt', 'edit'), (req
     Number(qos) || 0,
     retain ? 1 : 0,
     transport === 'udp' ? 'udp' : 'http',
-    value_transform === 'translation_table' ? 'translation_table' : 'passthrough'
+    transform,
+    transformArg
   );
 
   res.redirect('/mappings/loxone-to-mqtt');
@@ -178,7 +246,8 @@ router.get('/loxone-to-mqtt/:id/edit', (req, res) => {
 });
 
 router.post('/loxone-to-mqtt/:id/update', requirePermission('loxone_to_mqtt', 'edit'), (req, res) => {
-  const { miniserver_id, mqtt_topic, qos, retain, transport, value_transform } = req.body;
+  const { miniserver_id, mqtt_topic, qos, retain, transport } = req.body;
+  const { transform, transformArg } = normalizeLoxoneToMqttTransform(req.body);
   const token = (req.body.token || '').trim();
 
   if (!token) {
@@ -190,7 +259,7 @@ router.post('/loxone-to-mqtt/:id/update', requirePermission('loxone_to_mqtt', 'e
   try {
     db.prepare(
       `UPDATE mappings_loxone_to_mqtt
-       SET token = ?, miniserver_id = ?, mqtt_topic = ?, qos = ?, retain = ?, transport = ?, value_transform = ?
+       SET token = ?, miniserver_id = ?, mqtt_topic = ?, qos = ?, retain = ?, transport = ?, value_transform = ?, transform_arg = ?
        WHERE id = ?`
     ).run(
       token,
@@ -199,7 +268,8 @@ router.post('/loxone-to-mqtt/:id/update', requirePermission('loxone_to_mqtt', 'e
       Number(qos) || 0,
       retain ? 1 : 0,
       transport === 'udp' ? 'udp' : 'http',
-      value_transform === 'translation_table' ? 'translation_table' : 'passthrough',
+      transform,
+      transformArg,
       req.params.id
     );
   } catch (err) {
@@ -244,7 +314,7 @@ router.post('/loxone-to-mqtt/:id/test', requirePermission('loxone_to_mqtt', 'edi
     return;
   }
 
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 5582;
   const url = `http://127.0.0.1:${port}/api/loxone-in/${mapping.token}?value=${encodeURIComponent(rawValue)}`;
   try {
     const response = await fetch(url);

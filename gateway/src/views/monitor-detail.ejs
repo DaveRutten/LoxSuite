@@ -33,35 +33,52 @@
   <% } %>
 </div>
 
-<div id="monitor-meta" data-monitor-id="<%= monitor.id %>" data-range="<%= range %>" hidden></div>
+<div id="monitor-meta" data-monitor-id="<%= monitor.id %>" data-range="<%= range %>" data-group-mode="<%= groupMode %>" hidden></div>
 
 <% if (hasNumeric) { %>
+  <% if (truncated) { %>
+    <p class="hint">This chart and the list below only cover the most recent <%= rows.length %> readings &mdash; a monitor polled every few seconds can log more than that within "<%= range %>", so the plotted line may start partway through the range instead of at its very left edge. Export CSV for the full history, or pick a shorter range for a complete picture.</p>
+  <% } %>
   <div class="card chart-wrap">
-    <canvas data-monitor-ids="<%= monitor.id %>" data-range="<%= range %>" height="90"></canvas>
+    <canvas data-monitor-ids="<%= monitor.id %>" data-range="<%= range %>" data-range-until="<%= rangeUntilMs || '' %>" height="90"></canvas>
   </div>
 <% } else { %>
   <p class="hint">This monitor hasn't recorded any numeric values yet, so there's nothing to chart &mdash; the raw values are listed below instead.</p>
+  <% if (truncated) { %>
+    <p class="hint">Showing the most recent <%= rows.length %> readings in this range. Export CSV for the full history.</p>
+  <% } %>
 <% } %>
 
-<% if (truncated) { %>
-  <p class="hint">Showing the most recent <%= rows.length %> readings in this range. Export CSV for the full history.</p>
-<% } %>
-
-<div class="table-wrap">
-  <table>
-    <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
-    <tbody id="monitor-history-body">
-      <% rows.forEach(r => { %>
-        <tr><td><%= formatDateTime(r.recordedAt) %></td><td><span class="truncate" title="<%= r.value %>"><%= r.value %></span></td></tr>
-      <% }) %>
-      <% if (rows.length === 0) { %>
-        <tr><td colspan="2" class="empty">No readings in this range yet.</td></tr>
-      <% } %>
-    </tbody>
-  </table>
+<!-- Deliberately NOT .table-wrap: tables.js enhances every "<table>" nested under that class with
+     its own drag-reorder/hide/resize "Columns" toolbar (document.querySelectorAll('.table-wrap
+     table')), assuming one table per wrap. This card holds one <table> per day/hour group, which
+     made it build a competing toolbar per group instead of one sane one — a plain 2-column
+     timestamp/value table doesn't need any of that anyway. -->
+<div class="history-groups-wrap" id="monitor-history-groups">
+  <% if (rows.length === 0) { %>
+    <table>
+      <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
+      <tbody><tr><td colspan="2" class="empty">No readings in this range yet.</td></tr></tbody>
+    </table>
+  <% } else { %>
+    <% groups.forEach((g, gi) => { %>
+      <details class="history-group" data-group-key="<%= g.key %>" <%= gi === 0 ? 'open' : '' %>>
+        <summary><%= g.label %> <span class="hint">(<%= g.rows.length %> reading<%= g.rows.length === 1 ? '' : 's' %>)</span></summary>
+        <table>
+          <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
+          <tbody>
+            <% g.rows.forEach(r => { %>
+              <tr><td><%= formatDateTime(r.recordedAt) %></td><td><span class="truncate" title="<%= r.value %>"><%= r.value %></span></td></tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </details>
+    <% }) %>
+  <% } %>
 </div>
 
 <script src="/vendor/chart.umd.min.js"></script>
+<script src="/vendor/chartjs-plugin-zoom.min.js"></script>
 <script src="/monitor-chart.js" defer></script>
 
 <%- include('partials/foot') %>

@@ -53,16 +53,22 @@
         </div>
         <div>
           <label>Retain</label>
-          <select name="retain">
-            <option value="">No</option>
-            <option value="1">Yes</option>
-          </select>
+          <%- toggleSwitch('retain', false) %>
         </div>
         <div>
           <label>Value transform</label>
-          <select name="value_transform">
+          <select name="value_transform" id="add-value-transform-select">
             <option value="passthrough">Pass through unchanged</option>
             <option value="translation_table">Translation table (manage after adding)</option>
+            <option value="shelly_rgbw">Shelly RGBW/White (color/N/set JSON)</option>
+          </select>
+        </div>
+        <div id="add-shelly-rgbw-mode-field" style="display:none;">
+          <label>Shelly RGBW mode</label>
+          <select name="transform_arg">
+            <option value="rgb">RGB (from Loxone's RGB output, "H,S,V")</option>
+            <option value="white">White (0-100%)</option>
+            <option value="tunablew">Tunable white (from Loxone Lumitech, "brightness,kelvin")</option>
           </select>
         </div>
         <button type="submit" class="primary"><%- icon('plus') %> Add</button>
@@ -190,6 +196,16 @@
   </div>
 </div>
 
+<script>
+  (function () {
+    var select = document.getElementById('add-value-transform-select');
+    var modeField = document.getElementById('add-shelly-rgbw-mode-field');
+    if (!select || !modeField) return;
+    select.addEventListener('change', function () {
+      modeField.style.display = select.value === 'shelly_rgbw' ? '' : 'none';
+    });
+  })();
+</script>
 <script>
   // Each mapping row is followed by its own Test expand-row sibling (not a data row) — filtering
   // hides/shows that sibling in lockstep with its mapping row rather than trying to match text in

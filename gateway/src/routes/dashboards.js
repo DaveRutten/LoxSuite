@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { getCurrentValue, reloadMqttMonitors } = require('../monitorCollector');
 const { humanizeTopic } = require('../topicName');
-const { resolveRange, historyWindowClause, MAX_ROWS } = require('./monitor');
+const { resolveRange, historyWindowClause, rangeToWindow, MAX_ROWS } = require('./monitor');
 
 const router = express.Router();
 
@@ -37,20 +37,26 @@ function fieldStr(value) {
   return ((Array.isArray(value) ? value[0] : value) || '').toString().trim();
 }
 
-function clampDecimals(value) {
+// A plain multiplier applied to every raw reading before it's displayed/compared/charted — e.g.
+// a Loxone value reported in Wh needs *0.001 to show as kWh, or a raw 0-1 fraction needs *100 to
+// read as a percentage. Blank/invalid/zero all fall back to 1 (a no-op) rather than silently
+// zeroing out every value a panel shows, which a bare `Number(value) || 1` would otherwise do for
+// a genuinely-entered 0.
+function clampScale(value) {
   const n = Number(value);
-  if (!Number.isFinite(n)) return 2;
-  return Math.min(6, Math.max(0, Math.round(n)));
+  return Number.isFinite(n) && n !== 0 ? n : 1;
 }
 
-// null (not a number) means "no override — use the Settings-page global default", distinct from
-// an explicit 0. Only reachable from a panel type whose form actually has a decimals field with a
-// blank-is-valid "use default" option (currently just 'value' — chart's has always defaulted to a
-// bare 2 outside of the global setting, kept as-is here).
-function clampDecimalsOrNull(value) {
-  const str = fieldStr(value);
-  if (str === '') return null;
-  return clampDecimals(str);
+// Applied once, right after a raw reading leaves the database — everything downstream (rounding
+// for display, threshold-ladder coloring, gauge percent, stat_delta's comparison) then works
+// entirely in the already-scaled unit, rather than each needing its own scale-aware branch.
+// Rounded to 6 decimal places purely to avoid floating point noise (e.g. 0.1 * 3 = 0.30000000000000004)
+// showing up in a panel that itself displays plenty of decimals.
+function applyScale(rawValue, scale) {
+  const numeric = Number(rawValue);
+  if (!Number.isFinite(numeric)) return null;
+  if (scale === 1) return numeric;
+  return Math.round(numeric * scale * 1e6) / 1e6;
 }
 
 function getDefaultPanelDecimals() {
@@ -96,19 +102,27 @@ function sanitizeColor(value) {
   return SAFE_CSS_COLOR_RE.test(value.trim()) ? value.trim() : null;
 }
 
-// Grafana-style threshold ladder: each line is "<value>=<color>"; the color that applies to a
-// given reading is the HIGHEST threshold the reading meets or exceeds (e.g. "1=orange, 2=red,
+// Grafana-style threshold ladder: each line is "<value>=<color>[=<style>]"; the color that applies
+// to a given reading is the HIGHEST threshold the reading meets or exceeds (e.g. "1=orange, 2=red,
 // 3=purple" means 0.5 stays uncolored, 1.5 is orange, 2.5 is red, 4 is purple) — not a single
-// on/off alert the way the dedicated 'threshold' panel type's own config is.
+// on/off alert the way the dedicated 'threshold' panel type's own config is. The optional third
+// segment ('line', the default, or 'band') only means anything on a Chart panel's own plotted
+// thresholds (see makeThresholdPlugin in monitor-chart.js) — every other panel type that reuses
+// this same builder for its value-coloring ladder (table/value/gauge/stat_delta) just ignores it.
 function parseThresholdLadder(text) {
-  return Object.entries(parseKeyValueLines(text))
-    .map(([key, color]) => ({ value: Number(key), color: sanitizeColor(color) }))
-    .filter((t) => Number.isFinite(t.value) && t.color)
-    .sort((a, b) => a.value - b.value);
+  return (text || '').split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+    const parts = line.split('=');
+    if (parts.length < 2) return null;
+    const value = Number(parts[0]);
+    const color = sanitizeColor(parts[1]);
+    const style = parts[2] === 'band' ? 'band' : 'line';
+    if (!Number.isFinite(value) || !color) return null;
+    return { value, color, style };
+  }).filter(Boolean).sort((a, b) => a.value - b.value);
 }
 
 function serializeThresholdLadder(ladder) {
-  return (ladder || []).map((t) => `${t.value}=${t.color}`).join('\n');
+  return (ladder || []).map((t) => `${t.value}=${t.color}=${t.style === 'band' ? 'band' : 'line'}`).join('\n');
 }
 
 function colorForThresholdLadder(numeric, ladder) {
@@ -146,12 +160,37 @@ function serializeValueMappings(list) {
   return (list || []).map((m) => `${m.value}=${m.label}${m.color ? '=' + m.color : ''}`).join('\n');
 }
 
+// Chart-only: a labeled vertical line at a fixed point in time (e.g. "here's when the heating
+// came on") — same "<key>=<label>[=<color>]" shape as parseValueMappings above, just keyed by an
+// epoch-ms timestamp instead of a reading value. Rendered client-side by makeAnnotationPlugin in
+// monitor-chart.js, entirely independent of the threshold ladder (which colors by VALUE, not time).
+function parseAnnotations(text) {
+  const list = [];
+  (text || '').split('\n').forEach((line) => {
+    const parts = line.split('=');
+    if (parts.length < 2) return;
+    const time = Number(parts[0].trim());
+    const label = parts[1].trim();
+    const colorRaw = parts.length > 2 ? parts.slice(2).join('=').trim() : '';
+    if (!Number.isFinite(time) || !label) return;
+    list.push({ time, label, color: colorRaw ? sanitizeColor(colorRaw) : null });
+  });
+  return list.sort((a, b) => a.time - b.time);
+}
+
+function serializeAnnotations(list) {
+  return (list || []).map((a) => `${a.time}=${a.label}${a.color ? '=' + a.color : ''}`).join('\n');
+}
+
 // Per-series chart overrides — keyed by monitor id (not label, unlike the value panel's
 // monitorNames/valueLabels above: this is built entirely from a dynamic UI that already knows
 // each row's monitor id directly, never hand-typed, so there's no reason to prefer the friendlier
-// but less precise label key). {name, unit, axis} per monitor id that has ANY override set; a
-// monitor with none of the three isn't stored at all, keeping this empty for the common case of
-// a chart with no per-series customization.
+// but less precise label key). {name, unit, scale, decimals, axis, color} per monitor id that has
+// ANY override set; a monitor with none of them isn't stored at all, keeping this empty for the
+// common case of a chart with no per-series customization. scale/decimals mirror the value panel's
+// own per-monitor overrides (parseValueSeriesConfig below) — same shape, same client-side row
+// builder (see panel-grid.ejs's shared buildScalePicker), so a property that exists on both panel
+// types looks and behaves identically on both rather than each inventing its own version of it.
 function parseSeriesConfig(text) {
   let parsed;
   try {
@@ -165,20 +204,87 @@ function parseSeriesConfig(text) {
     const entry = parsed[id] || {};
     const name = typeof entry.name === 'string' ? entry.name.trim() : '';
     const unit = typeof entry.unit === 'string' ? entry.unit.trim() : '';
+    const scale = Number(entry.scale);
+    const decimals = Number(entry.decimals);
+    const hasScale = Number.isFinite(scale) && scale !== 0 && scale !== 1;
+    const hasDecimals = Number.isFinite(decimals);
     const axis = entry.axis === 'right' ? 'right' : 'left';
     const color = typeof entry.color === 'string' && entry.color.trim() ? sanitizeColor(entry.color) : null;
-    if (name || unit || axis === 'right' || color) result[id] = { name: name || null, unit: unit || null, axis, color };
+    const style = ['solid-thick', 'dashed', 'dotted'].includes(entry.style) ? entry.style : null;
+    if (name || unit || hasScale || hasDecimals || axis === 'right' || color || style) {
+      result[id] = {
+        name: name || null,
+        unit: unit || null,
+        scale: hasScale ? scale : null,
+        decimals: hasDecimals ? Math.min(6, Math.max(0, Math.round(decimals))) : null,
+        axis,
+        color,
+        style,
+      };
+    }
+  }
+  return result;
+}
+
+// Same shape/keying as parseSeriesConfig above, minus the chart-only axis/color fields, plus its
+// own scale/decimals (a value panel has no panel-wide equivalent of either — every monitor in it
+// can report a completely different kind of reading, so unlike chart's single shared Y-axis there
+// was never a meaningful "whole panel" scale/decimals to begin with). Built by the exact same
+// checked-monitor-driven row UI (see the shared .chart-series-settings/.value-series-settings
+// script in panel-grid.ejs). Replaced the old free-typed "<label>=<name>" monitorNames textarea;
+// loadPanelsWithMonitors below still reads any pre-existing monitorNames map as a fallback so
+// older panels don't lose their renames the first time this is opened, rather than needing a
+// one-off DB migration for it.
+function parseValueSeriesConfig(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text || '{}');
+  } catch (err) {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const result = {};
+  for (const id of Object.keys(parsed)) {
+    const entry = parsed[id] || {};
+    const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+    const unit = typeof entry.unit === 'string' ? entry.unit.trim() : '';
+    const scale = Number(entry.scale);
+    const decimals = Number(entry.decimals);
+    const hasScale = Number.isFinite(scale) && scale !== 0;
+    const hasDecimals = Number.isFinite(decimals);
+    if (name || unit || hasScale || hasDecimals) {
+      result[id] = {
+        name: name || null,
+        unit: unit || null,
+        scale: hasScale ? scale : null,
+        decimals: hasDecimals ? Math.min(6, Math.max(0, Math.round(decimals))) : null,
+      };
+    }
   }
   return result;
 }
 
 function buildConfig(panelType, body) {
   if (panelType === 'chart') {
+    // No panel-wide decimals/scale any more — every series sets its own of both now (see
+    // parseSeriesConfig), the same simplification already applied to the Current value panel
+    // type once its own per-value equivalents existed. The axis-tick decimals still need exactly
+    // one shared value (an axis can't format its ticks per-series) — that comes from the
+    // Settings-page global default at render time instead (see panel-grid.ejs's canvas).
+    const yMin = Number(body.y_min);
+    const yMax = Number(body.y_max);
     return {
       legendPosition: LEGEND_POSITIONS.includes(body.legend_position) ? body.legend_position : 'auto',
       unit: fieldStr(body.unit_chart),
-      decimals: clampDecimals(body.decimals),
+      fill: !!body.fill_area,
+      stepped: !!body.stepped_line,
+      points: !!body.show_points,
+      yScaleType: body.y_scale_type === 'logarithmic' ? 'logarithmic' : 'linear',
+      yMin: fieldStr(body.y_min) !== '' && Number.isFinite(yMin) ? yMin : null,
+      yMax: fieldStr(body.y_max) !== '' && Number.isFinite(yMax) ? yMax : null,
+      zoom: !!body.enable_zoom,
       thresholds: parseThresholdLadder(fieldStr(body.chart_thresholds)),
+      annotations: parseAnnotations(fieldStr(body.chart_annotations)),
       series: parseSeriesConfig(body.chart_series),
     };
   }
@@ -186,12 +292,9 @@ function buildConfig(panelType, body) {
     return {
       layout: body.value_layout === 'row' ? 'row' : 'stacked',
       unit: fieldStr(body.unit_value),
-      decimals: clampDecimalsOrNull(body.decimals_value),
       valueLabels: parseValueMappings(fieldStr(body.value_labels)),
       thresholds: parseThresholdLadder(fieldStr(body.value_thresholds)),
-      // Keyed by the monitor's OWN label (not its id) — friendlier to hand-edit than an opaque id,
-      // and this is a display-only override anyway, not something anything else looks up by.
-      monitorNames: parseKeyValueLines(fieldStr(body.monitor_names)),
+      series: parseValueSeriesConfig(body.value_series),
     };
   }
   if (panelType === 'gauge') {
@@ -201,12 +304,18 @@ function buildConfig(panelType, body) {
       min: Number.isFinite(min) ? min : 0,
       max: Number.isFinite(max) ? max : 100,
       unit: fieldStr(body.unit_gauge),
+      scale: clampScale(body.scale_gauge),
       thresholds: parseThresholdLadder(fieldStr(body.gauge_thresholds)),
     };
   }
   if (panelType === 'stat_delta') {
     const direction = ['up_good', 'down_good'].includes(body.direction) ? body.direction : 'neutral';
-    return { unit: fieldStr(body.unit_stat_delta), direction, thresholds: parseThresholdLadder(fieldStr(body.stat_delta_thresholds)) };
+    return {
+      unit: fieldStr(body.unit_stat_delta),
+      direction,
+      scale: clampScale(body.scale_stat_delta),
+      thresholds: parseThresholdLadder(fieldStr(body.stat_delta_thresholds)),
+    };
   }
   if (panelType === 'threshold') {
     const value = Number(body.threshold_value);
@@ -214,12 +323,13 @@ function buildConfig(panelType, body) {
       operator: THRESHOLD_OPERATORS.includes(body.threshold_operator) ? body.threshold_operator : 'gt',
       value: Number.isFinite(value) ? value : 0,
       unit: fieldStr(body.unit_threshold),
+      scale: clampScale(body.scale_threshold),
       labelOk: fieldStr(body.label_ok) || 'Normal',
       labelAlert: fieldStr(body.label_alert) || 'Alert',
     };
   }
   if (panelType === 'table') {
-    return { thresholds: parseThresholdLadder(fieldStr(body.table_thresholds)) };
+    return { scale: clampScale(body.scale_table), thresholds: parseThresholdLadder(fieldStr(body.table_thresholds)) };
   }
   return {};
 }
@@ -355,7 +465,15 @@ router.post('/quick-add-loxone', async (req, res) => {
   res.redirect('/');
 });
 
-function loadPanelsWithMonitors(dashboardId) {
+// rangeOverride (from the dashboard-wide time filter next to the auto-refresh control — see
+// partials/foot.ejs) stands in for every time-series panel's own *display* window without
+// touching what's actually stored in dashboard_panels.range: the Edit form still needs to show
+// and edit each panel's own real saved range regardless of whatever filter happens to be active
+// while looking at it, so the override only ever feeds into the `range` local computed per panel
+// below (and the `displayRange` field attached to it for panel-grid.ejs's chart canvas / stat_delta
+// label), never into `panel.range`/`base.range` itself.
+function loadPanelsWithMonitors(dashboardId, rangeOverride) {
+  const effectiveRange = rangeOverride ? resolveRange(rangeOverride) : null;
   const panels = db.prepare('SELECT * FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboardId);
   // miniserver_name is only meaningful for source_type='loxone' monitors (NULL for MQTT ones,
   // which aren't tied to any one Miniserver) — used to disambiguate when a panel combines
@@ -379,71 +497,121 @@ function loadPanelsWithMonitors(dashboardId) {
     if (config.valueLabels && !Array.isArray(config.valueLabels)) {
       config.valueLabels = Object.entries(config.valueLabels).map(([value, label]) => ({ value, label, color: null }));
     }
-    const base = { ...panel, config, monitors };
+    // Only 'value' ignores this entirely — it shows the current live reading, not a history
+    // window, so there's nothing for a time filter to apply to.
+    const range = effectiveRange || panel.range;
+    // Only the chart panel type's canvas actually reads this (see monitor-chart.js's
+    // rangeUntilMs) — computed here regardless of panel_type anyway since it's cheap and keeps
+    // every panel's `range` handling in this one place. Only ever non-null for an absolute (fixed
+    // from/to) range — the chart's own left edge always auto-scales to the earliest surviving data
+    // point rather than pinning to the range's nominal start, so there's no equivalent "since" to
+    // pass through here.
+    const { until: rangeUntilIso } = rangeToWindow(range);
+    const base = {
+      ...panel,
+      config,
+      monitors,
+      displayRange: range,
+      chartUntilMs: rangeUntilIso ? new Date(rangeUntilIso).getTime() : null,
+    };
 
     if (panel.panel_type === 'value') {
-      const decimals = config.decimals != null ? config.decimals : getDefaultPanelDecimals();
       const valueMappings = config.valueLabels || [];
-      const monitorNames = config.monitorNames || {};
+      // Per-monitor-id rename/unit/scale/decimals override (see parseValueSeriesConfig), built by
+      // the same checked-monitor-driven row UI as a chart panel's own series settings. A panel
+      // saved before this existed has its rename data sitting in the older label-keyed
+      // config.monitorNames instead — migrated onto `series` right here (in memory only) so the
+      // Edit form's builder picks it up pre-filled the first time it's opened, and the next save
+      // writes it out under the new shape with no separate DB migration needed.
+      const series = { ...(config.series || {}) };
+      if (config.monitorNames) {
+        monitors.forEach((m) => {
+          if (config.monitorNames[m.label] && !series[m.id]) series[m.id] = { name: config.monitorNames[m.label], unit: null };
+        });
+      }
       return {
         ...base,
         monitors: monitors.map((m) => {
-          const displayLabel = monitorNames[m.label] || m.label;
+          const override = series[m.id] || {};
+          const displayLabel = override.name || m.label;
+          const effectiveUnit = override.unit || config.unit;
+          // Every monitor in a value panel can be a completely different kind of reading (unlike
+          // chart's single shared Y-axis), so scale/decimals are per-monitor only — no panel-wide
+          // default to fall back to besides "unscaled" / the Settings-page global.
+          const scale = override.scale != null ? override.scale : 1;
+          const decimals = override.decimals != null ? override.decimals : getDefaultPanelDecimals();
           const current = getCurrentValue(m.id);
-          if (!current) return { ...m, displayLabel, current: null };
+          if (!current) return { ...m, displayLabel, effectiveUnit, current: null };
           // An exact match against the value-mapping list takes priority over decimal formatting
           // — a translated "1" -> "Actief" is a label, not a rounded number, so it skips toFixed()
           // AND the unit suffix (see panel-grid.ejs) that a real numeric/text value would
-          // otherwise get. Its OWN color (if it set one) likewise takes priority over the more
-          // general threshold ladder, since a mapped value is a more specific rule than a range.
+          // otherwise get. Matched against the RAW reading, before scaling — the mapping list is
+          // meant for the value as Loxone/MQTT actually reports it, not a multiplied-out one. Its
+          // OWN color (if it set one) likewise takes priority over the more general threshold
+          // ladder, since a mapped value is a more specific rule than a range.
           const mapping = valueMappings.find((vm) => vm.value === String(current.value));
           const isLabel = !!mapping;
-          const displayValue = isLabel ? mapping.label : formatPanelValue(current.value, decimals);
-          const numeric = Number(current.value);
-          const thresholdColor = (mapping && mapping.color) || colorForThresholdLadder(numeric, config.thresholds);
-          return { ...m, displayLabel, current: { ...current, displayValue, isLabel, thresholdColor } };
+          const scaledNumeric = applyScale(current.value, scale);
+          // scaledNumeric is null for a non-numeric reading (a Loxone text state, say) — falls
+          // back to the raw value so formatPanelValue's own non-numeric passthrough still applies,
+          // same as before scaling existed, instead of displaying a blank "null".
+          const displayValue = isLabel ? mapping.label : formatPanelValue(scaledNumeric === null ? current.value : scaledNumeric, decimals);
+          const thresholdColor = (mapping && mapping.color) || colorForThresholdLadder(scaledNumeric, config.thresholds);
+          return { ...m, displayLabel, effectiveUnit, current: { ...current, displayValue, isLabel, thresholdColor } };
         }),
       };
     }
 
     if (panel.panel_type === 'table') {
       const monitor = monitors[0] || null;
-      const { sql: rangeSql, params: rangeParams } = historyWindowClause(panel.range);
+      const scale = config.scale || 1;
+      const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
       const rawRows = monitor
         ? db.prepare(`SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS)
         : [];
-      const rows = rawRows.map((r) => ({ ...r, thresholdColor: colorForThresholdLadder(Number(r.value), config.thresholds) }));
+      const rows = rawRows.map((r) => {
+        const scaledNumeric = applyScale(r.value, scale);
+        return {
+          ...r,
+          displayValue: scaledNumeric === null ? r.value : scaledNumeric,
+          thresholdColor: colorForThresholdLadder(scaledNumeric, config.thresholds),
+        };
+      });
       return { ...base, rows };
     }
 
     if (panel.panel_type === 'gauge' || panel.panel_type === 'threshold') {
       const monitor = monitors[0] || null;
       const current = monitor ? getCurrentValue(monitor.id) : null;
-      const numeric = current ? Number(current.value) : null;
-      const hasNumeric = Number.isFinite(numeric);
+      const scale = config.scale || 1;
+      const scaledNumeric = current ? applyScale(current.value, scale) : null;
+      const hasNumeric = Number.isFinite(scaledNumeric);
+      const displayCurrent = current ? { ...current, displayValue: hasNumeric ? scaledNumeric : current.value } : null;
 
       if (panel.panel_type === 'gauge') {
         const { min, max } = config;
-        const percent = hasNumeric && max > min ? Math.min(100, Math.max(0, ((numeric - min) / (max - min)) * 100)) : null;
-        const thresholdColor = hasNumeric ? colorForThresholdLadder(numeric, config.thresholds) : null;
-        return { ...base, monitor, current, percent, thresholdColor };
+        const percent = hasNumeric && max > min ? Math.min(100, Math.max(0, ((scaledNumeric - min) / (max - min)) * 100)) : null;
+        const thresholdColor = hasNumeric ? colorForThresholdLadder(scaledNumeric, config.thresholds) : null;
+        return { ...base, monitor, current: displayCurrent, percent, thresholdColor };
       }
-      return { ...base, monitor, current, isAlert: evaluateThreshold(hasNumeric ? numeric : null, config) };
+      return { ...base, monitor, current: displayCurrent, isAlert: evaluateThreshold(hasNumeric ? scaledNumeric : null, config) };
     }
 
     if (panel.panel_type === 'stat_delta') {
       const monitor = monitors[0] || null;
       const current = monitor ? getCurrentValue(monitor.id) : null;
+      const scale = config.scale || 1;
       let comparison = null;
       if (monitor) {
-        const { sql: rangeSql, params: rangeParams } = historyWindowClause(panel.range);
+        const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
         comparison = db.prepare(`SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT 1`).get(monitor.id, ...rangeParams);
       }
-      const currentNumeric = current ? Number(current.value) : null;
-      const comparisonNumeric = comparison ? comparison.numericValue : null;
+      const currentNumeric = current ? applyScale(current.value, scale) : null;
+      const comparisonNumeric = comparison ? applyScale(comparison.numericValue, scale) : null;
       const delta = Number.isFinite(currentNumeric) && Number.isFinite(comparisonNumeric) ? currentNumeric - comparisonNumeric : null;
       const thresholdColor = Number.isFinite(currentNumeric) ? colorForThresholdLadder(currentNumeric, config.thresholds) : null;
-      return { ...base, monitor, current, delta, thresholdColor };
+      const displayCurrent = current ? { ...current, displayValue: Number.isFinite(currentNumeric) ? currentNumeric : current.value } : null;
+      return { ...base, monitor, current: displayCurrent, delta, thresholdColor };
     }
 
     return base; // chart: rendered client-side via /monitor/series.json
@@ -528,6 +696,15 @@ function loadDashboardsPageData(req) {
   const sharedWithMe = listSharedWithMe(req.session.userId, req.user && req.user.roleId);
   const otherUsers = listOtherUsers(req.session.userId);
   const roles = listRoles();
+  // The star toggle on each row (see dashboards.ejs) — a plain id Set is enough here since both
+  // lists' rows just need a yes/no, not the full favorite-dashboards sidebar query (that one also
+  // fetches names/re-verifies access, neither of which is needed once a row already IS the result
+  // of an access-checked list like these two).
+  const favoriteIds = new Set(
+    db.prepare('SELECT dashboard_id FROM dashboard_favorites WHERE user_id = ?').all(req.session.userId).map((r) => r.dashboard_id)
+  );
+  dashboards.forEach((d) => { d.isFavorited = favoriteIds.has(d.id); });
+  sharedWithMe.forEach((d) => { d.isFavorited = favoriteIds.has(d.id); });
   const shares = {};
   const roleShares = {};
   dashboards.forEach((d) => {
@@ -565,12 +742,44 @@ router.post('/:id/rename', (req, res) => {
   res.redirect(isShared(dashboard) ? '/' : '/dashboards');
 });
 
+// Only ever '/dashboards' (the list, where a row's own star button lives) or '/dashboards/<id>'
+// (a dashboard's own detail page) — never trusted as-is, since a submitted form field is fully
+// attacker-editable (unlike, say, a Referer header) and an unchecked redirect target is an open
+// redirect. Falls back to the list page for anything that isn't exactly one of those shapes.
+function safeDashboardRedirect(dashboard, redirectTo) {
+  if (redirectTo === '/dashboards' || redirectTo === `/dashboards/${dashboard.id}`) return redirectTo;
+  return '/dashboards';
+}
+
+// Pinning a dashboard into the sidebar (see "Favorite Dashboards" under Monitor in
+// partials/head.ejs) is a personal bookmark, not a change to the dashboard itself — anyone who can
+// currently SEE it (owner or a direct/role share) can star it for themselves, unlike
+// rename/delete/share below which are all owner- or editor-gated.
+router.post('/:id/favorite', (req, res) => {
+  const dashboard = loadAccessibleDashboard(req.params.id, req);
+  if (!dashboard) return res.status(404).send('Dashboard not found');
+
+  db.prepare('INSERT OR IGNORE INTO dashboard_favorites (user_id, dashboard_id) VALUES (?, ?)').run(req.session.userId, dashboard.id);
+  res.redirect(safeDashboardRedirect(dashboard, req.body.redirect_to));
+});
+
+router.post('/:id/unfavorite', (req, res) => {
+  const dashboard = loadAccessibleDashboard(req.params.id, req);
+  if (!dashboard) return res.status(404).send('Dashboard not found');
+
+  db.prepare('DELETE FROM dashboard_favorites WHERE user_id = ? AND dashboard_id = ?').run(req.session.userId, dashboard.id);
+  res.redirect(safeDashboardRedirect(dashboard, req.body.redirect_to));
+});
+
 router.post('/:id/delete', (req, res) => {
   const dashboard = loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (isShared(dashboard)) return forbidden(res); // the shared home Dashboard can't be deleted, only its panels
   if (!canManageDashboard(dashboard, req)) return forbidden(res);
 
+  // No PRAGMA foreign_keys enforcement in this DB (see db.js) — every OTHER user's star on this
+  // dashboard has to be cleaned up explicitly too, not just the deleting user's own.
+  db.prepare('DELETE FROM dashboard_favorites WHERE dashboard_id = ?').run(dashboard.id);
   db.prepare('DELETE FROM custom_dashboards WHERE id = ?').run(dashboard.id);
   res.redirect('/dashboards');
 });
@@ -647,7 +856,7 @@ router.get('/:id', (req, res) => {
   if (!canViewShared(dashboard, req)) return forbidden(res);
 
   const monitors = db.prepare('SELECT id, label, source_type FROM monitors ORDER BY label').all();
-  const panels = loadPanelsWithMonitors(dashboard.id);
+  const panels = loadPanelsWithMonitors(dashboard.id, req.query.range);
 
   // Only meaningful for a personal dashboard someone ELSE shared with the current user — the
   // owner sees no such hint on their own dashboards, and the shared home Dashboard has no single
@@ -655,6 +864,7 @@ router.get('/:id', (req, res) => {
   const sharedByOwner = !isShared(dashboard) && !isOwner(dashboard, req)
     ? db.prepare('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = ?').get(dashboard.user_id)?.name
     : null;
+  const isFavorited = !!db.prepare('SELECT 1 FROM dashboard_favorites WHERE user_id = ? AND dashboard_id = ?').get(req.session.userId, dashboard.id);
 
   res.render('dashboard-detail', {
     dashboard,
@@ -664,6 +874,7 @@ router.get('/:id', (req, res) => {
     canEditPanels: canMutate(dashboard, req),
     defaultPanelDecimals: getDefaultPanelDecimals(),
     sharedByOwner,
+    isFavorited,
   });
 });
 
@@ -798,3 +1009,4 @@ module.exports.getDefaultPanelDecimals = getDefaultPanelDecimals;
 module.exports.serializeKeyValueLines = serializeKeyValueLines;
 module.exports.serializeThresholdLadder = serializeThresholdLadder;
 module.exports.serializeValueMappings = serializeValueMappings;
+module.exports.serializeAnnotations = serializeAnnotations;

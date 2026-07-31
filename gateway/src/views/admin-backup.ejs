@@ -5,6 +5,7 @@
   <a href="/admin/roles">Access Roles</a>
   <a href="/admin/sso">Single Sign-On</a>
   <a class="active" href="/admin/backup">Backups</a>
+  <a href="/admin/notifications">Notifications</a>
 </div>
 
 <% if (error) { %>
@@ -22,45 +23,68 @@
 
 <p class="hint">
   Backs up the gateway's own database (users, mappings, monitors, dashboards, settings) and,
-  optionally, the MQTT broker's dynamic-security file (users/roles/ACLs) into one downloadable
-  <code>.zip</code>. Restoring always requires restarting the affected container(s) &mdash; neither
-  half can be swapped into a running process safely.
+  optionally, the MQTT broker's own config &mdash; both its dynamic-security file (users/roles/ACLs)
+  and <code>mosquitto.conf</code> itself (listener, persistence, logging, any custom tuning) &mdash;
+  into one downloadable <code>.zip</code>. Restoring always requires restarting the affected
+  container(s) &mdash; neither half can be swapped into a running process safely.
 </p>
 
 <div class="card">
   <h2>Schedule</h2>
-  <form method="post" action="/admin/backup/settings" class="form-grid">
-    <div>
-      <label>Enabled</label>
-      <select name="enabled">
-        <option value="1" <%= settings.enabled ? 'selected' : '' %>>Yes</option>
-        <option value="" <%= !settings.enabled ? 'selected' : '' %>>No</option>
-      </select>
+  <form id="backup-schedule-form" method="post" action="/admin/backup/settings">
+    <div class="form-grid">
+      <div>
+        <label>Enabled</label>
+        <%- toggleSwitch('enabled', settings.enabled, { id: 'backup-enabled-toggle' }) %>
+      </div>
     </div>
-    <div>
-      <label>Cron expression</label>
-      <input type="text" name="schedule_cron" value="<%= settings.schedule_cron %>" placeholder="0 3 * * *">
+    <%
+      // Cron/retention/MQTT-config only matter once the schedule is actually turned on — hidden
+      // until then, same #<x>-properties pattern as SSO's and rclone's own Enabled toggles above.
+    %>
+    <div id="backup-properties" class="form-grid" style="margin-top:0.85rem; <%= settings.enabled ? '' : 'display:none;' %>">
+      <div>
+        <label>Cron expression</label>
+        <input type="text" name="schedule_cron" value="<%= settings.schedule_cron %>" placeholder="0 3 * * *">
+      </div>
+      <div>
+        <label>Keep last</label>
+        <input type="number" name="retention_count" min="1" value="<%= settings.retention_count %>">
+      </div>
+      <div>
+        <label>Include MQTT config</label>
+        <%- toggleSwitch('include_mqtt_config', settings.include_mqtt_config, { disabled: !mqttConfigMounted }) %>
+      </div>
     </div>
-    <div>
-      <label>Keep last</label>
-      <input type="number" name="retention_count" min="1" value="<%= settings.retention_count %>">
-    </div>
-    <div>
-      <label>Include MQTT config</label>
-      <select name="include_mqtt_config" <%= mqttConfigMounted ? '' : 'disabled' %>>
-        <option value="1" <%= settings.include_mqtt_config ? 'selected' : '' %>>Yes</option>
-        <option value="" <%= !settings.include_mqtt_config ? 'selected' : '' %>>No</option>
-      </select>
-    </div>
-    <button type="submit" class="btn-edit"><%- icon('edit') %> Save schedule</button>
   </form>
-  <p class="hint" style="margin-bottom:0;">
+  <div id="backup-save-row" style="margin-top:0.9rem; <%= settings.enabled ? '' : 'display:none;' %>">
+    <button type="submit" form="backup-schedule-form" class="btn-edit"><%- icon('edit') %> Save schedule</button>
+  </div>
+  <p id="backup-cron-hint" class="hint" style="margin-top:0.6rem; <%= settings.enabled ? '' : 'display:none;' %>">
     Standard 5-field cron (minute hour day month weekday), evaluated in the gateway container's own
     timezone. <code>0 3 * * *</code> = every day at 03:00.
     <% if (!mqttConfigMounted) { %>
       MQTT config isn't reachable from this container right now &mdash; check the
       <code>./mosquitto/config:/mosquitto/config</code> volume in <code>docker-compose.yml</code>.
     <% } %>
+  </p>
+  <script>
+    (function () {
+      var toggle = document.getElementById('backup-enabled-toggle');
+      var properties = document.getElementById('backup-properties');
+      var cronHint = document.getElementById('backup-cron-hint');
+      var saveRow = document.getElementById('backup-save-row');
+      toggle.addEventListener('change', function () {
+        properties.style.display = toggle.checked ? '' : 'none';
+        cronHint.style.display = toggle.checked ? '' : 'none';
+        saveRow.style.display = toggle.checked ? '' : 'none';
+        // Same reasoning as SSO's own toggle: turning it off has nothing left to fill in, so save
+        // that state immediately rather than hiding the only button that could persist it.
+        if (!toggle.checked) toggle.closest('form').submit();
+      });
+    })();
+  </script>
+  <p class="hint" style="margin-top:0.6rem; margin-bottom:0;">
     <% if (settings.last_run_at) { %>
       Last run: <%= formatDateTime(settings.last_run_at) %> &mdash;
       <span class="badge <%= settings.last_status === 'ok' ? 'badge-ok' : 'badge-off' %>"><%= settings.last_status %></span>
@@ -76,6 +100,87 @@
   <form method="post" action="/admin/backup/run">
     <button type="submit" class="primary"><%- icon('plus') %> Backup now</button>
   </form>
+</div>
+
+<div class="card">
+  <h2>Offsite copy (rclone)</h2>
+  <p class="hint">
+    Every backup (scheduled or manual) is additionally copied to a remote of your choice via
+    <a href="https://rclone.org" target="_blank" rel="noopener">rclone</a> &mdash; any of the 70+
+    storage backends it supports (S3, Backblaze, Google Drive, SFTP, ...). This only ever
+    <strong>adds</strong> to the remote, never deletes anything there &mdash; pruning old offsite
+    copies is entirely up to your own remote-side lifecycle rules.
+  </p>
+  <% if (rcloneTestResult) { %>
+    <p class="hint" style="<%= rcloneTestResult.ok ? 'color: var(--success);' : 'color: var(--danger);' %>">
+      <% if (rcloneTestResult.ok) { %>Connection test succeeded.<% } else { %>Connection test failed: <%= rcloneTestResult.error %><% } %>
+    </p>
+  <% } %>
+  <form id="rclone-settings-form" method="post" action="/admin/backup/rclone/settings">
+    <div class="form-grid">
+      <div>
+        <label>Enabled</label>
+        <%- toggleSwitch('rclone_enabled', settings.rclone_enabled, { id: 'rclone-enabled-toggle' }) %>
+      </div>
+    </div>
+    <%
+      // Remote + rclone.conf, and the Save/Test buttons below, only matter once offsite copy is
+      // actually turned on — hidden until then (toggled by #rclone-enabled-toggle's change handler
+      // below), same reasoning as SSO's own #sso-properties.
+    %>
+    <div id="rclone-properties" style="<%= settings.rclone_enabled ? '' : 'display:none;' %>">
+      <div class="form-grid" style="margin-top:0.85rem;">
+        <div>
+          <label>Remote</label>
+          <input type="text" name="rclone_remote" value="<%= settings.rclone_remote || '' %>" placeholder="myremote:loxsuite-backups">
+        </div>
+      </div>
+      <div style="margin-top:0.85rem;">
+        <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);">rclone.conf contents</label>
+        <textarea name="rclone_config" rows="6" placeholder="[myremote]&#10;type = s3&#10;..." style="width:100%; max-width:40rem; font-family:'SF Mono', Consolas, monospace; font-size:0.82rem; padding:0.5rem 0.6rem; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text);"><%= settings.rclone_config || '' %></textarea>
+        <p class="hint" style="margin-top:0.35rem;">
+          Generated by running <code>rclone config</code> anywhere convenient (your own machine,
+          another server) and pasting the result here &mdash; kept in the database, written out to a
+          throwaway temp file only for the moment each upload/test actually runs.
+        </p>
+      </div>
+    </div>
+  </form>
+  <div id="rclone-save-row" style="margin-top:0.9rem; display:<%= settings.rclone_enabled ? 'flex' : 'none' %>; align-items:center; gap:0.6rem;">
+    <button type="submit" form="rclone-settings-form" class="btn-edit"><%- icon('edit') %> Save</button>
+    <form method="post" action="/admin/backup/rclone/test" style="margin:0;">
+      <button type="submit" class="btn-test"><%- icon('refresh') %> Test connection</button>
+    </form>
+  </div>
+  <p id="rclone-test-hint" class="hint" style="margin-top:0.6rem; <%= settings.rclone_enabled ? '' : 'display:none;' %>">
+    Test always uses the currently <strong>saved</strong> settings above &mdash; save first if you
+    just changed the remote or config.
+  </p>
+  <p class="hint" style="margin-top:0.6rem; margin-bottom:0;">
+    <% if (settings.rclone_last_run_at) { %>
+      Last offsite copy: <%= formatDateTime(settings.rclone_last_run_at) %> &mdash;
+      <span class="badge <%= settings.rclone_last_status === 'ok' ? 'badge-ok' : 'badge-off' %>"><%= settings.rclone_last_status %></span>
+      <% if (settings.rclone_last_error) { %><span class="hint"><%= settings.rclone_last_error %></span><% } %>
+    <% } else { %>
+      No offsite copy has run yet.
+    <% } %>
+  </p>
+  <script>
+    (function () {
+      var toggle = document.getElementById('rclone-enabled-toggle');
+      var properties = document.getElementById('rclone-properties');
+      var saveRow = document.getElementById('rclone-save-row');
+      var testHint = document.getElementById('rclone-test-hint');
+      toggle.addEventListener('change', function () {
+        properties.style.display = toggle.checked ? '' : 'none';
+        saveRow.style.display = toggle.checked ? 'flex' : 'none';
+        testHint.style.display = toggle.checked ? '' : 'none';
+        // Same reasoning as SSO's own toggle: turning it off has nothing left to fill in, so save
+        // that state immediately rather than hiding the only button that could persist it.
+        if (!toggle.checked) toggle.closest('form').submit();
+      });
+    })();
+  </script>
 </div>
 
 <div class="table-wrap">

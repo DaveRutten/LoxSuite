@@ -1,12 +1,5 @@
 <%- include('partials/head', { pageTitle: 'Profile', active: 'profile' }) %>
 
-<% if (error) { %>
-  <p class="error"><%= error %></p>
-<% } %>
-<% if (saved) { %>
-  <p class="hint" style="color: var(--success);">Saved.</p>
-<% } %>
-
 <div class="card">
   <div style="display:flex; align-items:center; gap:1.1rem; margin-bottom:1.25rem;">
     <% if (profile.avatar_url) { %>
@@ -34,35 +27,281 @@
   </div>
 </div>
 
-<% if (profile.auth_provider === 'local') { %>
+<div class="tabs">
+  <a href="/profile?tab=account" class="<%= tab === 'account' ? 'active' : '' %>">Account</a>
+  <a href="/profile?tab=notifications" class="<%= tab === 'notifications' ? 'active' : '' %>">Notifications</a>
+</div>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+<% if (saved) { %>
+  <p class="hint" style="color: var(--success);">Saved.</p>
+<% } %>
+
+<% if (tab === 'account') { %>
+  <% if (profile.auth_provider === 'local') { %>
+    <div class="card">
+      <h2>Name &amp; email</h2>
+      <form method="post" action="/profile/details">
+        <div class="form-grid">
+          <div><label>Display name</label><input type="text" name="display_name" value="<%= profile.display_name || '' %>" placeholder="<%= profile.username %>"></div>
+          <div><label>Email</label><input type="email" name="email" value="<%= profile.email || '' %>"></div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
+          <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Change password</h2>
+      <form method="post" action="/profile/password">
+        <div class="form-grid">
+          <div><label>Current password</label><input type="password" name="current_password" required></div>
+          <div><label>New password</label><input type="password" name="new_password" required minlength="8"></div>
+          <div><label>Confirm new password</label><input type="password" name="confirm_password" required minlength="8"></div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
+          <button type="submit" class="btn-edit"><%- icon('edit') %> Change password</button>
+        </div>
+      </form>
+    </div>
+  <% } else { %>
+    <p class="hint">Your name, email, avatar, and password are all managed by Pocket ID, not this gateway &mdash; they're refreshed here automatically every time you sign in.</p>
+  <% } %>
+<% } else { %>
   <div class="card">
-    <h2>Name &amp; email</h2>
-    <form method="post" action="/profile/details">
+    <h2>My channel</h2>
+    <p class="hint">
+      Where notifications you subscribe to below get sent &mdash; your own
+      <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noopener">Apprise URL</a>,
+      e.g. a personal Pushover/Telegram/ntfy target, separate from any channel an administrator has
+      set up on the <% if (currentUser.isAdmin) { %><a href="/admin/notifications">Notifications admin page</a><% } else { %>Notifications admin page<% } %>.
+    </p>
+    <form method="post" action="/profile/notifications/channel">
       <div class="form-grid">
-        <div><label>Display name</label><input type="text" name="display_name" value="<%= profile.display_name || '' %>" placeholder="<%= profile.username %>"></div>
-        <div><label>Email</label><input type="email" name="email" value="<%= profile.email || '' %>"></div>
+        <div style="grid-column:1/-1;"><label>Apprise URL</label><input type="text" name="notify_url" value="<%= profile.notify_url || '' %>" placeholder="tgram://bottoken/ChatID"></div>
       </div>
-      <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
+      <div class="row-actions" style="justify-content:flex-end; margin-top:0.9rem;">
         <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
       </div>
     </form>
+    <% if (profile.notify_url) { %>
+      <form method="post" action="/profile/notifications/channel/test" style="margin-top:0.6rem;">
+        <div class="row-actions" style="justify-content:flex-end;">
+          <button type="submit" class="btn-test"><%- icon('refresh') %> Send test</button>
+        </div>
+      </form>
+      <% if (testResult) { %>
+        <div class="hint" style="margin:0.4rem 0 0; text-align:right; <%= testResult.ok ? 'color: var(--success);' : 'color: var(--danger);' %>">
+          <% if (testResult.ok) { %>Test message sent.<% } else { %>Test failed: <%= testResult.error %><% } %>
+        </div>
+      <% } %>
+    <% } %>
   </div>
 
   <div class="card">
-    <h2>Change password</h2>
-    <form method="post" action="/profile/password">
-      <div class="form-grid">
-        <div><label>Current password</label><input type="password" name="current_password" required></div>
-        <div><label>New password</label><input type="password" name="new_password" required minlength="8"></div>
-        <div><label>Confirm new password</label><input type="password" name="confirm_password" required minlength="8"></div>
+    <h2>My rules</h2>
+    <p class="hint">
+      Your own trigger conditions, entirely independent of what an administrator has set up — no
+      admin involvement needed. Always delivered to <strong>My channel</strong> above; there's no
+      separate on/off switch to miss the way an admin-wide rule below has, since nobody else could
+      already have subscribed one of these for you.
+    </p>
+
+    <details class="add-panel">
+      <summary>Add rule</summary>
+      <div class="add-panel-body">
+        <form method="post" action="/profile/notifications/rules" class="rule-form">
+          <div class="form-grid">
+            <div><label>Name</label><input type="text" name="name" placeholder="e.g. Freezer too warm" required></div>
+            <div>
+              <label>Trigger</label>
+              <select name="trigger_type" class="rule-trigger-select">
+                <% triggerTypes.forEach(t => { %><option value="<%= t.key %>"><%= t.label %></option><% }) %>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid rule-fields" data-for="monitor_threshold" style="margin-top:0.85rem;">
+            <div>
+              <label>Monitor</label>
+              <select name="monitor_id">
+                <option value="">Choose a monitor&hellip;</option>
+                <% monitors.forEach(m => { %><option value="<%= m.id %>"><%= m.label %></option><% }) %>
+              </select>
+              <% if (monitors.length === 0) { %><p class="hint" style="margin:0.3rem 0 0;">No monitors visible to your Access Role.</p><% } %>
+            </div>
+            <div>
+              <label>Condition</label>
+              <select name="operator">
+                <option value="gt">&gt; (greater than)</option>
+                <option value="gte">&ge; (at least)</option>
+                <option value="lt">&lt; (less than)</option>
+                <option value="lte">&le; (at most)</option>
+                <option value="eq">= (equals)</option>
+              </select>
+            </div>
+            <div><label>Value</label><input type="number" step="any" name="threshold_value"></div>
+          </div>
+          <label class="toggle-row rule-fields" data-for="monitor_threshold" style="margin-top:0.5rem;">
+            <input type="checkbox" name="notify_on_recover">
+            <span><strong>Also notify on recovery</strong><span class="hint">Send a second message once the value is back within range, not just when it first crosses the line.</span></span>
+          </label>
+
+          <div class="form-grid rule-fields" data-for="miniserver_status" style="margin-top:0.85rem;">
+            <div>
+              <label>Miniserver</label>
+              <select name="miniserver_id">
+                <option value="">Any Miniserver</option>
+                <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid rule-fields" data-for="mqtt_client_status" style="margin-top:0.85rem;">
+            <div><label>MQTT username (blank = any client)</label><input type="text" name="mqtt_username" placeholder="e.g. shelly-livingroom"></div>
+          </div>
+
+          <div style="margin-top:0.9rem;">
+            <button type="submit" class="primary"><%- icon('plus') %> Add rule</button>
+          </div>
+        </form>
       </div>
-      <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
-        <button type="submit" class="btn-edit"><%- icon('edit') %> Change password</button>
+    </details>
+
+    <% if (myRules.length > 0) { %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Trigger</th><th>Enabled</th><th>Actions</th></tr></thead>
+          <tbody>
+            <% myRules.forEach(r => { %>
+              <tr>
+                <td><%= r.name %></td>
+                <td><%= r.triggerLabel %></td>
+                <td><span class="badge <%= r.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= r.enabled ? 'Yes' : 'No' %></span></td>
+                <td>
+                  <div class="row-actions">
+                    <button type="button" class="btn-edit" data-toggle-row="my-rule-edit-<%= r.id %>"><%- icon('edit') %> Edit</button>
+                    <form class="inline" method="post" action="/profile/notifications/rules/<%= r.id %>/delete" data-confirm="Delete this rule?">
+                      <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              <tr class="expand-row" id="my-rule-edit-<%= r.id %>">
+                <td colspan="4">
+                  <form method="post" action="/profile/notifications/rules/<%= r.id %>/update" class="rule-form">
+                    <div class="form-grid">
+                      <div><label>Name</label><input type="text" name="name" value="<%= r.name %>" required></div>
+                      <div>
+                        <label>Trigger</label>
+                        <select name="trigger_type" class="rule-trigger-select">
+                          <% triggerTypes.forEach(t => { %><option value="<%= t.key %>" <%= t.key === r.trigger_type ? 'selected' : '' %>><%= t.label %></option><% }) %>
+                        </select>
+                      </div>
+                      <div>
+                        <label>Enabled</label>
+                        <%- toggleSwitch('enabled', r.enabled) %>
+                      </div>
+                    </div>
+
+                    <div class="form-grid rule-fields" data-for="monitor_threshold" style="margin-top:0.85rem;">
+                      <div>
+                        <label>Monitor</label>
+                        <select name="monitor_id">
+                          <option value="">Choose a monitor&hellip;</option>
+                          <% monitors.forEach(m => { %><option value="<%= m.id %>" <%= r.config.monitor_id === m.id ? 'selected' : '' %>><%= m.label %></option><% }) %>
+                        </select>
+                      </div>
+                      <div>
+                        <label>Condition</label>
+                        <select name="operator">
+                          <option value="gt" <%= r.config.operator === 'gt' ? 'selected' : '' %>>&gt; (greater than)</option>
+                          <option value="gte" <%= r.config.operator === 'gte' ? 'selected' : '' %>>&ge; (at least)</option>
+                          <option value="lt" <%= r.config.operator === 'lt' ? 'selected' : '' %>>&lt; (less than)</option>
+                          <option value="lte" <%= r.config.operator === 'lte' ? 'selected' : '' %>>&le; (at most)</option>
+                          <option value="eq" <%= r.config.operator === 'eq' ? 'selected' : '' %>>= (equals)</option>
+                        </select>
+                      </div>
+                      <div><label>Value</label><input type="number" step="any" name="threshold_value" value="<%= r.config.value ?? '' %>"></div>
+                    </div>
+                    <label class="toggle-row rule-fields" data-for="monitor_threshold" style="margin-top:0.5rem;">
+                      <input type="checkbox" name="notify_on_recover" <%= r.config.notify_on_recover ? 'checked' : '' %>>
+                      <span><strong>Also notify on recovery</strong></span>
+                    </label>
+
+                    <div class="form-grid rule-fields" data-for="miniserver_status" style="margin-top:0.85rem;">
+                      <div>
+                        <label>Miniserver</label>
+                        <select name="miniserver_id">
+                          <option value="">Any Miniserver</option>
+                          <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="form-grid rule-fields" data-for="mqtt_client_status" style="margin-top:0.85rem;">
+                      <div><label>MQTT username (blank = any client)</label><input type="text" name="mqtt_username" value="<%= r.config.username || '' %>"></div>
+                    </div>
+
+                    <div style="margin-top:0.6rem;">
+                      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+                    </div>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
       </div>
-    </form>
+    <% } %>
   </div>
-<% } else { %>
-  <p class="hint">Your name, email, avatar, and password are all managed by Pocket ID, not this gateway &mdash; they're refreshed here automatically every time you sign in.</p>
+
+  <div class="card">
+    <h2>Subscriptions</h2>
+    <p class="hint">Get pinged on your own channel above whenever one of these admin-configured alerts fires &mdash; on top of whatever channel(s) an administrator already sends it to.</p>
+    <% if (notifyRules.length === 0) { %>
+      <p class="hint">No admin-wide notification rules exist yet<% if (currentUser.isAdmin) { %> &mdash; <a href="/admin/notifications">create one</a> first<% } %>, then come back here to subscribe. (Your own rules above don't need this step.)</p>
+    <% } else { %>
+      <form method="post" action="/profile/notifications/subscriptions">
+        <div style="display:flex; flex-direction:column; gap:0.75rem;">
+          <% notifyRules.forEach(rule => { %>
+            <label class="toggle-row">
+              <input type="checkbox" name="rule_ids" value="<%= rule.id %>" <%= rule.subscribed ? 'checked' : '' %>>
+              <span>
+                <strong><%= rule.name %></strong>
+                <span class="hint" style="margin:0; display:block;"><%= rule.triggerLabel %></span>
+              </span>
+            </label>
+          <% }) %>
+        </div>
+        <div class="row-actions" style="justify-content:flex-end; margin-top:1rem;">
+          <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+        </div>
+      </form>
+    <% } %>
+  </div>
 <% } %>
+
+<script>
+  // Shows only the field group matching the currently-selected trigger type — same pattern as the
+  // admin Notifications page's own rule form (admin-notifications.ejs), duplicated rather than
+  // shared since the two live on entirely separate pages.
+  (function () {
+    document.querySelectorAll('.rule-form').forEach(function (form) {
+      var select = form.querySelector('.rule-trigger-select');
+      if (!select) return;
+      function applyVisibility() {
+        form.querySelectorAll('.rule-fields').forEach(function (el) {
+          el.hidden = el.dataset.for !== select.value;
+        });
+      }
+      select.addEventListener('change', applyVisibility);
+      applyVisibility();
+    });
+  })();
+</script>
 
 <%- include('partials/foot') %>

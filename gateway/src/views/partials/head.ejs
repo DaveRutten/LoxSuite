@@ -16,7 +16,7 @@
     })();
   </script>
 </head>
-<body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>">
+<body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>" data-dash-range="<%= typeof dashboardRange !== 'undefined' && dashboardRange ? 'true' : '' %>">
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand">
@@ -41,10 +41,13 @@
       const mappingsHref = (mappingAreas.find((a) => canView(a.key)) || {}).href;
       const mappingsActive = ['mqtt-to-loxone', 'loxone-to-mqtt', 'commands', 'transformations'].includes(active);
 
+      // Same order as the tab strip itself (partials/tabs-mqtt-broker.ejs) — landing on the first
+      // one a role can actually see is the point of this whole indirection, so this list has to
+      // match that tab order or the sidebar link would land on some other, later tab instead.
       const brokerAreas = [
+        { key: 'settings', href: '/settings/broker' },
         { key: 'mqtt_users', href: '/mqtt-users' },
         { key: 'mqtt_roles', href: '/mqtt-roles' },
-        { key: 'settings', href: '/settings/broker' },
       ];
       const brokerHref = (brokerAreas.find((a) => canView(a.key)) || {}).href;
       const brokerActive = ['mqtt-users', 'mqtt-roles', 'broker-settings'].includes(active);
@@ -67,6 +70,22 @@
       <div class="nav-group" <%= isCollapsed('monitor', monitorExpanded) ? 'hidden' : '' %>>
         <% if (canView('monitor')) { %><a href="/monitor" class="<%= active === 'monitor' ? 'active' : '' %>">Monitor</a><% } %>
         <a href="/dashboards" class="<%= active === 'dashboards' ? 'active' : '' %>">My Dashboards</a>
+        <% if (favoriteDashboards.length > 0) { %>
+          <%
+            // Starred from a dashboard's own "Add to sidebar" button (dashboards.ejs,
+            // dashboard-detail.ejs) — favoriteDashboards itself already only ever holds ones this
+            // user can still actually reach (see loadFavoriteDashboards in loadUserContext.js).
+            const favoritesExpanded = active === 'dashboards';
+          %>
+          <button type="button" class="nav-section-label" data-nav-section="favorite-dashboards" aria-expanded="<%= isCollapsed('favorite-dashboards', favoritesExpanded) ? 'false' : 'true' %>">
+            <span>Favorite Dashboards</span><%- icon('chevron') %>
+          </button>
+          <div class="nav-group" <%= isCollapsed('favorite-dashboards', favoritesExpanded) ? 'hidden' : '' %>>
+            <% favoriteDashboards.forEach(d => { %>
+              <a href="/dashboards/<%= d.id %>"><%= d.name %></a>
+            <% }) %>
+          </div>
+        <% } %>
       </div>
 
       <% if (loxoneSectionVisible) { %>
@@ -93,9 +112,24 @@
         </div>
       <% } %>
 
-      <% if (canView('logs')) { %><a href="/logs" class="<%= (active === 'logs-mqtt' || active === 'logs-loxone' || active === 'logs-loxone-commands' || active === 'logs-system') ? 'active' : '' %>">Logs</a><% } %>
+      <% if (canView('logs_mqtt') || canView('logs_loxone') || canView('logs_loxone_commands') || canView('logs_system')) { %><a href="/logs" class="<%= (active === 'logs-mqtt' || active === 'logs-loxone' || active === 'logs-loxone-commands' || active === 'logs-system') ? 'active' : '' %>">Logs</a><% } %>
     </nav>
     <button type="button" id="theme-toggle" class="theme-toggle"><%- icon('theme') %> Toggle theme</button>
+    <%
+      // getVersionStatus() (see versionCheck.js) is a plain in-memory read, cheap enough to call
+      // on every page render — the actual GitHub check itself only ever runs on its own timer
+      // (once at boot, then daily), never per-request.
+      const versionStatus = getVersionStatus();
+    %>
+    <div class="sidebar-version">
+      <span>v<%= versionStatus.currentVersion %></span>
+      <% if (versionStatus.updateAvailable) { %>
+        <a href="https://github.com/DaveRutten/LoxSuite/releases" target="_blank" rel="noopener"
+           class="sidebar-version-update" title="Running v<%= versionStatus.currentVersion %> — v<%= versionStatus.latestVersion %> is available on GitHub">
+          <%- icon('refresh') %> Update available
+        </a>
+      <% } %>
+    </div>
   </aside>
   <div class="content">
     <header class="topbar">

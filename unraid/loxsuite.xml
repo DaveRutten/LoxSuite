@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<!--
+  Unraid Community Applications template for LoxSuite.
+
+  Requires an image actually published at ghcr.io/daverutten/loxsuite — see
+  .github/workflows/docker-publish.yml, which builds and pushes it on every push to main and on
+  version tags. Until that workflow has run at least once, this template will fail to pull.
+
+  To use this without waiting on Community Applications review/listing: Unraid's Docker tab ->
+  Add Container -> Template repositories -> add this file's raw GitHub URL, or copy it directly
+  into /boot/config/plugins/dockerMan/templates-user/ on the Unraid box.
+
+  Mosquitto (the MQTT broker) runs inside this same container alongside the gateway itself — see
+  docker-entrypoint.sh — so this one template is the whole stack; nothing else to add separately.
+-->
+<Container version="2">
+  <Name>LoxSuite</Name>
+  <Repository>ghcr.io/daverutten/loxsuite:latest</Repository>
+  <Registry>https://github.com/DaveRutten/LoxSuite/pkgs/container/loxsuite</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/DaveRutten/LoxSuite/issues</Support>
+  <Project>https://github.com/DaveRutten/LoxSuite</Project>
+  <Overview>LoxSuite is an MQTT gateway, logging, monitoring, and backup/restore tool for Loxone Miniservers. Bundles a Mosquitto MQTT broker and a web UI in a single container - map the ports/paths below, set the required variables (especially the passwords), then open the WebUI once it's healthy.&#10;&#10;First boot creates: the web UI admin account (ADMIN_USERNAME/ADMIN_PASSWORD), the gateway's own MQTT account (MQTT_USERNAME/MQTT_PASSWORD), and a break-glass MQTT admin account (MQTT_ADMIN_USERNAME/MQTT_ADMIN_PASSWORD) used once to bootstrap the broker's dynamic-security store.</Overview>
+  <Category>Network:Other HomeAutomation:</Category>
+  <WebUI>http://[IP]:[PORT:5582]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/DaveRutten/LoxSuite/main/gateway/public/favicon.svg</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+
+  <Config Name="WebUI Port" Target="5582" Default="5582" Mode="tcp" Description="Web UI / HTTP port" Type="Port" Display="always" Required="true" Mask="false">5582</Config>
+  <Config Name="MQTT Port" Target="1883" Default="1883" Mode="tcp" Description="MQTT broker port - point every device/integration that publishes or subscribes directly at this" Type="Port" Display="always" Required="true" Mask="false">1883</Config>
+  <Config Name="Loxone UDP Port" Target="11885" Default="11885" Mode="udp" Description="Port the gateway listens on for inbound Loxone Virtual UDP Output - set this same port in Loxone Config's Virtual UDP Output" Type="Port" Display="always" Required="true" Mask="false">11885</Config>
+
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/loxsuite/data" Mode="rw" Description="Gateway database (gateway.db) and local backups" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/loxsuite/data</Config>
+  <Config Name="Mosquitto Config" Target="/mosquitto/config" Default="/mnt/user/appdata/loxsuite/mosquitto/config" Mode="rw" Description="Mosquitto's mosquitto.conf and dynamic-security.json (users/roles/ACLs) - needs to be a real bind-mounted path, not left default, or MQTT Users/Roles management and MQTT-config backups won't work" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/loxsuite/mosquitto/config</Config>
+  <Config Name="Mosquitto Data" Target="/mosquitto/data" Default="/mnt/user/appdata/loxsuite/mosquitto/data" Mode="rw" Description="Mosquitto's own persistence (retained messages, subscriptions)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/loxsuite/mosquitto/data</Config>
+  <Config Name="Mosquitto Log" Target="/mosquitto/log" Default="/mnt/user/appdata/loxsuite/mosquitto/log" Mode="rw" Description="Mosquitto's own log file, tailed into the Logs page" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/loxsuite/mosquitto/log</Config>
+
+  <Config Name="ADMIN_USERNAME" Target="ADMIN_USERNAME" Default="admin" Mode="" Description="Web UI admin account username - created on first boot only, if no users exist yet" Type="Variable" Display="always" Required="true" Mask="false">admin</Config>
+  <Config Name="ADMIN_PASSWORD" Target="ADMIN_PASSWORD" Default="" Mode="" Description="Web UI admin account password - change this from the default, then change it again from inside the app once logged in" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="SESSION_SECRET" Target="SESSION_SECRET" Default="" Mode="" Description="Random long string used to sign session cookies - any long random value, generate one with e.g. `openssl rand -hex 32`" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="MQTT_USERNAME" Target="MQTT_USERNAME" Default="gateway" Mode="" Description="Username for the gateway's own MQTT account, created automatically on first boot" Type="Variable" Display="always" Required="true" Mask="false">gateway</Config>
+  <Config Name="MQTT_PASSWORD" Target="MQTT_PASSWORD" Default="" Mode="" Description="Password for the gateway's own MQTT account" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="MQTT_ADMIN_USERNAME" Target="MQTT_ADMIN_USERNAME" Default="admin" Mode="" Description="Break-glass MQTT admin account (Mosquitto dynamic-security) - used once on first boot to bootstrap the broker; keep the password safe for manual mosquitto_ctrl access later" Type="Variable" Display="advanced" Required="false" Mask="false">admin</Config>
+  <Config Name="MQTT_ADMIN_PASSWORD" Target="MQTT_ADMIN_PASSWORD" Default="" Mode="" Description="Break-glass MQTT admin account password" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+
+  <Config Name="DB_PATH" Target="DB_PATH" Default="/data/gateway.db" Mode="" Description="Path to the SQLite database inside the container - leave as default unless you know why you're changing it" Type="Variable" Display="advanced" Required="false" Mask="false">/data/gateway.db</Config>
+  <Config Name="MOSQUITTO_LOG_PATH" Target="MOSQUITTO_LOG_PATH" Default="/mosquitto/log/mosquitto.log" Mode="" Description="Path to the Mosquitto log file inside the container" Type="Variable" Display="advanced" Required="false" Mask="false">/mosquitto/log/mosquitto.log</Config>
+  <Config Name="MOSQUITTO_CONFIG_PATH" Target="MOSQUITTO_CONFIG_PATH" Default="/mosquitto/config" Mode="" Description="Path to the Mosquitto config directory inside the container" Type="Variable" Display="advanced" Required="false" Mask="false">/mosquitto/config</Config>
+  <Config Name="LOXONE_UDP_PORT" Target="LOXONE_UDP_PORT" Default="11885" Mode="" Description="Must match the container-side value of the Loxone UDP Port mapping above" Type="Variable" Display="advanced" Required="false" Mask="false">11885</Config>
+  <Config Name="PORT" Target="PORT" Default="5582" Mode="" Description="Port the web UI listens on inside the container - must match the container-side value of the WebUI Port mapping above" Type="Variable" Display="advanced" Required="false" Mask="false">5582</Config>
+</Container>

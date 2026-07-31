@@ -1,4 +1,6 @@
 const { nanoid } = require('nanoid');
+const mqtt = require('mqtt');
+const db = require('./db');
 const { getClient } = require('./mqttClient');
 
 const REQUEST_TOPIC = '$CONTROL/dynamic-security/v1';
@@ -95,6 +97,40 @@ async function removeRoleAcl(rolename, acltype, topic) {
   await sendCommand({ command: 'removeRoleACL', rolename, acltype, topic });
 }
 
+// A one-shot, standalone connection attempt with a specific username/password — used right after
+// createClient()/setClientPassword() (see routes/mqttUsers.js), the only moment the plaintext
+// password is ever in hand. Unlike a Miniserver, an existing MQTT user's password isn't stored
+// anywhere in LoxSuite (dynsec only ever receives it, never returns it) — so there is no
+// "re-test this saved user" equivalent to the Miniservers page's per-row "Test now" button; testing
+// only ever makes sense in the same request the credential was just set.
+function testClientConnection(username, password, timeoutMs = 5000) {
+  const settings = db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
+  const protocol = settings.use_tls ? 'mqtts' : 'mqtt';
+
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const client = mqtt.connect(`${protocol}://${settings.host}:${settings.port}`, {
+      username,
+      password,
+      connectTimeout: timeoutMs,
+      reconnectPeriod: 0, // one-shot — a failed attempt must not keep silently retrying in the background
+    });
+
+    let settled = false;
+    function finish(ok, error) {
+      if (settled) return;
+      settled = true;
+      client.removeAllListeners();
+      client.end(true);
+      resolve({ ok, ms: Date.now() - start, error: error || null });
+    }
+
+    client.once('connect', () => finish(true));
+    client.once('error', (err) => finish(false, err.message));
+    setTimeout(() => finish(false, 'Timed out'), timeoutMs);
+  });
+}
+
 module.exports = {
   listClients,
   createClient,
@@ -108,4 +144,5 @@ module.exports = {
   deleteRole,
   addRoleAcl,
   removeRoleAcl,
+  testClientConnection,
 };

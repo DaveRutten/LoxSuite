@@ -1,0 +1,49 @@
+name: Build and publish Docker image
+
+# Publishes to GHCR (ghcr.io/<owner>/loxsuite) rather than Docker Hub — no separate account/secret
+# to set up, since it authenticates with the repo's own built-in GITHUB_TOKEN. This is also what
+# the Unraid Community Applications template (unraid/loxsuite.xml) actually pulls, so this
+# workflow existing and running is a prerequisite for that template working at all.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch: {}
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/loxsuite
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,prefix=,format=short
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./gateway
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

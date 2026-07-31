@@ -9,37 +9,95 @@
   <form method="post" action="/miniservers/<%= miniserver.id %>/update">
     <div class="form-grid">
       <div><label>Name</label><input type="text" name="name" value="<%= miniserver.name %>" required></div>
+    </div>
+    <div class="form-grid" style="margin-top:0.85rem;">
       <div><label>Host / IP</label><input type="text" name="host" value="<%= miniserver.host %>" required></div>
       <div><label>HTTP port</label><input type="number" name="http_port" value="<%= miniserver.http_port %>" required></div>
       <div>
         <label>HTTPS</label>
-        <select name="use_https">
-          <option value="" <%= !miniserver.use_https ? 'selected' : '' %>>No</option>
-          <option value="1" <%= miniserver.use_https ? 'selected' : '' %>>Yes (self-signed certificate allowed)</option>
-        </select>
+        <%- toggleSwitch('use_https', miniserver.use_https) %>
+        <p class="hint" style="margin:0.3rem 0 0;">Self-signed certificates are allowed.</p>
       </div>
-      <div><label>UDP port (optional)</label><input type="number" name="udp_port" value="<%= miniserver.udp_port || '' %>"></div>
+    </div>
+    <div class="form-grid" style="margin-top:0.85rem;">
       <div><label>Username</label><input type="text" name="username" value="<%= miniserver.username %>" required></div>
       <div>
         <label>Password</label>
         <input type="password" name="password" placeholder="Leave blank to keep the current password">
       </div>
+    </div>
+
+    <h2 style="margin-top:1.5rem;">Features</h2>
+    <div class="form-grid">
+      <div><label>UDP port (optional)</label><input type="number" name="udp_port" value="<%= miniserver.udp_port || '' %>"></div>
       <div>
         <label>External URL (optional)</label>
         <input type="text" name="external_url" value="<%= miniserver.external_url || '' %>" placeholder="https://myhome.dyndns.org:8080">
       </div>
+    </div>
+    <p class="hint" style="margin-top:0.5rem;">
+      <strong>UDP port</strong> is the port <em>on the Miniserver itself</em> that Loxone listens on
+      for Virtual UDP Output commands sent by this gateway (configured in Loxone Config's Virtual
+      UDP Output, not here) &mdash; purely outbound from the gateway's side, so nothing needs to
+      change in <code>docker-compose.yml</code> for it. <strong>External URL</strong> is tried
+      automatically whenever the local Host/IP can't be reached, so this Miniserver stays usable
+      both at home and remotely.
+    </p>
+
+    <div style="margin-top:0.9rem; display:flex; align-items:center; gap:0.5rem;">
+      <button type="button" id="edit-ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
       <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
     </div>
+    <div id="edit-ms-test-result" style="margin-top:0.6rem;"></div>
   </form>
-  <p class="hint">
-    <strong>External URL</strong> is tried automatically whenever the local Host/IP can't be
-    reached, so this Miniserver stays usable both at home and remotely.
-  </p>
 </div>
 <% } else { %>
   <p class="hint">Your Access Role doesn't have permission to edit Miniservers.</p>
 <% } %>
 
 <p><a href="/miniservers">&larr; Back to Miniservers</a></p>
+
+<script>
+  (function () {
+    var btn = document.getElementById('edit-ms-test-btn');
+    var wrap = document.getElementById('edit-ms-test-result');
+    if (!btn || !wrap) return;
+
+    // Same feedback style as the Miniservers table's own "Test now" — see that page's inline
+    // script for the fuller comment on why each icon/color choice.
+    function renderLine(label, result) {
+      if (!result) return '';
+      var color = result.ok ? 'var(--accent)' : 'var(--danger)';
+      var iconSvg = result.ok
+        ? '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+        : '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+      var detail = result.ok ? (result.ms + ' ms') : (result.error || 'failed');
+      return '<div style="display:flex; align-items:center; gap:0.4rem; color:' + color + ';">' + iconSvg
+        + '<strong style="color:var(--text);">' + label + '</strong><span>' + detail + '</span></div>';
+    }
+
+    btn.addEventListener('click', function () {
+      wrap.innerHTML = '<p class="hint" style="margin:0;">Testing&hellip;</p>';
+      // Tests the currently-SAVED credentials (not whatever's unsaved in the form fields above) —
+      // save first if you just changed the host/port/etc. and want to test those new values.
+      // Content-Type: application/json exempts this from the CSRF form-token check server-side
+      // (see middleware/csrf.js).
+      fetch('/miniservers/<%= miniserver.id %>/check', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var html = '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">';
+          html += renderLine('Local', data.local);
+          html += data.external ? renderLine('External', data.external) : '<div class="hint" style="margin:0;">External: not configured</div>';
+          html += renderLine('Logbook reachable', data.logbook);
+          html += renderLine('Live data (websocket)', data.live);
+          html += '</div>';
+          wrap.innerHTML = html;
+        })
+        .catch(function () {
+          wrap.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
+        });
+    });
+  })();
+</script>
 
 <%- include('partials/foot') %>

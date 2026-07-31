@@ -21,14 +21,14 @@ services:
       MOSQUITTO_LOG_PATH: /mosquitto/log/mosquitto.log
       MOSQUITTO_CONFIG_PATH: /mosquitto/config
       LOXONE_UDP_PORT: 11885
-      PORT: 3000
+      PORT: 5582
     volumes:
       - ./data:/data
       - ./mosquitto/config:/mosquitto/config
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     ports:
-      - "3000:3000"
+      - "5582:5582"
       - "1883:1883"
       - "11885:11885/udp"
 

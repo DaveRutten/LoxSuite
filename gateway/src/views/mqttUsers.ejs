@@ -5,6 +5,15 @@
 <% if (error) { %>
   <p class="error"><%= error %></p>
 <% } %>
+<% if (testResult) { %>
+  <p class="hint" style="<%= testResult.ok ? 'color: var(--success);' : 'color: var(--danger);' %>">
+    <% if (testResult.ok) { %>
+      Connection test for "<%= testResult.username %>" succeeded (<%= testResult.ms %> ms).
+    <% } else { %>
+      Connection test for "<%= testResult.username %>" failed: <%= testResult.error %>
+    <% } %>
+  </p>
+<% } %>
 
 <p class="hint">
   Every device that connects to the broker (e.g. a Shelly) needs its own account here

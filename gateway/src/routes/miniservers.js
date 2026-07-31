@@ -12,20 +12,49 @@ router.get('/', (req, res) => {
   res.render('miniservers', { miniservers, error: null });
 });
 
-router.post('/', requirePermission('miniservers', 'edit'), (req, res) => {
+router.post('/', requirePermission('miniservers', 'edit'), async (req, res) => {
   const { name, host, http_port, udp_port, username, password, use_https, external_url } = req.body;
   if (!name || !host || !username || !password) {
     const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
     return res.render('miniservers', { miniservers, error: 'Name, host, username and password are required.' });
   }
 
-  db.prepare(
+  const result = db.prepare(
     `INSERT INTO miniservers (name, host, http_port, udp_port, username, password, use_https, external_url)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, password, use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null);
 
   logSystemEvent(`"${req.user.username}" added Miniserver "${name}" (${host}).`);
+
+  // Otherwise this sits on "Unknown" (badge-neutral) until the next periodic healthcheck sweep
+  // (up to 60s later, see startHealthchecks) — awaited here so the very next page load already
+  // shows Online/Offline instead of a status that reads as broken right after adding one.
+  const inserted = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(result.lastInsertRowid);
+  await checkMiniserver(inserted);
+
   res.redirect('/miniservers');
+});
+
+// Tests connectivity against whatever's currently typed into the Add-Miniserver form, before it's
+// been saved — a plain functional check (no miniserver.id yet to key a DB write or a persistent
+// live-websocket connection against, see loxoneWebSocket.js's ensureConnection), so this only runs
+// the stateless HTTP probes runDetailedCheck already does for the saved-row "Test now" button, not
+// the live-connection one.
+router.post('/test', requirePermission('miniservers', 'edit'), async (req, res) => {
+  const { host, http_port, username, password, use_https, external_url } = req.body;
+  if (!host || !username || !password) {
+    return res.status(400).json({ error: 'Host, username and password are required to test.' });
+  }
+  const candidate = {
+    host,
+    http_port: Number(http_port) || 80,
+    username,
+    password,
+    use_https: !!use_https,
+    external_url: external_url ? external_url.trim().replace(/\/+$/, '') : null,
+  };
+  const detail = await runDetailedCheck(candidate);
+  res.json(detail);
 });
 
 router.get('/:id/edit', (req, res) => {
@@ -69,8 +98,8 @@ router.post('/:id/check', requirePermission('miniservers', 'edit'), async (req, 
     runDetailedCheck(miniserver),
     testLiveConnection(miniserver),
   ]);
-  const updated = db.prepare('SELECT status, last_checked_at FROM miniservers WHERE id = ?').get(miniserver.id);
-  res.json({ ...detail, live, status: updated.status, lastCheckedAt: updated.last_checked_at });
+  const updated = db.prepare('SELECT status, last_checked_at, firmware_version FROM miniservers WHERE id = ?').get(miniserver.id);
+  res.json({ ...detail, live, status: updated.status, lastCheckedAt: updated.last_checked_at, firmwareVersion: updated.firmware_version });
 });
 
 module.exports = router;
