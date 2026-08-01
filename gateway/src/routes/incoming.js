@@ -20,14 +20,31 @@ router.post('/messages/clear', requirePermission('incoming', 'edit'), (req, res)
   res.redirect('/incoming/messages');
 });
 
+// LoxSuite's own MQTT connections (the gateway's persistent connection, the one-shot
+// dynamic-security bootstrap, and ad-hoc Test buttons — see mqttClient.js/dynsecBootstrap.js/
+// dynamicSecurity.js/routes/setup.js) all connect under a stable "loxsuite-..." clientId rather
+// than a random one, specifically so they can be told apart from real devices here.
+function isSystemClient(clientId) {
+  return clientId.startsWith('loxsuite-');
+}
+
 router.get('/clients', (req, res) => {
   const { allDevices } = discoverDevices();
-  const clients = getClients().map((c) => {
+  const allClients = getClients().map((c) => {
     const prefix = resolveTopicPrefix(c.clientId, allDevices);
     return { ...c, displayName: prefix || c.clientId, resolvedFromTopic: !!prefix };
   });
+  const deviceClients = allClients.filter((c) => !isSystemClient(c.clientId));
+  const systemClients = allClients.filter((c) => isSystemClient(c.clientId));
+  const tab = req.query.tab === 'system' ? 'system' : 'device';
   const settings = db.prepare('SELECT client_retention_hours FROM gateway_settings WHERE id = 1').get();
-  res.render('incoming-clients', { clients, retentionHours: settings.client_retention_hours });
+  res.render('incoming-clients', {
+    clients: tab === 'system' ? systemClients : deviceClients,
+    deviceCount: deviceClients.length,
+    systemCount: systemClients.length,
+    tab,
+    retentionHours: settings.client_retention_hours,
+  });
 });
 
 router.post('/clients/clear', requirePermission('incoming', 'edit'), (req, res) => {

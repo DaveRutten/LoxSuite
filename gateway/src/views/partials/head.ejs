@@ -161,11 +161,17 @@
             </button>
             <div id="account-menu-panel" class="account-menu-panel" hidden>
               <a href="/profile" class="<%= active === 'profile' ? 'active' : '' %>">Profile</a>
-              <% if (canView('settings')) { %>
+              <% /* Settings has no meaningful read-only view — every field on it is an edit
+                     control, nothing to look at without also being able to change it — so this
+                     (and the page's own content, see settings-general.ejs) gates on edit, not
+                     view. A "View" grant on the Settings row in Access Roles is otherwise a dead
+                     end: canView(true) but a blank page once there, since nothing on it renders
+                     for anyone who can't also canEdit. */ %>
+              <% if (canEdit('settings')) { %>
                 <a href="/settings" class="<%= active === 'settings' ? 'active' : '' %>">Settings</a>
               <% } %>
               <% if (currentUser.isAdmin) { %>
-                <a href="/admin/users" class="<%= active === 'admin' ? 'active' : '' %>">Administration</a>
+                <a href="/admin/general" class="<%= active === 'admin' ? 'active' : '' %>">Administration</a>
               <% } %>
               <div class="account-menu-divider"></div>
               <form method="post" action="/logout">

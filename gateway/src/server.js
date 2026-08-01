@@ -44,6 +44,8 @@ const { icon } = require('./icons');
 const { toggleSwitch } = require('./toggleSwitch');
 const backup = require('./backup');
 const { formatDateTime, getDisplayTimezone } = require('./dateFormat');
+const { formatCount, formatHeapStatus } = require('./format');
+const panelTypeDefaults = require('./panelTypeDefaults');
 const { getVersionStatus, startVersionCheck } = require('./versionCheck');
 
 const app = express();
@@ -53,6 +55,8 @@ app.set('views', path.join(__dirname, 'views'));
 app.locals.icon = icon;
 app.locals.toggleSwitch = toggleSwitch;
 app.locals.formatDateTime = formatDateTime;
+app.locals.formatCount = formatCount;
+app.locals.formatHeapStatus = formatHeapStatus;
 app.locals.getVersionStatus = getVersionStatus;
 app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
 app.locals.serializeThresholdLadder = dashboardsRoutes.serializeThresholdLadder;
@@ -123,6 +127,7 @@ app.get('/', requireAuth, requirePermission('dashboard', 'view'), (req, res) => 
     panels,
     monitors: dashboardMonitors,
     defaultPanelDecimals: dashboardsRoutes.getDefaultPanelDecimals(),
+    panelTypeDefaultsExist: panelTypeDefaults.listDefaultTypes(sharedDashboard.id),
   });
 });
 
@@ -161,7 +166,7 @@ app.use('/avatar', requireAuth, avatarRoutes);
 app.get('/help', requireAuth, (req, res) => res.render('help'));
 
 runBootstrap();
-startHealthchecks(60000);
+startHealthchecks();
 startTailing();
 startUdpServer();
 startMonitorCollector();

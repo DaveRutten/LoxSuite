@@ -19,6 +19,6 @@
   <p class="error"><%= error %></p>
 <% } %>
 
-<%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEditPanels, defaultPanelDecimals: defaultPanelDecimals }) %>
+<%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEditPanels, defaultPanelDecimals: defaultPanelDecimals, panelTypeDefaultsExist: panelTypeDefaultsExist }) %>
 
 <%- include('partials/foot') %>

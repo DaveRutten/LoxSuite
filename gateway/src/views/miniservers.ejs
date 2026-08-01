@@ -57,14 +57,33 @@
 </details>
 <% } %>
 
+<%
+  // jdev/sps/state's own fully-documented 0-8 values (see healthcheck.js's fetchPlcState) —
+  // label + badge color per state, 5 (running) the only "everything's fine" green, 7 (error) the
+  // only red, everything else a neutral in-between/transitional state.
+  const PLC_STATE_LABELS = {
+    '0': ['No status', 'badge-neutral'],
+    '1': ['Booting', 'badge-neutral'],
+    '2': ['Program loaded', 'badge-neutral'],
+    '3': ['Started', 'badge-neutral'],
+    '4': ['Loxone Link started', 'badge-neutral'],
+    '5': ['Running', 'badge-ok'],
+    '6': ['Change in progress', 'badge-neutral'],
+    '7': ['Error', 'badge-off'],
+    '8': ['Update occurring', 'badge-neutral'],
+  };
+%>
 <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Status</th><th>Firmware</th><th>Name</th><th>Host</th><th>HTTP port</th><th>HTTPS</th><th>UDP port</th><th>External URL</th><th>User</th><th>Last checked</th><th>Actions</th></tr>
+      <tr><th></th><th>Status</th><th>Firmware</th><th>Name</th><th>Host</th><th>HTTP port</th><th>HTTPS</th><th>UDP port</th><th>External URL</th><th>User</th><th>Last checked</th><th>Actions</th></tr>
     </thead>
     <tbody>
       <% miniservers.forEach(ms => { %>
         <tr>
+          <td>
+            <button type="button" class="icon-btn icon-btn-neutral" data-toggle-row="ms-diag-<%= ms.id %>" title="Show diagnostics"><%- icon('chevron') %></button>
+          </td>
           <td data-ms-status-id="<%= ms.id %>">
             <% const badgeClass = ms.status === 'online' ? 'badge-ok' : ms.status === 'offline' ? 'badge-off' : 'badge-neutral'; %>
             <% const badgeText = ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown'; %>
@@ -102,9 +121,88 @@
             <% } %>
           </td>
         </tr>
+        <tr class="expand-row" id="ms-diag-<%= ms.id %>">
+          <td colspan="11">
+            <%
+              // Everything here comes from the healthcheck cycle (healthcheck.js's
+              // checkMiniserver/fetchSystemStats/fetchPlcState/fetchFirmwareVersion), not fetched
+              // fresh on expand — same "already current, no extra round trip" reasoning as the
+              // Firmware column right above. /jdev/sys/cpu|heap|numtasks|state|.. are real, working
+              // commands verified directly against a live Miniserver, but undocumented by Loxone —
+              // shown as their raw values rather than a guessed interpretation wherever the meaning
+              // isn't certain (see format.js's formatHeapStatus), except PLC state, which Loxone
+              // does fully document (see PLC_STATE_LABELS above).
+              const plc = PLC_STATE_LABELS[ms.plc_state];
+            %>
+            <div class="ms-diagnostics-card">
+              <div class="ms-diagnostics" data-ms-diagnostics-id="<%= ms.id %>">
+                <div>
+                  <span class="hint" style="margin:0;">PLC state</span>
+                  <div>
+                    <% if (plc) { %>
+                      <span class="badge <%= plc[1] %>" title="Miniserver's own PLC run state (jdev/sps/state).">PLC <%= ms.plc_state %>: <%= plc[0] %></span>
+                    <% } else { %>
+                      -
+                    <% } %>
+                  </div>
+                </div>
+                <div>
+                  <span class="hint" style="margin:0;">CPU load</span>
+                  <div><%= ms.cpu_load || '-' %></div>
+                </div>
+                <div>
+                  <span class="hint" style="margin:0;">Heap</span>
+                  <div title="<%= ms.heap_status || '' %>"><%= formatHeapStatus(ms.heap_status) || '-' %></div>
+                </div>
+                <div>
+                  <span class="hint" style="margin:0;">Tasks</span>
+                  <div><%= ms.num_tasks || '-' %></div>
+                </div>
+                <div>
+                  <span class="hint" style="margin:0;">Firmware date</span>
+                  <div><%= ms.firmware_date || '-' %></div>
+                </div>
+                <div>
+                  <span class="hint" style="margin:0;">Update channel</span>
+                  <div data-ms-update-level-id="<%= ms.id %>"><%= ms.update_level || '-' %></div>
+                </div>
+              </div>
+              <% if (canEdit('miniservers')) { %>
+              <%
+                // Update starts disabled — Loxone doesn't expose a plain yes/no "update available"
+                // flag over HTTP (confirmed against a real Miniserver, several different ways),
+                // so there's no real signal to gate it on. Requiring "Check for update" to be run
+                // at least once first, THEN enabling it, is the most honest stand-in available:
+                // not a true availability gate, just "you looked at the current state before
+                // triggering a real update" — see the JS below and the hint text underneath.
+              %>
+              <%
+                // NOT .row-actions — tables.js's collapseRowActions() scans every `td .row-actions`
+                // with more than one child and sweeps it into its own auto-generated "..." kebab
+                // menu, which is exactly the effect that class name has here too (this div also
+                // sits inside a <td>, with 2 buttons). .ms-update-actions gets the same plain
+                // flex/gap layout without tripping that scan.
+              %>
+              <div class="ms-update-actions">
+                <button type="button" class="btn-soft ms-check-update-btn" data-ms-id="<%= ms.id %>"><%- icon('refresh') %> Check for update</button>
+                <button type="button" class="btn-soft ms-update-firmware-btn" data-ms-id="<%= ms.id %>" data-ms-name="<%= ms.name %>" disabled title="Run &quot;Check for update&quot; first — Loxone doesn't expose a plain update-available flag over HTTP, so this only unlocks once you've looked at the current release channel yourself"><%- icon('upload') %> Update to latest release</button>
+              </div>
+              <div class="ms-update-result" data-ms-update-result-for="<%= ms.id %>"></div>
+              <p class="hint" style="margin-top:0.4rem; margin-bottom:0;">
+                "Check for update" reads this Miniserver's own release channel (Loxone doesn't
+                expose a plain yes/no "update available" flag over HTTP, so this is a best-effort
+                read, not a guarantee — it's also what unlocks the button below). "Update to latest
+                release" sends the actual update command — a <strong>real firmware update and
+                reboot</strong> on this Miniserver right now, every device it controls briefly
+                stops responding while it restarts.
+              </p>
+              <% } %>
+            </div>
+          </td>
+        </tr>
       <% }) %>
       <% if (miniservers.length === 0) { %>
-        <tr><td colspan="11" class="empty">No miniservers added yet.</td></tr>
+        <tr><td colspan="12" class="empty">No miniservers added yet.</td></tr>
       <% } %>
     </tbody>
   </table>
@@ -137,6 +235,7 @@
           var html = '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">';
           html += renderLine('Local', data.local);
           html += data.external ? renderLine('External', data.external) : '<div class="hint" style="margin:0;">External: not configured</div>';
+          html += renderLine('Loxone API', data.api);
           html += renderLine('Logbook reachable', data.logbook);
           html += renderLine('Live data (websocket)', data.live);
           html += '</div>';
@@ -150,6 +249,16 @@
           }
           var firmwareCell = document.querySelector('[data-ms-firmware-id="' + msId + '"]');
           if (firmwareCell) firmwareCell.textContent = data.firmwareVersion || '-';
+          var deviceMonitorCell = document.querySelector('[data-ms-device-monitor-id="' + msId + '"]');
+          if (deviceMonitorCell) {
+            if (data.deviceMonitorStatus === null || data.deviceMonitorStatus === undefined) {
+              deviceMonitorCell.textContent = '-';
+            } else if (data.deviceMonitorStatus === '0') {
+              deviceMonitorCell.innerHTML = '<span class="badge badge-ok" title="Miniserver\'s own self-reported health status (deviceMonitor) is 0 — no issue reported.">OK</span>';
+            } else {
+              deviceMonitorCell.innerHTML = '<span class="badge badge-off" title="Miniserver\'s own self-reported health status (deviceMonitor) — code meaning undocumented, check Loxone Config\'s own status messages for details.">Code ' + data.deviceMonitorStatus + '</span>';
+            }
+          }
         })
         .catch(function () {
           wrap.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
@@ -197,6 +306,7 @@
             var html = '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">';
             html += renderLine('Local', data.local);
             html += data.external ? renderLine('External', data.external) : '<div class="hint" style="margin:0;">External: not configured</div>';
+            html += renderLine('Loxone API', data.api);
             html += renderLine('Logbook reachable', data.logbook);
             html += '</div>';
             addTestResult.innerHTML = html;
@@ -207,6 +317,58 @@
       });
     }
   })();
+</script>
+
+<script>
+  // Check for update / Update to latest release (diagnostics expand-row). Plain fetch() with
+  // Content-Type: application/json, same CSRF-exempt pattern used elsewhere in this app (see
+  // middleware/csrf.js) — neither route reads a request body.
+  document.addEventListener('click', function (e) {
+    var checkBtn = e.target.closest('.ms-check-update-btn');
+    if (checkBtn) {
+      var msId = checkBtn.dataset.msId;
+      var resultEl = document.querySelector('[data-ms-update-result-for="' + msId + '"]');
+      var updateBtnForCheck = document.querySelector('.ms-update-firmware-btn[data-ms-id="' + msId + '"]');
+      checkBtn.disabled = true;
+      resultEl.textContent = 'Checking…';
+      fetch('/miniservers/' + msId + '/check-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.error) { resultEl.textContent = data.error; return; }
+          var levelEl = document.querySelector('[data-ms-update-level-id="' + msId + '"]');
+          if (levelEl && data.updateLevel) levelEl.textContent = data.updateLevel;
+          resultEl.textContent = 'Release channel: ' + (data.updateLevel || 'unknown') + '. Loxone doesn\'t expose a plain "update available" flag over HTTP — open Loxone Config to see if a new release is actually offered.';
+          // Unlocks the Update button — see the comment on it in the template for why this is a
+          // "you looked before triggering" gate, not a real availability check.
+          if (updateBtnForCheck) { updateBtnForCheck.disabled = false; updateBtnForCheck.title = 'Trigger a real firmware update on this Miniserver now'; }
+        })
+        .catch(function () { resultEl.textContent = 'Check failed.'; })
+        .then(function () { checkBtn.disabled = false; });
+      return;
+    }
+
+    var updateBtn = e.target.closest('.ms-update-firmware-btn');
+    if (!updateBtn) return;
+    var confirmed = window.confirm(
+      'This will trigger a REAL firmware update and reboot on "' + updateBtn.dataset.msName + '" right now.\n\n' +
+      "Loxone doesn't expose whether a newer release actually exists over HTTP — this may reinstall the version you're already running. Check Loxone Config directly first if you want to be sure.\n\n" +
+      'Every device it controls (lighting, heating, gates, alarms, everything) will briefly stop responding while it restarts. This cannot be undone once started.\n\n' +
+      'Continue?'
+    );
+    if (!confirmed) return;
+    var msId2 = updateBtn.dataset.msId;
+    var resultEl2 = document.querySelector('[data-ms-update-result-for="' + msId2 + '"]');
+    updateBtn.disabled = true;
+    resultEl2.textContent = 'Triggering update…';
+    fetch('/miniservers/' + msId2 + '/update-firmware', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        resultEl2.textContent = data.note || (data.triggered ? 'Update triggered. The Miniserver may now reboot.' : 'Something went wrong.');
+      })
+      .catch(function () { resultEl2.textContent = 'Update triggered — connection ended (expected if the Miniserver is now rebooting).'; });
+      // Deliberately left disabled after a real trigger — re-enabling would invite a second,
+      // separate update command on a Miniserver that may currently be mid-reboot.
+  });
 </script>
 
 <%- include('partials/foot') %>

@@ -95,7 +95,7 @@ Logged in as <strong><%= username %></strong>
     instead.
   </p>
 
-  <%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEdit('dashboard'), defaultPanelDecimals: defaultPanelDecimals }) %>
+  <%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEdit('dashboard'), defaultPanelDecimals: defaultPanelDecimals, panelTypeDefaultsExist: panelTypeDefaultsExist }) %>
 </div>
 
 <%- include('partials/foot') %>

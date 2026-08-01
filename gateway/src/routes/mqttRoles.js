@@ -1,5 +1,5 @@
 const express = require('express');
-const { listRolesVerbose, createRole, deleteRole, addRoleAcl, removeRoleAcl } = require('../dynamicSecurity');
+const { listRolesVerbose, createRole, deleteRole, addRoleAcl, removeRoleAcl, editRoleAcl } = require('../dynamicSecurity');
 const { requirePermission } = require('../middleware/requirePermission');
 
 const router = express.Router();
@@ -55,6 +55,18 @@ router.post('/:rolename/acls', requirePermission('mqtt_roles', 'edit'), async (r
   try {
     if (!acltype || !topic) throw new Error('ACL type and topic filter are required.');
     await addRoleAcl(req.params.rolename, acltype, topic, allow === '1');
+  } catch (err) {
+    const roles = await listRolesVerbose().catch(() => []);
+    return res.render('mqttRoles', { roles, protectedRoles: PROTECTED_ROLES, aclTypes: ACL_TYPES, error: err.message });
+  }
+  res.redirect('/mqtt-roles');
+});
+
+router.post('/:rolename/acls/edit', requirePermission('mqtt_roles', 'edit'), async (req, res) => {
+  const { old_acltype: oldAcltype, old_topic: oldTopic, acltype, topic, allow } = req.body;
+  try {
+    if (!acltype || !topic) throw new Error('ACL type and topic filter are required.');
+    await editRoleAcl(req.params.rolename, oldAcltype, oldTopic, acltype, topic, allow === '1');
   } catch (err) {
     const roles = await listRolesVerbose().catch(() => []);
     return res.render('mqttRoles', { roles, protectedRoles: PROTECTED_ROLES, aclTypes: ACL_TYPES, error: err.message });

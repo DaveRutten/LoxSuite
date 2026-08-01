@@ -1,7 +1,6 @@
 const db = require('./db');
 const { fetchMiniserver, miniserverBaseUrl, insecureAgent } = require('./loxone');
 const { checkMiniserverStatus } = require('./notifications');
-const { getStructure } = require('./loxoneStructure');
 const { decrypt } = require('./secretCrypto');
 
 const TIMEOUT_MS = 4000;
@@ -26,9 +25,36 @@ async function testAddress(miniserver, base, dispatcher, path) {
   }
 }
 
+// Same shape as testAddress, but for /jdev/cfg/version specifically — a plain 200 on "/" only
+// proves SOMETHING answered HTTP there (could be a captive portal, a different device entirely,
+// or a Loxone Miniserver that's about to reject these exact credentials on every real API call).
+// Checking the response actually parses as Loxone's own {"LL":{"value":...,"Code":"200"}} shape
+// is what confirms this is genuinely a reachable Loxone API with working credentials, not just an
+// open port.
+async function testApiAddress(miniserver, base, dispatcher) {
+  const auth = Buffer.from(`${miniserver.username}:${decrypt(miniserver.password)}`).toString('base64');
+  const start = Date.now();
+  try {
+    const res = await fetch(`${base}/jdev/cfg/version`, {
+      headers: { Authorization: `Basic ${auth}` },
+      dispatcher,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const ms = Date.now() - start;
+    if (!res.ok) return { ok: false, ms, error: `HTTP ${res.status}` };
+    const body = await res.json().catch(() => null);
+    if (!body?.LL?.value) return { ok: false, ms, error: "Reachable, but didn't look like a Loxone Miniserver's API response" };
+    return { ok: true, ms, error: null, version: body.LL.value };
+  } catch (err) {
+    return { ok: false, ms: Date.now() - start, error: err.message };
+  }
+}
+
 // Powers the Miniservers page's "Test now" feedback row — separate pass/fail for local reachability,
-// external-URL reachability, and the log endpoint specifically (a Miniserver can be reachable at all
-// while /dev/fsget is blocked by a proxy/firewall in between, so this is worth showing on its own).
+// external-URL reachability, the log endpoint specifically (a Miniserver can be reachable at all
+// while /dev/fsget is blocked by a proxy/firewall in between, so this is worth showing on its own),
+// and the Loxone API itself (distinct from "local"/"external" plain reachability — see
+// testApiAddress above).
 async function runDetailedCheck(miniserver) {
   const localBase = miniserverBaseUrl(miniserver);
   const localDispatcher = miniserver.use_https ? insecureAgent : undefined;
@@ -37,36 +63,68 @@ async function runDetailedCheck(miniserver) {
   const local = await testAddress(miniserver, localBase, localDispatcher, '/');
   const external = externalBase ? await testAddress(miniserver, externalBase, undefined, '/') : null;
 
-  // Logbook re-tests whichever address just succeeded (mirroring fetchMiniserver's own
+  // Logbook/API re-test whichever address just succeeded (mirroring fetchMiniserver's own
   // local-then-external preference) rather than probing both again.
   const workingBase = local.ok ? localBase : (external && external.ok ? externalBase : null);
   const workingDispatcher = local.ok ? localDispatcher : undefined;
   const logbook = workingBase
     ? await testAddress(miniserver, workingBase, workingDispatcher, '/dev/fsget/log/def.log')
     : { ok: false, ms: 0, error: 'No reachable address to test it through' };
+  const api = workingBase
+    ? await testApiAddress(miniserver, workingBase, workingDispatcher)
+    : { ok: false, ms: 0, error: 'No reachable address to test it through' };
 
-  return { local, external, logbook };
+  return { local, external, logbook, api };
 }
 
-// The Miniserver's firmware version lives in LoxAPP3.json's msInfo block, not behind a plain
-// /jdev/cfg/* call — newer firmware gates /jdev/cfg/* endpoints behind the token-based
-// /jdev/sys/getkey2 auth flow (plain Basic auth silently gets nothing useful back there), while
-// /data/LoxAPP3.json accepts the same Basic auth every other Miniserver read in this app already
-// uses. Reuses loxoneStructure's own cache (getMonitorableStates/getRoomCategoryTree already rely
-// on the exact same fetch+cache), so every healthcheck after the very first one for a given
-// Miniserver reads this for free instead of re-fetching the (potentially large) structure file on
-// every 60s sweep. swVersion is an array (e.g. [12, 3, 4, 20]) on some firmware and a plain string
-// on others — normalized to a dotted string either way.
-async function fetchFirmwareVersion(miniserver) {
+// A single value read off a plain /jdev/... command — shared by fetchSystemStats below and
+// firmware/PLC-state reading here. Every one of these commands is undocumented in Loxone's own
+// official HTTP command reference (verified against the actual reference PDF and a
+// community-reverse-engineered doc), but each was individually confirmed to return real 200s with
+// real data directly against a live Miniserver before being wired in here — none of this was
+// assumed from a name alone.
+async function readSysValue(miniserver, path) {
   try {
-    const structure = await getStructure(miniserver);
-    const swVersion = structure?.msInfo?.swVersion;
-    if (Array.isArray(swVersion)) return swVersion.join('.');
-    if (typeof swVersion === 'string' && swVersion) return swVersion;
-    return null;
+    const res = await fetchMiniserver(miniserver, path, { timeoutMs: TIMEOUT_MS });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const value = body?.LL?.value;
+    return value === undefined || value === null || value === '' ? null : String(value);
   } catch (err) {
     return null;
   }
+}
+
+// /jdev/cfg/version — was originally read from LoxAPP3.json's msInfo.swVersion, which turned out
+// to not exist at all on at least one real Miniserver's structure file (confirmed by direct
+// inspection: msInfo had 23 other keys, no swVersion among them) — silently null forever there
+// regardless of how long the gateway ran, since nothing about that failure mode ever looks like an
+// error. This dedicated command doesn't depend on the structure file at all.
+function fetchFirmwareVersion(miniserver) {
+  return readSysValue(miniserver, '/jdev/cfg/version');
+}
+
+// /jdev/sps/state — the Miniserver's own PLC run state. Loxone documents all 8 possible values
+// (unlike the msInfo.deviceMonitor value this replaced, which had no documented meaning beyond
+// "0 seems to mean healthy"): 0 no status, 1 booting, 2 program loaded, 3 started, 4 Loxone Link
+// started, 5 running, 6 change in progress, 7 error, 8 update occurring. See PLC_STATE_LABELS in
+// miniservers.ejs for how these render.
+function fetchPlcState(miniserver) {
+  return readSysValue(miniserver, '/jdev/sps/state');
+}
+
+// /jdev/sys/cpu, /jdev/sys/heap, /jdev/sys/numtasks, /jdev/cfg/versiondate — same
+// undocumented-but-verified-working status as fetchFirmwareVersion/fetchPlcState above (e.g. cpu
+// "14%", heap "478956/1016404kB", numtasks "64", versiondate "Jul 21 2026 17:23:12"). Fetched in
+// parallel, each independently — one endpoint erroring shouldn't blank out the others.
+async function fetchSystemStats(miniserver) {
+  const [cpuLoad, heapStatus, numTasks, firmwareDate] = await Promise.all([
+    readSysValue(miniserver, '/jdev/sys/cpu'),
+    readSysValue(miniserver, '/jdev/sys/heap'),
+    readSysValue(miniserver, '/jdev/sys/numtasks'),
+    readSysValue(miniserver, '/jdev/cfg/versiondate'),
+  ]);
+  return { cpuLoad, heapStatus, numTasks, firmwareDate };
 }
 
 async function checkMiniserver(miniserver) {
@@ -78,12 +136,18 @@ async function checkMiniserver(miniserver) {
     // — and fetchMiniserver already tries external_url as a fallback for that case.
     await fetchMiniserver(miniserver, '/', { timeoutMs: TIMEOUT_MS });
     const firmwareVersion = await fetchFirmwareVersion(miniserver);
-    if (firmwareVersion) {
-      db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = NULL, firmware_version = ? WHERE id = ?')
-        .run('online', now, firmwareVersion, miniserver.id);
-    } else {
-      db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = NULL WHERE id = ?').run('online', now, miniserver.id);
-    }
+    const plcState = await fetchPlcState(miniserver);
+    const { cpuLoad, heapStatus, numTasks, firmwareDate } = await fetchSystemStats(miniserver);
+    // COALESCE keeps whatever was last successfully read if this particular sweep's fetch failed
+    // — a hiccup reading any one of these shouldn't flip an otherwise-successful check's columns
+    // back to unknown.
+    db.prepare(
+      `UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = NULL,
+       firmware_version = COALESCE(?, firmware_version), plc_state = COALESCE(?, plc_state),
+       cpu_load = COALESCE(?, cpu_load), heap_status = COALESCE(?, heap_status), num_tasks = COALESCE(?, num_tasks),
+       firmware_date = COALESCE(?, firmware_date)
+       WHERE id = ?`
+    ).run('online', now, firmwareVersion, plcState, cpuLoad, heapStatus, numTasks, firmwareDate, miniserver.id);
     checkMiniserverStatus(miniserver, 'online');
   } catch (err) {
     db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = ? WHERE id = ?')
@@ -97,9 +161,21 @@ async function checkAllMiniservers() {
   await Promise.all(miniservers.map(checkMiniserver));
 }
 
-function startHealthchecks(intervalMs = 60000) {
-  checkAllMiniservers();
-  return setInterval(checkAllMiniservers, intervalMs);
+// Recursive setTimeout, not setInterval — re-reads gateway_settings.healthcheck_interval_seconds
+// (Settings page) before scheduling each next run, so changing it there takes effect on the very
+// next tick instead of needing a gateway restart. A plain setInterval would have locked in
+// whatever interval was configured at startup.
+function startHealthchecks() {
+  let cancelled = false;
+  async function tick() {
+    await checkAllMiniservers();
+    if (cancelled) return;
+    const settings = db.prepare('SELECT healthcheck_interval_seconds FROM gateway_settings WHERE id = 1').get();
+    const seconds = settings?.healthcheck_interval_seconds > 0 ? settings.healthcheck_interval_seconds : 60;
+    setTimeout(tick, seconds * 1000);
+  }
+  tick();
+  return () => { cancelled = true; };
 }
 
 module.exports = { checkMiniserver, checkAllMiniservers, startHealthchecks, runDetailedCheck };

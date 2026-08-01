@@ -3,6 +3,7 @@ const db = require('../db');
 const { getCurrentValue, reloadMqttMonitors } = require('../monitorCollector');
 const { humanizeTopic } = require('../topicName');
 const { resolveRange, historyWindowClause, rangeToWindow, MAX_ROWS } = require('./monitor');
+const panelTypeDefaults = require('../panelTypeDefaults');
 
 const router = express.Router();
 
@@ -873,6 +874,7 @@ router.get('/:id', (req, res) => {
     error: null,
     canEditPanels: canMutate(dashboard, req),
     defaultPanelDecimals: getDefaultPanelDecimals(),
+    panelTypeDefaultsExist: panelTypeDefaults.listDefaultTypes(dashboard.id),
     sharedByOwner,
     isFavorited,
   });
@@ -964,6 +966,36 @@ router.post('/:id/panels/:panelId/duplicate', (req, res) => {
   res.redirect(dashboardUrl(dashboard));
 });
 
+// Saves this panel's current appearance config as the house style for its panel_type — global
+// (every dashboard, every editor), not tied to this specific panel's monitors/title/range. See
+// panelTypeDefaults.js for how per-series settings (chart/value line colors etc.) get remapped by
+// position rather than by monitor id, so the template still makes sense on a differently-wired panel.
+router.post('/:id/panels/:panelId/save-as-default', (req, res) => {
+  const dashboard = loadAccessibleDashboard(req.params.id, req);
+  if (!dashboard) return res.status(404).send('Dashboard not found');
+  if (!canMutate(dashboard, req)) return forbidden(res);
+
+  const panel = db.prepare('SELECT id FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').get(req.params.panelId, dashboard.id);
+  if (!panel) return res.status(404).send('Panel not found');
+
+  panelTypeDefaults.saveAsDefault(panel.id);
+  res.redirect(dashboardUrl(dashboard));
+});
+
+// Re-applies whatever's currently saved as this panel_type's house style — a no-op (redirects
+// with nothing changed) if nothing's ever been saved for that type yet.
+router.post('/:id/panels/:panelId/reset-to-default', (req, res) => {
+  const dashboard = loadAccessibleDashboard(req.params.id, req);
+  if (!dashboard) return res.status(404).send('Dashboard not found');
+  if (!canMutate(dashboard, req)) return forbidden(res);
+
+  const panel = db.prepare('SELECT id FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').get(req.params.panelId, dashboard.id);
+  if (!panel) return res.status(404).send('Panel not found');
+
+  panelTypeDefaults.resetToDefault(panel.id);
+  res.redirect(dashboardUrl(dashboard));
+});
+
 // Fired on resize-drag mouseup (see dashboard-detail.ejs) — sizing is otherwise entirely
 // drag-driven, no form for it.
 router.post('/:id/panels/:panelId/resize', (req, res) => {
@@ -1010,3 +1042,11 @@ module.exports.serializeKeyValueLines = serializeKeyValueLines;
 module.exports.serializeThresholdLadder = serializeThresholdLadder;
 module.exports.serializeValueMappings = serializeValueMappings;
 module.exports.serializeAnnotations = serializeAnnotations;
+// Reused by routes/liveData.js's "Suggest dashboard" flow, which lets a bucket's panel type be
+// overridden away from its own server-side default (see BUCKET_BY_KEY in dashboardSuggestions.js)
+// — same type list, same single-vs-multi-monitor rule, and the same per-type config defaults a
+// panel gets when created any other way, so a suggested panel never ends up in a shape the regular
+// editor wouldn't also produce.
+module.exports.PANEL_TYPES = PANEL_TYPES;
+module.exports.SINGLE_MONITOR_TYPES = SINGLE_MONITOR_TYPES;
+module.exports.buildConfig = buildConfig;

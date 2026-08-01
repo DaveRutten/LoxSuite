@@ -6,6 +6,7 @@ const { ensureConnection, getLiveValue, getStatus } = require('../loxoneWebSocke
 const { suggestForRoom, BUCKET_BY_KEY } = require('../dashboardSuggestions');
 const { requirePermission } = require('../middleware/requirePermission');
 const { resolveRange } = require('./monitor');
+const { PANEL_TYPES, SINGLE_MONITOR_TYPES, buildConfig } = require('./dashboards');
 
 const POLL_INTERVALS_MS = [5000, 10000, 30000, 60000, 300000];
 
@@ -224,7 +225,11 @@ router.post('/suggest', requirePermission('monitor', 'edit'), async (req, res) =
     'INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, ?, ?, ?, ?, ?)'
   );
   const insertPanelMonitor = db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)');
-  const configFor = (panelType) => (panelType === 'chart' ? JSON.stringify({ legendPosition: 'auto', unit: '', decimals: null }) : JSON.stringify({ layout: 'stacked' }));
+
+  // Each bucket's own suggested panelType (BUCKET_BY_KEY) is only the default — the preview lets
+  // it be overridden per bucket (e.g. Climate as a Current value panel instead of a chart), same
+  // type list and same single-vs-multi-monitor rule as the regular "Add panel" form uses.
+  const panelTypeOverrides = req.body.panel_types && typeof req.body.panel_types === 'object' ? req.body.panel_types : {};
 
   // Group the flat, hand-picked item list back into one panel per bucket, preserving the bucket
   // order from BUCKET_BY_KEY (insertion order) rather than whatever order items happened to arrive
@@ -237,8 +242,15 @@ router.post('/suggest', requirePermission('monitor', 'edit'), async (req, res) =
 
   Array.from(itemsByBucket.entries()).forEach(([bucketKey, items], position) => {
     const bucket = BUCKET_BY_KEY.get(bucketKey);
-    const monitorIds = items.map((item) => findOrCreateMonitor(item));
-    const panelId = insertPanel.run(dashboardId, bucket.panelType, bucket.label, range, configFor(bucket.panelType), position).lastInsertRowid;
+    const override = panelTypeOverrides[bucketKey];
+    const panelType = PANEL_TYPES.includes(override) ? override : bucket.panelType;
+    // table/gauge/stat_delta/threshold each show exactly one monitor — same truncation the
+    // regular panel form applies (routes/dashboards.js), so switching a multi-item bucket to one
+    // of these doesn't try to attach items it can't actually display.
+    const pickedItems = SINGLE_MONITOR_TYPES.includes(panelType) ? items.slice(0, 1) : items;
+    const monitorIds = pickedItems.map((item) => findOrCreateMonitor(item));
+    const config = JSON.stringify(buildConfig(panelType, {}));
+    const panelId = insertPanel.run(dashboardId, panelType, bucket.label, range, config, position).lastInsertRowid;
     monitorIds.forEach((monitorId, i) => insertPanelMonitor.run(panelId, monitorId, i));
   });
 

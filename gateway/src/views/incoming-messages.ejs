@@ -1,7 +1,8 @@
 <%- include('partials/head', { pageTitle: 'Live Data', active: 'incoming', refresh: 5, liveSwap: true }) %>
 
 <p class="hint">
-  Refreshes every 5 seconds. One row per topic, most recently updated on top &mdash; the
+  <strong><%= topics.length %> topic<%= topics.length === 1 ? '' : 's' %></strong> seen since the gateway
+  started. Refreshes every 5 seconds, one row per topic, most recently updated on top &mdash; the
   <strong>Previous value</strong> column shows what changed. In-memory only, so this clears on a gateway restart.
 </p>
 
@@ -38,7 +39,7 @@
               <span class="truncate" title="<%= t.previousValue %>"><%= t.previousValue %></span>
             <% } %>
           </td>
-          <td><%= t.count %></td>
+          <td title="<%= t.count %>"><%= formatCount(t.count) %></td>
           <td><%= formatDateTime(t.lastSeen) %></td>
           <td><code class="recognition-string" title="<%= t.recognition %>"><%= t.recognition %></code></td>
           <td>

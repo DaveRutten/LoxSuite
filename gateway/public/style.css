@@ -1062,6 +1062,14 @@ td .row-actions {
   max-width: 0;
 }
 .confirm-bar.open { max-height: 4rem; opacity: 1; margin-top: 0.5rem; flex-basis: 100%; max-width: 100%; }
+/* .table-toolbar's own `gap: 0.4rem` (see above) applies on BOTH sides of this element even while
+   it's zero-width and collapsed, so any button followed by a data-confirm form visually sits twice
+   as far from its neighbor as a plain button-to-button pair. A negative margin-left cancels exactly
+   one gap-unit, bringing it back to the same single gap every other adjacent pair gets. Scoped to
+   .table-toolbar specifically — .confirm-bar also appears inside .row-actions/.dash-panel-head,
+   which don't share this gap value and don't have the same doubling to correct for. */
+.table-toolbar > .confirm-bar { margin-left: -0.4rem; }
+.table-toolbar > .confirm-bar.open { margin-left: 0; }
 .confirm-bar-inner { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.6rem; }
 .confirm-bar-text { font-size: 0.82rem; color: var(--text-muted); }
 
@@ -1804,6 +1812,22 @@ main > .hint:first-child { margin-top: 0; }
 .icon-btn-add { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
 .icon-btn-add:hover { color: #fff; background: var(--accent); }
 
+/* Reset-to-default (panel-grid.ejs) sits alongside Edit/Duplicate/Delete, which all have an
+   always-visible bordered box (not the base .icon-btn's transparent one) — neutral/gray rather
+   than a "meaning" color, since applying a saved default isn't inherently positive or dangerous
+   the way Duplicate/Delete are. */
+.icon-btn-neutral { border-color: var(--border); }
+.icon-btn-neutral:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+
+/* A panel's "Save as default" star (panel-grid.ejs), once a default is actually saved for its
+   type — same bordered-box treatment as Edit/Duplicate/Delete, and the same filled-icon-means-
+   active convention as .favorite-toggle-btn.is-favorited above (reused, not reinvented). Purple
+   rather than reusing Edit's own amber so the two don't read as the same action at a glance. */
+.icon-btn-star-saved { color: var(--purple); background: var(--purple-soft); border-color: var(--purple); }
+.icon-btn-star-saved .icon { fill: currentColor; }
+.icon-btn-star-saved:hover { color: #fff; background: var(--purple); }
+.icon-btn-star-saved:hover .icon { fill: #fff; }
+
 /* ---- Collapsible add panel ---- */
 .add-panel {
   background: var(--surface);
@@ -1924,11 +1948,79 @@ main > .hint:first-child { margin-top: 0; }
 
 .suggest-bucket-list { display: flex; flex-direction: column; gap: 0.9rem; }
 
-.suggest-bucket-title { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.35rem; }
+.suggest-bucket-title { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.35rem; }
+/* Overrides which panel type this bucket becomes (see live-data.ejs's PANEL_TYPE_LABELS) — a
+   plain-text label until "Create dashboard" is submitted, so it reads as part of the title rather
+   than a form control competing with the item rows below it. */
+.suggest-bucket-title .suggest-panel-type-select { font-weight: 400; font-size: 0.8rem; max-width: 11rem; }
 
 .suggest-item-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.86rem; padding: 0.15rem 0; }
 .suggest-item-row label { flex: 1; cursor: pointer; }
 .suggest-item-row select { max-width: 12rem; }
+/* Second select per row (see live-data.ejs's panelSelect) — which panel this item ends up in,
+   overriding the bucket it was auto-suggested/added into. Narrower than the state select: a
+   bucket label ("Access & Security") never needs as much room as a state name can. */
+.suggest-item-row select + select { max-width: 9rem; }
+
+/* Lets a control that has more than one state worth watching (e.g. Climate's tempTarget
+   alongside its own default tempActual row) get pinned as a second row instead of the two being
+   an either/or choice on one row's dropdown — see live-data.ejs's addRow()/refreshAddOptions().
+   Hidden once every state of every control already in this bucket has its own row (nothing left
+   worth offering), same reasoning as an empty state elsewhere in this app. */
+.suggest-add-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.86rem; padding: 0.3rem 0 0.1rem; }
+.suggest-add-row select { max-width: 16rem; }
+
+/* Miniservers page's diagnostics expand-row (miniservers.ejs) — one bordered card so the whole
+   block (stat grid + update buttons + hint text) reads as a single cohesive detail panel instead
+   of a few loosely floating lines glued to the row above it. Stat grid on top, update buttons
+   bottom-left below it (.row-actions, same bordered .btn-soft style used everywhere else in this
+   app — not a separate visual treatment). */
+.ms-diagnostics-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem 1rem; }
+.ms-diagnostics { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+.ms-diagnostics > div { min-width: 8rem; }
+/* Deliberately NOT .row-actions — see the comment on this div in miniservers.ejs for why (that
+   class name has tables.js's collapseRowActions() attached, which would sweep this into its own
+   "..." kebab menu instead of showing the buttons directly). Same plain flex/gap layout either way. */
+.ms-update-actions { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.75rem; }
+.ms-update-result { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; }
+
+/* This card's real content height is much shorter than the shared tr.expand-row.open cap (40rem
+   — sized for far taller content elsewhere, like a Test row's value-suggest dropdown open). Left
+   at 40rem, the max-height transition reaches this card's actual height almost instantly and then
+   just sits there for the rest of the 0.2s duration while the row's own padding keeps animating
+   separately — reads as two mismatched motions instead of one smooth one. Scoped to this specific
+   card rather than lowering the shared default, which has already been tuned against clipping
+   taller content on other pages.
+   visibility is a second, stronger layer on top of the shared rule's max-height:0/overflow:hidden
+   — belt-and-suspenders against this specific card ever reading as "still slightly visible" while
+   collapsed, whatever the exact cause (a flex child's own intrinsic min-height fighting an
+   ancestor's max-height is a known way this class of bug shows up). Delayed by the same 0.2s the
+   collapse transition itself takes, so closing still animates instead of the content vanishing
+   the instant .open is removed; opening flips it back to visible immediately (delay: 0s) so
+   nothing is hidden while growing in. */
+.ms-diagnostics-card {
+  visibility: hidden;
+  max-height: 0; /* restated (also set by the shared tr.expand-row td > *:not(.confirm-bar) rule)
+    so this card's own collapsed height never depends on cascade ordering between the two */
+  height: 0; /* a THIRD layer alongside max-height/visibility — two different Miniserver rows
+    measured different collapsed heights despite both being max-height:0 (one had short "-"
+    placeholders throughout, the other real longer text/badges that apparently still contributed
+    some residual intrinsic size even inside overflow:hidden, likely from the flex-wrap stat grid
+    inside). Explicit height:0 is a harder constraint than max-height for this and doesn't fight
+    the max-height transition, since the open state below switches it to auto. */
+  overflow: hidden;
+  line-height: 0; /* zeroes out any residual height from text metrics inside a 0-height box —
+    without this, collapsed rows measured a few px taller than others depending on font rendering */
+  transition: max-height 0.2s var(--ease), visibility 0s linear 0.2s;
+}
+tr.expand-row.open td > .ms-diagnostics-card {
+  max-height: 14rem;
+  height: auto;
+  visibility: visible;
+  line-height: normal; /* undoes the collapsed rule's line-height:0 — this card's own text needs
+    its real line-height back once actually shown, only the collapsed box needed it zeroed */
+  transition: max-height 0.2s var(--ease), visibility 0s linear 0s;
+}
 
 .help-highlight { animation: help-pulse 2.2s ease-out; }
 @keyframes help-pulse {

@@ -79,11 +79,32 @@ function processLine(line) {
   }
 }
 
+// The very first replay covers the log's entire history, including whatever was still logged as
+// "connected" the instant this container was last stopped. Mosquitto restarts in lockstep with
+// the gateway (same container, same docker-entrypoint.sh), so none of those old TCP connections
+// can still be genuinely alive by the time this runs — a stopped container doesn't get to log a
+// clean disconnect line for whoever was connected at kill time, which otherwise left them stuck
+// showing "Connected" forever (see clearClients()'s own "still connected" carve-out, which
+// wouldn't touch them either). Anything real reconnects within moments of the broker coming back
+// up and gets its own fresh "New client connected" line, flipping it back to 'connected' the
+// normal way — this only clears out the stale carryover from before this boot.
+function markReplayComplete() {
+  if (replayComplete) return;
+  replayComplete = true;
+  const now = new Date().toISOString();
+  for (const client of clients.values()) {
+    if (client.status === 'connected') {
+      client.status = 'disconnected';
+      client.disconnectedAt = now;
+    }
+  }
+}
+
 function poll() {
   fs.stat(LOG_PATH, (err, stats) => {
     if (err) return;
     if (stats.size < position) position = 0; // log file was rotated/truncated
-    if (stats.size === position) { replayComplete = true; return; }
+    if (stats.size === position) { markReplayComplete(); return; }
 
     const stream = fs.createReadStream(LOG_PATH, { start: position, end: stats.size - 1, encoding: 'utf8' });
     let buffer = '';
@@ -91,7 +112,7 @@ function poll() {
     stream.on('end', () => {
       position = stats.size;
       buffer.split('\n').filter(Boolean).forEach(processLine);
-      replayComplete = true;
+      markReplayComplete();
     });
   });
 }

@@ -116,6 +116,14 @@ function connectWithSettings(settings) {
 
   const protocol = settings.use_tls ? 'mqtts' : 'mqtt';
   client = mqtt.connect(`${protocol}://${settings.host}:${settings.port}`, {
+    // A fixed clientId, not mqtt.js's own random "mqttjs_xxxxxxxx" default — every reconnect
+    // (a network blip, a broker restart, the auth-failure loop a wrong password causes) would
+    // otherwise show up as a brand new, differently-named client each time, in both Mosquitto's
+    // own log and this app's own Client Activity page, instead of being recognizable as the one
+    // gateway process reconnecting. A real MQTT broker disconnects whatever was already connected
+    // under the same clientId when a new connection claims it — exactly what should happen here,
+    // since only one gateway process is ever meant to hold this identity at a time.
+    clientId: 'loxsuite-gateway',
     username: settings.username || undefined,
     password: settings.password || undefined,
     reconnectPeriod: 5000,

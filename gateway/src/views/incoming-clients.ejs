@@ -9,6 +9,19 @@
   &mdash; each removal is logged on the <a href="/logs/system">System</a> log.
 </p>
 
+<div class="tabs">
+  <a href="/incoming/clients?tab=device" class="<%= tab === 'device' ? 'active' : '' %>">Devices (<%= deviceCount %>)</a>
+  <a href="/incoming/clients?tab=system" class="<%= tab === 'system' ? 'active' : '' %>">LoxSuite itself (<%= systemCount %>)</a>
+</div>
+
+<% if (tab === 'system') { %>
+  <p class="hint">
+    LoxSuite's own MQTT connections — the gateway's own persistent connection, the one-shot
+    dynamic-security bootstrap that runs on every boot, and any ad-hoc Test button use — not real
+    devices. Hidden from the Devices tab by default so real IoT traffic isn't buried among them.
+  </p>
+<% } %>
+
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="search-combo">

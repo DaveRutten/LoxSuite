@@ -46,6 +46,7 @@
 
   <Config Name="WebUI Port" Target="5582" Default="5582" Mode="tcp" Description="Web UI / HTTP port" Type="Port" Display="always" Required="true" Mask="false">5582</Config>
   <Config Name="MQTT Port" Target="1883" Default="1883" Mode="tcp" Description="MQTT broker port - point every device/integration that publishes or subscribes directly at this" Type="Port" Display="always" Required="true" Mask="false">1883</Config>
+  <Config Name="MQTT WebSocket Port" Target="9001" Default="9001" Mode="tcp" Description="MQTT-over-WebSocket port - for browser-based MQTT clients/dashboards that can't open a raw TCP socket. Same broker, same accounts/ACLs as the plain MQTT port above" Type="Port" Display="always" Required="true" Mask="false">9001</Config>
   <Config Name="Loxone UDP Port" Target="11885" Default="11885" Mode="udp" Description="Port the gateway listens on for inbound Loxone Virtual UDP Output - set this same port in Loxone Config's Virtual UDP Output" Type="Port" Display="always" Required="true" Mask="false">11885</Config>
 
   <Config Name="Data" Target="/data" Default="/mnt/user/appdata/loxsuite/data" Mode="rw" Description="Gateway database (gateway.db) and local backups" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/loxsuite/data</Config>

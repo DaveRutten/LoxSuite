@@ -187,6 +187,13 @@ repack them with the fewest gaps in one pass. Chart panels refresh via their own
 other panel type rides the same 5-second auto-refresh the home Dashboard uses. Deleting a monitor
 removes it from any panel referencing it automatically.
 
+Any panel's Edit form has a star and a reset icon: **star** saves that panel's whole appearance
+(colors, legend, thresholds, line styles, ...) as the default for every panel of that type *on this
+specific dashboard* — not global, so a chart's house style on one dashboard doesn't affect another.
+**Reset** applies whatever's currently saved back onto that panel. Line/series colors are remapped
+by position rather than by monitor id, so "line 1 is always red" holds even when you reset a panel
+wired to entirely different monitors than whichever panel the default was saved from.
+
 A dashboard can be **shared** with specific other users (viewer or editor access) or with an entire
 Access Role, from the list's own **Share** button — the owner keeps full control regardless of what a
 shared editor changes. The star button on any dashboard (in the list, or at the top of the dashboard
@@ -197,11 +204,22 @@ for quick access to the boards you actually check often.
 
 Add one entry per physical Miniserver: name, host, HTTP port (with an HTTPS toggle for
 self-signed-certificate Miniservers — certificate errors are ignored for this connection only),
-optional UDP port, and a webservice username/password. The gateway pings every Miniserver once a
-minute in the background and shows an Online/Offline/Unknown badge plus its firmware version (read
-from the same cached structure export used for Monitor's Loxone controls, not a separate API call);
-**Test now** runs that check immediately. Editing a Miniserver never displays its stored password —
-leave the field blank to keep it, or type a new one to change it.
+optional UDP port, and a webservice username/password. The gateway checks every Miniserver in the
+background on an interval you set (Settings, default 60s) and shows an Online/Offline/Unknown
+badge plus its firmware version; **Test now** runs that check immediately, plus a **Loxone API**
+line specifically confirming the response actually looks like a Loxone Miniserver's own API
+(distinct from the plain Local/External reachability checks, which only prove *something*
+answered HTTP there). Editing a Miniserver never displays its stored password — leave the field
+blank to keep it, or type a new one to change it.
+
+Click the arrow on any row to expand a **diagnostics** panel: PLC run state (Loxone's own
+documented 0–8 values, e.g. "Running"), CPU load, heap usage, task count, firmware date, and
+update channel — all read via a handful of Miniserver HTTP commands that aren't in Loxone's
+official API reference but were individually verified to work on real firmware. **Check for
+update** reads the current release channel (Loxone doesn't expose a plain yes/no "update
+available" flag over HTTP, so this can't tell you for certain whether you're already current) and
+unlocks **Update to latest release**, which sends a real update command — an actual firmware
+update and reboot on that Miniserver, with a confirmation dialog spelling out the consequences.
 
 An optional **External URL** (a full base address — DynDNS hostname with port, or a Loxone
 DNS/Cloud address) can also be set. Every HTTP call this gateway makes to that Miniserver — Virtual
@@ -223,7 +241,10 @@ once actually expanded (a structure file can list hundreds of controls, so readi
 front just to open the page would mean hundreds of requests before you've looked at any of them);
 open values refresh automatically every few seconds. A **Suggest dashboard** button per room turns
 its controls into a starter personal dashboard (lighting, climate, shading, energy) in one step —
-toggle it off in Settings if you'd rather always add monitors/panels one at a time.
+toggle it off in Settings if you'd rather always add monitors/panels one at a time. The preview lets
+you fine-tune before creating anything: uncheck any auto-picked item, **+ Add** another state of a
+control already in a bucket (e.g. a climate control's target alongside its actual temperature), and
+override which panel type or which bucket any individual item ends up in.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/live-data-dark.png">
@@ -291,17 +312,21 @@ per-mapping entry count and a shortcut to manage it.
 Two views, both refreshing automatically (without a full page reload) every 5 seconds and both
 in-memory only (cleared on a gateway restart):
 
-- **Live Messages** — one row per topic seen, with its actual and previous value, a message count,
-  and a ready-to-copy **Command Recognition** string (`MQTT:\i<topic>=\i\v`) for a Loxone Virtual
-  UDP Input. **Map** jumps to a pre-filled MQTT &rarr; Loxone mapping, **Widget** pins the value on
-  the Dashboard.
-- **Connected Clients** — which MQTT clients are connected or have been. The **Device** column shows
-  the topic prefix seen in that device's own MQTT traffic when one is known (hover to see the raw
-  MQTT client ID), falling back to the raw client ID otherwise — there's no protocol-level way to
-  ask the broker "who published this topic", so this is a best-effort match, not a guarantee.
-  Devices that look like a Shelly get a "Suggest commands" shortcut. **Clear list** removes
-  disconnected entries only — clients that are still actually connected stay listed, since they
-  won't send a new "connected" event just because the view was cleared.
+- **Live Messages** — one row per topic seen (a running total shown at the top), with its actual
+  and previous value, a message count (abbreviated past 1000 — `1.2K`, `3.4M` — for a broker that's
+  been running for months, full number on hover), and a ready-to-copy **Command Recognition**
+  string (`MQTT:\i<topic>=\i\v`) for a Loxone Virtual UDP Input. **Map** jumps to a pre-filled MQTT
+  &rarr; Loxone mapping, **Widget** pins the value on the Dashboard.
+- **Connected Clients** — which MQTT clients are connected or have been, split into a **Devices**
+  tab and a **LoxSuite itself** tab (the gateway's own persistent connection, its one-shot
+  dynamic-security bootstrap, and any ad-hoc Test button use — each with a stable `loxsuite-...`
+  client ID, so real IoT traffic isn't buried among them). The **Device** column shows the topic
+  prefix seen in that device's own MQTT traffic when one is known (hover to see the raw MQTT
+  client ID), falling back to the raw client ID otherwise — there's no protocol-level way to ask
+  the broker "who published this topic", so this is a best-effort match, not a guarantee. Devices
+  that look like a Shelly get a "Suggest commands" shortcut. **Clear list** removes disconnected
+  entries only — clients that are still actually connected stay listed, since they won't send a
+  new "connected" event just because the view was cleared.
 
 ### Logs
 
@@ -340,7 +365,10 @@ A role is a named set of ACL rules (publish/subscribe permissions on topic patte
 assigned one or more roles. Out of the box, `client` has full publish/subscribe on every topic
 (`#`) and `admin` is Mosquitto's own built-in role. Both are protected from *deletion* (the
 gateway's bootstrap and every device account depend on them) but their ACL rules can still be
-edited like any other role.
+edited like any other role. An existing ACL's type/topic/allow can be changed in place (**Edit**)
+instead of removing and re-adding it — Mosquitto's dynamic-security plugin has no native "modify"
+command, so this does an add-then-remove behind the scenes when the topic or type actually
+changes, ordered so a failed add never leaves a role with neither the old nor the new grant.
 
 ### Settings
 
@@ -348,11 +376,19 @@ edited like any other role.
   MQTT. Defaults to the bundled Mosquitto process running in the same container, but can point at
   any external broker; saving reconnects immediately. The `MQTT_URL`/`MQTT_USERNAME`/`MQTT_PASSWORD`
   environment variables only seed this setting on the very first start.
+- The bundled broker also listens for **MQTT over WebSocket** on port `9001` (`ws://<gateway-host>:9001`),
+  alongside plain MQTT on `1883` — same accounts, roles, and ACLs either way, for browser-based MQTT
+  clients/dashboards that can't open a raw TCP socket. Only written into a genuinely fresh
+  `mosquitto.conf` (an empty `Mosquitto Config` volume) the same way the rest of that file is —
+  add `listener 9001` / `protocol websockets` to an existing one yourself to pick it up on upgrade.
 - **Auto-create Loxone &rarr; MQTT mappings** — off by default. When enabled, a call to
   `/api/loxone-in/<anything>` that doesn't match an existing token is treated as a literal MQTT
   topic and a new passthrough mapping is created on the spot instead of returning 404. Convenient
   for wiring up Loxone quickly, but it means any string reaching that endpoint becomes a real
   topic — leave it off unless you specifically want that.
+- **Miniservers check interval** — how often every configured Miniserver is re-checked for
+  reachability, firmware version, and diagnostics (default 60s, 10s minimum). Takes effect on the
+  very next check, no gateway restart needed.
 
 ### Administration & Access Roles
 
@@ -369,11 +405,14 @@ Visible only to users whose Access Role has **Administrator** checked. Six tabs:
   local user's password, or delete an account. The gateway always keeps at least one administrator
   — deleting, demoting, or reassigning the last remaining admin is blocked with an error.
 - **Access Roles** — named permission sets. Each role has a fixed matrix of one **view**/**edit**
-  pair per page in the app (Monitor, Miniservers, MQTT Users, Settings, and so on). An
-  **Administrator** role bypasses the matrix entirely and always has full access — that flag is
-  separate from the matrix so a role can never grant itself more power through it. Hiding a nav
-  item or button a role can't use is a UI convenience; the server enforces every request
-  regardless.
+  pair per page in the app (Monitor, Miniservers, MQTT Users, Settings, and so on), plus a separate
+  matrix underneath for the four Logs tabs specifically (a role can be trusted with the System log
+  without also seeing the MQTT broker log) — a **None** button clears every log checkbox in one
+  click instead of unchecking each individually. An **Administrator** role bypasses the matrix
+  entirely and always has full access — that flag is separate from the matrix so a role can never
+  grant itself more power through it. A page a role has no rights to at all doesn't appear in its
+  nav either, not just blocked on request; the server enforces every request regardless of what the
+  UI shows.
 - **Backups** — schedule (a standard 5-field cron expression) or manually trigger a zip of the
   gateway's own SQLite database and, optionally, Mosquitto's dynamic-security/broker config, with a
   **Keep last** retention count so it can run indefinitely without slowly filling the disk. An

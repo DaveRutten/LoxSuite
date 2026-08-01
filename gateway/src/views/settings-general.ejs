@@ -62,6 +62,22 @@
   </div>
 
   <div class="card">
+    <h2>Miniservers</h2>
+    <div class="settings-field-list">
+      <div class="settings-field">
+        <label>Check interval (seconds)</label>
+        <input type="number" name="healthcheck_interval_seconds" min="10" value="<%= gatewaySettings.healthcheck_interval_seconds %>">
+        <p class="hint">
+          How often every <a href="/miniservers">Miniserver</a> is re-checked for reachability,
+          firmware version, and diagnostics (CPU/heap/PLC state/etc). Takes effect on the very next
+          check, no restart needed. 10 seconds minimum — going much lower adds constant load on
+          every configured Miniserver for little benefit.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Dashboards</h2>
     <div class="settings-field">
       <label>Default decimals for "Current value" panels</label>

@@ -246,6 +246,13 @@
 
     var RANGE_PRESETS = [['1h', 'Last hour'], ['24h', 'Last 24 hours'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['all', 'All']];
     var POLL_INTERVALS = [[5000, '5 seconds'], [10000, '10 seconds'], [30000, '30 seconds'], [60000, '1 minute'], [300000, '5 minutes']];
+    // Same 6 types and labels as the regular "Add panel" form (partials/panel-grid.ejs) — a
+    // bucket's own panelType (dashboardSuggestions.js's BUCKET_BY_KEY) is only the starting
+    // point, overridable per bucket before creating the dashboard.
+    var PANEL_TYPE_LABELS = [
+      ['chart', 'Chart'], ['table', 'Table'], ['value', 'Current value'],
+      ['gauge', 'Gauge'], ['stat_delta', 'Stat with change'], ['threshold', 'Threshold indicator'],
+    ];
 
     // "Suggest dashboard" — the button lives inside <summary>, so a click on it has to be stopped
     // from also toggling the room open/closed (the browser's default behaviour for any click
@@ -282,15 +289,54 @@
           preview.appendChild(settingsRow);
 
           var list = el('div', { class: 'suggest-bucket-list' });
+          // key -> { box, addPicker } for every bucket actually shown on this page — populated as
+          // each bucket is built below, then used by every row's own panel-select (added further
+          // down) to move a row into a DIFFERENT bucket's box on demand. Declared before the loop
+          // since a row built for bucket A needs to already be able to target bucket B, built
+          // later in the same pass.
+          var boxes = {};
+          var allBuckets = data.buckets.map(function (b) { return { key: b.key, label: b.label }; });
+
+          // Moves (or, for a freshly-built row, first-time places) row into bucketKey's box, right
+          // before that box's own "+ Add" picker so the picker always stays the last thing in it.
+          function moveRow(row, bucketKey) {
+            var target = boxes[bucketKey];
+            if (!target) return;
+            target.box.insertBefore(row, target.addPicker);
+          }
+
           data.buckets.forEach(function (bucket) {
             var bucketBox = el('div', { class: 'suggest-bucket' });
+            var typeSelect = el('select', { class: 'suggest-panel-type-select', 'data-bucket-key': bucket.key, title: 'Panel type' }, PANEL_TYPE_LABELS.map(function (t) {
+              return el('option', { value: t[0], text: t[1] });
+            }));
+            typeSelect.value = bucket.panelType;
             bucketBox.appendChild(el('div', { class: 'suggest-bucket-title' }, [
               document.createTextNode(bucket.label + ' '),
-              el('span', { class: 'hint', style: 'margin:0;', text: '(' + (bucket.panelType === 'chart' ? 'chart panel' : 'current-value panel') + ')' }),
+              typeSelect,
             ]));
 
-            bucket.items.forEach(function (item, i) {
-              var rowId = 'suggest-' + roomUuid + '-' + bucket.key + '-' + i;
+            var rowCounter = 0;
+            // addPicker has to already be a real child of bucketBox before addRow() below can
+            // insertBefore() against it as a reference node — built and attached first, empty/
+            // hidden, then populated by refreshAddOptions() once the initial rows exist.
+            var addPicker = el('div', { class: 'suggest-add-row', hidden: true });
+            var addSelect = el('select', {});
+            var addBtn = el('button', { type: 'button', class: 'btn-soft' });
+            addBtn.innerHTML = '+ Add';
+            addPicker.appendChild(addSelect);
+            addPicker.appendChild(addBtn);
+            bucketBox.appendChild(addPicker);
+            boxes[bucket.key] = { box: bucketBox, addPicker: addPicker };
+
+            // One row per control by default (its own PRIMARY_STATE pick, e.g. Climate's
+            // tempActual) — a control with more than one state worth watching (Climate's
+            // tempTarget alongside tempActual) still only gets that one row here, switchable via
+            // its own dropdown to any ONE of its states. addRow()/the "+ Add" picker below is what
+            // lets a second row for the SAME control's other state get added alongside it, so both
+            // can be pinned as separate panel items instead of it being either/or.
+            function addRow(item, initialUuid) {
+              var rowId = 'suggest-' + roomUuid + '-' + bucket.key + '-' + (rowCounter++);
               var row = el('div', { class: 'suggest-item-row' });
               var checkbox = el('input', { type: 'checkbox', id: rowId, checked: 'checked' });
               row.appendChild(checkbox);
@@ -298,11 +344,61 @@
               var stateSelect = el('select', { 'data-bucket-key': bucket.key }, item.availableStates.map(function (s) {
                 return el('option', { value: s.uuid, text: s.stateName });
               }));
-              stateSelect.value = item.uuid;
+              stateSelect.value = initialUuid;
               row.appendChild(stateSelect);
-              checkbox.addEventListener('change', function () { stateSelect.disabled = !checkbox.checked; });
-              bucketBox.appendChild(row);
+
+              // Which panel this item ends up in — defaults to the bucket it was auto-suggested
+              // into (or added under), but every bucket currently on the page is offered, so a
+              // wrongly-guessed item (or one you'd just rather see elsewhere) can be moved without
+              // starting over. Only offers buckets already shown here, not the full fixed list —
+              // an empty bucket type (e.g. no Media items in this room) never got built at all.
+              var panelSelect = el('select', { title: 'Panel', 'aria-label': 'Panel' }, allBuckets.map(function (b) {
+                return el('option', { value: b.key, text: b.label });
+              }));
+              panelSelect.value = bucket.key;
+              panelSelect.addEventListener('change', function () {
+                stateSelect.dataset.bucketKey = panelSelect.value;
+                moveRow(row, panelSelect.value);
+              });
+              row.appendChild(panelSelect);
+
+              checkbox.addEventListener('change', function () {
+                stateSelect.disabled = !checkbox.checked;
+                panelSelect.disabled = !checkbox.checked;
+              });
+              stateSelect.addEventListener('change', refreshAddOptions);
+              moveRow(row, bucket.key);
+              return row;
+            }
+
+            // Every state of every control already represented in this bucket, minus whichever
+            // ones already have their own row anywhere on the page (not just this bucket — a row
+            // moved elsewhere via its panel-select still "uses up" that state, same as if it'd
+            // never left) — e.g. once Climate's tempActual row exists, this offers tempTarget (same
+            // control) until that's added too, then the picker just hides itself.
+            function refreshAddOptions() {
+              addSelect.innerHTML = '';
+              var existingUuids = Array.from(list.querySelectorAll('.suggest-item-row select[data-bucket-key]')).map(function (s) { return s.value; });
+              bucket.items.forEach(function (item) {
+                item.availableStates.forEach(function (s) {
+                  if (existingUuids.indexOf(s.uuid) !== -1) return;
+                  var opt = el('option', { value: s.uuid, text: item.controlName + ' / ' + s.stateName });
+                  opt.dataset.item = JSON.stringify(item);
+                  addSelect.appendChild(opt);
+                });
+              });
+              addPicker.hidden = addSelect.options.length === 0;
+            }
+
+            addBtn.addEventListener('click', function () {
+              var opt = addSelect.selectedOptions[0];
+              if (!opt) return;
+              addRow(JSON.parse(opt.dataset.item), opt.value);
+              refreshAddOptions();
             });
+
+            bucket.items.forEach(function (item) { addRow(item, item.uuid); });
+            refreshAddOptions();
             list.appendChild(bucketBox);
           });
           preview.appendChild(list);
@@ -318,6 +414,10 @@
               if (checkbox.checked) items.push({ uuid: stateSelect.value, bucketKey: stateSelect.dataset.bucketKey });
             });
             if (items.length === 0) { status.textContent = 'Pick at least one.'; return; }
+            var panelTypes = {};
+            list.querySelectorAll('.suggest-panel-type-select').forEach(function (select) {
+              panelTypes[select.dataset.bucketKey] = select.value;
+            });
             createBtn.disabled = true;
             status.textContent = 'Creating…';
             fetch('/live-data/suggest', {
@@ -330,6 +430,7 @@
                 range: rangeSelect.value,
                 poll_interval_ms: pollSelect.value,
                 items: items,
+                panel_types: panelTypes,
               }),
             })
               .then(function (r) { return r.json(); })

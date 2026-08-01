@@ -23,6 +23,10 @@ if [ ! -f "$MOSQUITTO_CONF" ]; then
 listener 1883
 allow_anonymous false
 
+listener 9001
+protocol websockets
+allow_anonymous false
+
 plugin /usr/lib/mosquitto_dynamic_security.so
 plugin_opt_config_file /mosquitto/config/dynamic-security.json
 

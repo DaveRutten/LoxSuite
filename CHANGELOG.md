@@ -2,6 +2,74 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.0-alpha.1] - 2026-08-01
+
+### Added
+- **Miniservers**: an expandable diagnostics panel per row — PLC run state (Loxone's own
+  documented 0-8 values), CPU load, heap usage, task count, firmware date, and update channel, via
+  Miniserver HTTP commands not in Loxone's official API reference but individually verified
+  against real firmware. **Check for update** reads the current release channel and unlocks
+  **Update to latest release**, which sends a real update command (confirmation dialog spells out
+  the consequences — this is a genuine firmware update and reboot, not a dry run). The background
+  check interval is now configurable in Settings (default 60s, 10s minimum) instead of a fixed
+  60s. "Test now" and the Add-Miniserver test both gained a **Loxone API** line, confirming the
+  response actually looks like a Loxone Miniserver's own API rather than just "something answered
+  HTTP" (what the existing Local/External checks prove).
+- **Dashboard panels**: a star/reset pair on every panel's Edit form — star saves that panel's
+  whole appearance as the default for every panel of that type *on that specific dashboard*; reset
+  applies it back. Line/series colors remap by monitor *position* rather than id, so a saved
+  default still makes sense applied to a panel wired to entirely different monitors.
+- **Suggest dashboard** (Live Data): the preview is now editable before creating anything — **+
+  Add** pins another state of a control already in a bucket (e.g. a climate control's target
+  alongside its actual reading), and any item's panel type or bucket can be overridden per item.
+- **MQTT Roles**: an existing ACL's type/topic/allow can be edited in place instead of removing
+  and re-adding it.
+- **Access Roles**: a **None** button clears every log-permission checkbox for a role in one click.
+- Connected Clients (Live Traffic) splits into **Devices** and **LoxSuite itself** tabs — the
+  gateway's own connections (persistent broker connection, dynamic-security bootstrap, ad-hoc Test
+  button use) now connect under a stable `loxsuite-...` client ID instead of a random one each
+  time, specifically so they can be told apart from real devices here.
+- Live Messages (Live Traffic) shows a running total topic count, and abbreviates each topic's
+  message count past 1000 (`1.2K`, `3.4M`) for a broker that's been running a long time.
+- MQTT over WebSocket support (port `9001`) can now be added retroactively to an existing
+  install — see the upgrade note under 0.3.1-alpha.1 below.
+
+### Fixed
+- **Suggest dashboard**'s Lighting bucket matched any generic `Switch`/`Pushbutton` control
+  regardless of its actual category — a ventilation "turbo" button, a shading lock flag, or a
+  media trigger could all get miscategorized as lighting purely by control type. Those two types
+  now only match Lighting via Loxone's own `lights` category tag; `Dimmer`/`LightControllerV2`/
+  `ColorPickerV2` (unambiguous regardless of category) still match by type alone.
+- Firmware version on the Miniservers page was silently always blank on at least one real
+  Miniserver — it read `msInfo.swVersion` from the structure export, which doesn't exist in that
+  field on real hardware. Switched to a dedicated `/jdev/cfg/version` command.
+- A disconnected MQTT client that was still marked "Connected" at the exact moment of a gateway
+  restart stayed stuck showing Connected forever afterward (the broker restarts in lockstep with
+  the gateway, so nothing from before a restart can still genuinely be connected, but the process
+  dying doesn't get to log a clean disconnect line for whoever was live at that instant). The first
+  log replay after each restart now sweeps any such leftover into Disconnected.
+- A Viewer-role user on the Settings page saw the page's shell but no content (every field there
+  is edit-only, so a view-only grant was a dead end) — Settings nav links now gate on edit access
+  instead of view.
+- The Administration nav link (sidebar and Help) pointed at the Users tab instead of General.
+- Uneven spacing around Monitor/Client Activity toolbar buttons that have a `data-confirm`
+  dropdown — the confirm bar's zero-width collapsed state was still consuming a full flex `gap` on
+  both sides, doubling the visible space around those specific buttons.
+- Saving or resetting a panel's default appearance closed its still-open Edit drawer, and (briefly)
+  broke the drawer's own autosave content-patching for every panel on the page — an earlier
+  version's cross-DOM `button[form=]` trick added extra elements the patch logic mistook for panel
+  content. Replaced with a plain `fetch()` that adds no DOM nodes and patches just that panel's
+  own rendered content in place.
+
+## [0.3.1-alpha.1] - 2026-08-01
+
+### Added
+- The bundled Mosquitto broker now also listens for **MQTT over WebSocket** on port `9001`
+  (`ws://<gateway-host>:9001`), alongside plain MQTT on `1883` — same accounts, roles, and ACLs
+  either way. For browser-based MQTT clients/dashboards that can't open a raw TCP socket. Only
+  written into a genuinely fresh `mosquitto.conf`, same as the rest of that file — add
+  `listener 9001` / `protocol websockets` to an existing one yourself to pick it up on upgrade.
+
 ## [0.3.0-alpha.1] - 2026-08-01
 
 ### Fixed

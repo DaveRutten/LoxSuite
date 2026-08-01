@@ -51,21 +51,52 @@
           <tr><th>ACL type</th><th>Topic filter</th><th>Allow</th><th>Actions</th></tr>
         </thead>
         <tbody>
-          <% (role.acls || []).forEach(acl => { %>
+          <% (role.acls || []).forEach((acl, i) => { %>
+            <% var editRowId = 'acl-edit-' + role.rolename + '-' + i; %>
             <tr>
               <td><%= acl.acltype %></td>
               <td><code><%= acl.topic %></code></td>
               <td><span class="badge <%= acl.allow ? 'badge-ok' : 'badge-off' %>"><%= acl.allow ? 'Allow' : 'Deny' %></span></td>
               <td>
                 <% if (canEdit('mqtt_roles')) { %>
-                <form class="inline" method="post" action="/mqtt-roles/<%= role.rolename %>/acls/delete">
-                  <input type="hidden" name="acltype" value="<%= acl.acltype %>">
-                  <input type="hidden" name="topic" value="<%= acl.topic %>">
-                  <button type="submit" class="danger"><%- icon('trash') %> Remove</button>
-                </form>
+                <div class="row-actions">
+                  <button type="button" class="btn-edit" data-toggle-row="<%= editRowId %>"><%- icon('edit') %> Edit</button>
+                  <form class="inline" method="post" action="/mqtt-roles/<%= role.rolename %>/acls/delete">
+                    <input type="hidden" name="acltype" value="<%= acl.acltype %>">
+                    <input type="hidden" name="topic" value="<%= acl.topic %>">
+                    <button type="submit" class="danger"><%- icon('trash') %> Remove</button>
+                  </form>
+                </div>
                 <% } %>
               </td>
             </tr>
+            <% if (canEdit('mqtt_roles')) { %>
+            <tr class="expand-row" id="<%= editRowId %>">
+              <td colspan="4">
+                <form method="post" action="/mqtt-roles/<%= role.rolename %>/acls/edit" class="form-grid" style="gap:0.6rem;">
+                  <input type="hidden" name="old_acltype" value="<%= acl.acltype %>">
+                  <input type="hidden" name="old_topic" value="<%= acl.topic %>">
+                  <div>
+                    <label>ACL type</label>
+                    <select name="acltype">
+                      <% aclTypes.forEach(t => { %>
+                        <option value="<%= t %>" <%= t === acl.acltype ? 'selected' : '' %>><%= t %></option>
+                      <% }) %>
+                    </select>
+                  </div>
+                  <div><label>Topic filter</label><input type="text" name="topic" value="<%= acl.topic %>" required></div>
+                  <div>
+                    <label>Effect</label>
+                    <select name="allow">
+                      <option value="1" <%= acl.allow ? 'selected' : '' %>>Allow</option>
+                      <option value="0" <%= !acl.allow ? 'selected' : '' %>>Deny</option>
+                    </select>
+                  </div>
+                  <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+                </form>
+              </td>
+            </tr>
+            <% } %>
           <% }) %>
           <% if (!role.acls || role.acls.length === 0) { %>
             <tr><td colspan="4" class="empty">No ACLs on this role &mdash; it currently grants no access.</td></tr>

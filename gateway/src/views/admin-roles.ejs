@@ -76,13 +76,17 @@
           </table>
         </div>
 
-        <h2 style="margin-top:1.25rem;">Logs</h2>
+        <div style="display:flex; align-items:baseline; justify-content:space-between; margin-top:1.25rem; gap:0.5rem; flex-wrap:wrap;">
+          <h2 style="margin:0;">Logs</h2>
+          <button type="button" class="btn-soft" data-uncheck-target="logs-table-<%= role.id %>">None &mdash; hide all logs</button>
+        </div>
         <p class="hint">
           Each log is its own toggle &mdash; a role can be trusted with, say, the System log without
           also seeing the MQTT broker log. <strong>Download</strong> exports the full, unfiltered
-          <code>.log</code> file and implies View.
+          <code>.log</code> file and implies View. <strong>None</strong> unchecks every box below
+          (still needs <strong>Save permissions</strong> to take effect).
         </p>
-        <div class="table-wrap">
+        <div class="table-wrap" id="logs-table-<%= role.id %>">
           <table>
             <thead><tr><th>Log</th><th>View</th><th>Download</th></tr></thead>
             <tbody>

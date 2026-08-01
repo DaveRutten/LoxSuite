@@ -80,6 +80,7 @@ function runBootstrap() {
   const settings = db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
   const protocol = settings.use_tls ? 'mqtts' : 'mqtt';
   const client = mqtt.connect(`${protocol}://${settings.host}:${settings.port}`, {
+    clientId: 'loxsuite-bootstrap',
     username: adminUsername,
     password: adminPassword,
     reconnectPeriod: 5000,

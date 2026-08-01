@@ -37,13 +37,26 @@ const PRIMARY_STATE = {
 // (catches the common case where the category itself isn't formally typed, which is most
 // categories on a real installation — 84 of 122 on the one this was checked against). Checked in
 // this order; a control only ever lands in the first bucket that claims it.
+//
+// 'Switch'/'Pushbutton' are deliberately NOT in the lighting controlTypes fallback below, even
+// though most light switches on a real install are exactly that type — they're also Loxone's
+// go-to type for a ventilation "turbo" button, a shading lock flag, a media-triggered scene, or
+// any other one-off command, none of which have a categoryType of their own to rule them out (real
+// case that shipped wrongly bucketed: "Ventilatie Turbo Vrijgeven", "Rolluik Vergrendeld", "Muziek
+// op beweging" — a fan button, a shading flag, and a media trigger, all swept into Lighting purely
+// by control type). Since there's no reliable way to tell "this Switch is a light" from "this
+// Switch is something else" without an explicit categoryType, these two only ever land here via
+// categoryTypes: ['lights'] — an untyped-category light switch is missed rather than another
+// control type being wrongly claimed, matching this file's own better-to-omit-than-mislead
+// philosophy (see the PRIMARY_STATE comment above). Dimmer/LightControllerV2/ColorPickerV2 stay in
+// controlTypes since those three ARE unambiguous — nothing else uses them.
 const BUCKETS = [
   {
     key: 'lighting',
     label: 'Lighting',
     panelType: 'value',
     categoryTypes: ['lights'],
-    controlTypes: ['Switch', 'Pushbutton', 'Dimmer', 'LightControllerV2', 'ColorPickerV2'],
+    controlTypes: ['Dimmer', 'LightControllerV2', 'ColorPickerV2'],
   },
   {
     key: 'climate',

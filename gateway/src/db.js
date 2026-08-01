@@ -165,6 +165,23 @@ db.exec(`
     PRIMARY KEY (panel_id, monitor_id)
   );
 
+  -- One "house style" template per (dashboard, panel_type) — shared by every editor of that
+  -- SPECIFIC dashboard, not global across every dashboard in the install (a chart's "look" on the
+  -- home Dashboard doesn't have to match one on someone's personal board). config is the same
+  -- shape buildConfig() (routes/dashboards.js) produces EXCEPT its series/value_series keys: those
+  -- are normally keyed by monitor id, which a reusable template can't know in advance, so this
+  -- stores them as seriesByPosition (an array ordered by monitor POSITION instead) — "Save as
+  -- default" converts a real panel's id-keyed series into that array using its own current monitor
+  -- order, and "Reset to default" does the reverse for whichever panel it's applied to, using THAT
+  -- panel's own monitor order. See panelTypeDefaults.js.
+  CREATE TABLE IF NOT EXISTS panel_type_defaults (
+    dashboard_id INTEGER NOT NULL REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+    panel_type TEXT NOT NULL,
+    config TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (dashboard_id, panel_type)
+  );
+
   -- A personal dashboard (custom_dashboards.user_id = its owner) shared with one or more other
   -- users, each with their own viewer/editor grant — separate from the one shared user_id IS NULL
   -- home Dashboard above, which is already visible to everyone via the 'dashboard' Access Role
@@ -244,9 +261,47 @@ function migrateMiniserverStatusColumns() {
     db.exec('ALTER TABLE miniservers ADD COLUMN external_url TEXT');
   }
   if (!columns.includes('firmware_version')) {
-    // Populated from /jdev/cfg/apiversion whenever a healthcheck finds the Miniserver online
-    // (see checkMiniserver in healthcheck.js) — left NULL until the first successful check.
+    // Populated from /jdev/cfg/version whenever a healthcheck finds the Miniserver online (see
+    // checkMiniserver in healthcheck.js) — left NULL until the first successful check. Was
+    // originally read from LoxAPP3.json's msInfo.swVersion, which turned out to not exist at all
+    // on at least one real Miniserver's structure file (confirmed by direct inspection) — always
+    // silently null there regardless of how long it ran. /jdev/cfg/version is a dedicated,
+    // verified-working command instead of relying on a structure field that isn't guaranteed present.
     db.exec('ALTER TABLE miniservers ADD COLUMN firmware_version TEXT');
+  }
+  if (!columns.includes('device_monitor_status')) {
+    // Superseded by plc_state below — msInfo.deviceMonitor's value ("0" on a healthy Miniserver)
+    // had no official documentation of what any other value would mean, unlike the PLC state
+    // command's fully enumerated, documented 0-8 states. Column kept (unused) rather than dropped
+    // — SQLite ALTER TABLE DROP COLUMN support varies by version, and an unused TEXT column costs
+    // nothing to leave in place.
+    db.exec('ALTER TABLE miniservers ADD COLUMN device_monitor_status TEXT');
+  }
+  if (!columns.includes('plc_state')) {
+    // /jdev/sps/state — the Miniserver's own PLC run state, one of 8 fully documented values (0
+    // no status, 1 booting, 2 program loaded, 3 started, 4 Loxone Link started, 5 running, 6
+    // change in progress, 7 error, 8 update occurring). Read fresh every healthcheck sweep, not
+    // cached/derived from the structure file — a single direct command, nothing else needed.
+    db.exec('ALTER TABLE miniservers ADD COLUMN plc_state TEXT');
+  }
+  if (!columns.includes('cpu_load')) {
+    // /jdev/sys/cpu, /jdev/sys/heap, /jdev/sys/numtasks, /jdev/cfg/versiondate — undocumented in
+    // Loxone's own official HTTP command reference, but real, working commands on real firmware
+    // (verified directly against a live Miniserver, not assumed). heap_status is kept as the raw
+    // "used/totalkB" string the Miniserver itself returns rather than split into two columns —
+    // Loxone doesn't document whether the first number is free or used memory, so this shows
+    // exactly what the Miniserver said instead of asserting an interpretation that might be backwards.
+    db.exec('ALTER TABLE miniservers ADD COLUMN cpu_load TEXT');
+    db.exec('ALTER TABLE miniservers ADD COLUMN heap_status TEXT');
+    db.exec('ALTER TABLE miniservers ADD COLUMN num_tasks TEXT');
+    db.exec('ALTER TABLE miniservers ADD COLUMN firmware_date TEXT');
+  }
+  if (!columns.includes('update_level')) {
+    // jdev/cfg/updatelevel — which release channel this Miniserver tracks (e.g. "Alpha" vs the
+    // stable channel), read on demand from the Miniservers page's "Check for update" button
+    // (routes/miniservers.js), not on every 60s healthcheck sweep — it essentially never changes
+    // day to day, unlike firmware_version/cpu_load/etc. above.
+    db.exec('ALTER TABLE miniservers ADD COLUMN update_level TEXT');
   }
 }
 
@@ -790,6 +845,40 @@ function migrateClientRetentionSetting() {
 }
 
 migrateClientRetentionSetting();
+
+// How often the background sweep re-checks every Miniserver's reachability, firmware version, and
+// diagnostics (CPU/heap/PLC state/etc. — see healthcheck.js's checkAllMiniservers). 60s default,
+// same as the previous hardcoded value in server.js's startHealthchecks(60000) call.
+function migrateHealthcheckIntervalSetting() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('healthcheck_interval_seconds')) {
+    db.exec('ALTER TABLE gateway_settings ADD COLUMN healthcheck_interval_seconds INTEGER NOT NULL DEFAULT 60');
+  }
+}
+
+migrateHealthcheckIntervalSetting();
+
+// panel_type_defaults started out global (one row per panel_type, PRIMARY KEY(panel_type)) —
+// rescoped to per-dashboard (see the CREATE TABLE above) before this ever shipped in a release, so
+// there's no real installed base to preserve data for. Existing rows (from local testing only) are
+// dropped rather than migrated — SQLite can't ALTER a PRIMARY KEY in place anyway.
+function migratePanelTypeDefaultsScope() {
+  const columns = db.prepare('PRAGMA table_info(panel_type_defaults)').all().map((c) => c.name);
+  if (columns.length > 0 && !columns.includes('dashboard_id')) {
+    db.exec('DROP TABLE panel_type_defaults');
+    db.exec(`
+      CREATE TABLE panel_type_defaults (
+        dashboard_id INTEGER NOT NULL REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+        panel_type TEXT NOT NULL,
+        config TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (dashboard_id, panel_type)
+      )
+    `);
+  }
+}
+
+migratePanelTypeDefaultsScope();
 
 // Whether the "Suggest dashboard" button (Live Data, per room) is offered at all — a per-gateway
 // toggle rather than per-user, since it just controls whether the feature is available, not

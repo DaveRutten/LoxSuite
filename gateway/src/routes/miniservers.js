@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { checkMiniserver, runDetailedCheck } = require('../healthcheck');
+const { fetchMiniserver } = require('../loxone');
 const { testConnection: testLiveConnection, resetConnection: resetLiveConnection } = require('../loxoneWebSocket');
 const { requirePermission } = require('../middleware/requirePermission');
 const { logSystemEvent } = require('../auditLog');
@@ -99,8 +100,61 @@ router.post('/:id/check', requirePermission('miniservers', 'edit'), async (req, 
     runDetailedCheck(miniserver),
     testLiveConnection(miniserver),
   ]);
-  const updated = db.prepare('SELECT status, last_checked_at, firmware_version FROM miniservers WHERE id = ?').get(miniserver.id);
-  res.json({ ...detail, live, status: updated.status, lastCheckedAt: updated.last_checked_at, firmwareVersion: updated.firmware_version });
+  const updated = db.prepare('SELECT status, last_checked_at, firmware_version, device_monitor_status FROM miniservers WHERE id = ?').get(miniserver.id);
+  res.json({
+    ...detail,
+    live,
+    status: updated.status,
+    lastCheckedAt: updated.last_checked_at,
+    firmwareVersion: updated.firmware_version,
+    deviceMonitorStatus: updated.device_monitor_status,
+  });
+});
+
+// /jdev/sys/updatecheck — undocumented, found the same way as the diagnostics endpoints (grepped
+// out of the Miniserver's own /admin JS bundle), tells the Miniserver to check its own update
+// server. Returns 200 with an empty value over plain HTTP even when a newer release genuinely
+// exists (verified against a real Miniserver) — there's no synchronous "yes/no, here's the
+// version" answer available this way, so this only reports the Miniserver's own current
+// version/update-channel (jdev/cfg/updatelevel — e.g. "Alpha" vs the stable channel) rather than
+// claiming to know whether an update is actually available.
+router.post('/:id/check-update', requirePermission('miniservers', 'edit'), async (req, res) => {
+  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
+  if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
+
+  try {
+    await fetchMiniserver(miniserver, '/jdev/sys/updatecheck', { timeoutMs: 8000 });
+    const levelRes = await fetchMiniserver(miniserver, '/jdev/cfg/updatelevel', { timeoutMs: 8000 });
+    const levelBody = levelRes.ok ? await levelRes.json() : null;
+    const updateLevel = levelBody?.LL?.value || null;
+    if (updateLevel) db.prepare('UPDATE miniservers SET update_level = ? WHERE id = ?').run(updateLevel, miniserver.id);
+    res.json({ updateLevel, checked: true });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// /dev/sys/updatetolatestrelease — undocumented, found the same way as the above. Triggers a REAL
+// firmware update + reboot on this specific Miniserver; nothing about this route is a dry run.
+// Gated on the same edit permission as delete/update above, and every call is logged via
+// logSystemEvent regardless of outcome — this is exactly the kind of action that needs an audit
+// trail. The confirm dialog lives client-side (data-confirm, miniservers.ejs) since this route has
+// no way to know a human deliberately clicked it vs. any other POST to this URL.
+router.post('/:id/update-firmware', requirePermission('miniservers', 'edit'), async (req, res) => {
+  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
+  if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
+
+  try {
+    const result = await fetchMiniserver(miniserver, '/jdev/sys/updatetolatestrelease', { timeoutMs: 15000 });
+    const body = result.ok ? await result.json() : null;
+    logSystemEvent(`"${req.user.username}" triggered a firmware update on Miniserver "${miniserver.name}" (${miniserver.host}).`);
+    res.json({ triggered: true, response: body?.LL?.value ?? null });
+  } catch (err) {
+    // A timeout/connection-drop here is expected once the Miniserver actually reboots into the
+    // update — not necessarily a failure, just the point where it stops answering HTTP requests.
+    logSystemEvent(`"${req.user.username}" triggered a firmware update on Miniserver "${miniserver.name}" (${miniserver.host}) — connection ended before a response came back (expected if it's now rebooting): ${err.message}`);
+    res.json({ triggered: true, response: null, note: 'Connection ended before a response came back — expected if the Miniserver is now rebooting into the update.' });
+  }
 });
 
 module.exports = router;

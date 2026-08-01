@@ -293,7 +293,21 @@
       <form id="panel-edit-<%= p.id %>" method="post" action="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/settings" class="form-grid panel-settings-form">
         <div class="panel-settings-form-head" style="grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; margin-bottom:0.3rem;">
           <strong>Edit panel</strong>
-          <button type="button" class="icon-btn" data-toggle-row="panel-edit-<%= p.id %>" title="Close" aria-label="Close">&times;</button>
+          <div class="row-actions">
+            <%
+              // The star's color is a "just saved" flag, not "does a default exist" — it starts
+              // unlit on every page load regardless of saved state, lights up the moment Save is
+              // clicked, and dims again the moment Reset is clicked (see the dedicated script
+              // block below). Reset's own visibility is still gated on a real saved default
+              // actually existing for this (dashboard, panel_type) pair — nothing to reset to
+              // otherwise — that part IS server truth, just not tied to the star's color.
+            %>
+            <button type="button" class="icon-btn icon-btn-neutral" data-panel-default-kind="save" data-panel-default-url="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/save-as-default" title="Save this panel's appearance as the default for every &quot;<%= p.panel_type %>&quot; panel on THIS dashboard"><%- icon('star') %></button>
+            <% if (panelTypeDefaultsExist[p.panel_type]) { %>
+            <button type="button" class="icon-btn icon-btn-neutral" data-panel-default-kind="reset" data-panel-default-url="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/reset-to-default" title="Apply the saved &quot;<%= p.panel_type %>&quot; default (this dashboard) to THIS panel"><%- icon('refresh') %></button>
+            <% } %>
+            <button type="button" class="icon-btn" data-toggle-row="panel-edit-<%= p.id %>" title="Close" aria-label="Close">&times;</button>
+          </div>
         </div>
         <div>
           <label>Panel type</label>
@@ -1491,6 +1505,11 @@
       }
       window.stampCsrfTokens();
     }
+    // Reused by the save-as-default/reset-to-default handler below — "Reset" actually changes a
+    // panel's rendered content (new colors etc.), so it needs the same in-place patch this
+    // form's own autosave already does, rather than a full page reload that would also close the
+    // drawer the user very much still has open.
+    window.applyDashPanelPatch = applyPatch;
 
     function doSave(form) {
       clearTimeout(pending.get(form));
@@ -1551,6 +1570,55 @@
       }
     });
   })();
+</script>
+
+<script>
+  // Save-as-default / reset-to-default (panel-settings-form-head) — plain fetch() rather than a
+  // real <form>: these buttons live inside .panel-settings-form-head, itself inside the main
+  // "Edit panel" <form>, and HTML can't nest a second <form> in there. An earlier version used a
+  // standalone empty <form> elsewhere in the DOM + button[form="..."] to point at it, which
+  // technically works per spec, but silently broke getContentEl() above (script starting "Auto-
+  // saves every .panel-settings-form") — that scans .dash-panel's direct children for "whatever
+  // isn't a known non-content element" to patch in fresh HTML after a save, and the extra sibling
+  // <form>s (not in its exclusion list) got mistaken for panel content. fetch() avoids adding any
+  // DOM nodes at all. Content-Type: application/json is what lets this skip the CSRF token
+  // entirely (see middleware/csrf.js) — neither route reads a request body.
+  //
+  // Also used to reload the whole page here: that closed the drawer the user was actively in,
+  // which isn't expected for either action. Reset now in-place patches this panel's own rendered
+  // content via the same applyDashPanelPatch() the form's own autosave uses (Reset genuinely
+  // changes what's on screen — new colors etc.); Save doesn't change this panel's own content at
+  // all, so it only needs to flip the star's own "just saved" flag, nothing else on the page.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-panel-default-kind]');
+    if (!btn) return;
+    var kind = btn.dataset.panelDefaultKind;
+    var card = btn.closest('.dash-panel');
+    var starBtn = card && card.querySelector('[data-panel-default-kind="save"]');
+    btn.disabled = true;
+    fetch(btn.dataset.panelDefaultUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (res) { return kind === 'reset' ? res.text() : null; })
+      .then(function (html) {
+        if (kind === 'save') {
+          // Just-saved flag — see the comment on these buttons in the template. Doesn't reflect
+          // whether a default still exists in the DB, only "was Save the last thing clicked here."
+          if (starBtn) { starBtn.classList.add('icon-btn-star-saved'); starBtn.classList.remove('icon-btn-neutral'); }
+          return;
+        }
+        if (starBtn) { starBtn.classList.remove('icon-btn-star-saved'); starBtn.classList.add('icon-btn-neutral'); }
+        if (!html || !card) return;
+        // Only the panel's rendered CONTENT is patched here (applyDashPanelPatch explicitly skips
+        // .panel-settings-form, same as the autosave flow it's shared with) — the still-open Edit
+        // form's own fields (color pickers etc.) keep showing whatever was there before Reset was
+        // clicked, not the newly-applied default, until the drawer is closed and reopened. Known
+        // gap, not silently different from what the form actually shows.
+        var freshDoc = new DOMParser().parseFromString(html, 'text/html');
+        var freshCard = freshDoc.querySelector('.dash-panel[data-id="' + card.dataset.id + '"]');
+        if (freshCard) window.applyDashPanelPatch(card, freshCard);
+      })
+      .catch(function () {})
+      .then(function () { btn.disabled = false; });
+  });
 </script>
 
 <script>

@@ -614,6 +614,18 @@
   // now-narrow original Actions cell instead of sitting next to the relocated buttons, where a
   // real <td> won't clip its overflow — it visually bled into whichever column happened to sit
   // next to that cell instead of appearing where the buttons actually ended up.
+  // Bulk-unchecks every checkbox inside the element named by data-uncheck-target — e.g. the Roles
+  // page's "None — hide all logs" button, so an admin doesn't have to click each of the 4 log
+  // toggles individually to lock a role out of every log. Client-side only, same as any other
+  // checkbox edit here — nothing is saved until the form's own Save button is submitted.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-uncheck-target]');
+    if (!btn) return;
+    var target = document.getElementById(btn.getAttribute('data-uncheck-target'));
+    if (!target) return;
+    target.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
+  });
+
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('form[data-confirm]').forEach(function (form) {
       var submitBtn = form.querySelector('button[type="submit"]');

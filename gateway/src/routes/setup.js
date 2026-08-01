@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const mqtt = require('mqtt');
+const crypto = require('crypto');
 const db = require('../db');
 const { invalidateTimezoneCache } = require('../dateFormat');
 const { checkMiniserver } = require('../healthcheck');
@@ -148,6 +149,7 @@ router.post('/mqtt/test', async (req, res) => {
   const protocol = useTls ? 'mqtts' : 'mqtt';
   const start = Date.now();
   const client = mqtt.connect(`${protocol}://${host}:${port}`, {
+    clientId: `loxsuite-test-${crypto.randomBytes(3).toString('hex')}`,
     username: username || undefined,
     password: password || undefined,
     connectTimeout: 5000,

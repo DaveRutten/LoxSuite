@@ -45,6 +45,7 @@ router.post('/', requirePermission('settings', 'edit'), (req, res) => {
   const logDays = Number(req.body.log_retention_days);
   const monitorDays = Number(req.body.monitor_retention_days);
   const clientHours = Number(req.body.client_retention_hours);
+  const healthcheckSeconds = Number(req.body.healthcheck_interval_seconds);
   const timezone = (req.body.display_timezone || '').trim();
   const panelDecimals = Number(req.body.default_panel_decimals);
 
@@ -60,6 +61,12 @@ router.post('/', requirePermission('settings', 'edit'), (req, res) => {
   }
   if (Number.isFinite(clientHours) && clientHours > 0) {
     db.prepare('UPDATE gateway_settings SET client_retention_hours = ? WHERE id = 1').run(Math.round(clientHours));
+  }
+  // 10s floor — healthcheck.js's own recursive-setTimeout loop already re-reads this on every
+  // tick, so a too-low value here would otherwise let it hammer every configured Miniserver in a
+  // tight loop.
+  if (Number.isFinite(healthcheckSeconds) && healthcheckSeconds >= 10) {
+    db.prepare('UPDATE gateway_settings SET healthcheck_interval_seconds = ? WHERE id = 1').run(Math.round(healthcheckSeconds));
   }
   if (timezone) {
     db.prepare('UPDATE gateway_settings SET display_timezone = ? WHERE id = 1').run(timezone);

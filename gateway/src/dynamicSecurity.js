@@ -97,6 +97,19 @@ async function removeRoleAcl(rolename, acltype, topic) {
   await sendCommand({ command: 'removeRoleACL', rolename, acltype, topic });
 }
 
+// Mosquitto's dynsec plugin has no "modify ACL" command — (acltype, topic) is an ACL's identity
+// within a role, and addRoleACL already upserts allow in place when that pair is unchanged (the
+// common case: flipping Allow/Deny on the same topic). Only when the identifying pair itself
+// changes (a different topic filter or ACL type) does this need an actual remove — done AFTER the
+// add, not before, so a failed add leaves the original ACL intact instead of momentarily leaving
+// the role with neither the old nor the new grant.
+async function editRoleAcl(rolename, oldAcltype, oldTopic, newAcltype, newTopic, newAllow) {
+  await addRoleAcl(rolename, newAcltype, newTopic, newAllow);
+  if (newAcltype !== oldAcltype || newTopic !== oldTopic) {
+    await removeRoleAcl(rolename, oldAcltype, oldTopic);
+  }
+}
+
 // A one-shot, standalone connection attempt with a specific username/password — used right after
 // createClient()/setClientPassword() (see routes/mqttUsers.js), the only moment the plaintext
 // password is ever in hand. Unlike a Miniserver, an existing MQTT user's password isn't stored
@@ -110,6 +123,7 @@ function testClientConnection(username, password, timeoutMs = 5000) {
   return new Promise((resolve) => {
     const start = Date.now();
     const client = mqtt.connect(`${protocol}://${settings.host}:${settings.port}`, {
+      clientId: `loxsuite-test-${nanoid(6)}`,
       username,
       password,
       connectTimeout: timeoutMs,
@@ -144,5 +158,6 @@ module.exports = {
   deleteRole,
   addRoleAcl,
   removeRoleAcl,
+  editRoleAcl,
   testClientConnection,
 };
