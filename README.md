@@ -215,6 +215,21 @@ in Loxone Config and don't appear anywhere in a Miniserver's structure export (`
 confirmed against a real Miniserver with 365 controls and zero Virtual Inputs in the export. Type
 the name exactly as configured in Loxone Config.
 
+### Live Data
+
+Every control a Miniserver's structure export knows about, grouped by room and then by category —
+the same grouping Loxone Config itself uses. Rooms, categories, and values are all only fetched
+once actually expanded (a structure file can list hundreds of controls, so reading all of them up
+front just to open the page would mean hundreds of requests before you've looked at any of them);
+open values refresh automatically every few seconds. A **Suggest dashboard** button per room turns
+its controls into a starter personal dashboard (lighting, climate, shading, energy) in one step —
+toggle it off in Settings if you'd rather always add monitors/panels one at a time.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/live-data-dark.png">
+  <img src="docs/screenshots/live-data-light.png" alt="The Live Data page showing a room's categories and live control values">
+</picture>
+
 ### MQTT &rarr; Loxone
 
 Subscribe to a topic (wildcards `+`/`#` supported) and forward each message to a Virtual Input on
@@ -341,8 +356,14 @@ edited like any other role.
 
 ### Administration & Access Roles
 
-Visible only to users whose Access Role has **Administrator** checked. Five tabs:
+Visible only to users whose Access Role has **Administrator** checked. Six tabs:
 
+- **General** — re-run the guided first-run setup wizard any time: admin password, timezone,
+  Miniserver, MQTT broker connection, SSO, backups, and notifications, each step skippable and
+  each with a **Test** button where a live connection makes sense (Miniserver, MQTT, notification
+  channel). Re-running doesn't undo anything already configured — every step is pre-filled with
+  whatever's currently set, and a step's badge only gets a checkmark once you've actually gone
+  through it (Skip or a real save).
 - **Users** — every web UI account (distinct from **Users (MQTT accounts)** above, which is about
   IoT devices connecting to the broker). Add a local account, change anyone's Access Role, reset a
   local user's password, or delete an account. The gateway always keeps at least one administrator
@@ -371,6 +392,32 @@ Visible only to users whose Access Role has **Administrator** checked. Five tabs
   Pocket ID, set the **Callback URL** to `http://<gateway-host>:5582/auth/sso/callback` (shown on
   this page) and, if you want LoxSuite to appear as a launchable app on the Pocket ID home screen,
   set the **Client Launch URL** ("User URL") to `http://<gateway-host>:5582/`.
+
+<table>
+<tr>
+<td width="50%">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/backup-dark.png">
+  <img src="docs/screenshots/backup-light.png" alt="The Backups admin page with a schedule, a manual backup, and offsite rclone copy">
+</picture>
+
+</td>
+<td width="50%">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/notifications-dark.png">
+  <img src="docs/screenshots/notifications-light.png" alt="The Notifications admin page with a channel and a rule">
+</picture>
+
+</td>
+</tr>
+</table>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/security-dark.png">
+  <img src="docs/screenshots/security-light.png" alt="The Security admin page with the login rate limit and Single Sign-On settings">
+</picture>
 
 ### Profile
 

@@ -46,7 +46,11 @@ function isLastAdmin(userId) {
   return !!(user && user.isAdmin && adminCount === 1);
 }
 
-router.get('/', (req, res) => res.redirect('/admin/users'));
+router.get('/', (req, res) => res.redirect('/admin/general'));
+
+router.get('/general', (req, res) => {
+  res.render('admin-general', { error: null });
+});
 
 router.get('/users', (req, res) => {
   res.render('admin-users', { users: listUsers(), roles: db.prepare('SELECT * FROM access_roles ORDER BY name').all(), error: null });

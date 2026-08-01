@@ -540,10 +540,12 @@
 </details>
 
 <details class="add-panel" id="help-admin">
-  <summary>Administration &mdash; Users, Access Roles, Backups, Notifications, and Security</summary>
+  <summary>Administration &mdash; General, Users, Access Roles, Backups, Notifications, and Security</summary>
   <div class="add-panel-body">
-    <p>Visible only to users whose Access Role has <strong>Administrator</strong> checked. Five tabs:</p>
+    <p>Visible only to users whose Access Role has <strong>Administrator</strong> checked. Six tabs:</p>
     <ul>
+      <li><strong>General</strong> &mdash; re-run the guided first-run setup wizard any time; see
+        "Is there a guided first-run setup?" above.</li>
       <li><strong>Users</strong> &mdash; every web UI account (not to be confused with
         <a href="/mqtt-users">MQTT Users</a>, which is about IoT devices connecting to the broker, a
         completely different thing). Add a local account, change anyone's Access Role, reset a local
@@ -696,11 +698,11 @@
   <div class="add-panel-body">
     <p>
       Yes &mdash; an Administrator is walked through it automatically right after their very first
-      login (changing the default admin password, setting the timezone, optionally adding a first
-      Miniserver), but only once, install-wide. It stays reachable any time afterward from
-      <a href="/settings">Settings</a> &rarr; "Run setup wizard again" &mdash; running it again doesn't
-      undo anything already configured, it just walks through the same steps with whatever's currently
-      set pre-filled.
+      login (admin password, timezone, Miniserver, MQTT broker, SSO, backups, notifications), but
+      only once, install-wide. It stays reachable any time afterward from
+      <a href="/admin/general">Administration &rarr; General</a> &rarr; "Run setup wizard again"
+      &mdash; running it again doesn't undo anything already configured, it just walks through the
+      same steps with whatever's currently set pre-filled.
     </p>
   </div>
 </details>

@@ -1,16 +1,18 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const mqtt = require('mqtt');
 const db = require('../db');
 const { invalidateTimezoneCache } = require('../dateFormat');
 const { checkMiniserver } = require('../healthcheck');
 const { logSystemEvent } = require('../auditLog');
 const backup = require('../backup');
 const { sendTestMessage } = require('../notifications');
-const { encrypt } = require('../secretCrypto');
+const { encrypt, decrypt } = require('../secretCrypto');
+const mqttClient = require('../mqttClient');
 
 const router = express.Router();
 const TIMEZONES = Intl.supportedValuesOf('timeZone');
-const STEPS = ['welcome', 'password', 'timezone', 'miniserver', 'sso', 'backup', 'notifications', 'done'];
+const STEPS = ['welcome', 'password', 'timezone', 'miniserver', 'mqtt', 'sso', 'backup', 'notifications', 'done'];
 
 function isValidTimezone(tz) {
   try {
@@ -26,13 +28,33 @@ function currentStep(req) {
   return step;
 }
 
+// A step's badge only shows a checkmark once it's actually been submitted (Skip or a real save) —
+// see markVisited below — not just because its current state happens to already look valid.
+function loadVisitedSteps() {
+  const row = db.prepare('SELECT setup_wizard_visited_steps FROM gateway_settings WHERE id = 1').get();
+  return (row?.setup_wizard_visited_steps || '').split(',').filter(Boolean);
+}
+
+function markVisited(step) {
+  const visited = new Set(loadVisitedSteps());
+  visited.add(step);
+  db.prepare('UPDATE gateway_settings SET setup_wizard_visited_steps = ? WHERE id = 1').run(Array.from(visited).join(','));
+}
+
+function loadMqttSettings() {
+  const settings = db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
+  return settings ? { ...settings, password: decrypt(settings.password) } : settings;
+}
+
 function render(req, res, extra = {}) {
   res.render('setup-wizard', {
     step: currentStep(req),
     steps: STEPS,
+    visitedSteps: loadVisitedSteps(),
     timezones: TIMEZONES,
     gatewaySettings: db.prepare('SELECT * FROM gateway_settings WHERE id = 1').get(),
     miniserverCount: db.prepare('SELECT COUNT(*) AS c FROM miniservers').get().c,
+    mqttSettings: loadMqttSettings(),
     sso: db.prepare('SELECT * FROM sso_settings WHERE id = 1').get(),
     roles: db.prepare('SELECT * FROM access_roles ORDER BY name').all(),
     backupSettings: backup.getSettings(),
@@ -58,6 +80,7 @@ router.post('/password', (req, res) => {
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(newPassword, 10), req.user.id);
     logSystemEvent(`"${req.user.username}" changed their password via the setup wizard.`);
   }
+  markVisited('password');
   res.redirect('/setup?step=timezone');
 });
 
@@ -68,12 +91,16 @@ router.post('/timezone', (req, res) => {
     db.prepare('UPDATE gateway_settings SET display_timezone = ? WHERE id = 1').run(timezone);
     invalidateTimezoneCache();
   }
+  markVisited('timezone');
   res.redirect('/setup?step=miniserver');
 });
 
 router.post('/miniserver', async (req, res) => {
   const { name, host, http_port: httpPort, udp_port: udpPort, username, password, use_https: useHttps, external_url: externalUrl } = req.body;
-  if (!name && !host && !username && !password) return res.redirect('/setup?step=sso');
+  if (!name && !host && !username && !password) {
+    markVisited('miniserver');
+    return res.redirect('/setup?step=mqtt');
+  }
   if (!name || !host || !username || !password) {
     return render(req, res, { error: 'Name, host, username and password are all required to add a Miniserver — or leave every field blank to skip this step.' });
   }
@@ -91,7 +118,56 @@ router.post('/miniserver', async (req, res) => {
   const inserted = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(result.lastInsertRowid);
   await checkMiniserver(inserted);
 
+  markVisited('miniserver');
+  res.redirect('/setup?step=mqtt');
+});
+
+router.post('/mqtt', (req, res) => {
+  const { host, port, username, password, use_tls: useTls } = req.body;
+  if (!host || !port) {
+    return render(req, res, { error: 'Host and port are required — or leave everything blank to skip this step.' });
+  }
+
+  db.prepare(
+    'UPDATE mqtt_settings SET host = ?, port = ?, username = ?, password = ?, use_tls = ? WHERE id = 1'
+  ).run(host, Number(port), username || null, encrypt(password) || null, useTls ? 1 : 0);
+  mqttClient.reconnect();
+  logSystemEvent(`"${req.user.username}" updated the MQTT broker connection via the setup wizard.`);
+  markVisited('mqtt');
   res.redirect('/setup?step=sso');
+});
+
+// Ad-hoc test against whatever's currently typed into the form, before it's been saved — same
+// one-shot-connection pattern as dynamicSecurity.js's testClientConnection, just fully
+// parameterized (host/port too, not only username/password) since nothing's saved yet to fall
+// back on.
+router.post('/mqtt/test', async (req, res) => {
+  const { host, port, username, password, use_tls: useTls } = req.body;
+  if (!host || !port) return res.status(400).json({ error: 'Fill in host and port first.' });
+
+  const protocol = useTls ? 'mqtts' : 'mqtt';
+  const start = Date.now();
+  const client = mqtt.connect(`${protocol}://${host}:${port}`, {
+    username: username || undefined,
+    password: password || undefined,
+    connectTimeout: 5000,
+    reconnectPeriod: 0, // one-shot — a failed attempt must not keep silently retrying in the background
+  });
+
+  let settled = false;
+  const result = await new Promise((resolve) => {
+    function finish(ok, error) {
+      if (settled) return;
+      settled = true;
+      client.removeAllListeners();
+      client.end(true);
+      resolve({ ok, ms: Date.now() - start, error: error || null });
+    }
+    client.once('connect', () => finish(true));
+    client.once('error', (err) => finish(false, err.message));
+    setTimeout(() => finish(false, 'Timed out'), 5000);
+  });
+  res.json(result);
 });
 
 router.post('/sso', (req, res) => {
@@ -110,6 +186,7 @@ router.post('/sso', (req, res) => {
     `UPDATE sso_settings SET enabled = ?, issuer_url = ?, client_id = ?, client_secret = ?, default_role_id = ? WHERE id = 1`
   ).run(enabled ? 1 : 0, issuerUrl || null, clientId || null, newSecret || null, defaultRoleId || null);
   if (enabled) logSystemEvent(`"${req.user.username}" enabled Single Sign-On via the setup wizard.`);
+  markVisited('sso');
   res.redirect('/setup?step=backup');
 });
 
@@ -148,18 +225,23 @@ router.post('/backup', (req, res) => {
   });
   backup.rescheduleFromSettings();
   if (enabled || rcloneEnabled) logSystemEvent(`"${req.user.username}" configured backups via the setup wizard.`);
+  markVisited('backup');
   res.redirect('/setup?step=notifications');
 });
 
 router.post('/notifications', (req, res) => {
   const { name, url } = req.body;
-  if (!name && !url) return res.redirect('/setup?step=done');
+  if (!name && !url) {
+    markVisited('notifications');
+    return res.redirect('/setup?step=done');
+  }
   if (!name || !url) {
     return render(req, res, { error: 'Channel name and Apprise URL are both required to add a channel — or leave both blank to skip this step.' });
   }
   db.prepare('INSERT INTO notification_channels (name, url, enabled, created_at) VALUES (?, ?, 1, ?)')
     .run(name.trim(), url.trim(), new Date().toISOString());
   logSystemEvent(`"${req.user.username}" added notification channel "${name}" via the setup wizard.`);
+  markVisited('notifications');
   res.redirect('/setup?step=done');
 });
 
@@ -175,6 +257,15 @@ router.post('/notifications/test', async (req, res) => {
   } catch (err) {
     res.json({ ok: false, error: err.message });
   }
+});
+
+// Every step's own "Skip" button posts here instead of a plain link, so skipping marks the step
+// visited (see markVisited) exactly like a real save does — the checkmark means "you made a
+// decision here", not "you happened to submit data".
+router.post('/skip-step', (req, res) => {
+  const { step, next } = req.body;
+  if (STEPS.includes(step)) markVisited(step);
+  res.redirect(`/setup?step=${STEPS.includes(next) ? next : 'done'}`);
 });
 
 router.post('/finish', (req, res) => {

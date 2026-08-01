@@ -2,6 +2,46 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.0-alpha.1] - 2026-08-01
+
+### Fixed
+- **Critical**: the dynamic-security bootstrap (creating the gateway's own MQTT broker account on
+  first boot) read the MQTT password straight out of the database without decrypting it, so the
+  broker account ended up with the *encrypted ciphertext* as its actual password — mismatched
+  against the real password the gateway itself tries to authenticate with. This broke the MQTT
+  connection on every fresh bootstrap since encryption at rest was introduced in 0.2.0-alpha.1
+  (a brand new install, or an existing one whose `dynamic-security.json` was ever reset).
+- Setup wizard buttons that sit next to a Test button (Continue/Save & continue/Add & continue)
+  were a few pixels lower than their neighbor — a login-page-only CSS rule's `margin-top` was
+  bleeding onto every `.primary` button in the wizard, not just the login form's own submit button.
+
+### Added
+- Setup wizard: a new **MQTT Broker** step (host/port/TLS/username/password, pre-filled with the
+  already-working bundled-broker connection), with the same ad-hoc **Test** button the Miniserver
+  step already had.
+- **Administration -> General**: a new first tab holding "Run setup wizard again" (moved out of
+  the general Settings page, where it didn't fit alongside per-account preferences).
+
+### Changed
+- Setup wizard step badges: redesigned as plain single-line text (no boxed/pill background),
+  checkmark shown before the label. A step's checkmark now only appears once that step has
+  actually been submitted (Skip or a real save) — previously a step could show complete just
+  because its default state happened to already be "valid" (e.g. SSO disabled), even if nobody
+  had looked at it yet.
+
+## [0.2.2-alpha.1] - 2026-08-01
+
+### Fixed
+- Unraid template: `ADMIN_PASSWORD`, `SESSION_SECRET`, `MQTT_PASSWORD`, and `MQTT_ADMIN_PASSWORD`
+  are no longer masked in Unraid's Edit Container screen. A masked field always renders blank
+  there regardless of whether it's actually set, and clicking Apply while it looks empty silently
+  saves that blank value over the real one — which is exactly what caused the SESSION_SECRET
+  incident in 0.2.1-alpha.1. Showing the real value beats hiding it from a screen glance on a
+  self-hosted single-admin box.
+
+### Added
+- More README screenshots: Live Data, and the Administration Backups/Notifications/Security pages.
+
 ## [0.2.1-alpha.1] - 2026-08-01
 
 ### Added

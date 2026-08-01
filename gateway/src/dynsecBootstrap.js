@@ -1,6 +1,7 @@
 const mqtt = require('mqtt');
 const { nanoid } = require('nanoid');
 const db = require('./db');
+const { decrypt } = require('./secretCrypto');
 
 const REQUEST_TOPIC = '$CONTROL/dynamic-security/v1';
 const RESPONSE_TOPIC = '$CONTROL/dynamic-security/v1/response';
@@ -93,7 +94,7 @@ function runBootstrap() {
       }
       try {
         await ensureClientRole(client);
-        await ensureGatewayAccount(client, settings.username, settings.password);
+        await ensureGatewayAccount(client, settings.username, decrypt(settings.password));
         console.log('Dynamic security bootstrap complete.');
       } catch (bootstrapErr) {
         console.error('Dynamic security bootstrap failed:', bootstrapErr.message);

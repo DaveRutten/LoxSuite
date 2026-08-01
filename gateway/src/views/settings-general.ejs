@@ -7,17 +7,6 @@
   <p class="hint" style="color: var(--success);">Saved.</p>
 <% } %>
 
-<% if (currentUser && currentUser.isAdmin) { %>
-<div class="card">
-  <h2>Setup wizard</h2>
-  <p class="hint">
-    The guided first-run setup (admin password, timezone, first Miniserver) — safe to run again
-    any time, e.g. to double-check something or walk through it again in this test version.
-  </p>
-  <a href="/setup"><button type="button" class="btn-soft"><%- icon('refresh') %> Run setup wizard again</button></a>
-</div>
-<% } %>
-
 <% if (canEdit('settings')) { %>
 <form method="post" action="/settings">
   <div class="card">

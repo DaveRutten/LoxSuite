@@ -1,0 +1,26 @@
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+
+<div class="tabs">
+  <a class="active" href="/admin/general">General</a>
+  <a href="/admin/users">Users</a>
+  <a href="/admin/roles">Access Roles</a>
+  <a href="/admin/backup">Backups</a>
+  <a href="/admin/notifications">Notifications</a>
+  <a href="/admin/security">Security</a>
+</div>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<div class="card">
+  <h2>Setup wizard</h2>
+  <p class="hint">
+    The guided first-run setup (admin password, timezone, Miniserver, MQTT broker, SSO, backups,
+    notifications) — safe to run again any time, e.g. to double-check something or walk through it
+    again in this test version.
+  </p>
+  <a href="/setup"><button type="button" class="btn-soft"><%- icon('refresh') %> Run setup wizard again</button></a>
+</div>
+
+<%- include('partials/foot') %>

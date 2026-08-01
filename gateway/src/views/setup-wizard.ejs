@@ -22,28 +22,27 @@
     </div>
 
     <%
-      // "Complete" only has a real meaning for steps with an evaluable saved/valid state — welcome,
-      // password, timezone and done have no such concept (leaving them at their defaults is just as
-      // valid as changing them), so they never show a checkmark, current-step highlighting aside.
-      function stepComplete(s) {
-        if (s === 'miniserver') return miniserverCount > 0;
-        if (s === 'sso') return !sso.enabled || !!(sso.issuer_url && sso.client_id);
-        if (s === 'backup') {
-          var localOk = !backupSettings.enabled || !!(backupSettings.schedule_cron && backupSettings.retention_count);
-          var rcloneOk = !backupSettings.rclone_enabled || !!backupSettings.rclone_remote;
-          return localOk && rcloneOk;
-        }
-        if (s === 'notifications') return channelCount > 0;
-        return false;
+      // A step only gets a checkmark once it's actually been submitted (Skip or a real save) — see
+      // markVisited in routes/setup.js — not just because its current state happens to be valid.
+      // "done" has no submit step of its own to track, so it never shows one.
+      var STEP_LABELS = { mqtt: 'MQTT', sso: 'SSO' };
+      function stepLabel(s) {
+        return STEP_LABELS[s] || (s.charAt(0).toUpperCase() + s.slice(1));
+      }
+      function skipForm(stepName, nextStep, label, btnClass) {
+        return '<form method="post" action="/setup/skip-step" style="display:inline;">'
+          + '<input type="hidden" name="_csrf" value="' + csrfToken + '">'
+          + '<input type="hidden" name="step" value="' + stepName + '">'
+          + '<input type="hidden" name="next" value="' + nextStep + '">'
+          + '<button type="submit" class="' + (btnClass || 'btn-soft') + '"' + (btnClass === 'primary' ? ' style="width:auto; margin-top:0;"' : '') + '>' + (label || 'Skip') + '</button>'
+          + '</form>';
       }
     %>
-    <div class="tabs" style="justify-content:center; margin-bottom:1.25rem;">
+    <div style="display:flex; align-items:center; justify-content:center; gap:1.1rem; flex-wrap:wrap; margin-bottom:1.25rem; font-size:0.82rem;">
       <% steps.forEach(function (s, i) { %>
-        <a href="/setup?step=<%= s %>" style="text-decoration:none;">
-          <span class="badge <%= s === step ? 'badge-ok' : 'badge-neutral' %>">
-            <% if (stepComplete(s)) { %><span style="color:var(--success);"><%- icon('check', { size: 11 }) %></span><% } %>
-            <%= i + 1 %>. <%= s.charAt(0).toUpperCase() + s.slice(1) %>
-          </span>
+        <a href="/setup?step=<%= s %>" style="text-decoration:none; white-space:nowrap; display:inline-flex; align-items:center; gap:0.3rem; color:<%= s === step ? 'var(--accent)' : 'var(--text-muted)' %>; font-weight:<%= s === step ? '600' : '400' %>;">
+          <% if (visitedSteps.includes(s)) { %><span style="color:var(--success); display:inline-flex;"><%- icon('check', { size: 11 }) %></span><% } %>
+          <span><%= i + 1 %>. <%= stepLabel(s) %></span>
         </a>
       <% }) %>
     </div>
@@ -56,18 +55,18 @@
       <% if (step === 'welcome') { %>
         <h2>Welcome</h2>
         <p class="hint">
-          A quick guided setup — change the default admin password, set your timezone, and
-          optionally add your first Miniserver. Everything here is also reachable individually
-          later (Profile, Settings, Miniservers), and this wizard itself stays reachable any time
-          from Settings &rarr; "Run setup wizard again", so nothing here is a one-shot, locked-in
-          decision.
+          A quick guided setup — admin password, timezone, Miniserver, MQTT broker, SSO, backups,
+          and notifications. Everything here is also reachable individually later (Profile,
+          Settings, Miniservers, Administration), and this wizard itself stays reachable any time
+          from Administration &rarr; General &rarr; "Run setup wizard again", so nothing here is a
+          one-shot, locked-in decision.
         </p>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
           <form method="post" action="/setup/skip">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <button type="submit" class="btn-soft">Skip setup entirely</button>
           </form>
-          <a href="/setup?step=password"><button type="button" class="primary" style="width:auto;">Get started</button></a>
+          <%- skipForm('welcome', 'password', 'Get started', 'primary') %>
         </div>
       <% } %>
 
@@ -84,8 +83,8 @@
           <div><label>Confirm new password</label><input type="password" name="confirm_password" minlength="8"></div>
         </form>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
-          <a href="/setup?step=timezone"><button type="button" class="btn-soft">Skip</button></a>
-          <button type="submit" form="password-form" class="primary" style="width:auto;">Continue</button>
+          <%- skipForm('password', 'timezone') %>
+          <button type="submit" form="password-form" class="primary" style="width:auto; margin-top:0;">Continue</button>
         </div>
       <% } %>
 
@@ -107,8 +106,8 @@
           </div>
         </form>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
-          <a href="/setup?step=miniserver"><button type="button" class="btn-soft">Skip</button></a>
-          <button type="submit" form="timezone-form" class="primary" style="width:auto;">Continue</button>
+          <%- skipForm('timezone', 'miniserver') %>
+          <button type="submit" form="timezone-form" class="primary" style="width:auto; margin-top:0;">Continue</button>
         </div>
       <% } %>
 
@@ -153,19 +152,88 @@
         </form>
         <% } %>
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
-          <a href="/setup?step=sso"><button type="button" class="btn-soft">Skip</button></a>
+          <%- skipForm('miniserver', 'mqtt') %>
           <div style="display:flex; align-items:center; gap:0.5rem;">
             <% if (miniserverCount === 0) { %>
               <button type="button" id="ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
             <% } %>
             <% if (miniserverCount > 0) { %>
-              <a href="/setup?step=sso"><button type="button" class="primary" style="width:auto;">Continue</button></a>
+              <%- skipForm('miniserver', 'mqtt', 'Continue', 'primary') %>
             <% } else { %>
-              <button type="submit" form="miniserver-form" class="primary" style="width:auto;">Add &amp; continue</button>
+              <button type="submit" form="miniserver-form" class="primary" style="width:auto; margin-top:0;">Add &amp; continue</button>
             <% } %>
           </div>
         </div>
         <div id="ms-test-result" style="margin-top:0.6rem;"></div>
+      <% } %>
+
+      <% if (step === 'mqtt') { %>
+        <h2>MQTT Broker</h2>
+        <p class="hint">
+          The bundled Mosquitto broker runs inside this same container — these are the connection
+          details the gateway itself uses, already filled in and working. You can also point this
+          at a different/external broker instead; the gateway then stops using the bundled process
+          for this connection.
+        </p>
+        <form method="post" action="/setup/mqtt" id="mqtt-form" class="form-grid">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div><label>Host</label><input type="text" name="host" value="<%= mqttSettings.host %>" required></div>
+          <div><label>Port</label><input type="number" name="port" value="<%= mqttSettings.port %>" required></div>
+          <div>
+            <label>TLS</label>
+            <%- toggleSwitch('use_tls', mqttSettings.use_tls) %>
+          </div>
+          <div><label>Username</label><input type="text" name="username" value="<%= mqttSettings.username || '' %>"></div>
+          <div><label>Password</label><input type="password" name="password" value="<%= mqttSettings.password || '' %>"></div>
+        </form>
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
+          <%- skipForm('mqtt', 'sso') %>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <button type="button" id="mqtt-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
+            <button type="submit" form="mqtt-form" class="primary" style="width:auto; margin-top:0;">Save &amp; continue</button>
+          </div>
+        </div>
+        <div id="mqtt-test-result" style="margin-top:0.6rem;"></div>
+        <script>
+          (function () {
+            var form = document.getElementById('mqtt-form');
+            var testBtn = document.getElementById('mqtt-test-btn');
+            var testResult = document.getElementById('mqtt-test-result');
+            if (form && testBtn) {
+              testBtn.addEventListener('click', function () {
+                var data = new FormData(form);
+                var payload = {
+                  host: data.get('host'),
+                  port: data.get('port'),
+                  username: data.get('username'),
+                  password: data.get('password'),
+                  use_tls: data.get('use_tls'),
+                };
+                if (!payload.host || !payload.port) {
+                  testResult.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Fill in host and port first.</p>';
+                  return;
+                }
+                testResult.innerHTML = '<p class="hint" style="margin:0;">Testing&hellip;</p>';
+                // Content-Type: application/json exempts this from the CSRF form-token check
+                // server-side (see middleware/csrf.js), same as the other wizard Test buttons.
+                fetch('/setup/mqtt/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                  .then(function (r) { return r.json(); })
+                  .then(function (data) {
+                    if (data.error) {
+                      testResult.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">' + data.error + '</p>';
+                      return;
+                    }
+                    testResult.innerHTML = data.ok
+                      ? '<p class="hint" style="margin:0; color:var(--success);">Connected (' + data.ms + ' ms).</p>'
+                      : '<p class="hint" style="margin:0; color:var(--danger);">Failed: ' + (data.error || 'could not connect') + '</p>';
+                  })
+                  .catch(function () {
+                    testResult.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
+                  });
+              });
+            }
+          })();
+        </script>
       <% } %>
 
       <% if (step === 'sso') { %>
@@ -220,8 +288,8 @@
           })();
         </script>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
-          <a href="/setup?step=backup"><button type="button" class="btn-soft">Skip</button></a>
-          <button type="submit" form="sso-form" class="primary" style="width:auto;">Save &amp; continue</button>
+          <%- skipForm('sso', 'backup') %>
+          <button type="submit" form="sso-form" class="primary" style="width:auto; margin-top:0;">Save &amp; continue</button>
         </div>
       <% } %>
 
@@ -300,8 +368,8 @@
           })();
         </script>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
-          <a href="/setup?step=notifications"><button type="button" class="btn-soft">Skip</button></a>
-          <button type="submit" form="backup-form" class="primary" style="width:auto;">Save &amp; continue</button>
+          <%- skipForm('backup', 'notifications') %>
+          <button type="submit" form="backup-form" class="primary" style="width:auto; margin-top:0;">Save &amp; continue</button>
         </div>
       <% } %>
 
@@ -357,10 +425,10 @@
           })();
         </script>
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
-          <a href="/setup?step=done"><button type="button" class="btn-soft">Skip</button></a>
+          <%- skipForm('notifications', 'done') %>
           <div style="display:flex; align-items:center; gap:0.5rem;">
             <button type="button" id="notif-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
-            <button type="submit" form="notifications-form" class="primary" style="width:auto;">Add &amp; continue</button>
+            <button type="submit" form="notifications-form" class="primary" style="width:auto; margin-top:0;">Add &amp; continue</button>
           </div>
         </div>
         <div id="notif-test-result" style="margin-top:0.6rem;"></div>
@@ -371,7 +439,7 @@
         <p class="hint">
           You can fine-tune everything you just set up, and dig into Notification rules (which
           Monitor, which threshold, ...), any time from Administration. Run this wizard again any
-          time from Settings.
+          time from Administration &rarr; General.
         </p>
         <form method="post" action="/setup/finish">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">

@@ -861,6 +861,20 @@ function migrateLoginRateLimit() {
 
 migrateLoginRateLimit();
 
+// Which setup-wizard steps (routes/setup.js) have actually been submitted (Skip or a real save),
+// as a comma-separated list of step names — powers the checkmark on that step's own badge, so it
+// only shows once a step has genuinely been gone through, not just because its current state
+// happens to already be valid (e.g. SSO disabled is "valid" from the moment gateway_settings is
+// first created, long before anyone's looked at that step).
+function migrateSetupWizardVisitedSteps() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('setup_wizard_visited_steps')) {
+    db.exec("ALTER TABLE gateway_settings ADD COLUMN setup_wizard_visited_steps TEXT NOT NULL DEFAULT ''");
+  }
+}
+
+migrateSetupWizardVisitedSteps();
+
 // Break-glass: when SSO is set up and this is on, local username/password login is refused for
 // anyone NOT coming from a private/local network — forcing normal sign-in through SSO — while
 // still leaving a way in from the local network if the external IdP is ever unreachable. Off by

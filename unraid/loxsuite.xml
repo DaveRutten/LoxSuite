@@ -12,6 +12,14 @@
 
   Mosquitto (the MQTT broker) runs inside this same container alongside the gateway itself — see
   docker-entrypoint.sh — so this one template is the whole stack; nothing else to add separately.
+
+  Password/secret fields below are deliberately Mask="false" — Unraid renders a Mask="true" field
+  as blank in its own Edit Container screen regardless of whether a value is actually set, and
+  clicking Apply while it looks empty can silently save that blank value over the real one. That
+  already happened once with SESSION_SECRET (which secrets are encrypted with, not just session
+  cookies — see the README's Security section) and broke every stored credential until they were
+  re-entered. Showing the real value on every edit is worth more here than hiding it from a casual
+  screen glance, since this is a self-hosted single-admin box, not a shared multi-operator panel.
 -->
 <Container version="2">
   <Name>LoxSuite</Name>
@@ -46,12 +54,12 @@
   <Config Name="Mosquitto Log" Target="/mosquitto/log" Default="/mnt/user/appdata/loxsuite/mosquitto/log" Mode="rw" Description="Mosquitto's own log file, tailed into the Logs page" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/loxsuite/mosquitto/log</Config>
 
   <Config Name="ADMIN_USERNAME" Target="ADMIN_USERNAME" Default="admin" Mode="" Description="Web UI admin account username - created on first boot only, if no users exist yet" Type="Variable" Display="always" Required="true" Mask="false">admin</Config>
-  <Config Name="ADMIN_PASSWORD" Target="ADMIN_PASSWORD" Default="" Mode="" Description="Web UI admin account password - change this from the default, then change it again from inside the app once logged in" Type="Variable" Display="always" Required="true" Mask="true"></Config>
-  <Config Name="SESSION_SECRET" Target="SESSION_SECRET" Default="" Mode="" Description="Random long string used to sign session cookies - any long random value, generate one with e.g. `openssl rand -hex 32`" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="ADMIN_PASSWORD" Target="ADMIN_PASSWORD" Default="" Mode="" Description="Web UI admin account password - change this from the default, then change it again from inside the app once logged in" Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="SESSION_SECRET" Target="SESSION_SECRET" Default="" Mode="" Description="Random long string, set once and never changed afterward - signs session cookies AND is the key Miniserver/MQTT/SSO/rclone secrets are encrypted with. Changing it after first boot makes those unreadable until re-entered. Generate one with e.g. openssl rand -hex 32" Type="Variable" Display="always" Required="true" Mask="false"></Config>
   <Config Name="MQTT_USERNAME" Target="MQTT_USERNAME" Default="gateway" Mode="" Description="Username for the gateway's own MQTT account, created automatically on first boot" Type="Variable" Display="always" Required="true" Mask="false">gateway</Config>
-  <Config Name="MQTT_PASSWORD" Target="MQTT_PASSWORD" Default="" Mode="" Description="Password for the gateway's own MQTT account" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="MQTT_PASSWORD" Target="MQTT_PASSWORD" Default="" Mode="" Description="Password for the gateway's own MQTT account" Type="Variable" Display="always" Required="true" Mask="false"></Config>
   <Config Name="MQTT_ADMIN_USERNAME" Target="MQTT_ADMIN_USERNAME" Default="admin" Mode="" Description="Break-glass MQTT admin account (Mosquitto dynamic-security) - used once on first boot to bootstrap the broker; keep the password safe for manual mosquitto_ctrl access later" Type="Variable" Display="advanced" Required="false" Mask="false">admin</Config>
-  <Config Name="MQTT_ADMIN_PASSWORD" Target="MQTT_ADMIN_PASSWORD" Default="" Mode="" Description="Break-glass MQTT admin account password" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="MQTT_ADMIN_PASSWORD" Target="MQTT_ADMIN_PASSWORD" Default="" Mode="" Description="Break-glass MQTT admin account password" Type="Variable" Display="always" Required="true" Mask="false"></Config>
 
   <Config Name="DB_PATH" Target="DB_PATH" Default="/data/gateway.db" Mode="" Description="Path to the SQLite database inside the container - leave as default unless you know why you're changing it" Type="Variable" Display="advanced" Required="false" Mask="false">/data/gateway.db</Config>
   <Config Name="MOSQUITTO_LOG_PATH" Target="MOSQUITTO_LOG_PATH" Default="/mosquitto/log/mosquitto.log" Mode="" Description="Path to the Mosquitto log file inside the container" Type="Variable" Display="advanced" Required="false" Mask="false">/mosquitto/log/mosquitto.log</Config>
