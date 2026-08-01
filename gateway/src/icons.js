@@ -25,9 +25,11 @@ const ICONS = {
   // CSS class (.is-favorited, see style.css) that fills it instead, rather than this needing a
   // second icon definition just for that.
   star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
-  // Two sources bridging into one hub — Loxone and MQTT devices merging into this
-  // gateway. An original mark (not the Loxone logo) used as the app's brand icon.
-  logo: '<circle cx="7" cy="6" r="1.8" fill="currentColor" stroke="none"/><circle cx="17" cy="6" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="18" r="2.2" fill="currentColor" stroke="none"/><path d="M8.3 7.6 10.6 15.4"/><path d="M15.7 7.6 13.4 15.4"/>',
+  // Two sources bridging into one hub — Loxone and MQTT devices merging into this gateway. An
+  // original mark (not the Loxone logo), square-cropped from the same connection mark used in
+  // docs/logo-light.svg and docs/logo-dark.svg (the README banner) and gateway/public/favicon.svg
+  // — kept in sync with those if the mark itself ever changes.
+  logo: '<circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/><circle cx="3" cy="12" r="2" stroke-width="1.5"/><circle cx="21" cy="12" r="2" stroke-width="1.5"/><path d="M5 12h2.5M16.5 12h2.5" stroke-width="1.5"/>',
 };
 
 function icon(name, opts) {

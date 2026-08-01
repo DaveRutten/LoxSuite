@@ -1,6 +1,7 @@
 const dgram = require('dgram');
 const { Agent } = require('undici');
 const db = require('./db');
+const { decrypt } = require('./secretCrypto');
 
 // Local Loxone Miniservers use a self-signed HTTPS certificate, so the default
 // fetch() TLS verification would reject every request to a use_https=1 server.
@@ -52,7 +53,7 @@ function miniserverBaseUrl(miniserver) {
 // happens in that case. This is what lets a single Miniserver stay usable both on the local
 // network and remotely without switching configuration.
 async function fetchMiniserver(miniserver, path, options = {}) {
-  const auth = Buffer.from(`${miniserver.username}:${miniserver.password}`).toString('base64');
+  const auth = Buffer.from(`${miniserver.username}:${decrypt(miniserver.password)}`).toString('base64');
   const headers = { Authorization: `Basic ${auth}`, ...(options.headers || {}) };
   const { timeoutMs, ...restOptions } = options;
 

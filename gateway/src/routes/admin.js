@@ -3,6 +3,8 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { AREAS, MAIN_AREAS, LOG_AREAS } = require('../permissionAreas');
 const { logSystemEvent } = require('../auditLog');
+const { reloadLoginLimiter } = require('./auth');
+const { encrypt } = require('../secretCrypto');
 
 const router = express.Router();
 
@@ -211,19 +213,31 @@ router.post('/roles/:id/delete', (req, res) => {
   res.redirect('/admin/roles');
 });
 
-router.get('/sso', (req, res) => {
-  const sso = db.prepare('SELECT * FROM sso_settings WHERE id = 1').get();
-  const roles = db.prepare('SELECT * FROM access_roles ORDER BY name').all();
-  res.render('admin-sso', { sso, roles, error: null, saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
+// Single Sign-On and the login rate limit are both Administration -> Security cards on one page
+// now (used to be a separate "Single Sign-On" tab) — this loads everything both cards need
+// regardless of which form was actually just submitted, so either POST handler can re-render the
+// same view with fresh data (and the other card's own edits, if any, aren't lost either).
+function loadSecurityPageData() {
+  return {
+    sso: db.prepare('SELECT * FROM sso_settings WHERE id = 1').get(),
+    roles: db.prepare('SELECT * FROM access_roles ORDER BY name').all(),
+    gatewaySettings: db.prepare('SELECT * FROM gateway_settings WHERE id = 1').get(),
+  };
+}
+
+router.get('/security', (req, res) => {
+  res.render('admin-security', { ...loadSecurityPageData(), error: null, saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
 });
 
+// /admin/sso is kept as the SSO form's own POST target (unchanged from before the merge) rather
+// than renaming it to /admin/security/sso — nothing else needed to change to make that work.
 router.post('/sso', (req, res) => {
   const { enabled, issuer_url, client_id, client_secret, default_role_id, button_label, local_login_disabled } = req.body;
 
   // Blank secret field = keep the existing one; it's never shown back to the browser, so
   // re-typing is only needed to actually change it (same convention as Miniserver passwords).
   const existing = db.prepare('SELECT client_secret FROM sso_settings WHERE id = 1').get();
-  const newSecret = client_secret ? client_secret : existing?.client_secret;
+  const newSecret = client_secret ? encrypt(client_secret) : existing?.client_secret;
 
   db.prepare(
     `UPDATE sso_settings SET enabled = ?, issuer_url = ?, client_id = ?, client_secret = ?, default_role_id = ?, button_label = ?, local_login_disabled = ?
@@ -238,9 +252,25 @@ router.post('/sso', (req, res) => {
     local_login_disabled ? 1 : 0
   );
   logSystemEvent(`"${req.user.username}" updated SSO settings.`);
-  const sso = db.prepare('SELECT * FROM sso_settings WHERE id = 1').get();
-  const roles = db.prepare('SELECT * FROM access_roles ORDER BY name').all();
-  res.render('admin-sso', { sso, roles, error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
+  res.render('admin-security', { ...loadSecurityPageData(), error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
+});
+
+router.post('/security', (req, res) => {
+  const max = Number(req.body.login_rate_limit_max);
+  const windowMinutes = Number(req.body.login_rate_limit_window_minutes);
+
+  if (!Number.isFinite(max) || max < 1) {
+    return res.render('admin-security', { ...loadSecurityPageData(), error: 'Max login attempts must be at least 1.', saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
+  }
+  if (!Number.isFinite(windowMinutes) || windowMinutes < 1) {
+    return res.render('admin-security', { ...loadSecurityPageData(), error: 'The login attempts time window must be at least 1 minute.', saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
+  }
+
+  db.prepare('UPDATE gateway_settings SET login_rate_limit_max = ?, login_rate_limit_window_minutes = ? WHERE id = 1')
+    .run(Math.round(max), Math.round(windowMinutes));
+  reloadLoginLimiter();
+  logSystemEvent(`"${req.user.username}" updated the login rate limit.`);
+  res.render('admin-security', { ...loadSecurityPageData(), error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
 });
 
 module.exports = router;

@@ -1,5 +1,6 @@
 const { Issuer } = require('openid-client');
 const db = require('./db');
+const { decrypt } = require('./secretCrypto');
 
 // Discovery is a network round-trip, so the built openid-client Client is cached and only
 // rebuilt when the stored SSO settings (or the gateway's own base URL) actually change.
@@ -7,7 +8,8 @@ let cachedClient = null;
 let cachedKey = null;
 
 function loadSettings() {
-  return db.prepare('SELECT * FROM sso_settings WHERE id = 1').get();
+  const settings = db.prepare('SELECT * FROM sso_settings WHERE id = 1').get();
+  return settings ? { ...settings, client_secret: decrypt(settings.client_secret) } : settings;
 }
 
 function isEnabled() {

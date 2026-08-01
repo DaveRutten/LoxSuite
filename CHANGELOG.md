@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.0-alpha.1] - 2026-08-01
+
+### Added
+- **Encryption at rest** for every secret LoxSuite has to actively use (not just check a login
+  against): Miniserver passwords, the MQTT broker password, the SSO client secret, and any saved
+  `rclone.conf`. AES-256-GCM, key derived from `SESSION_SECRET` — no new required environment
+  variable. Existing plain-text values are encrypted automatically on first boot after upgrading.
+- **Setup wizard**: three new steps (Single Sign-On, Backups, Notifications), all optional and
+  skippable like the rest of the wizard. The Miniserver step gained the UDP port/External URL
+  fields and Test button the regular Add Miniserver form already had. Step badges are clickable
+  and show a checkmark once that step's own state is complete.
+- **Administration -> Security**: the login page's rate limit (attempts and time window) is now
+  configurable, instead of a fixed 10-per-15-minutes.
+
+### Fixed
+- The setup wizard's Miniserver step sent you straight to the last step instead of the next one
+  when a Miniserver was already configured.
+- A dashboard panel's Test/Add buttons in the wizard sat on their own row above Skip/Continue
+  instead of alongside them.
+- Two "Known scope limitations" entries in the README were stale — a Shelly RGBW/White/Tunable
+  value transform and live-websocket-backed Loxone monitors were already built, just not
+  documented as such.
+
 ## [0.1.0-alpha.1] - 2026-07-31
 
 ### Added

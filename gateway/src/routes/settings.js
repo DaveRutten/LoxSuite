@@ -4,6 +4,7 @@ const mqttClient = require('../mqttClient');
 const { requirePermission } = require('../middleware/requirePermission');
 const { invalidateTimezoneCache } = require('../dateFormat');
 const { logSystemEvent } = require('../auditLog');
+const { encrypt, decrypt } = require('../secretCrypto');
 
 function isValidTimezone(tz) {
   try {
@@ -17,7 +18,11 @@ function isValidTimezone(tz) {
 const router = express.Router();
 
 function loadSettings() {
-  return db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
+  const settings = db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
+  // Decrypted here (not left to each caller) since this is shown back in the broker settings
+  // form's own password field (settings.ejs) as well as used to actually connect — every reader
+  // needs the real value either way, unlike Miniserver/SSO secrets which are never displayed back.
+  return settings ? { ...settings, password: decrypt(settings.password) } : settings;
 }
 
 function loadGatewaySettings() {
@@ -87,7 +92,7 @@ router.post('/broker', requirePermission('settings', 'edit'), (req, res) => {
 
   db.prepare(
     'UPDATE mqtt_settings SET host = ?, port = ?, username = ?, password = ?, use_tls = ? WHERE id = 1'
-  ).run(host, Number(port), username || null, password || null, use_tls ? 1 : 0);
+  ).run(host, Number(port), username || null, encrypt(password) || null, use_tls ? 1 : 0);
   db.prepare('UPDATE gateway_settings SET auto_create_loxone_mappings = ? WHERE id = 1').run(auto_create_enabled ? 1 : 0);
 
   mqttClient.reconnect();

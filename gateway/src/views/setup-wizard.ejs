@@ -21,9 +21,30 @@
       <span>LoxSuite setup</span>
     </div>
 
+    <%
+      // "Complete" only has a real meaning for steps with an evaluable saved/valid state — welcome,
+      // password, timezone and done have no such concept (leaving them at their defaults is just as
+      // valid as changing them), so they never show a checkmark, current-step highlighting aside.
+      function stepComplete(s) {
+        if (s === 'miniserver') return miniserverCount > 0;
+        if (s === 'sso') return !sso.enabled || !!(sso.issuer_url && sso.client_id);
+        if (s === 'backup') {
+          var localOk = !backupSettings.enabled || !!(backupSettings.schedule_cron && backupSettings.retention_count);
+          var rcloneOk = !backupSettings.rclone_enabled || !!backupSettings.rclone_remote;
+          return localOk && rcloneOk;
+        }
+        if (s === 'notifications') return channelCount > 0;
+        return false;
+      }
+    %>
     <div class="tabs" style="justify-content:center; margin-bottom:1.25rem;">
       <% steps.forEach(function (s, i) { %>
-        <span class="badge <%= s === step ? 'badge-ok' : 'badge-neutral' %>"><%= i + 1 %>. <%= s.charAt(0).toUpperCase() + s.slice(1) %></span>
+        <a href="/setup?step=<%= s %>" style="text-decoration:none;">
+          <span class="badge <%= s === step ? 'badge-ok' : 'badge-neutral' %>">
+            <% if (stepComplete(s)) { %><span style="color:var(--success);"><%- icon('check', { size: 11 }) %></span><% } %>
+            <%= i + 1 %>. <%= s.charAt(0).toUpperCase() + s.slice(1) %>
+          </span>
+        </a>
       <% }) %>
     </div>
 
@@ -97,39 +118,260 @@
           <p class="hint">You already have <%= miniserverCount %> Miniserver<%= miniserverCount === 1 ? '' : 's' %> configured — nothing more needed here.</p>
         <% } else { %>
         <p class="hint">Leave every field blank to skip this and add one later from the Miniservers page.</p>
-        <form method="post" action="/setup/miniserver" id="miniserver-form" class="form-grid">
+        <form method="post" action="/setup/miniserver" id="miniserver-form">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <div><label>Name</label><input type="text" name="name"></div>
-          <div><label>Host / IP</label><input type="text" name="host"></div>
-          <div><label>HTTP port</label><input type="number" name="http_port" value="80"></div>
-          <div>
-            <label>HTTPS</label>
-            <select name="use_https">
-              <option value="">No</option>
-              <option value="1">Yes (self-signed certificate allowed)</option>
-            </select>
+          <div class="form-grid">
+            <div><label>Name</label><input type="text" name="name"></div>
+            <div><label>Host / IP</label><input type="text" name="host"></div>
+            <div><label>HTTP port</label><input type="number" name="http_port" value="80"></div>
+            <div>
+              <label>HTTPS</label>
+              <select name="use_https">
+                <option value="">No</option>
+                <option value="1">Yes (self-signed certificate allowed)</option>
+              </select>
+            </div>
+            <div><label>Username</label><input type="text" name="username"></div>
+            <div><label>Password</label><input type="password" name="password"></div>
           </div>
-          <div><label>Username</label><input type="text" name="username"></div>
-          <div><label>Password</label><input type="password" name="password"></div>
+
+          <h3 style="margin-top:1.25rem;">Features (optional)</h3>
+          <div class="form-grid">
+            <div><label>UDP port (optional)</label><input type="number" name="udp_port"></div>
+            <div>
+              <label>External URL (optional)</label>
+              <input type="text" name="external_url" placeholder="https://myhome.dyndns.org:8080">
+            </div>
+          </div>
+          <p class="hint" style="margin-top:0.5rem;">
+            <strong>UDP port</strong> is the port <em>on the Miniserver itself</em> that Loxone
+            listens on for Virtual UDP Output commands sent by this gateway (configured in Loxone
+            Config's Virtual UDP Output, not here). <strong>External URL</strong> is used as a
+            fallback whenever the local Host/IP can't be reached &mdash; Monitor polling, Common
+            commands, log fetching and testing all try it automatically if the local address fails.
+          </p>
         </form>
         <% } %>
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
-          <a href="/setup?step=done"><button type="button" class="btn-soft">Skip</button></a>
-          <% if (miniserverCount > 0) { %>
-            <a href="/setup?step=done"><button type="button" class="primary" style="width:auto;">Continue</button></a>
-          <% } else { %>
-            <button type="submit" form="miniserver-form" class="primary" style="width:auto;">Add &amp; continue</button>
-          <% } %>
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
+          <a href="/setup?step=sso"><button type="button" class="btn-soft">Skip</button></a>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <% if (miniserverCount === 0) { %>
+              <button type="button" id="ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
+            <% } %>
+            <% if (miniserverCount > 0) { %>
+              <a href="/setup?step=sso"><button type="button" class="primary" style="width:auto;">Continue</button></a>
+            <% } else { %>
+              <button type="submit" form="miniserver-form" class="primary" style="width:auto;">Add &amp; continue</button>
+            <% } %>
+          </div>
         </div>
+        <div id="ms-test-result" style="margin-top:0.6rem;"></div>
+      <% } %>
+
+      <% if (step === 'sso') { %>
+        <h2>Single Sign-On</h2>
+        <p class="hint">
+          Optional &mdash; lets people log in with a self-hosted
+          <a href="https://pocket-id.org" target="_blank" rel="noopener">Pocket ID</a> instance,
+          alongside the username/password login you already have. Leave Enabled off to skip this
+          and set it up later from Administration.
+        </p>
+        <form method="post" action="/setup/sso" id="sso-form">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="form-grid">
+            <div>
+              <label>Enabled</label>
+              <%- toggleSwitch('enabled', sso.enabled, { id: 'sso-enabled-toggle' }) %>
+            </div>
+          </div>
+          <div id="sso-properties" class="form-grid" style="margin-top:0.85rem; <%= sso.enabled ? '' : 'display:none;' %>">
+            <div>
+              <label>Issuer URL</label>
+              <input type="text" name="issuer_url" value="<%= sso.issuer_url || '' %>" placeholder="https://pocket-id.example.com">
+            </div>
+            <div>
+              <label>Client ID</label>
+              <input type="text" name="client_id" value="<%= sso.client_id || '' %>">
+            </div>
+            <div>
+              <label>Client secret</label>
+              <input type="password" name="client_secret" placeholder="<%= sso.client_secret ? 'Leave blank to keep the current secret' : '' %>">
+            </div>
+            <div>
+              <label>Default Access Role for new SSO users</label>
+              <select name="default_role_id">
+                <option value="">-</option>
+                <% roles.forEach(r => { %>
+                  <option value="<%= r.id %>" <%= r.id === sso.default_role_id ? 'selected' : '' %>><%= r.name %></option>
+                <% }) %>
+              </select>
+            </div>
+          </div>
+        </form>
+        <script>
+          (function () {
+            var toggle = document.getElementById('sso-enabled-toggle');
+            var properties = document.getElementById('sso-properties');
+            if (toggle && properties) {
+              toggle.addEventListener('change', function () {
+                properties.style.display = toggle.checked ? '' : 'none';
+              });
+            }
+          })();
+        </script>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
+          <a href="/setup?step=backup"><button type="button" class="btn-soft">Skip</button></a>
+          <button type="submit" form="sso-form" class="primary" style="width:auto;">Save &amp; continue</button>
+        </div>
+      <% } %>
+
+      <% if (step === 'backup') { %>
+        <h2>Backups</h2>
+        <p class="hint">
+          Optional &mdash; backs up the gateway's own database on a schedule, and/or additionally
+          copies every backup offsite via <a href="https://rclone.org" target="_blank" rel="noopener">rclone</a>.
+          Leave both Enabled toggles off to skip this and set it up later from Administration.
+        </p>
+        <form method="post" action="/setup/backup" id="backup-form">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <h3>Local schedule</h3>
+          <div class="form-grid">
+            <div>
+              <label>Enabled</label>
+              <%- toggleSwitch('enabled', backupSettings.enabled, { id: 'backup-enabled-toggle' }) %>
+            </div>
+          </div>
+          <div id="backup-properties" class="form-grid" style="margin-top:0.85rem; <%= backupSettings.enabled ? '' : 'display:none;' %>">
+            <div>
+              <label>Cron expression</label>
+              <input type="text" name="schedule_cron" value="<%= backupSettings.schedule_cron %>" placeholder="0 3 * * *">
+            </div>
+            <div>
+              <label>Keep last</label>
+              <input type="number" name="retention_count" min="1" value="<%= backupSettings.retention_count %>">
+            </div>
+          </div>
+          <p id="backup-cron-hint" class="hint" style="margin-top:0.5rem; <%= backupSettings.enabled ? '' : 'display:none;' %>">
+            Standard 5-field cron (minute hour day month weekday). <code>0 3 * * *</code> = every day at 03:00.
+          </p>
+
+          <h3 style="margin-top:1.25rem;">Offsite copy (rclone)</h3>
+          <div class="form-grid">
+            <div>
+              <label>Enabled</label>
+              <%- toggleSwitch('rclone_enabled', backupSettings.rclone_enabled, { id: 'rclone-enabled-toggle' }) %>
+            </div>
+          </div>
+          <div id="rclone-properties" style="<%= backupSettings.rclone_enabled ? '' : 'display:none;' %>">
+            <div class="form-grid" style="margin-top:0.85rem;">
+              <div>
+                <label>Remote</label>
+                <input type="text" name="rclone_remote" value="<%= backupSettings.rclone_remote || '' %>" placeholder="myremote:loxsuite-backups">
+              </div>
+            </div>
+            <div style="margin-top:0.85rem;">
+              <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);">rclone.conf contents</label>
+              <textarea name="rclone_config" rows="5" placeholder="[myremote]&#10;type = s3&#10;..." style="width:100%; font-family:'SF Mono', Consolas, monospace; font-size:0.82rem; padding:0.5rem 0.6rem; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text);"><%= backupSettings.rclone_config || '' %></textarea>
+              <p class="hint" style="margin-top:0.35rem;">
+                Generated by running <code>rclone config</code> anywhere convenient and pasting the
+                result here. Test the connection any time from Administration &rarr; Backups once saved.
+              </p>
+            </div>
+          </div>
+        </form>
+        <script>
+          (function () {
+            var backupToggle = document.getElementById('backup-enabled-toggle');
+            var backupProperties = document.getElementById('backup-properties');
+            var backupCronHint = document.getElementById('backup-cron-hint');
+            if (backupToggle) {
+              backupToggle.addEventListener('change', function () {
+                backupProperties.style.display = backupToggle.checked ? '' : 'none';
+                backupCronHint.style.display = backupToggle.checked ? '' : 'none';
+              });
+            }
+            var rcloneToggle = document.getElementById('rclone-enabled-toggle');
+            var rcloneProperties = document.getElementById('rclone-properties');
+            if (rcloneToggle) {
+              rcloneToggle.addEventListener('change', function () {
+                rcloneProperties.style.display = rcloneToggle.checked ? '' : 'none';
+              });
+            }
+          })();
+        </script>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
+          <a href="/setup?step=notifications"><button type="button" class="btn-soft">Skip</button></a>
+          <button type="submit" form="backup-form" class="primary" style="width:auto;">Save &amp; continue</button>
+        </div>
+      <% } %>
+
+      <% if (step === 'notifications') { %>
+        <h2>Notifications</h2>
+        <p class="hint">
+          Optional &mdash; add a channel to send alerts to (Teams, Slack, Telegram, Email, or
+          anything else <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noopener">Apprise</a>
+          supports). Leave both fields blank to skip this. Alert rules (which Monitor, which
+          threshold, ...) are set up afterwards from Administration &rarr; Notifications, once you
+          have Monitors and Miniservers to point them at.
+        </p>
+        <% if (channelCount > 0) { %>
+          <p class="hint">You already have <%= channelCount %> channel<%= channelCount === 1 ? '' : 's' %> configured.</p>
+        <% } %>
+        <form method="post" action="/setup/notifications" id="notifications-form">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="form-grid">
+            <div><label>Name</label><input type="text" name="name" placeholder="e.g. Family Teams"></div>
+            <div><label>Apprise URL</label><input type="text" name="url" placeholder="msteams://TokenA/TokenB/TokenC/"></div>
+          </div>
+        </form>
+        <script>
+          (function () {
+            var form = document.getElementById('notifications-form');
+            var testBtn = document.getElementById('notif-test-btn');
+            var testResult = document.getElementById('notif-test-result');
+            if (form && testBtn) {
+              testBtn.addEventListener('click', function () {
+                var data = new FormData(form);
+                var url = data.get('url');
+                if (!url) {
+                  testResult.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Fill in an Apprise URL first.</p>';
+                  return;
+                }
+                testResult.innerHTML = '<p class="hint" style="margin:0;">Testing&hellip;</p>';
+                // Content-Type: application/json exempts this from the CSRF form-token check
+                // server-side (see middleware/csrf.js), same as the Miniserver step's own Test button.
+                fetch('/setup/notifications/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: data.get('name'), url: url }) })
+                  .then(function (r) { return r.json(); })
+                  .then(function (data) {
+                    if (data.error || data.ok === false) {
+                      testResult.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">' + (data.error || 'Test failed.') + '</p>';
+                      return;
+                    }
+                    testResult.innerHTML = '<p class="hint" style="margin:0; color:var(--success);">Test message sent.</p>';
+                  })
+                  .catch(function () {
+                    testResult.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
+                  });
+              });
+            }
+          })();
+        </script>
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
+          <a href="/setup?step=done"><button type="button" class="btn-soft">Skip</button></a>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <button type="button" id="notif-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
+            <button type="submit" form="notifications-form" class="primary" style="width:auto;">Add &amp; continue</button>
+          </div>
+        </div>
+        <div id="notif-test-result" style="margin-top:0.6rem;"></div>
       <% } %>
 
       <% if (step === 'done') { %>
         <h2>All set</h2>
         <p class="hint">
-          You can dig further into Notifications (Teams/Slack/Telegram/Email alerts) and offsite
-          backups (rclone) any time under Administration &mdash; both are optional and skipped
-          here on purpose, since they need details specific to your own setup. Run this wizard
-          again any time from Settings.
+          You can fine-tune everything you just set up, and dig into Notification rules (which
+          Monitor, which threshold, ...), any time from Administration. Run this wizard again any
+          time from Settings.
         </p>
         <form method="post" action="/setup/finish">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">

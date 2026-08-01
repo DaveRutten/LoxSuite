@@ -7,6 +7,7 @@ const AdmZip = require('adm-zip');
 const cronParser = require('cron-parser');
 const db = require('./db');
 const { notifyBackupFailed } = require('./notifications');
+const { encrypt, decrypt } = require('./secretCrypto');
 
 // Recomputed independently rather than imported from db.js, same convention already used by
 // mosquittoLog.js/loxone.js for their own env-configured paths (see MOSQUITTO_LOG_PATH there) —
@@ -38,12 +39,16 @@ function timestampForFilename(date) {
 }
 
 function getSettings() {
-  return db.prepare('SELECT * FROM backup_settings WHERE id = 1').get();
+  const settings = db.prepare('SELECT * FROM backup_settings WHERE id = 1').get();
+  // Decrypted here so every reader (the admin-backup.ejs textarea, routes/setup.js's wizard step,
+  // and writeTempRcloneConfig below) gets the real rclone.conf contents without its own call.
+  return settings ? { ...settings, rclone_config: decrypt(settings.rclone_config) } : settings;
 }
 
 function updateSettings(fields) {
   const current = getSettings();
   const next = { ...current, ...fields };
+  if (next.rclone_config) next.rclone_config = encrypt(next.rclone_config);
   db.prepare(
     `UPDATE backup_settings SET enabled = ?, schedule_cron = ?, retention_count = ?, include_mqtt_config = ?,
      last_run_at = ?, last_status = ?, last_error = ?,

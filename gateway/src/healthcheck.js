@@ -2,6 +2,7 @@ const db = require('./db');
 const { fetchMiniserver, miniserverBaseUrl, insecureAgent } = require('./loxone');
 const { checkMiniserverStatus } = require('./notifications');
 const { getStructure } = require('./loxoneStructure');
+const { decrypt } = require('./secretCrypto');
 
 const TIMEOUT_MS = 4000;
 
@@ -9,7 +10,7 @@ const TIMEOUT_MS = 4000;
 // report each candidate's own reachability separately, unlike fetchMiniserver's combined result
 // used for the plain online/offline status).
 async function testAddress(miniserver, base, dispatcher, path) {
-  const auth = Buffer.from(`${miniserver.username}:${miniserver.password}`).toString('base64');
+  const auth = Buffer.from(`${miniserver.username}:${decrypt(miniserver.password)}`).toString('base64');
   const start = Date.now();
   try {
     const res = await fetch(`${base}${path}`, {

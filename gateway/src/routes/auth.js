@@ -31,13 +31,28 @@ const router = express.Router();
 // Password guessing is the only real brute-force surface here — SSO login has no password to
 // guess, and its own external IdP already rate-limits itself. Keyed on IP only (no per-username
 // tracking), so it caps how fast any one client can try passwords regardless of which account.
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: 'Too many login attempts. Please wait a few minutes and try again.',
-});
+// Configurable from Settings -> General (routes/settings.js) — express-rate-limit v7 lets `max`
+// vary per-request via a function, but `windowMs` is a plain fixed number at construction time, so
+// changing the window means building a brand new limiter. reloadLoginLimiter() does that and
+// reassigns the module-level reference; the route below calls through it indirectly (`(req, res,
+// next) => loginLimiter(req, res, next)`, not `loginLimiter` itself) so it always dispatches to
+// whichever instance is current instead of the one that existed at startup.
+function buildLoginLimiter() {
+  const settings = db.prepare('SELECT login_rate_limit_max, login_rate_limit_window_minutes FROM gateway_settings WHERE id = 1').get();
+  return rateLimit({
+    windowMs: (settings?.login_rate_limit_window_minutes ?? 15) * 60 * 1000,
+    max: settings?.login_rate_limit_max ?? 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many login attempts. Please wait a few minutes and try again.',
+  });
+}
+
+let loginLimiter = buildLoginLimiter();
+
+function reloadLoginLimiter() {
+  loginLimiter = buildLoginLimiter();
+}
 
 router.get('/login', (req, res) => {
   res.render('login', {
@@ -48,7 +63,7 @@ router.get('/login', (req, res) => {
   });
 });
 
-router.post('/login', loginLimiter, (req, res) => {
+router.post('/login', (req, res, next) => loginLimiter(req, res, next), (req, res) => {
   const { username, password, remember } = req.body;
 
   if (!localLoginAllowed(req)) {
@@ -165,4 +180,7 @@ router.get('/auth/sso/callback', async (req, res) => {
   }
 });
 
+// Attached to the router itself (rather than exporting {router, reloadLoginLimiter}) since
+// server.js already does `app.use(authRoutes)` expecting a router, not a wrapper object.
+router.reloadLoginLimiter = reloadLoginLimiter;
 module.exports = router;

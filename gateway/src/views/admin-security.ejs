@@ -3,9 +3,9 @@
 <div class="tabs">
   <a href="/admin/users">Users</a>
   <a href="/admin/roles">Access Roles</a>
-  <a class="active" href="/admin/sso">Single Sign-On</a>
   <a href="/admin/backup">Backups</a>
   <a href="/admin/notifications">Notifications</a>
+  <a class="active" href="/admin/security">Security</a>
 </div>
 
 <% if (error) { %>
@@ -15,15 +15,42 @@
   <p class="hint" style="color: var(--success);">Saved.</p>
 <% } %>
 
-<p class="hint">
-  Lets people log in with a self-hosted <a href="https://pocket-id.org" target="_blank" rel="noopener">Pocket ID</a>
-  instance, alongside (not instead of) the existing username/password login. The first time someone
-  signs in via Pocket ID, an account is created for them automatically with the default Access Role
-  below &mdash; pick something with limited permissions unless you want every SSO user to start out
-  as an administrator.
-</p>
+<div class="card">
+  <h2>Login rate limit</h2>
+  <p class="hint">Limits how fast one IP address can try passwords on the login page.</p>
+
+  <form method="post" action="/admin/security" id="login-rate-limit-form" class="form-grid">
+    <div>
+      <label>Max login attempts</label>
+      <input type="number" name="login_rate_limit_max" min="1" value="<%= gatewaySettings.login_rate_limit_max %>" style="max-width:8rem;">
+    </div>
+    <div>
+      <label>Time window (minutes)</label>
+      <input type="number" name="login_rate_limit_window_minutes" min="1" value="<%= gatewaySettings.login_rate_limit_window_minutes %>" style="max-width:8rem;">
+    </div>
+  </form>
+  <p class="hint" style="margin-top:0.6rem;">
+    E.g. 10 attempts / 15 minutes means an 11th attempt from the same IP within 15 minutes of its
+    first is refused, with a "Too many login attempts" message, until the window rolls over.
+    Applies to local username/password login only — SSO isn't affected (Pocket ID rate-limits
+    itself).
+  </p>
+
+  <div style="margin-top:0.9rem;">
+    <button type="submit" form="login-rate-limit-form" class="btn-edit"><%- icon('edit') %> Save</button>
+  </div>
+</div>
 
 <div class="card">
+  <h2>Single Sign-On</h2>
+  <p class="hint">
+    Lets people log in with a self-hosted <a href="https://pocket-id.org" target="_blank" rel="noopener">Pocket ID</a>
+    instance, alongside (not instead of) the existing username/password login. The first time someone
+    signs in via Pocket ID, an account is created for them automatically with the default Access Role
+    below &mdash; pick something with limited permissions unless you want every SSO user to start out
+    as an administrator.
+  </p>
+
   <form method="post" action="/admin/sso">
     <div class="form-grid">
       <div>
@@ -67,8 +94,8 @@
       </div>
     </div>
 
-    <div id="sso-security" style="<%= sso.enabled ? '' : 'display:none;' %>">
-      <h2 style="margin-top:1.5rem;">Security</h2>
+    <div id="sso-fallback" style="<%= sso.enabled ? '' : 'display:none;' %>">
+      <h3 style="margin-top:1.5rem;">Local login fallback</h3>
       <label class="toggle-row">
         <input type="checkbox" name="local_login_disabled" <%= sso.local_login_disabled ? 'checked' : '' %>>
         <span>
@@ -91,11 +118,11 @@
     (function () {
       var toggle = document.getElementById('sso-enabled-toggle');
       var properties = document.getElementById('sso-properties');
-      var security = document.getElementById('sso-security');
+      var fallback = document.getElementById('sso-fallback');
       var saveRow = document.getElementById('sso-save-row');
       toggle.addEventListener('change', function () {
         properties.style.display = toggle.checked ? '' : 'none';
-        security.style.display = toggle.checked ? '' : 'none';
+        fallback.style.display = toggle.checked ? '' : 'none';
         saveRow.style.display = toggle.checked ? '' : 'none';
         // Turning it off has nothing left to fill in — save that state right away instead of
         // making it disappear along with the very button that would have persisted it. Turning it
@@ -104,13 +131,13 @@
       });
     })();
   </script>
-</div>
 
-<p class="hint">
-  In Pocket ID's client settings, register <code><%= baseUrl %>/auth/sso/callback</code> as the
-  <strong>Callback URL</strong>. If you also want LoxSuite to show up as a launchable app on the
-  Pocket ID home screen, set <code><%= baseUrl %>/</code> as the <strong>Client Launch URL</strong>
-  (the "User URL") &mdash; that's the address a signed-in user lands on.
-</p>
+  <p class="hint" style="margin-top:1rem;">
+    In Pocket ID's client settings, register <code><%= baseUrl %>/auth/sso/callback</code> as the
+    <strong>Callback URL</strong>. If you also want LoxSuite to show up as a launchable app on the
+    Pocket ID home screen, set <code><%= baseUrl %>/</code> as the <strong>Client Launch URL</strong>
+    (the "User URL") &mdash; that's the address a signed-in user lands on.
+  </p>
+</div>
 
 <%- include('partials/foot') %>

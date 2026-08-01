@@ -540,7 +540,7 @@
 </details>
 
 <details class="add-panel" id="help-admin">
-  <summary>Administration &mdash; Users, Access Roles, Single Sign-On, Backups, and Notifications</summary>
+  <summary>Administration &mdash; Users, Access Roles, Backups, Notifications, and Security</summary>
   <div class="add-panel-body">
     <p>Visible only to users whose Access Role has <strong>Administrator</strong> checked. Five tabs:</p>
     <ul>
@@ -557,16 +557,6 @@
         specifically so a role can never accidentally grant itself more power through it. Hiding a nav
         item or button a role can't use is a convenience; the actual enforcement happens on the server
         for every request, matrix or not.</li>
-      <li><strong>Single Sign-On</strong> &mdash; connect a self-hosted Pocket ID instance so people can log
-        in with it alongside the existing username/password login (SSO doesn't replace it). The first
-        time someone signs in via Pocket ID, an account is created for them automatically with whatever
-        Access Role you set as the default here &mdash; pick something limited unless you want every new
-        SSO user starting out as an administrator. When creating the OIDC client on the Pocket ID side,
-        the page shows the exact <strong>Callback URL</strong> to register
-        (<code>&lt;gateway-host&gt;/auth/sso/callback</code>); if you also want LoxSuite to show up as a
-        launchable app on the Pocket ID home screen, set its <strong>Client Launch URL</strong> &mdash;
-        labeled <strong>User URL</strong> in some Pocket ID versions &mdash; to the gateway's own address
-        (<code>http://&lt;gateway-host&gt;:5582/</code>).</li>
       <li><strong>Backups</strong> &mdash; back up the gateway's own database, optionally together with the
         MQTT broker's own config (dynamic-security.json <em>and</em> mosquitto.conf), into one downloadable
         <code>.zip</code>, additionally copied offsite via <a href="https://rclone.org" target="_blank" rel="noopener">rclone</a>
@@ -576,6 +566,17 @@
         <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener">Apprise</a> supports, for
         a Monitor crossing a threshold, a Miniserver or MQTT client going online/offline, or a backup
         failing. See below.</li>
+      <li><strong>Security</strong> &mdash; the login page's rate limit (max attempts and time window), and
+        Single Sign-On: connect a self-hosted Pocket ID instance so people can log in with it alongside
+        the existing username/password login (SSO doesn't replace it). The first time someone signs in
+        via Pocket ID, an account is created for them automatically with whatever Access Role you set as
+        the default here &mdash; pick something limited unless you want every new SSO user starting out
+        as an administrator. When creating the OIDC client on the Pocket ID side, the page shows the
+        exact <strong>Callback URL</strong> to register
+        (<code>&lt;gateway-host&gt;/auth/sso/callback</code>); if you also want LoxSuite to show up as a
+        launchable app on the Pocket ID home screen, set its <strong>Client Launch URL</strong> &mdash;
+        labeled <strong>User URL</strong> in some Pocket ID versions &mdash; to the gateway's own address
+        (<code>http://&lt;gateway-host&gt;:5582/</code>).</li>
     </ul>
     <p class="hint" style="margin-bottom:0;">
       The gateway always keeps at least one administrator: deleting, demoting, or reassigning the last

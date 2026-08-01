@@ -17,6 +17,57 @@ It provides:
 - **Logs**: live + persisted view of the Mosquitto broker log and each Miniserver's own log.
 - A web interface (with login) to manage all of the above — no manual JSON or config-file editing.
 
+## Screenshots
+
+<table>
+<tr>
+<td width="50%">
+
+**Dashboards** — chart, value, gauge and table panels, freely arranged and resized.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
+  <img src="docs/screenshots/dashboard-light.png" alt="A LoxSuite dashboard with chart, value and gauge panels">
+</picture>
+
+</td>
+<td width="50%">
+
+**Monitor** — any MQTT topic or Loxone value, charted over time with hover tooltips.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/monitor-detail-dark.png">
+  <img src="docs/screenshots/monitor-detail-light.png" alt="A Monitor detail page showing a temperature chart and grouped history table">
+</picture>
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Miniservers** — status, firmware version, and connection details at a glance.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/miniservers-dark.png">
+  <img src="docs/screenshots/miniservers-light.png" alt="The Miniservers page listing two online Miniservers">
+</picture>
+
+</td>
+<td width="50%">
+
+**Mappings** — MQTT topics bridged to Loxone Virtual Inputs, and back.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/mappings-dark.png">
+  <img src="docs/screenshots/mappings-light.png" alt="The MQTT to Loxone mappings page">
+</picture>
+
+</td>
+</tr>
+</table>
+
+*(Demo data — light/dark follows your system theme on GitHub.)*
+
 ## Quick start
 
 Everything runs as a single Docker container named `loxsuite` — Mosquitto and the gateway are
@@ -302,13 +353,6 @@ Visible only to users whose Access Role has **Administrator** checked. Five tabs
   separate from the matrix so a role can never grant itself more power through it. Hiding a nav
   item or button a role can't use is a UI convenience; the server enforces every request
   regardless.
-- **Single Sign-On** — connect a self-hosted [Pocket ID](https://pocket-id.org) instance so people
-  can log in with it *alongside* (not instead of) the existing username/password login. The first
-  sign-in via Pocket ID auto-creates an account with a configurable default Access Role. When
-  creating the OIDC client in Pocket ID, set the **Callback URL** to
-  `http://<gateway-host>:5582/auth/sso/callback` (shown on the Single Sign-On admin page) and, if
-  you want LoxSuite to appear as a launchable app on the Pocket ID home screen, set the **Client
-  Launch URL** ("User URL") to `http://<gateway-host>:5582/`.
 - **Backups** — schedule (a standard 5-field cron expression) or manually trigger a zip of the
   gateway's own SQLite database and, optionally, Mosquitto's dynamic-security/broker config, with a
   **Keep last** retention count so it can run indefinitely without slowly filling the disk. An
@@ -320,6 +364,13 @@ Visible only to users whose Access Role has **Administrator** checked. Five tabs
   services. **Channels** (a name plus one Apprise URL) and **Rules** (which event, and which
   channel(s) it fires to) are kept as two separate, reusable lists. Every user can *also* set up
   their own, entirely independent notifications — see Profile below.
+- **Security** — the login page's rate limit (max attempts and time window), and **Single Sign-On**:
+  connect a self-hosted [Pocket ID](https://pocket-id.org) instance so people can log in with it
+  *alongside* (not instead of) the existing username/password login. The first sign-in via Pocket ID
+  auto-creates an account with a configurable default Access Role. When creating the OIDC client in
+  Pocket ID, set the **Callback URL** to `http://<gateway-host>:5582/auth/sso/callback` (shown on
+  this page) and, if you want LoxSuite to appear as a launchable app on the Pocket ID home screen,
+  set the **Client Launch URL** ("User URL") to `http://<gateway-host>:5582/`.
 
 ### Profile
 
@@ -362,10 +413,12 @@ whatever channel(s) they already send to.
 - No way to autocomplete Virtual Input names — see the Miniservers section above.
 - MQTT device accounts all share one `client` role with access to every topic; there's no
   per-device topic restriction out of the box (build one yourself under **Roles** if you need it).
-- Device-specific value transforms beyond a plain translation table (e.g. RGBW colour conversion)
-  aren't built — the translation table covers most on/off- and enum-style cases.
-- Loxone-direct monitors are polling-based, not a websocket push subscription — see the Monitor
-  section above.
+- Loxone-direct monitors and Live Data both read from one persistent, shared websocket connection
+  per Miniserver (`getLiveValue` in `loxoneWebSocket.js`) rather than each opening its own — a
+  monitor's own poll interval controls how often a *history row* gets written from that live
+  cache, not how the value itself is obtained. A plain HTTP request
+  (`/jdev/sps/io/<uuid>`) is only used as a fallback for the states that endpoint actually answers
+  for, and only when nothing has been pushed onto the live connection yet.
 
 ## Data and persistence
 

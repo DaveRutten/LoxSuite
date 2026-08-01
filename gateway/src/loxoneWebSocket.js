@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const WebSocket = require('ws');
 const db = require('./db');
 const { fetchMiniserver } = require('./loxone');
+const { decrypt } = require('./secretCrypto');
 
 const RESCAN_TICK_MS = 60000;
 
@@ -74,7 +75,8 @@ function parseTextStates(buf, onValue) {
 
 class MiniserverLiveConnection {
   constructor(miniserver) {
-    this.miniserver = miniserver;
+    // Decrypted once here rather than at each of this.miniserver.password's two use sites below.
+    this.miniserver = { ...miniserver, password: decrypt(miniserver.password) };
     this.cache = new Map(); // uuid -> value (number or string)
     this.status = 'connecting';
     this.lastError = null;

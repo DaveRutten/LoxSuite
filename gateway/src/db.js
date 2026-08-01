@@ -3,6 +3,7 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const { AREAS, LOG_AREAS } = require('./permissionAreas');
+const { encrypt, isEncrypted } = require('./secretCrypto');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'gateway.db');
 
@@ -844,6 +845,21 @@ function migrateDefaultPanelDecimals() {
 
 migrateDefaultPanelDecimals();
 
+// Login brute-force throttle (see the loginLimiter in routes/auth.js) — was hardcoded at 10
+// attempts per 15 minutes; made configurable per a direct request. Keyed on IP only, so this
+// caps how fast any one client can try passwords, not any one account.
+function migrateLoginRateLimit() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('login_rate_limit_max')) {
+    db.exec('ALTER TABLE gateway_settings ADD COLUMN login_rate_limit_max INTEGER NOT NULL DEFAULT 10');
+  }
+  if (!columns.includes('login_rate_limit_window_minutes')) {
+    db.exec('ALTER TABLE gateway_settings ADD COLUMN login_rate_limit_window_minutes INTEGER NOT NULL DEFAULT 15');
+  }
+}
+
+migrateLoginRateLimit();
+
 // Break-glass: when SSO is set up and this is on, local username/password login is refused for
 // anyone NOT coming from a private/local network — forcing normal sign-in through SSO — while
 // still leaving a way in from the local network if the external IdP is ever unreachable. Off by
@@ -988,5 +1004,35 @@ function ensureAdminUser() {
 }
 
 ensureAdminUser();
+
+// Encrypts secrets that predate secretCrypto.js (see that file) and are still sitting in the
+// database as plain text — Miniserver passwords, the MQTT broker password, the SSO client secret,
+// and any saved rclone.conf. Every write site already encrypts going forward; this only ever
+// touches a value once (encrypt() itself is a no-op on an already-encrypted value, so this is safe
+// to run unconditionally on every boot, not just the first one after upgrading).
+function migrateEncryptExistingSecrets() {
+  const miniservers = db.prepare('SELECT id, password FROM miniservers').all();
+  const encryptMiniserver = db.prepare('UPDATE miniservers SET password = ? WHERE id = ?');
+  for (const ms of miniservers) {
+    if (ms.password && !isEncrypted(ms.password)) encryptMiniserver.run(encrypt(ms.password), ms.id);
+  }
+
+  const mqtt = db.prepare('SELECT password FROM mqtt_settings WHERE id = 1').get();
+  if (mqtt?.password && !isEncrypted(mqtt.password)) {
+    db.prepare('UPDATE mqtt_settings SET password = ? WHERE id = 1').run(encrypt(mqtt.password));
+  }
+
+  const sso = db.prepare('SELECT client_secret FROM sso_settings WHERE id = 1').get();
+  if (sso?.client_secret && !isEncrypted(sso.client_secret)) {
+    db.prepare('UPDATE sso_settings SET client_secret = ? WHERE id = 1').run(encrypt(sso.client_secret));
+  }
+
+  const backupSettings = db.prepare('SELECT rclone_config FROM backup_settings WHERE id = 1').get();
+  if (backupSettings?.rclone_config && !isEncrypted(backupSettings.rclone_config)) {
+    db.prepare('UPDATE backup_settings SET rclone_config = ? WHERE id = 1').run(encrypt(backupSettings.rclone_config));
+  }
+}
+
+migrateEncryptExistingSecrets();
 
 module.exports = db;

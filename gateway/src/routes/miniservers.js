@@ -4,6 +4,7 @@ const { checkMiniserver, runDetailedCheck } = require('../healthcheck');
 const { testConnection: testLiveConnection, resetConnection: resetLiveConnection } = require('../loxoneWebSocket');
 const { requirePermission } = require('../middleware/requirePermission');
 const { logSystemEvent } = require('../auditLog');
+const { encrypt } = require('../secretCrypto');
 
 const router = express.Router();
 
@@ -22,7 +23,7 @@ router.post('/', requirePermission('miniservers', 'edit'), async (req, res) => {
   const result = db.prepare(
     `INSERT INTO miniservers (name, host, http_port, udp_port, username, password, use_https, external_url)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, password, use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null);
+  ).run(name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, encrypt(password), use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null);
 
   logSystemEvent(`"${req.user.username}" added Miniserver "${name}" (${host}).`);
 
@@ -69,7 +70,7 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), (req, res) 
   // Blank password field = keep the existing one; the current value is never
   // shown back to the browser, so re-typing is only needed to actually change it.
   const existing = db.prepare('SELECT password FROM miniservers WHERE id = ?').get(req.params.id);
-  const newPassword = password ? password : existing?.password;
+  const newPassword = password ? encrypt(password) : existing?.password;
 
   db.prepare(
     `UPDATE miniservers SET name = ?, host = ?, http_port = ?, udp_port = ?, username = ?, password = ?, use_https = ?, external_url = ?

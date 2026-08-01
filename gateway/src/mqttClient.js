@@ -2,6 +2,7 @@ const mqtt = require('mqtt');
 const db = require('./db');
 const { forwardToLoxone } = require('./loxone');
 const { recordMqttValue } = require('./monitorCollector');
+const { decrypt } = require('./secretCrypto');
 
 const MAX_LOG = 200;
 const RATE_WINDOW_MS = 10000;
@@ -53,7 +54,8 @@ function recordMessage(topic, payload) {
 }
 
 function loadSettings() {
-  return db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
+  const settings = db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
+  return settings ? { ...settings, password: decrypt(settings.password) } : settings;
 }
 
 function shouldThrottle(mapping) {
