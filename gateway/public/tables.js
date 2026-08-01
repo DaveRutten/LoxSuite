@@ -189,7 +189,42 @@
       return sort.dir === 'desc' ? -cmp : cmp;
     });
 
-    rows.forEach(function (row) { tbody.appendChild(row); });
+    // A row's own expand-row(s) (Test/Rename/Reset-password/diagnostics/etc. — a single colspan'd
+    // <td>, so the length filter above never included any of them in `rows`) have to move along
+    // with it, or sorting strands every such detail panel wherever it originally sat instead of
+    // following its own row. There can be MORE than one in a row: collapseRowActions() (above)
+    // auto-collapses a >1-button Actions column into its own kebab + its own generated
+    // .expand-row, inserted as the main row's immediate next sibling — a row using both that AND
+    // a page-specific expand-row (e.g. Miniservers' diagnostics panel) ends up with two, back to
+    // back. Collected as a whole run here, not just a single nextElementSibling check, so neither
+    // gets left behind. Captured BEFORE this row's own appendChild — walking siblings after would
+    // read the row's brand new neighbors at the tbody's current end, not the ones it actually had.
+    //
+    // Any of them that's open is force-collapsed INSTANTLY (transition disabled, then a
+    // synchronous reflow via offsetHeight to make that actually take effect) rather than just
+    // removing .open and letting its normal 0.2s transition run — the appendChild() moves below
+    // fire immediately afterward, same tick, before a transition started by class removal alone
+    // would have painted a single frame. Without forcing it synchronous first, the move still
+    // carried the old "open" layout metrics with it, which is what the visible jump actually was.
+    // "Which row was expanded" isn't state worth preserving through a full reorder anyway (unlike,
+    // say, a half-filled edit form).
+    rows.forEach(function (row) {
+      var trailing = [];
+      var sib = row.nextElementSibling;
+      while (sib && sib.classList.contains('expand-row')) {
+        trailing.push(sib);
+        sib = sib.nextElementSibling;
+      }
+      trailing.forEach(function (expandRow) {
+        if (!expandRow.classList.contains('open')) return;
+        expandRow.style.transition = 'none';
+        expandRow.classList.remove('open');
+        void expandRow.offsetHeight; // forces layout now, with the collapsed state, before continuing
+        expandRow.style.transition = '';
+      });
+      tbody.appendChild(row);
+      trailing.forEach(function (expandRow) { tbody.appendChild(expandRow); });
+    });
   }
 
   function updateSortIndicators(table, sort) {

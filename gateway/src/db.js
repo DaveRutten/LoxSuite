@@ -858,6 +858,60 @@ function migrateHealthcheckIntervalSetting() {
 
 migrateHealthcheckIntervalSetting();
 
+// A third monitor source alongside mqtt/loxone: 'miniserver_diag' tracks one of the Miniserver
+// diagnostic fields healthcheck.js already polls on its own interval (CPU load, heap, task count)
+// — fed a reading whenever that cycle updates, never polled independently by this monitor itself.
+// Deliberately not another 'loxone' monitor: those poll /jdev/sps/io/<uuid> on their own schedule,
+// and CPU/heap/tasks aren't controls with a uuid at all, they're the plain HTTP commands
+// healthcheck.js's fetchSystemStats already reads — a second independent poll of the exact same
+// data on a different schedule would be pure waste. source_type's CHECK constraint can't be
+// ALTERed in place in SQLite, so this is the same create/copy/drop/rename dance every other
+// constraint change in this file uses.
+// heap_value_kb, not heap_free_kb — /jdev/sys/heap reports "X/totalKb" but Loxone doesn't document
+// whether X is free or used memory (see format.js's formatHeapStatus), so this doesn't assert an
+// interpretation the raw display itself doesn't either.
+function migrateMonitorDiagnosticSource() {
+  const columns = db.prepare('PRAGMA table_info(monitors)').all().map((c) => c.name);
+  if (columns.includes('diag_field')) return;
+
+  // DROP TABLE IF EXISTS first + the whole thing wrapped in one transaction: a container restart
+  // landing mid-migration (the multi-statement db.exec() below isn't atomic on its own — each
+  // statement commits independently) previously left monitors_new created-and-populated but never
+  // renamed, which then made every subsequent boot fail outright on "table monitors_new already
+  // exists" instead of retrying cleanly. db.transaction() rolls back everything on any failure,
+  // and the IF EXISTS guard means a stale leftover from before this fix shipped doesn't block a
+  // fresh attempt either.
+  const migrate = db.transaction(() => {
+    db.exec('DROP TABLE IF EXISTS monitors_new');
+    db.exec(`
+      CREATE TABLE monitors_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_type TEXT NOT NULL CHECK (source_type IN ('mqtt', 'loxone', 'miniserver_diag')),
+        label TEXT NOT NULL,
+        mqtt_topic TEXT,
+        miniserver_id INTEGER REFERENCES miniservers(id) ON DELETE CASCADE,
+        loxone_uuid TEXT,
+        diag_field TEXT CHECK (diag_field IN ('cpu_load', 'heap_value_kb', 'heap_total_kb', 'num_tasks')),
+        poll_interval_ms INTEGER NOT NULL DEFAULT 10000,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+
+      INSERT INTO monitors_new
+        (id, source_type, label, mqtt_topic, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at)
+      SELECT id, source_type, label, mqtt_topic, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at
+      FROM monitors;
+
+      DROP TABLE monitors;
+      ALTER TABLE monitors_new RENAME TO monitors;
+    `);
+  });
+  migrate();
+  console.log("Migrated monitors: added 'miniserver_diag' source type + diag_field column.");
+}
+
+migrateMonitorDiagnosticSource();
+
 // panel_type_defaults started out global (one row per panel_type, PRIMARY KEY(panel_type)) —
 // rescoped to per-dashboard (see the CREATE TABLE above) before this ever shipped in a release, so
 // there's no real installed base to preserve data for. Existing rows (from local testing only) are

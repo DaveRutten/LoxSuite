@@ -2,6 +2,45 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.1-alpha.1] - 2026-08-01
+
+### Added
+- **Monitor**: a new "Miniserver diagnostic" source — track CPU load, heap, or task count as a
+  regular monitor with history/chart/CSV export. Fed from the Miniservers page's own existing
+  background check, not polled a second time.
+- **Miniservers**: **Add to Dashboard** / **Add to Monitor** buttons on the diagnostics panel pin
+  CPU load, heap, and task count in one click — the former also adds each as a widget on the
+  shared home Dashboard, the latter only starts recording history without pinning anything.
+- A permanent "Demo (offline, for UI testing)" Miniserver, so empty/offline states have something
+  to show without needing a real, reachable device.
+
+### Fixed
+- The Miniservers diagnostics panel's **Check for update**, **Update to latest release**, **Add to
+  Dashboard**, and **Add to Monitor** buttons are now disabled (visible, not clickable) while that
+  Miniserver is offline, instead of staying active against a device that can't answer.
+- No button anywhere had visible `:disabled` styling — the explicit colors every button class sets
+  override the browser's own default dimming, so a disabled button (Update to latest release
+  before its first check, any button while offline, ...) looked exactly as clickable as an enabled
+  one, and still lit up on hover. All five button classes now dim and ignore hover while disabled.
+- Check for update / Update to latest release / Add to Dashboard / Add to Monitor now use the
+  app's existing color convention (purple/yellow/green) instead of a plain bordered gray, matching
+  every other action button in the app.
+- Sorting a table while a row's expand-panel was open could send the wrong row to the top, or
+  strand one behind — root-caused to the Miniservers row's own Actions-column overflow already
+  generating its own "..." kebab expand-row, so a row could carry two stacked expand-rows, not
+  one; the sort logic now re-pairs the whole chain instead of just the next sibling.
+- A Miniserver's diagnostics panel could render at a visibly different collapsed height than its
+  neighbor's — its card kept a fixed border and padding even while collapsed, which doesn't shrink
+  to zero just because the row's height/overflow do.
+- Duplicate `miniserver_id` form fields (a hidden one in the Loxone section, a visible one in the
+  new diagnostics section) could both submit at once on the Monitor "Add" form, producing "Too
+  many parameter values were provided" and a follow-on "monitor not found" for the partially
+  created row. Fixed by disabling whichever section isn't active, plus a defensive fallback
+  server-side.
+- A rebuild landing mid-migration could leave a stale `monitors_new` table behind, crash-looping
+  the gateway on every subsequent boot. The `miniserver_diag` migration now runs inside a
+  transaction with a `DROP TABLE IF EXISTS` guard, so a retry after an interrupted run is safe.
+
 ## [0.4.0-alpha.1] - 2026-08-01
 
 ### Added

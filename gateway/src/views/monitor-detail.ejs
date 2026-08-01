@@ -1,9 +1,12 @@
 <%- include('partials/head', { pageTitle: monitor.label, active: 'monitor' }) %>
 
 <p class="hint">
-  <%= monitor.source_type === 'mqtt' ? 'MQTT topic' : 'Loxone (direct, polled)' %>:
+  <%= monitor.source_type === 'mqtt' ? 'MQTT topic' : monitor.source_type === 'miniserver_diag' ? 'Miniserver diagnostic' : 'Loxone (direct, polled)' %>:
   <% if (monitor.source_type === 'mqtt') { %>
     <code><%= monitor.mqtt_topic %></code>
+  <% } else if (monitor.source_type === 'miniserver_diag') { %>
+    <%= monitor.miniserver_name || '-' %> &middot; <%= DIAG_FIELD_LABELS[monitor.diag_field] || monitor.diag_field %>
+    <span class="hint" style="margin:0;">(reuses the Miniservers page's own check, not polled separately)</span>
   <% } else { %>
     <%= monitor.miniserver_name || '-' %>, every <%= Math.round(monitor.poll_interval_ms / 1000) %>s
   <% } %>

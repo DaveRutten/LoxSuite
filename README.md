@@ -148,6 +148,9 @@ Track a value over time and view it as a chart and/or a raw table, with a CSV ex
   (`/jdev/sps/io/<uuid>`) on an interval you choose (5s&ndash;5min). This is polling, not a websocket
   push subscription — simpler to build and operate, at the cost of only-as-fresh-as-the-interval
   updates.
+- **Miniserver diagnostic** — CPU load, heap, or task count from a Miniserver's own diagnostics
+  (see Miniservers below). Fed from that page's existing background check, not polled a second
+  time — a reading only lands here on the same interval the Miniservers page already refreshes on.
 
 Readings are stored in SQLite and survive a gateway restart. Old readings are purged automatically
 after a configurable retention period (default 30 days, editable on the Monitor page). A monitor's
@@ -220,6 +223,17 @@ update** reads the current release channel (Loxone doesn't expose a plain yes/no
 available" flag over HTTP, so this can't tell you for certain whether you're already current) and
 unlocks **Update to latest release**, which sends a real update command — an actual firmware
 update and reboot on that Miniserver, with a confirmation dialog spelling out the consequences.
+**Add to Dashboard** / **Add to Monitor** pin CPU load, heap, and task count as history-tracking
+monitors in one click — the former also adds each as a widget on the shared home Dashboard, the
+latter only starts recording history without pinning anything. All four actions are disabled
+(visible, not clickable) while a Miniserver is offline.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/miniservers-diag-dark.png">
+  <img src="docs/screenshots/miniservers-diag-light.png" alt="A Miniserver row expanded to show its diagnostics panel: PLC state, CPU load, heap, task count, firmware date and update channel, with Check for update, Update to latest release, Add to Dashboard and Add to Monitor buttons">
+</picture>
+
+*(Demo data.)*
 
 An optional **External URL** (a full base address — DynDNS hostname with port, or a Loxone
 DNS/Cloud address) can also be set. Every HTTP call this gateway makes to that Miniserver — Virtual

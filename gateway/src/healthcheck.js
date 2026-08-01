@@ -2,6 +2,8 @@ const db = require('./db');
 const { fetchMiniserver, miniserverBaseUrl, insecureAgent } = require('./loxone');
 const { checkMiniserverStatus } = require('./notifications');
 const { decrypt } = require('./secretCrypto');
+const { recordMiniserverDiagValue } = require('./monitorCollector');
+const { parseHeapStatus } = require('./format');
 
 const TIMEOUT_MS = 4000;
 
@@ -149,6 +151,19 @@ async function checkMiniserver(miniserver) {
        WHERE id = ?`
     ).run('online', now, firmwareVersion, plcState, cpuLoad, heapStatus, numTasks, firmwareDate, miniserver.id);
     checkMiniserverStatus(miniserver, 'online');
+
+    // Feeds any Monitor tracking one of these fields (source_type 'miniserver_diag') — a no-op
+    // query if none exist for this Miniserver. Fed from THIS cycle's own fresh readings, not the
+    // COALESCE'd fallback values just written above — a cycle that failed to read e.g. cpu_load
+    // shouldn't re-feed a monitor with an unchanged reading it's already seen, just skip that one
+    // field this time (recordMiniserverDiagValue no-ops on null/undefined already).
+    recordMiniserverDiagValue(miniserver.id, 'cpu_load', cpuLoad !== null ? parseFloat(cpuLoad) : null);
+    recordMiniserverDiagValue(miniserver.id, 'num_tasks', numTasks);
+    const heap = parseHeapStatus(heapStatus);
+    if (heap) {
+      recordMiniserverDiagValue(miniserver.id, 'heap_value_kb', heap.firstKb);
+      recordMiniserverDiagValue(miniserver.id, 'heap_total_kb', heap.totalKb);
+    }
   } catch (err) {
     db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = ? WHERE id = ?')
       .run('offline', now, err.message, miniserver.id);

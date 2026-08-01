@@ -23,6 +23,7 @@
           <select name="source_type" id="source-type-select">
             <option value="mqtt">MQTT topic</option>
             <option value="loxone">Loxone (direct, polled)</option>
+            <option value="miniserver_diag">Miniserver diagnostic</option>
           </select>
         </div>
         <div><label>Label (optional)</label><input type="text" name="label" placeholder="Leave blank to auto-generate one"></div>
@@ -69,6 +70,32 @@
         </div>
       </div>
 
+      <div class="form-grid" id="miniserver-diag-fields" style="margin-top:0.85rem; display:none;">
+        <div>
+          <label>Miniserver</label>
+          <select name="miniserver_id" id="diag-miniserver-select" disabled>
+            <option value="">Select a Miniserver&hellip;</option>
+            <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
+          </select>
+        </div>
+        <div>
+          <label>Field</label>
+          <select name="diag_field">
+            <option value="cpu_load">CPU load</option>
+            <option value="heap_value_kb">Heap value</option>
+            <option value="heap_total_kb">Heap total</option>
+            <option value="num_tasks">Task count</option>
+          </select>
+        </div>
+      </div>
+      <p class="hint" id="miniserver-diag-hint" style="margin-top:0.5rem; display:none;">
+        Not polled independently &mdash; reuses whatever the
+        <a href="/miniservers">Miniservers</a> page's own background check already reads on its
+        own interval (Settings, default 60s), so adding one of these never adds extra load on the
+        Miniserver. "Heap value" is deliberately not labeled free/used: Loxone doesn't document
+        which of the two numbers it returns is which.
+      </p>
+
       <div style="margin-top:0.9rem;">
         <button type="submit" class="primary"><%- icon('plus') %> Add</button>
         <span class="hint" id="loxone-fetch-status" style="margin:0 0 0 0.6rem; display:inline;"></span>
@@ -110,6 +137,8 @@
           <td>
             <% if (m.source_type === 'mqtt') { %>
               MQTT &middot; <code><%= m.mqtt_topic %></code>
+            <% } else if (m.source_type === 'miniserver_diag') { %>
+              Diagnostic &middot; <%= m.miniserver_name || '-' %> <span class="hint" style="margin:0;">(reuses the Miniservers page's own check, not polled separately)</span>
             <% } else { %>
               Loxone &middot; <%= m.miniserver_name || '-' %> <span class="hint" style="margin:0;">(every <%= Math.round(m.poll_interval_ms / 1000) %>s)</span>
             <% } %>
@@ -156,6 +185,8 @@
                   <option value="300000" <%= m.poll_interval_ms === 300000 ? 'selected' : '' %>>5 minutes</option>
                 </select>
               </div>
+              <% } else if (m.source_type === 'miniserver_diag') { %>
+              <div><label>Field</label><input type="text" value="<%= m.miniserver_name %> &middot; <%= DIAG_FIELD_LABELS[m.diag_field] || m.diag_field %>" disabled title="The Miniserver/field can't be changed — delete and re-add to track a different one."></div>
               <% } else { %>
               <div><label>MQTT topic</label><input type="text" value="<%= m.mqtt_topic %>" disabled title="The topic itself can't be changed — delete and re-add to track a different topic."></div>
               <% } %>
@@ -178,17 +209,29 @@
     var sourceSelect = document.getElementById('source-type-select');
     var mqttFields = document.getElementById('mqtt-fields');
     var loxoneFields = document.getElementById('loxone-fields');
+    var diagFields = document.getElementById('miniserver-diag-fields');
+    var diagHint = document.getElementById('miniserver-diag-hint');
     var miniserverSelect = document.getElementById('loxone-miniserver-select');
     var miniserverIdInput = document.getElementById('loxone-miniserver-id');
     var stateSelect = document.getElementById('loxone-state-select');
     var stateFilter = document.getElementById('loxone-state-filter');
     var fetchStatus = document.getElementById('loxone-fetch-status');
+    var diagMiniserverSelect = document.getElementById('diag-miniserver-select');
     var allStates = [];
 
     sourceSelect.addEventListener('change', function () {
-      var isLoxone = sourceSelect.value === 'loxone';
-      mqttFields.style.display = isLoxone ? 'none' : '';
-      loxoneFields.style.display = isLoxone ? '' : 'none';
+      var value = sourceSelect.value;
+      mqttFields.style.display = value === 'mqtt' ? '' : 'none';
+      loxoneFields.style.display = value === 'loxone' ? '' : 'none';
+      diagFields.style.display = value === 'miniserver_diag' ? '' : 'none';
+      diagHint.style.display = value === 'miniserver_diag' ? '' : 'none';
+      // Both sections have their own miniserver_id field (this one, and diag-miniserver-select
+      // below) — a disabled field is never included in a form submission, which is what keeps the
+      // inactive one's value out of the POST instead of both landing in req.body.miniserver_id as
+      // an array (which is what "Too many parameter values were provided" from the INSERT further
+      // down actually was).
+      miniserverIdInput.disabled = value !== 'loxone';
+      diagMiniserverSelect.disabled = value !== 'miniserver_diag';
     });
 
     function renderStates(states) {

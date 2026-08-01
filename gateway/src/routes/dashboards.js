@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { getCurrentValue, reloadMqttMonitors } = require('../monitorCollector');
+const { getCurrentValue, reloadMqttMonitors, findOrCreateDiagMonitor, DIAG_FIELD_LABELS } = require('../monitorCollector');
 const { humanizeTopic } = require('../topicName');
 const { resolveRange, historyWindowClause, rangeToWindow, MAX_ROWS } = require('./monitor');
 const panelTypeDefaults = require('../panelTypeDefaults');
@@ -462,6 +462,40 @@ router.post('/quick-add-loxone', async (req, res) => {
     `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`
   ).run(sharedDashboard.id, label || uuid, maxPos + 1).lastInsertRowid;
   db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
+
+  res.redirect('/');
+});
+
+// Same shape as quick-add-topic/quick-add-loxone above, for a Miniserver's diagnostic fields (CPU
+// load, heap, task count). Powers the "Add to Dashboard" button next to
+// Check-for-update/Update-to-latest-release in the Miniservers page's own diagnostics panel — one
+// click pins all three at once (per user feedback: three separate per-stat "+" buttons read as
+// cluttered). Monitor creation/seeding itself is shared with routes/monitor.js's "Add to Monitor"
+// sibling button (same bundle, minus the panel) via monitorCollector's findOrCreateDiagMonitor.
+const QUICK_ADD_DIAG_FIELDS = ['cpu_load', 'heap_value_kb', 'num_tasks'];
+
+function addDiagWidget(sharedDashboardId, miniserver, diagField) {
+  const monitorId = findOrCreateDiagMonitor(miniserver, diagField);
+  const label = `${miniserver.name} - ${DIAG_FIELD_LABELS[diagField]}`;
+
+  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboardId).m;
+  const panelId = db.prepare(
+    `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`
+  ).run(sharedDashboardId, label, maxPos + 1).lastInsertRowid;
+  db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
+}
+
+router.post('/quick-add-diag', (req, res) => {
+  if (!(req.user && (req.user.isAdmin || req.user.permissions.dashboard?.edit))) return forbidden(res);
+
+  const miniserverId = Number(req.body.miniserver_id);
+  const sharedDashboard = db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
+  if (!miniserverId || !sharedDashboard) return res.redirect('/miniservers');
+
+  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(miniserverId);
+  if (!miniserver) return res.redirect('/miniservers');
+
+  QUICK_ADD_DIAG_FIELDS.forEach((diagField) => addDiagWidget(sharedDashboard.id, miniserver, diagField));
 
   res.redirect('/');
 });

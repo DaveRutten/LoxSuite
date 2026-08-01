@@ -3,10 +3,23 @@ const db = require('../db');
 const { humanizeTopic } = require('../topicName');
 const { getTopicOverview } = require('../mqttClient');
 const { getMonitorableStates } = require('../loxoneStructure');
-const { reloadMqttMonitors, getCurrentValue, clearCurrentValue } = require('../monitorCollector');
+const {
+  reloadMqttMonitors,
+  getCurrentValue,
+  clearCurrentValue,
+  findOrCreateDiagMonitor,
+  DIAG_FIELD_LABELS,
+} = require('../monitorCollector');
 const { requirePermission } = require('../middleware/requirePermission');
 
 const router = express.Router();
+
+// Bundle used by the Miniservers page's own "Add to Monitor" button (quick-add-diag below) — same
+// three fields its "Add to Dashboard" sibling in routes/dashboards.js pins, just without also
+// creating a dashboard panel. heap_total_kb is deliberately left out of both bundles: it's still
+// reachable one-at-a-time via the manual Add-monitor form above, but as a near-constant value
+// (Loxone doesn't document it changing) it's not worth a click on every quick-add.
+const QUICK_ADD_DIAG_FIELDS = ['cpu_load', 'heap_value_kb', 'num_tasks'];
 
 const RANGE_MS = {
   '1h': 60 * 60 * 1000,
@@ -167,12 +180,23 @@ router.get('/', (req, res) => {
     retentionDays: retention.monitor_retention_days,
     unusedCount,
     prefillTopic: req.query.topic || '',
+    DIAG_FIELD_LABELS,
     error: null,
   });
 });
 
 router.post('/', requirePermission('monitor', 'edit'), async (req, res) => {
-  const { source_type, label, topic, miniserver_id, loxone_uuid, poll_interval_ms } = req.body;
+  const { source_type, label, topic, loxone_uuid, diag_field, poll_interval_ms } = req.body;
+  // The Add form has two separate miniserver_id fields (one per source-type section, since only
+  // one section is ever relevant at a time) — normally kept out of the submit by disabling
+  // whichever one isn't active (monitor.ejs), but a request that somehow still carries both
+  // (JS-disabled browser, hand-crafted request, ...) would otherwise reach the INSERT below as an
+  // array and fail there with a much less clear "Too many parameter values were provided". Picking
+  // the first non-empty value here means the form's own field-disabling is a UX nicety, not the
+  // only thing standing between a slightly-unusual request and a confusing SQL error.
+  const miniserver_id = Array.isArray(req.body.miniserver_id)
+    ? req.body.miniserver_id.find((v) => v)
+    : req.body.miniserver_id;
 
   try {
     if (source_type === 'mqtt') {
@@ -197,6 +221,13 @@ router.post('/', requirePermission('monitor', 'edit'), async (req, res) => {
         `INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at)
          VALUES ('loxone', ?, ?, ?, ?, 1, ?)`
       ).run(resolvedLabel, miniserver_id, loxone_uuid, Number(poll_interval_ms) || 10000, new Date().toISOString());
+    } else if (source_type === 'miniserver_diag') {
+      if (!miniserver_id || !diag_field) throw new Error('Miniserver and diagnostic field are required.');
+      if (!DIAG_FIELD_LABELS[diag_field]) throw new Error('Unknown diagnostic field.');
+      const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(miniserver_id);
+      if (!miniserver) throw new Error('Miniserver not found.');
+
+      findOrCreateDiagMonitor(miniserver, diag_field, label);
     } else {
       throw new Error('Unknown source type.');
     }
@@ -212,14 +243,33 @@ router.post('/', requirePermission('monitor', 'edit'), async (req, res) => {
       .map((m) => ({ ...m, current: getCurrentValue(m.id) }));
     const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
     const retention = db.prepare('SELECT monitor_retention_days FROM gateway_settings WHERE id = 1').get();
+    const unusedCount = monitors.filter((m) => m.panelCount === 0).length;
     res.render('monitor', {
       monitors,
       miniservers,
       knownTopics: getTopicOverview().map((t) => t.topic),
       retentionDays: retention.monitor_retention_days,
+      unusedCount,
+      prefillTopic: '',
+      DIAG_FIELD_LABELS,
       error: err.message,
     });
   }
+});
+
+// Powers the Miniservers page's "Add to Monitor" button — same three diagnostic fields as that
+// page's "Add to Dashboard" button (routes/dashboards.js), just without also pinning a panel: for
+// when a value is worth tracking/charting but doesn't need to live on the Dashboard itself.
+router.post('/quick-add-diag', requirePermission('monitor', 'edit'), (req, res) => {
+  const miniserverId = Number(req.body.miniserver_id);
+  if (!miniserverId) return res.redirect('/miniservers');
+
+  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(miniserverId);
+  if (!miniserver) return res.redirect('/miniservers');
+
+  QUICK_ADD_DIAG_FIELDS.forEach((diagField) => findOrCreateDiagMonitor(miniserver, diagField));
+
+  res.redirect('/monitor');
 });
 
 router.post('/settings', requirePermission('monitor', 'edit'), (req, res) => {
@@ -364,6 +414,7 @@ router.get('/:id', (req, res) => {
     hasNumeric,
     truncated: rows.length >= MAX_ROWS,
     rangeUntilMs: until ? new Date(until).getTime() : null,
+    DIAG_FIELD_LABELS,
   });
 });
 

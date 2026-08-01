@@ -33,4 +33,15 @@ function formatHeapStatus(raw) {
   return `${a} MB / ${b} MB`;
 }
 
-module.exports = { formatCount, formatHeapStatus };
+// Same "usedOrFree/totalkB" string as formatHeapStatus above, but returning the two raw kB
+// numbers rather than a display string — used to feed a miniserver_diag monitor's heap_free_kb/
+// heap_total_kb fields (see monitorCollector.js's recordMiniserverDiagValue), which need actual
+// numbers to chart, not formatted text.
+function parseHeapStatus(raw) {
+  if (!raw) return null;
+  const match = /^(\d+)\/(\d+)kB$/.exec(raw.trim());
+  if (!match) return null;
+  return { firstKb: Number(match[1]), totalKb: Number(match[2]) };
+}
+
+module.exports = { formatCount, formatHeapStatus, parseHeapStatus };

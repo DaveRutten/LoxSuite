@@ -1108,10 +1108,26 @@ tr.expand-row.open td {
 tr.expand-row td > *:not(.confirm-bar) {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.2s var(--ease);
+  /* height/visibility/line-height are a stronger, belt-and-suspenders collapse on top of
+     max-height/overflow alone — two different expand-row contents (Miniservers' own diagnostics
+     card, and the plain .row-actions-expanded collapseRowActions() generates for an overflowing
+     Actions column) each independently measured a few px of residual height at rest, varying by
+     how much text/how many badges happened to be inside, despite both being max-height:0. A flex
+     child's own intrinsic min-height fighting an ancestor's max-height is a known way this shows
+     up. visibility is delayed by the same 0.2s the collapse itself takes, so closing still
+     animates instead of the content vanishing the instant .open is removed; opening flips
+     everything back immediately (delay: 0s) so nothing is hidden while growing in. */
+  height: 0;
+  visibility: hidden;
+  line-height: 0;
+  transition: max-height 0.2s var(--ease), visibility 0s linear 0.2s;
 }
 tr.expand-row.open td > *:not(.confirm-bar) {
   max-height: 40rem;
+  height: auto;
+  visibility: visible;
+  line-height: normal;
+  transition: max-height 0.2s var(--ease), visibility 0s linear 0s;
 }
 
 /* Long Command Recognition strings would otherwise force the whole table to
@@ -1632,6 +1648,25 @@ button.danger:hover { background: var(--danger); color: #fff; }
 }
 .btn-test:hover { background: var(--purple); color: #fff; }
 
+/* None of the color rules above change for :disabled on their own — explicit background/color/
+   border wins over whatever faint dimming the browser's own default UA stylesheet would otherwise
+   apply, so a disabled button (Update to latest release before its first Check, any of these
+   while a Miniserver is offline, ...) rendered exactly as vivid/clickable-looking as an enabled
+   one. opacity dims it uniformly regardless of which color class it is. The paired :disabled:hover
+   overrides matter too: :hover triggers from mouse position alone, disabled or not, so without
+   these a disabled button still flashed to its full-color hover fill on mouseover — pointer-events
+   would stop that too, but it also silently blocks the native title tooltip these buttons rely on
+   to explain why they're disabled, so each class's own resting colors are restated here instead. */
+button.primary:disabled, .btn-soft:disabled, .btn-edit:disabled, .btn-test:disabled, button.danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button.primary:disabled:hover { background: var(--accent-soft); color: var(--accent); }
+button.danger:disabled:hover { background: var(--danger-soft); color: var(--danger); }
+.btn-soft:disabled:hover { background: var(--surface-alt); color: var(--text-muted); }
+.btn-edit:disabled:hover { background: var(--warning-soft); color: var(--warning); }
+.btn-test:disabled:hover { background: var(--purple-soft); color: var(--purple); }
+
 /* Several of the classes above are also used on a <summary> (e.g. the Rename/Test toggles).
    <summary>'s native display is list-item (a block box) — list-style alone only hides the
    disclosure-triangle glyph, not the block-level sizing, which is what made these wrap onto two
@@ -1975,7 +2010,16 @@ main > .hint:first-child { margin-top: 0; }
    of a few loosely floating lines glued to the row above it. Stat grid on top, update buttons
    bottom-left below it (.row-actions, same bordered .btn-soft style used everywhere else in this
    app — not a separate visual treatment). */
-.ms-diagnostics-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem 1rem; }
+/* border/padding are collapsed to 0 by default and only restored in the .open state below — left
+   at their "open" values unconditionally, this card's own box (border-box or not) can never
+   actually reach the shared tr.expand-row td > *:not(.confirm-bar) rule's height:0: a border/
+   padding of non-zero width still occupies real layout height regardless of height:0 or
+   overflow:hidden (neither one shrinks a box's own border/padding, only its content). That
+   residual ~29px (1px+1px border + 0.85rem+0.85rem padding) is exactly the kind of "a few
+   stray px, varying with how much padding/border happens to apply" residual height the shared
+   rule's own comment describes — this card was the actual remaining source of it. */
+.ms-diagnostics-card { background: var(--surface-alt); border: 1px solid var(--border); border-width: 0; border-radius: var(--radius); padding: 0; transition: padding 0.2s var(--ease), border-width 0.2s var(--ease); }
+tr.expand-row.open td > .ms-diagnostics-card { border-width: 1px; padding: 0.85rem 1rem; }
 .ms-diagnostics { display: flex; flex-wrap: wrap; gap: 1.5rem; }
 .ms-diagnostics > div { min-width: 8rem; }
 /* Deliberately NOT .row-actions — see the comment on this div in miniservers.ejs for why (that
@@ -1984,43 +2028,16 @@ main > .hint:first-child { margin-top: 0; }
 .ms-update-actions { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.75rem; }
 .ms-update-result { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; }
 
-/* This card's real content height is much shorter than the shared tr.expand-row.open cap (40rem
-   — sized for far taller content elsewhere, like a Test row's value-suggest dropdown open). Left
-   at 40rem, the max-height transition reaches this card's actual height almost instantly and then
+/* This card's real content height is much shorter than the shared tr.expand-row.open cap (40rem —
+   sized for far taller content elsewhere, like a Test row's value-suggest dropdown open). Left at
+   40rem, the max-height transition reaches this card's actual height almost instantly and then
    just sits there for the rest of the 0.2s duration while the row's own padding keeps animating
-   separately — reads as two mismatched motions instead of one smooth one. Scoped to this specific
-   card rather than lowering the shared default, which has already been tuned against clipping
-   taller content on other pages.
-   visibility is a second, stronger layer on top of the shared rule's max-height:0/overflow:hidden
-   — belt-and-suspenders against this specific card ever reading as "still slightly visible" while
-   collapsed, whatever the exact cause (a flex child's own intrinsic min-height fighting an
-   ancestor's max-height is a known way this class of bug shows up). Delayed by the same 0.2s the
-   collapse transition itself takes, so closing still animates instead of the content vanishing
-   the instant .open is removed; opening flips it back to visible immediately (delay: 0s) so
-   nothing is hidden while growing in. */
-.ms-diagnostics-card {
-  visibility: hidden;
-  max-height: 0; /* restated (also set by the shared tr.expand-row td > *:not(.confirm-bar) rule)
-    so this card's own collapsed height never depends on cascade ordering between the two */
-  height: 0; /* a THIRD layer alongside max-height/visibility — two different Miniserver rows
-    measured different collapsed heights despite both being max-height:0 (one had short "-"
-    placeholders throughout, the other real longer text/badges that apparently still contributed
-    some residual intrinsic size even inside overflow:hidden, likely from the flex-wrap stat grid
-    inside). Explicit height:0 is a harder constraint than max-height for this and doesn't fight
-    the max-height transition, since the open state below switches it to auto. */
-  overflow: hidden;
-  line-height: 0; /* zeroes out any residual height from text metrics inside a 0-height box —
-    without this, collapsed rows measured a few px taller than others depending on font rendering */
-  transition: max-height 0.2s var(--ease), visibility 0s linear 0.2s;
-}
-tr.expand-row.open td > .ms-diagnostics-card {
-  max-height: 14rem;
-  height: auto;
-  visibility: visible;
-  line-height: normal; /* undoes the collapsed rule's line-height:0 — this card's own text needs
-    its real line-height back once actually shown, only the collapsed box needed it zeroed */
-  transition: max-height 0.2s var(--ease), visibility 0s linear 0s;
-}
+   separately — reads as two mismatched motions instead of one smooth one. Everything else about
+   collapsed/open state (visibility/height/line-height/overflow) now lives on the shared
+   tr.expand-row td > *:not(.confirm-bar) rule itself, not repeated here — that rule's own comment
+   covers why (the same residual-height issue also affects collapseRowActions()'s generated
+   .row-actions-expanded row, not just this card, so it belongs at the shared level). */
+tr.expand-row.open td > .ms-diagnostics-card { max-height: 14rem; }
 
 .help-highlight { animation: help-pulse 2.2s ease-out; }
 @keyframes help-pulse {
