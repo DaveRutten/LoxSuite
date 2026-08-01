@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.1-alpha.1] - 2026-08-01
+
+### Added
+- **Emergency password reset** — drop a `reset-password.txt` file (containing a username) into the
+  `Data` volume and restart; that account gets a fresh random password printed once to the
+  container log, and every session is signed out. For anyone locked out of the web UI without
+  container/database access.
+
+### Changed
+- Documented, more prominently, that `SESSION_SECRET` must stay the same across restarts once
+  set — it's now also the key secrets are encrypted with (see 0.2.0-alpha.1), not just the session
+  cookie signing key it always was. Changing it after secrets have already been encrypted makes
+  them unreadable (not lost — they can be re-entered once `SESSION_SECRET` is stable again).
+
 ## [0.2.0-alpha.1] - 2026-08-01
 
 ### Added

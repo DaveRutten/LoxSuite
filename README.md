@@ -404,7 +404,20 @@ whatever channel(s) they already send to.
 - **CSRF protection** — a synchronizer token, stamped onto every form client-side and checked on
   every state-changing request. Session cookies use `SameSite=Lax` (not `Strict`, which would
   break the Pocket ID SSO redirect callback).
-- **Login rate-limiting** — 10 attempts per 15 minutes per IP on `/login`.
+- **Login rate-limiting** — configurable from Administration &rarr; Security (default 10 attempts
+  per 15 minutes per IP on `/login`).
+- **Secrets encrypted at rest** — Miniserver passwords, the MQTT broker password, the SSO client
+  secret, and any saved `rclone.conf` are stored encrypted (AES-256-GCM) in `gateway.db`, not
+  plain text. The key is derived from `SESSION_SECRET` (see Environment variables below) — **that
+  value has to stay the same across restarts**, or these secrets become unreadable (they aren't
+  lost, just unrecoverable until you re-enter them). Set it once to a real random value and don't
+  change it afterward.
+- **Emergency password reset** — if you're ever locked out of the web UI, drop a file named
+  `reset-password.txt` into the same directory as `gateway.db` (the `Data` volume/path), containing
+  just the affected username. On the next boot, that account gets a fresh random password (printed
+  once to the container's own log, then the file is deleted), and every existing session is signed
+  out. Needs the same filesystem access restoring the database from a backup already does — this
+  doesn't add a new way in, just a safer one than editing the SQLite file by hand.
 - The web UI itself has no built-in TLS. If you expose it beyond a trusted LAN, put a
   TLS-terminating reverse proxy (Caddy, nginx, Traefik, ...) in front of it.
 
@@ -432,7 +445,7 @@ whatever channel(s) they already send to.
 |---|---|
 | `MQTT_USERNAME` / `MQTT_PASSWORD` | Account the gateway itself connects to the broker with. Created automatically on first boot. |
 | `MQTT_ADMIN_USERNAME` / `MQTT_ADMIN_PASSWORD` | Break-glass dynamic-security admin account, used once on first boot to bootstrap the `client` role and the gateway's own account. Keep the password somewhere safe. |
-| `SESSION_SECRET` | Random long string used to sign session cookies. |
+| `SESSION_SECRET` | Random long string used to sign session cookies *and* to derive the key that encrypts Miniserver/MQTT/SSO/rclone secrets at rest — set it once, keep it the same afterward (see Security above). |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Web UI admin account, created on first boot if the `users` table is empty. |
 | `DB_PATH` | SQLite database path (set in `docker-compose.yml`, rarely needs changing). |
 | `LOXONE_UDP_PORT` | UDP port the gateway listens on for Loxone &rarr; MQTT UDP mappings (default 11884). |

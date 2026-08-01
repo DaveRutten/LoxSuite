@@ -27,7 +27,7 @@
   <Category>Network:Other HomeAutomation:</Category>
   <WebUI>http://[IP]:[PORT:5582]/</WebUI>
   <TemplateURL/>
-  <Icon>https://raw.githubusercontent.com/DaveRutten/LoxSuite/main/gateway/public/favicon.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/DaveRutten/LoxSuite/main/unraid/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>

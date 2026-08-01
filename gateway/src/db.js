@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const { AREAS, LOG_AREAS } = require('./permissionAreas');
@@ -1004,6 +1005,39 @@ function ensureAdminUser() {
 }
 
 ensureAdminUser();
+
+// Emergency password reset: drop a file named reset-password.txt into the same directory as
+// gateway.db (the persisted /data volume, already reachable to anyone with filesystem access to
+// this deployment — SMB share, Unraid's file browser, ssh, ...), containing just the username on
+// its own line. Checked on every boot; a matching user gets a fresh random password, printed to
+// the container's own stdout log ONCE, and every existing session is invalidated (in case the
+// account was compromised, not just forgotten). The file is deleted immediately after, so this is
+// one-shot rather than a standing backdoor. Doesn't grant any access that direct sqlite3/DB access
+// wouldn't already — this only makes that same trust level safe and easy instead of hand-written
+// bcrypt commands via `docker exec`.
+function checkEmergencyPasswordReset() {
+  const resetFilePath = path.join(path.dirname(DB_PATH), 'reset-password.txt');
+  if (!fs.existsSync(resetFilePath)) return;
+
+  const username = fs.readFileSync(resetFilePath, 'utf8').trim();
+  fs.unlinkSync(resetFilePath); // one-shot, regardless of whether a matching user is found below
+
+  const user = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!user) {
+    console.warn(`reset-password.txt named "${username}", but no such user exists — nothing reset.`);
+    return;
+  }
+
+  const newPassword = crypto.randomBytes(9).toString('base64url'); // 12 chars, URL-safe
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(newPassword, 10), user.id);
+  db.prepare('DELETE FROM sessions').run();
+  console.log('==================================================================');
+  console.log(`Emergency password reset for "${username}": ${newPassword}`);
+  console.log('Log in with this once, then change it from Profile. Every existing session was signed out.');
+  console.log('==================================================================');
+}
+
+checkEmergencyPasswordReset();
 
 // Encrypts secrets that predate secretCrypto.js (see that file) and are still sitting in the
 // database as plain text — Miniserver passwords, the MQTT broker password, the SSO client secret,
