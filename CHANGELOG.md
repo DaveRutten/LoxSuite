@@ -2,6 +2,65 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.0-alpha.1] - 2026-08-02
+
+### Added
+- **Notification Center**: a bell icon next to Help, visible to every logged-in user, polling for
+  new events every 60s — opening it marks them read and links to a full history under the new
+  **Logs → Notifications** tab (its own permission area). Reuses the existing Apprise rule engine
+  for delivery and adds two events that only ever show up here: **Firmware changed** (a
+  Miniserver's reported version changed since the last check) and a per-rung **Notify** flag on any
+  threshold ladder (Monitor or Dashboard chart), which logs directly without needing a separate
+  rule/channel.
+- **Dashboard chart panels**: five new snapshot chart types — **Bar (compare)**, **Doughnut**,
+  **Pie**, **Polar Area**, **Radar** — comparing every selected monitor's *current* value side by
+  side, alongside the existing time-series line chart.
+- **Monitor detail page**: its chart is now as configurable as a Dashboard chart panel (appearance,
+  thresholds with the new Notify flag, axis, annotations), via a resizable edit drawer with a live
+  preview, plus save/reset-as-default across every Monitor's chart at once. The custom time-range
+  field accepts absolute dates too (`1-8-2026`, `1-8-2026/-now`), Grafana-style.
+- **Miniservers**: a **Generation** column (Miniserver Gen 1/Gen 2, Miniserver Go Gen 1/Gen 2,
+  Compact) — `msInfo.miniserverType` from the structure file, fetched once per Miniserver (a
+  physical device's generation never changes) and confirmed against Loxone's own official
+  Structure File documentation before shipping, not guessed.
+- **Loxone commands log**: a **+ Mapping** button on a "no matching mapping" rejected row (pre-fills
+  the Loxone → MQTT add form with that exact topic) and a **+ Reject** button on an accepted row
+  (disables its mapping on the spot).
+- **Backups**: offsite copy (rclone) gained graphical setup forms for **S3-compatible** (AWS S3,
+  MinIO, Wasabi, DigitalOcean Spaces, Cloudflare R2), **SFTP**, **WebDAV**, and **Backblaze B2** —
+  each builds the underlying `rclone.conf` from plain fields (passwords obscured via rclone's own
+  `rclone obscure`, never plain text) instead of requiring `rclone config` run elsewhere and pasted
+  in. Pasting a hand-written config directly is still there for any of rclone's other 65+ backends.
+- **Notifications**: a channel's **Service** picker gained graphical forms for **Email (SMTP)**,
+  **Telegram**, **Slack**, **Microsoft Teams**, and **Discord** — paste the webhook URL/bot
+  token/SMTP details the service itself gives you and the actual Apprise URL is built for you, with
+  a live preview before saving. **Custom (Apprise URL)** still takes any raw Apprise URL directly.
+- Per-table Columns menu: a column can now start hidden by default until explicitly shown (used for
+  Miniservers' Generation/UDP port/External URL, all sparse for a typical row) — previously every
+  column always started visible.
+- Any single database query taking 200ms or longer is now logged to the System log — groundwork
+  from investigating slow monitor-data loads on some self-hosting setups (e.g. Unraid), where a
+  slow underlying disk is a real, visible-this-way possibility.
+
+### Fixed
+- The Miniservers table sorted alphabetically by name instead of by when a Miniserver was added,
+  so a newly added one didn't reliably appear where expected.
+- The Miniservers table needed horizontal scrolling to see the Actions column on common laptop
+  widths, even before the new Generation column — tightened its padding and capped the Name column
+  with a click-to-expand ellipsis instead of letting one long name stretch the whole table.
+- A `required` form field inside a `hidden`-attribute ancestor (not the field itself) still blocked
+  submission in Chromium, silently, with no visible error — confirmed empirically while building
+  the new Notifications Service picker; toggling `required` itself, not just visibility, is what
+  actually fixes it.
+- The topbar notification bell wasn't visually centered in its circle (first a vertical offset, then
+  a separate ~5px horizontal one from a `margin-right` rule meant for icon+label buttons bleeding
+  onto icon-only ones) and was a slightly different, wrong shade of gray from the neighboring Help
+  button (a copy/paste typo: `var(--text)` instead of `var(--text-muted)`).
+- `loxoneStructure.js`'s `getStructure` (the in-memory, fetch-once-per-Miniserver structure cache)
+  wasn't actually exported, only its higher-level derived helpers were — meant the new Generation
+  lookup silently failed on its own require until this was found by exercising it against a real
+  Miniserver rather than trusting a clean container boot alone.
+
 ## [0.4.1-alpha.1] - 2026-08-01
 
 ### Added

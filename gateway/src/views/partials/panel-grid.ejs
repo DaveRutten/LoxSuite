@@ -4,45 +4,11 @@
   // canEditPanels is computed by the caller: personal dashboards are always editable by their
   // owner (no Access Role check), the shared one is gated by canEdit('dashboard').
 
-  // A <datalist> suggestion list is easy to miss — nothing marks the field as "has a dropdown"
-  // the way a <select> does, and whether clicking (rather than typing first) reveals every
-  // suggestion varies by browser. A real <select> is unambiguous: pick one of these, or the
-  // explicit "Custom..." option reveals a free-text field (wired up in the script below).
-  const UNIT_PRESETS = ['°C', '°F', '%', 'W', 'kW', 'kWh', 'V', 'A', 'Hz', 'hPa', 'lux', 'ppm', 'bar', 'm³', 'dB'];
-  function escAttr(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  }
-  function unitField(fieldName, currentValue) {
-    const isCustom = !!currentValue && !UNIT_PRESETS.includes(currentValue);
-    let html = `<select class="unit-select" data-unit-name="${fieldName}"><option value="">(none)</option>`;
-    UNIT_PRESETS.forEach((u) => {
-      html += `<option value="${escAttr(u)}" ${currentValue === u ? 'selected' : ''}>${u}</option>`;
-    });
-    html += `<option value="__custom__" ${isCustom ? 'selected' : ''}>Custom&hellip;</option></select>`;
-    html += `<input type="text" class="unit-custom-input" placeholder="Custom unit"
-      value="${isCustom ? escAttr(currentValue) : ''}" style="margin-top:0.3rem; width:100%; ${isCustom ? '' : 'display:none;'}">`;
-    return html;
-  }
+  // escAttr/unitField/thresholdField/annotationField moved to chartFieldHelpers.js (registered as
+  // global EJS helpers in server.js, alongside toggleSwitch/icon/serializeThresholdLadder etc.)
+  // once the Monitor detail page's own chart settings became a second consumer of them.
 
-  // Grafana-style threshold ladder (see dashboards.js's parseThresholdLadder/colorForThresholdLadder)
-  // — a dynamic add/remove-row builder (value + native color picker per row), not a hand-typed
-  // "value=color" textarea; that hidden textarea still exists underneath and is what actually
-  // submits (kept in the exact same format buildConfig() already parses), just filled in by the
-  // client-side script below instead of typed directly. Collapsed by default unless there's
-  // already at least one threshold configured, so an unused feature doesn't take up space.
-  function thresholdField(fieldName, ladder) {
-    return `<details class="threshold-builder-details" style="grid-column:1/-1;" ${ladder && ladder.length > 0 ? 'open' : ''}>
-      <summary>Threshold colors (optional)</summary>
-      <div class="threshold-builder" data-name="${fieldName}">
-        <div class="threshold-builder-rows"></div>
-        <button type="button" class="btn-soft threshold-add-row">${icon('plus')} Add threshold</button>
-        <textarea name="${fieldName}" class="threshold-builder-hidden" hidden>${escAttr(serializeThresholdLadder(ladder))}</textarea>
-        <p class="hint" style="margin:0.4rem 0 0;">A reading is colored using the highest threshold it meets or exceeds.</p>
-      </div>
-    </details>`;
-  }
-
-  // Same shape as thresholdField() above (a collapsible, dynamic add/remove-row builder over a
+  // Same shape as thresholdField() (a collapsible, dynamic add/remove-row builder over a
   // hidden textarea in the exact format dashboards.js already parses) but for an EXACT value
   // match rather than a >= ladder — each row is a value, the name to show instead of it, and an
   // optional color of its own (its own color wins over the threshold ladder for that one value,
@@ -55,21 +21,6 @@
         <button type="button" class="btn-soft value-mapping-add-row">${icon('plus')} Add value</button>
         <textarea name="${fieldName}" class="value-mapping-hidden" hidden>${escAttr(serializeValueMappings(mappings))}</textarea>
         <p class="hint" style="margin:0.4rem 0 0;">Shows the name instead of a matching reading's raw value — every row gets a color too, starting from a default you can pick your own instead of.</p>
-      </div>
-    </details>`;
-  }
-
-  // Chart-only: a labeled vertical line at a fixed moment in time (see parseAnnotations in
-  // dashboards.js) — same collapsible dynamic-row-builder shape as thresholdField/valueMappingField
-  // above, just keyed by a datetime instead of a reading value/threshold.
-  function annotationField(fieldName, list) {
-    return `<details class="threshold-builder-details" style="grid-column:1/-1;" ${list && list.length > 0 ? 'open' : ''}>
-      <summary>Annotations (optional)</summary>
-      <div class="annotation-builder" data-name="${fieldName}">
-        <div class="annotation-builder-rows"></div>
-        <button type="button" class="btn-soft annotation-add-row">${icon('plus')} Add annotation</button>
-        <textarea name="${fieldName}" class="annotation-builder-hidden" hidden>${escAttr(serializeAnnotations(list))}</textarea>
-        <p class="hint" style="margin:0.4rem 0 0;">Marks a specific moment on the chart with a vertical line and label &mdash; e.g. "heating turned on".</p>
       </div>
     </details>`;
   }
@@ -105,6 +56,14 @@
     return html;
   }
 %>
+<%
+  // Not deferred, and loaded here rather than down with chart.umd.min.js/monitor-chart.js at the
+  // bottom of this file — every builder below (threshold/value-mapping/annotation/chart-series)
+  // calls LoxColorPicker.buildPickerHtml() synchronously, as soon as the parser reaches each
+  // <script> block, so the module has to already be defined before the FIRST of those runs, not
+  // just before the page finishes loading.
+%>
+<script src="/color-picker.js"></script>
 <% if (canEditPanels) { %>
 <div id="panel-edit-backdrop" class="panel-edit-backdrop"></div>
 <details class="add-panel">
@@ -132,6 +91,17 @@
 
       <div class="form-grid" id="chart-fields" style="margin-top:0.85rem; display:none;">
         <div>
+          <label>Chart type</label>
+          <select name="chart_type" id="chart-type-select" class="chart-type-select">
+            <option value="line">Line</option>
+            <option value="bar_compare">Bar (compare)</option>
+            <option value="doughnut">Doughnut</option>
+            <option value="pie">Pie</option>
+            <option value="polar_area">Polar Area</option>
+            <option value="radar">Radar</option>
+          </select>
+        </div>
+        <div>
           <label>Legend</label>
           <select name="legend_position">
             <option value="auto" selected>Auto (only when &gt;1 monitor)</option>
@@ -142,21 +112,36 @@
             <option value="off">Off</option>
           </select>
         </div>
-        <div><label>Y-axis unit (optional)</label><%- unitField('unit_chart', '') %></div>
-        <div><label>Stepped line</label><%- toggleSwitch('stepped_line', false) %></div>
-        <div><label>Show points on line</label><%- toggleSwitch('show_points', false) %></div>
-        <div><label>Fill area under line</label><%- toggleSwitch('fill_area', false) %></div>
-        <div><label>Y-axis scale</label>
+        <div data-chart-type-for="line"><label>Y-axis unit (optional)</label><%- unitField('unit_chart', '') %></div>
+        <div data-chart-type-for="line"><label>Stepped line</label>
+          <select name="stepped_line">
+            <option value="">Off</option>
+            <option value="before">Before</option>
+            <option value="after">After</option>
+            <option value="middle">Middle</option>
+          </select>
+        </div>
+        <div data-chart-type-for="line"><label>Curve</label>
+          <select name="curve_tension">
+            <option value="0">Straight</option>
+            <option value="0.15" selected>Slight curve</option>
+            <option value="0.4">Smooth</option>
+          </select>
+        </div>
+        <div data-chart-type-for="line"><label>Show points on line</label><%- toggleSwitch('show_points', false) %></div>
+        <div data-chart-type-for="line"><label>Fill area under line</label><%- toggleSwitch('fill_area', false) %></div>
+        <div><label>Animate on load</label><%- toggleSwitch('enable_animation', false) %></div>
+        <div data-chart-type-for="line"><label>Y-axis scale</label>
           <select name="y_scale_type">
             <option value="linear">Linear</option>
             <option value="logarithmic">Logarithmic</option>
           </select>
         </div>
-        <div><label>Y-axis min (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto"></div>
-        <div><label>Y-axis max (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto"></div>
-        <div><label>Zoom &amp; pan</label><%- toggleSwitch('enable_zoom', false) %></div>
-        <%- thresholdField('chart_thresholds', []) %>
-        <%- annotationField('chart_annotations', []) %>
+        <div data-chart-type-for="line"><label>Y-axis min (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto"></div>
+        <div data-chart-type-for="line"><label>Y-axis max (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto"></div>
+        <div data-chart-type-for="line"><label>Zoom &amp; pan</label><%- toggleSwitch('enable_zoom', false) %></div>
+        <div data-chart-type-for="line" style="grid-column:1/-1;"><%- thresholdField('chart_thresholds', []) %></div>
+        <div data-chart-type-for="line" style="grid-column:1/-1;"><%- annotationField('chart_annotations', []) %></div>
       </div>
 
       <div class="form-grid" id="value-layout-field" style="margin-top:0.85rem; display:none;">
@@ -302,11 +287,17 @@
               // actually existing for this (dashboard, panel_type) pair — nothing to reset to
               // otherwise — that part IS server truth, just not tied to the star's color.
             %>
+            <%
+              // Chart panels fold their own chartType into the lookup key ('chart:line',
+              // 'chart:polar_area', ...) — see defaultsKey() in panelTypeDefaults.js for why a
+              // Line house style and a Polar Area one can't share one 'chart' key.
+              const panelDefaultsKey = p.panel_type === 'chart' ? 'chart:' + (p.config.chartType || 'line') : p.panel_type;
+            %>
             <button type="button" class="icon-btn icon-btn-neutral" data-panel-default-kind="save" data-panel-default-url="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/save-as-default" title="Save this panel's appearance as the default for every &quot;<%= p.panel_type %>&quot; panel on THIS dashboard"><%- icon('star') %></button>
-            <% if (panelTypeDefaultsExist[p.panel_type]) { %>
+            <% if (panelTypeDefaultsExist[panelDefaultsKey]) { %>
             <button type="button" class="icon-btn icon-btn-neutral" data-panel-default-kind="reset" data-panel-default-url="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/reset-to-default" title="Apply the saved &quot;<%= p.panel_type %>&quot; default (this dashboard) to THIS panel"><%- icon('refresh') %></button>
             <% } %>
-            <button type="button" class="icon-btn" data-toggle-row="panel-edit-<%= p.id %>" title="Close" aria-label="Close">&times;</button>
+            <button type="button" class="icon-btn icon-btn-danger" data-toggle-row="panel-edit-<%= p.id %>" title="Close" aria-label="Close">&times;</button>
           </div>
         </div>
         <div>
@@ -334,25 +325,60 @@
           // sync when a field moves between sections.
           var legendPos = p.panel_type === 'chart' ? (p.config.legendPosition || 'auto') : 'auto';
           var yScaleType = p.panel_type === 'chart' ? (p.config.yScaleType || 'linear') : 'linear';
+          // config.stepped predates the before/after/middle granularity and was a bare boolean —
+          // true is normalized to 'before' here (the granularity that reproduced the old rendering)
+          // so a panel saved before this upgrade doesn't show "Off" the first time its Edit form
+          // opens despite still actually being stepped. See routes/dashboards.js's buildConfig for
+          // the same normalization on the canvas data-attr / new-submission side.
+          var steppedVal = p.panel_type === 'chart' ? (p.config.stepped === true ? 'before' : (p.config.stepped || '')) : '';
+          var curveTension = p.panel_type === 'chart' && p.config.curveTension != null ? p.config.curveTension : 0.15;
+          var chartType = p.panel_type === 'chart' ? (p.config.chartType || 'line') : 'line';
         %>
         <div class="panel-section" data-fields-for="chart">
           <div class="panel-section-title">Appearance</div>
+          <div>
+            <label>Chart type</label>
+            <select name="chart_type" class="chart-type-select">
+              <option value="line" <%= chartType === 'line' ? 'selected' : '' %>>Line</option>
+              <option value="bar_compare" <%= chartType === 'bar_compare' ? 'selected' : '' %>>Bar (compare)</option>
+              <option value="doughnut" <%= chartType === 'doughnut' ? 'selected' : '' %>>Doughnut</option>
+              <option value="pie" <%= chartType === 'pie' ? 'selected' : '' %>>Pie</option>
+              <option value="polar_area" <%= chartType === 'polar_area' ? 'selected' : '' %>>Polar Area</option>
+              <option value="radar" <%= chartType === 'radar' ? 'selected' : '' %>>Radar</option>
+            </select>
+          </div>
           <div>
             <label>Legend</label>
             <select name="legend_position">
               <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto (only when &gt;1 monitor)</option>
               <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
+              <option value="bottom" <%= legendPos === 'bottom' ? 'selected' : '' %>>Bottom</option>
               <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
               <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
               <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
             </select>
           </div>
-          <div><label>Y-axis unit</label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
-          <div><label>Stepped line</label><%- toggleSwitch('stepped_line', p.panel_type === 'chart' && !!p.config.stepped) %></div>
-          <div><label>Show points on line</label><%- toggleSwitch('show_points', p.panel_type === 'chart' && !!p.config.points) %></div>
-          <div><label>Fill area under line</label><%- toggleSwitch('fill_area', p.panel_type === 'chart' && !!p.config.fill) %></div>
+          <div data-chart-type-for="line"><label>Y-axis unit</label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
+          <div data-chart-type-for="line"><label>Stepped line</label>
+            <select name="stepped_line">
+              <option value="" <%= steppedVal === '' ? 'selected' : '' %>>Off</option>
+              <option value="before" <%= steppedVal === 'before' ? 'selected' : '' %>>Before</option>
+              <option value="after" <%= steppedVal === 'after' ? 'selected' : '' %>>After</option>
+              <option value="middle" <%= steppedVal === 'middle' ? 'selected' : '' %>>Middle</option>
+            </select>
+          </div>
+          <div data-chart-type-for="line"><label>Curve</label>
+            <select name="curve_tension">
+              <option value="0" <%= curveTension == 0 ? 'selected' : '' %>>Straight</option>
+              <option value="0.15" <%= curveTension == 0.15 ? 'selected' : '' %>>Slight curve</option>
+              <option value="0.4" <%= curveTension == 0.4 ? 'selected' : '' %>>Smooth</option>
+            </select>
+          </div>
+          <div data-chart-type-for="line"><label>Show points on line</label><%- toggleSwitch('show_points', p.panel_type === 'chart' && !!p.config.points) %></div>
+          <div data-chart-type-for="line"><label>Fill area under line</label><%- toggleSwitch('fill_area', p.panel_type === 'chart' && !!p.config.fill) %></div>
+          <div><label>Animate on load</label><%- toggleSwitch('enable_animation', p.panel_type === 'chart' && !!p.config.animation) %></div>
         </div>
-        <div class="panel-section" data-fields-for="chart">
+        <div class="panel-section" data-fields-for="chart" data-chart-type-for="line">
           <div class="panel-section-title">Y-axis</div>
           <div>
             <label>Scale</label>
@@ -364,14 +390,14 @@
           <div><label>Minimum (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMin != null ? p.config.yMin : '' %>"></div>
           <div><label>Maximum (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMax != null ? p.config.yMax : '' %>"></div>
         </div>
-        <div class="panel-section" data-fields-for="chart">
+        <div class="panel-section" data-fields-for="chart" data-chart-type-for="line">
           <div class="panel-section-title">Interaction</div>
           <div><label>Zoom &amp; pan (scroll to zoom, drag to pan)</label><%- toggleSwitch('enable_zoom', p.panel_type === 'chart' && !!p.config.zoom) %></div>
         </div>
-        <div data-fields-for="chart" style="grid-column:1/-1;">
+        <div data-fields-for="chart" data-chart-type-for="line" style="grid-column:1/-1;">
           <%- thresholdField('chart_thresholds', p.panel_type === 'chart' ? p.config.thresholds : []) %>
         </div>
-        <div data-fields-for="chart" style="grid-column:1/-1;">
+        <div data-fields-for="chart" data-chart-type-for="line" style="grid-column:1/-1;">
           <%- annotationField('chart_annotations', p.panel_type === 'chart' ? p.config.annotations : []) %>
         </div>
 
@@ -507,7 +533,14 @@
             // shared across every series on that axis — falls back to the same Settings-page
             // global default the Current value panel type's own per-value Decimals already does.
           %>
-          <canvas data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.displayRange || p.range %>" data-range-until="<%= p.chartUntilMs || '' %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>" data-scale="1" data-fill="<%= p.config.fill ? '1' : '' %>" data-stepped="<%= p.config.stepped ? '1' : '' %>" data-points="<%= p.config.points ? '1' : '' %>" data-y-scale-type="<%= p.config.yScaleType || 'linear' %>" data-y-min="<%= p.config.yMin != null ? p.config.yMin : '' %>" data-y-max="<%= p.config.yMax != null ? p.config.yMax : '' %>" data-zoom="<%= p.config.zoom ? '1' : '' %>" data-thresholds="<%= JSON.stringify(p.config.thresholds || []) %>" data-annotations="<%= JSON.stringify(p.config.annotations || []) %>" data-series="<%= JSON.stringify(p.config.series || {}) %>"></canvas>
+          <%
+            // config.stepped predates the before/after/middle granularity (see the Edit form's own
+            // steppedVal local above for the matching normalization on the pre-fill side) — true
+            // (legacy boolean) becomes 'before' here too, so an old saved panel keeps rendering
+            // exactly as it did before this option existed instead of silently losing its step.
+            var canvasStepped = p.config.stepped === true ? 'before' : (p.config.stepped || '');
+          %>
+          <canvas data-chart-type="<%= p.config.chartType || 'line' %>" data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.displayRange || p.range %>" data-range-until="<%= p.chartUntilMs || '' %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>" data-scale="1" data-fill="<%= p.config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= p.config.curveTension != null ? p.config.curveTension : 0.15 %>" data-points="<%= p.config.points ? '1' : '' %>" data-animation="<%= p.config.animation ? '1' : '' %>" data-y-scale-type="<%= p.config.yScaleType || 'linear' %>" data-y-min="<%= p.config.yMin != null ? p.config.yMin : '' %>" data-y-max="<%= p.config.yMax != null ? p.config.yMax : '' %>" data-zoom="<%= p.config.zoom ? '1' : '' %>" data-thresholds="<%= JSON.stringify(p.config.thresholds || []) %>" data-annotations="<%= JSON.stringify(p.config.annotations || []) %>" data-series="<%= JSON.stringify(p.config.series || {}) %>"></canvas>
         </div>
       <% } else if (p.panel_type === 'table') { %>
         <div class="panel-table-scroll">
@@ -595,6 +628,7 @@
     var thresholdFields = document.getElementById('threshold-fields');
     var chartSeriesSettings = document.getElementById('chart-series-settings');
     var valueSeriesSettings = document.getElementById('value-series-settings');
+    var chartTypeSelect = document.getElementById('chart-type-select');
     var SINGLE_MONITOR_TYPES = ['table', 'gauge', 'stat_delta', 'threshold'];
     var NO_RANGE_TYPES = ['value', 'gauge', 'threshold'];
 
@@ -614,6 +648,20 @@
     panelTypeSelect.addEventListener('change', syncPanelType);
     syncPanelType();
 
+    // Sub-toggle within chart-fields itself — line-only sections (Y-axis, zoom, thresholds,
+    // annotations, stepped/curve/points/fill) hide when a snapshot chart type is picked. Independent
+    // of syncPanelType() above: #chart-fields already goes display:none as a whole when panel_type
+    // isn't 'chart', so this only ever needs to worry about the chart_type axis on its own.
+    function syncChartType() {
+      var chartType = chartTypeSelect.value;
+      chartFields.querySelectorAll('[data-chart-type-for]').forEach(function (el) {
+        var types = el.getAttribute('data-chart-type-for').split(',');
+        el.style.display = types.indexOf(chartType) !== -1 ? '' : 'none';
+      });
+    }
+    chartTypeSelect.addEventListener('change', syncChartType);
+    syncChartType();
+
     var filterInput = document.getElementById('monitor-filter');
     filterInput.addEventListener('input', function () {
       var q = filterInput.value.toLowerCase();
@@ -631,15 +679,26 @@
   (function () {
     document.querySelectorAll('.panel-settings-form .panel-type-select').forEach(function (select) {
       var form = select.closest('form');
+      // A field can carry data-fields-for, data-chart-type-for, or both (e.g. the Y-axis section —
+      // chart-only AND line-only) — both must pass for it to show, so this walks the union of
+      // matches once and ANDs the two checks, rather than two independent passes that would each
+      // blindly overwrite the other's display verdict.
+      var chartTypeSelect = form.querySelector('.chart-type-select');
 
       function sync() {
         var type = select.value;
-        form.querySelectorAll('[data-fields-for]').forEach(function (el) {
-          var types = el.getAttribute('data-fields-for').split(',');
-          el.style.display = types.indexOf(type) !== -1 ? '' : 'none';
+        var chartType = chartTypeSelect ? chartTypeSelect.value : 'line';
+        form.querySelectorAll('[data-fields-for], [data-chart-type-for]').forEach(function (el) {
+          var visible = true;
+          var fieldsFor = el.getAttribute('data-fields-for');
+          if (fieldsFor) visible = fieldsFor.split(',').indexOf(type) !== -1;
+          var chartTypeFor = el.getAttribute('data-chart-type-for');
+          if (visible && chartTypeFor) visible = type === 'chart' && chartTypeFor.split(',').indexOf(chartType) !== -1;
+          el.style.display = visible ? '' : 'none';
         });
       }
       select.addEventListener('change', sync);
+      if (chartTypeSelect) chartTypeSelect.addEventListener('change', sync);
       sync();
     });
 
@@ -746,80 +805,7 @@
   })();
 </script>
 
-<script>
-  // Drives every .threshold-builder (see thresholdField() above) — a dynamic add/remove-row UI
-  // (value + native color picker + line/band style per row) that keeps a hidden textarea in sync
-  // in the exact "<value>=<color>=<style>" format the server already parses (dashboards.js's
-  // parseThresholdLadder), so nothing on the server side needed to change for this to stop being a
-  // hand-typed textarea. The Style column only visibly changes anything on a Chart panel (drawn as
-  // either a dashed line or a filled band — see makeThresholdPlugin in monitor-chart.js); every
-  // other panel type that reuses this same builder for value-coloring just ignores it.
-  (function () {
-    // A native <input type="color"> only accepts a strict 7-char hex value — an existing config
-    // saved as a CSS name (e.g. "orange", from before this builder existed, or hand-edited) has to
-    // be resolved to its hex equivalent before it can be shown as that row's starting color.
-    function toHexColor(color) {
-      var probe = document.createElement('div');
-      probe.style.color = color;
-      document.body.appendChild(probe);
-      var computed = getComputedStyle(probe).color;
-      document.body.removeChild(probe);
-      var m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-      if (!m) return '#e34948';
-      function hex(n) { return Number(n).toString(16).padStart(2, '0'); }
-      return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
-    }
-
-    function serializeRows(builder) {
-      var lines = [];
-      builder.querySelectorAll('.threshold-builder-row').forEach(function (row) {
-        var value = row.querySelector('.threshold-row-value').value.trim();
-        var color = row.querySelector('.threshold-row-color').value;
-        var style = row.querySelector('.threshold-row-style').value;
-        if (value !== '' && color) lines.push(value + '=' + color + '=' + style);
-      });
-      builder.querySelector('.threshold-builder-hidden').value = lines.join('\n');
-    }
-
-    function addRow(builder, value, color, style) {
-      var row = document.createElement('div');
-      row.className = 'threshold-builder-row';
-      row.innerHTML =
-        '<input type="number" class="threshold-row-value" placeholder="Value" step="any">' +
-        '<select class="threshold-row-style" title="Line: a dashed line at this value. Band: a filled zone from this value up to the next threshold.">' +
-          '<option value="line">Line</option>' +
-          '<option value="band">Band</option>' +
-        '</select>' +
-        '<input type="color" class="threshold-row-color">' +
-        '<button type="button" class="icon-btn icon-btn-danger threshold-row-remove" title="Remove" aria-label="Remove">&times;</button>';
-      row.querySelector('.threshold-row-value').value = value == null ? '' : value;
-      row.querySelector('.threshold-row-style').value = style === 'band' ? 'band' : 'line';
-      row.querySelector('.threshold-row-color').value = toHexColor(color || '#e34948');
-      builder.querySelector('.threshold-builder-rows').appendChild(row);
-
-      row.querySelector('.threshold-row-value').addEventListener('input', function () { serializeRows(builder); });
-      row.querySelector('.threshold-row-style').addEventListener('change', function () { serializeRows(builder); });
-      row.querySelector('.threshold-row-color').addEventListener('input', function () { serializeRows(builder); });
-      row.querySelector('.threshold-row-remove').addEventListener('click', function () {
-        row.remove();
-        serializeRows(builder);
-      });
-    }
-
-    document.querySelectorAll('.threshold-builder').forEach(function (builder) {
-      var hidden = builder.querySelector('.threshold-builder-hidden');
-      hidden.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
-        var parts = line.split('=');
-        if (parts.length < 2) return;
-        addRow(builder, parts[0], parts[1], parts[2]);
-      });
-      builder.querySelector('.threshold-add-row').addEventListener('click', function () {
-        addRow(builder, '', '#e34948', 'line');
-        serializeRows(builder);
-      });
-    });
-  })();
-</script>
+<script src="/threshold-annotation-builder.js"></script>
 
 <script>
   // Drives every .value-mapping-builder (see valueMappingField() above) — same idea as the
@@ -827,18 +813,6 @@
   // "<value>=<label>[=<color>]" format dashboards.js's parseValueMappings already handles. The
   // color segment is optional per row (a value can just be renamed, with no color of its own).
   (function () {
-    function toHexColor(color) {
-      var probe = document.createElement('div');
-      probe.style.color = color;
-      document.body.appendChild(probe);
-      var computed = getComputedStyle(probe).color;
-      document.body.removeChild(probe);
-      var m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-      if (!m) return '#e34948';
-      function hex(n) { return Number(n).toString(16).padStart(2, '0'); }
-      return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
-    }
-
     function serializeRows(builder) {
       var lines = [];
       builder.querySelectorAll('.value-mapping-row').forEach(function (row) {
@@ -850,28 +824,26 @@
       builder.querySelector('.value-mapping-hidden').value = lines.join('\n');
     }
 
-    // Every row always carries a color — starting from a default (rotated through a small fixed
-    // palette so several rows added in one go don't all start out identical) rather than gated
-    // behind its own "give this value a color" checkbox, which was one more click for what's the
-    // common case anyway and, on top of that, rendered as a plain unthemed white box in dark mode.
-    var DEFAULT_ROW_COLORS = ['#e34948', '#5CA83F', '#2f7fd6', '#b45309', '#7c3aed', '#0891b2'];
+    // Every row always carries a color — starting from the next palette slot not already used by
+    // a sibling row (see nextAvailableColor in color-picker.js) rather than gated behind its own
+    // "give this value a color" checkbox, which was one more click for what's the common case
+    // anyway and, on top of that, rendered as a plain unthemed white box in dark mode.
     function addRow(builder, value, name, color) {
-      var index = builder.querySelectorAll('.value-mapping-row').length;
       var row = document.createElement('div');
       row.className = 'value-mapping-row';
+      var usedColors = Array.prototype.map.call(builder.querySelectorAll('.value-mapping-row-color'), function (el) { return el.value; });
       row.innerHTML =
         '<input type="text" class="value-mapping-row-value" placeholder="Value">' +
         '<input type="text" class="value-mapping-row-name" placeholder="Name to show">' +
-        '<input type="color" class="value-mapping-row-color">' +
+        LoxColorPicker.buildPickerHtml(color || LoxColorPicker.nextAvailableColor(usedColors), 'value-mapping-row-color') +
         '<button type="button" class="icon-btn icon-btn-danger value-mapping-row-remove" title="Remove" aria-label="Remove">&times;</button>';
       row.querySelector('.value-mapping-row-value').value = value == null ? '' : value;
       row.querySelector('.value-mapping-row-name').value = name == null ? '' : name;
-      row.querySelector('.value-mapping-row-color').value = toHexColor(color || DEFAULT_ROW_COLORS[index % DEFAULT_ROW_COLORS.length]);
       builder.querySelector('.value-mapping-rows').appendChild(row);
 
       row.querySelector('.value-mapping-row-value').addEventListener('input', function () { serializeRows(builder); });
       row.querySelector('.value-mapping-row-name').addEventListener('input', function () { serializeRows(builder); });
-      row.querySelector('.value-mapping-row-color').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.value-mapping-row-color').addEventListener('change', function () { serializeRows(builder); });
       row.querySelector('.value-mapping-row-remove').addEventListener('click', function () {
         row.remove();
         serializeRows(builder);
@@ -895,86 +867,6 @@
 </script>
 
 <script>
-  // Drives every .annotation-builder (see annotationField() above) — same dynamic add/remove-row
-  // shape as the value-mapping builder just above, keyed by a datetime instead of a reading value,
-  // kept in the "<epoch-ms>=<label>[=<color>]" format dashboards.js's parseAnnotations expects.
-  (function () {
-    function toHexColor(color) {
-      var probe = document.createElement('div');
-      probe.style.color = color;
-      document.body.appendChild(probe);
-      var computed = getComputedStyle(probe).color;
-      document.body.removeChild(probe);
-      var m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-      if (!m) return '#5b6472';
-      function hex(n) { return Number(n).toString(16).padStart(2, '0'); }
-      return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
-    }
-
-    function pad(n) { return String(n).padStart(2, '0'); }
-    // datetime-local reads/writes in whatever timezone the BROWSER is in, same as the Range field's
-    // own absolute-range inputs elsewhere in this file — the value stored server-side is always a
-    // plain epoch ms, so this is purely a display-time conversion.
-    function toLocalInputValue(ms) {
-      var d = new Date(ms);
-      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-    }
-
-    function serializeRows(builder) {
-      var lines = [];
-      builder.querySelectorAll('.annotation-row').forEach(function (row) {
-        var timeStr = row.querySelector('.annotation-row-time').value;
-        var label = row.querySelector('.annotation-row-label').value.trim();
-        var color = row.querySelector('.annotation-row-color').value;
-        if (!timeStr || !label) return;
-        var ms = new Date(timeStr).getTime();
-        if (!Number.isFinite(ms)) return;
-        lines.push(ms + '=' + label + '=' + color);
-      });
-      builder.querySelector('.annotation-builder-hidden').value = lines.join('\n');
-    }
-
-    function addRow(builder, ms, label, color) {
-      var row = document.createElement('div');
-      row.className = 'annotation-row';
-      row.innerHTML =
-        '<input type="datetime-local" class="annotation-row-time">' +
-        '<input type="text" class="annotation-row-label" placeholder="Label">' +
-        '<input type="color" class="annotation-row-color">' +
-        '<button type="button" class="icon-btn icon-btn-danger annotation-row-remove" title="Remove" aria-label="Remove">&times;</button>';
-      row.querySelector('.annotation-row-time').value = toLocalInputValue(ms != null ? ms : Date.now());
-      row.querySelector('.annotation-row-label').value = label == null ? '' : label;
-      row.querySelector('.annotation-row-color').value = toHexColor(color || '#5b6472');
-      builder.querySelector('.annotation-builder-rows').appendChild(row);
-
-      row.querySelector('.annotation-row-time').addEventListener('change', function () { serializeRows(builder); });
-      row.querySelector('.annotation-row-label').addEventListener('input', function () { serializeRows(builder); });
-      row.querySelector('.annotation-row-color').addEventListener('input', function () { serializeRows(builder); });
-      row.querySelector('.annotation-row-remove').addEventListener('click', function () {
-        row.remove();
-        serializeRows(builder);
-      });
-    }
-
-    document.querySelectorAll('.annotation-builder').forEach(function (builder) {
-      var hidden = builder.querySelector('.annotation-builder-hidden');
-      hidden.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
-        var parts = line.split('=');
-        if (parts.length < 2) return;
-        var ms = Number(parts[0]);
-        if (!Number.isFinite(ms)) return;
-        var color = parts.length > 2 ? parts.slice(2).join('=').trim() : '';
-        addRow(builder, ms, parts[1], color);
-      });
-      builder.querySelector('.annotation-add-row').addEventListener('click', function () {
-        addRow(builder, Date.now(), '', '#5b6472');
-        serializeRows(builder);
-      });
-    });
-  })();
-</script>
-
-<script>
   // Drives every .chart-series-settings (Add-panel's and each panel's own Edit form both have
   // one) — builds one row per currently-checked monitor in that SAME form's monitor checklist
   // (found via the container's own data-checklist-selector, since the two forms use different
@@ -985,21 +877,6 @@
     // as its own small copy here rather than sharing that server-side const, since these rows are
     // built entirely client-side (one per checked monitor, added/removed as checkboxes toggle).
     var UNIT_PRESETS = ['°C', '°F', '%', 'W', 'kW', 'kWh', 'V', 'A', 'Hz', 'hPa', 'lux', 'ppm', 'bar', 'm³', 'dB'];
-
-    // Same hex-normalization helper as the threshold/value-mapping builders above — a native
-    // <input type="color"> only accepts a strict 7-char hex value, so a color already stored as a
-    // CSS name has to be resolved before it can seed that row's swatch.
-    function toHexColor(color) {
-      var probe = document.createElement('div');
-      probe.style.color = color;
-      document.body.appendChild(probe);
-      var computed = getComputedStyle(probe).color;
-      document.body.removeChild(probe);
-      var m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-      if (!m) return '#e34948';
-      function hex(n) { return Number(n).toString(16).padStart(2, '0'); }
-      return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
-    }
 
     function buildUnitPicker(currentValue) {
       var wrap = document.createElement('span');
@@ -1101,7 +978,7 @@
       return Number.isFinite(n) && n !== 0 ? n : null;
     }
 
-    function buildRow(monitorId, monitorLabel, override) {
+    function buildRow(monitorId, monitorLabel, override, usedColors, chartType) {
       var row = document.createElement('div');
       row.className = 'chart-series-row';
       row.dataset.monitorId = monitorId;
@@ -1118,14 +995,32 @@
           '<option value="dashed">Dashed</option>' +
           '<option value="dotted">Dotted</option>' +
         '</select>' +
+        '<select class="chart-series-row-point-style" title="Point marker shape — only visible when Show points is on">' +
+          '<option value="">Circle</option>' +
+          '<option value="cross">Cross</option>' +
+          '<option value="rect">Square</option>' +
+          '<option value="rectRot">Diamond</option>' +
+          '<option value="star">Star</option>' +
+          '<option value="triangle">Triangle</option>' +
+        '</select>' +
         '<input type="checkbox" class="chart-series-row-color-enabled" title="Give this series its own color">' +
-        '<input type="color" class="chart-series-row-color">';
+        LoxColorPicker.buildPickerHtml((override && override.color) || LoxColorPicker.nextAvailableColor(usedColors), 'chart-series-row-color', 'chart-series-row-color-wrap');
       row.querySelector('.chart-series-row-label').textContent = monitorLabel;
       row.querySelector('.chart-series-row-label').title = monitorLabel;
       row.querySelector('.chart-series-row-name').value = (override && override.name) || '';
       row.querySelector('.chart-series-row-decimals').value = (override && override.decimals != null) ? override.decimals : '';
       row.querySelector('.chart-series-row-axis').value = (override && override.axis === 'right') ? 'right' : 'left';
       row.querySelector('.chart-series-row-style').value = (override && override.style) || '';
+      row.querySelector('.chart-series-row-point-style').value = (override && override.pointStyle) || '';
+
+      // Axis/line-style/point-style are meaningless off the 'line' geometry (no time axis to split
+      // left/right, no line to dash, no point to shape) — name/unit/scale/decimals/color stay
+      // meaningful for every chart type, so only these three hide.
+      if (chartType && chartType !== 'line') {
+        row.querySelector('.chart-series-row-axis').style.display = 'none';
+        row.querySelector('.chart-series-row-style').style.display = 'none';
+        row.querySelector('.chart-series-row-point-style').style.display = 'none';
+      }
 
       var unitPicker = buildUnitPicker((override && override.unit) || '');
       row.querySelector('.chart-series-row-unit-slot').replaceWith(unitPicker);
@@ -1135,13 +1030,12 @@
       var colorValue = override && override.color;
       var colorEnabled = !!colorValue;
       row.querySelector('.chart-series-row-color-enabled').checked = colorEnabled;
-      row.querySelector('.chart-series-row-color').value = toHexColor(colorValue || '#e34948');
       // .is-disabled dims the swatch rather than hiding it outright — see that class in style.css
       // for why: its circular border stayed the row's only visual hint a color picker lives there
       // at all, so hiding the whole element along with the fill left a blank gap in its place.
-      row.querySelector('.chart-series-row-color').classList.toggle('is-disabled', !colorEnabled);
+      LoxColorPicker.setSwatchDisabled(row.querySelector('.chart-series-row-color-wrap'), !colorEnabled);
       row.querySelector('.chart-series-row-color-enabled').addEventListener('change', function (e) {
-        row.querySelector('.chart-series-row-color').classList.toggle('is-disabled', !e.target.checked);
+        LoxColorPicker.setSwatchDisabled(row.querySelector('.chart-series-row-color-wrap'), !e.target.checked);
       });
 
       return row;
@@ -1151,6 +1045,7 @@
       var form = container.closest('form');
       var checklist = form.querySelector(container.dataset.checklistSelector);
       if (!checklist) return;
+      var chartTypeSelect = form.querySelector('.chart-type-select');
       var hidden = container.querySelector('.chart-series-hidden');
       var rowsEl = container.querySelector('.chart-series-rows');
       var cache = {};
@@ -1168,9 +1063,10 @@
           if (!Number.isFinite(decimals)) decimals = null;
           var axis = row.querySelector('.chart-series-row-axis').value;
           var style = row.querySelector('.chart-series-row-style').value;
+          var pointStyle = row.querySelector('.chart-series-row-point-style').value;
           var hasColor = row.querySelector('.chart-series-row-color-enabled').checked;
           var color = hasColor ? row.querySelector('.chart-series-row-color').value : null;
-          var entry = { name: name || null, unit: unit || null, scale: scale === 1 ? null : scale, decimals: decimals, axis: axis, color: color, style: style || null };
+          var entry = { name: name || null, unit: unit || null, scale: scale === 1 ? null : scale, decimals: decimals, axis: axis, color: color, style: style || null, pointStyle: pointStyle || null };
           // Kept in the in-memory cache (not just `out`) even when blank, so unchecking a monitor
           // and re-checking it later in the same session still shows whatever was last entered —
           // only what actually has a real value ends up in the submitted `out`.
@@ -1183,6 +1079,10 @@
       function rebuildRows() {
         var checked = Array.prototype.slice.call(checklist.querySelectorAll('input[type="checkbox"]:checked'));
         rowsEl.innerHTML = '';
+        // Accumulated across the loop (not per-row) so each new row's default avoids every color
+        // already resolved so far in this same pass — an existing saved override counts as "used"
+        // here too, so a freshly-added row can't coincidentally match one already set explicitly.
+        var usedColors = [];
         checked.forEach(function (checkbox) {
           var id = checkbox.value;
           var labelEl = checkbox.closest('label');
@@ -1190,7 +1090,8 @@
           // checklist's own markup above) — the Edit form's compact checklist has no such suffix
           // to begin with, so this simply doesn't match anything there.
           var monitorLabel = labelEl ? labelEl.textContent.trim().replace(/\s*\([a-z_]+\)\s*$/i, '') : id;
-          var row = buildRow(id, monitorLabel, cache[id]);
+          var row = buildRow(id, monitorLabel, cache[id], usedColors, chartTypeSelect ? chartTypeSelect.value : 'line');
+          usedColors.push(row.querySelector('.chart-series-row-color').value);
           Array.prototype.forEach.call(row.querySelectorAll('input, select'), function (el) {
             el.addEventListener('input', serialize);
             el.addEventListener('change', serialize);
@@ -1203,6 +1104,9 @@
       checklist.addEventListener('change', function (e) {
         if (e.target.matches('input[type="checkbox"]')) rebuildRows();
       });
+      // Switching chart type live re-renders every row so axis/style/point-style show or hide
+      // immediately, without waiting for a monitor to be re-checked.
+      if (chartTypeSelect) chartTypeSelect.addEventListener('change', rebuildRows);
       rebuildRows();
     });
 
@@ -1398,61 +1302,11 @@
   })();
 </script>
 
-<script>
-  // Drag-to-resize for the panel edit drawer's width — one shared handle per panel, but only the
-  // currently-open one is ever visible (see .panel-drawer-resize-handle in style.css). The width
-  // itself lives in a CSS custom property on the root element, so every panel's drawer (whichever
-  // one is open next) picks up the same value — this is a personal UI preference, not dashboard
-  // data, so localStorage is enough; no server round-trip needed.
-  (function () {
-    var STORAGE_KEY = 'panelDrawerWidth';
-    var MIN_WIDTH = 340;
-
-    function maxWidth() { return Math.min(1000, window.innerWidth * 0.92); }
-
-    var saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) document.documentElement.style.setProperty('--panel-drawer-width', Math.min(Number(saved), maxWidth()) + 'px');
-
-    document.querySelectorAll('.panel-drawer-resize-handle').forEach(function (handle) {
-      handle.addEventListener('mousedown', function (e) {
-        e.preventDefault();
-        var drawer = handle.previousElementSibling;
-        var startX = e.clientX;
-        var startWidth = drawer.getBoundingClientRect().width;
-        handle.classList.add('dragging');
-        // The handle's own CSS cursor:ew-resize (see style.css) only actually shows while the
-        // mouse is hovering that thin 6px strip — which it immediately isn't, the moment a real
-        // drag starts moving the mouse away from it. Forcing it on <body> for the drag's duration
-        // is what keeps the resize cursor showing everywhere the mouse passes over, not just
-        // there; unset again on mouseup, once the drag itself no longer dictates what the cursor
-        // means.
-        document.body.style.cursor = 'ew-resize';
-        document.body.style.userSelect = 'none';
-
-        function onMove(e) {
-          // Dragging left (clientX decreases) should widen the drawer — its right edge is pinned
-          // to the viewport edge, so the left edge (and this handle) are what actually move.
-          var width = Math.max(MIN_WIDTH, Math.min(maxWidth(), startWidth + (startX - e.clientX)));
-          document.documentElement.style.setProperty('--panel-drawer-width', width + 'px');
-          // The editing panel is centered against exactly this leftover space (see
-          // recenterEditingPanel above) — keeps it centered live as the drawer's own width changes
-          // instead of only catching up once the drag ends.
-          if (window.recenterEditingPanel) window.recenterEditingPanel();
-        }
-        function onUp() {
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
-          handle.classList.remove('dragging');
-          document.body.style.cursor = '';
-          document.body.style.userSelect = '';
-          localStorage.setItem(STORAGE_KEY, getComputedStyle(document.documentElement).getPropertyValue('--panel-drawer-width').trim().replace('px', ''));
-        }
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-      });
-    });
-  })();
-</script>
+<%
+  // Extracted to /panel-drawer-resize.js once the Monitor detail page's own chart-settings drawer
+  // became a second consumer of this same drag-to-resize behavior.
+%>
+<script src="/panel-drawer-resize.js"></script>
 
 <script>
   // Auto-saves every .panel-settings-form on any field change instead of requiring the explicit
@@ -1885,5 +1739,14 @@
 </script>
 
 <script src="/vendor/chart.umd.min.js"></script>
+<%
+  // chartjs-plugin-zoom reads window.Hammer at its OWN script-evaluation time (it's a UMD module
+  // whose browser-globals branch does `t.ChartZoom = n(t.Chart, t.Hammer, ...)`) — Hammer.js has
+  // to already be loaded before this tag, not just before the plugin is *used*. Without it, the
+  // plugin silently skips setting up its Hammer.Manager entirely (the pinch/pan gesture handling),
+  // while wheel-zoom keeps working fine since that's wired via a plain native 'wheel' listener,
+  // not Hammer — exactly the "zoom works, pan doesn't, no error anywhere" shape this had.
+%>
+<script src="/vendor/hammer.min.js"></script>
 <script src="/vendor/chartjs-plugin-zoom.min.js"></script>
 <script src="/monitor-chart.js" defer></script>

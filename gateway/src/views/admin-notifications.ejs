@@ -32,10 +32,25 @@
   <details class="add-panel">
     <summary>Add channel</summary>
     <div class="add-panel-body">
-      <form method="post" action="/admin/notifications/channels" class="form-grid">
-        <div><label>Name</label><input type="text" name="name" placeholder="e.g. Family Teams" required></div>
-        <div><label>Apprise URL</label><input type="text" name="url" placeholder="msteams://TokenA/TokenB/TokenC/" required></div>
-        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+      <form method="post" action="/admin/notifications/channels" class="channel-form">
+        <div class="form-grid">
+          <div><label>Name</label><input type="text" name="name" placeholder="e.g. Family Teams" required></div>
+          <div>
+            <label>Service</label>
+            <select class="channel-service-select">
+              <option value="custom">Custom (Apprise URL)</option>
+              <option value="email">Email (SMTP)</option>
+              <option value="telegram">Telegram</option>
+              <option value="slack">Slack</option>
+              <option value="teams">Microsoft Teams</option>
+              <option value="discord">Discord</option>
+            </select>
+          </div>
+        </div>
+        <%- include('partials/channel-service-fields', { url: '' }) %>
+        <div style="margin-top:0.9rem;">
+          <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+        </div>
       </form>
     </div>
   </details>
@@ -68,13 +83,29 @@
           </tr>
           <tr class="expand-row" id="channel-edit-<%= c.id %>">
             <td colspan="4">
-              <form method="post" action="/admin/notifications/channels/<%= c.id %>/update" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
-                <input type="text" name="name" value="<%= c.name %>" required style="max-width:14rem;">
-                <input type="text" name="url" value="<%= c.url %>" required style="max-width:22rem; flex:1;">
-                <span style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem;">
-                  <%- toggleSwitch('enabled', c.enabled) %> Enabled
-                </span>
-                <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+              <form method="post" action="/admin/notifications/channels/<%= c.id %>/update" class="channel-form">
+                <div class="form-grid">
+                  <div><label>Name</label><input type="text" name="name" value="<%= c.name %>" required></div>
+                  <div>
+                    <label>Service</label>
+                    <select class="channel-service-select">
+                      <option value="custom">Custom (Apprise URL)</option>
+                      <option value="email">Email (SMTP)</option>
+                      <option value="telegram">Telegram</option>
+                      <option value="slack">Slack</option>
+                      <option value="teams">Microsoft Teams</option>
+                      <option value="discord">Discord</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Enabled</label>
+                    <%- toggleSwitch('enabled', c.enabled) %>
+                  </div>
+                </div>
+                <%- include('partials/channel-service-fields', { url: c.url }) %>
+                <div style="margin-top:0.6rem;">
+                  <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+                </div>
               </form>
             </td>
           </tr>
@@ -133,6 +164,16 @@
           <div>
             <label>Miniserver</label>
             <select name="miniserver_id">
+              <option value="">Any Miniserver</option>
+              <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid rule-fields" data-for="firmware_changed" style="margin-top:0.85rem;">
+          <div>
+            <label>Miniserver</label>
+            <select name="firmware_miniserver_id">
               <option value="">Any Miniserver</option>
               <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
             </select>
@@ -234,6 +275,16 @@
                   </div>
                 </div>
 
+                <div class="form-grid rule-fields" data-for="firmware_changed" style="margin-top:0.85rem;">
+                  <div>
+                    <label>Miniserver</label>
+                    <select name="firmware_miniserver_id">
+                      <option value="">Any Miniserver</option>
+                      <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
+                    </select>
+                  </div>
+                </div>
+
                 <div class="form-grid rule-fields" data-for="mqtt_client_status" style="margin-top:0.85rem;">
                   <div><label>MQTT username (blank = any client)</label><input type="text" name="mqtt_username" value="<%= r.config.username || '' %>"></div>
                 </div>
@@ -276,6 +327,104 @@
       }
       select.addEventListener('change', applyVisibility);
       applyVisibility();
+    });
+  })();
+</script>
+
+<script>
+  // Builds a real Apprise URL from a friendly per-service field group and writes it into the
+  // existing .channel-url-input right before the form submits — the server-side routes
+  // (POST .../channels, .../channels/:id/update) are untouched, they only ever see the same plain
+  // `url` field they always have. Webhook-based services (Slack/Teams/Discord) work by pasting the
+  // full webhook URL the service gives you and extracting Apprise's own token(s) out of it, rather
+  // than asking anyone to split a URL into tokens by hand.
+  (function () {
+    function buildEmailUrl(get) {
+      var host = get('host'), user = get('user'), pass = get('pass'), to = get('to');
+      if (!host || !user || !pass || !to) return null;
+      var scheme = get('ssl') === 'on' ? 'mailtos' : 'mailto';
+      var port = get('port') ? ':' + get('port') : '';
+      var params = ['to=' + encodeURIComponent(to)];
+      if (get('from')) params.push('from=' + encodeURIComponent(get('from')));
+      return scheme + '://' + encodeURIComponent(user) + ':' + encodeURIComponent(pass) + '@' + host + port + '/?' + params.join('&');
+    }
+    function buildTelegramUrl(get) {
+      var token = get('token'), chatIds = get('chatIds');
+      if (!token || !chatIds) return null;
+      var ids = chatIds.split(',').map(function (s) { return s.trim(); }).filter(Boolean).join('/');
+      return ids ? ('tgram://' + token + '/' + ids) : null;
+    }
+    function buildSlackUrl(get) {
+      var m = /hooks\.slack\.com\/services\/([^/]+)\/([^/]+)\/([^/?]+)/.exec(get('webhookUrl') || '');
+      if (!m) return null;
+      var channel = get('channel');
+      return 'slack://' + m[1] + '/' + m[2] + '/' + m[3] + (channel ? '/' + encodeURIComponent(channel.replace(/^#/, '')) : '');
+    }
+    function buildTeamsUrl(get) {
+      var m = /webhookb2\/([^@]+)@([^/]+)\/IncomingWebhook\/([^/]+)\/([^/?]+)/.exec(get('webhookUrl') || '');
+      return m ? ('msteams://' + m[1] + '/' + m[2] + '/' + m[3] + '/' + m[4] + '/') : null;
+    }
+    function buildDiscordUrl(get) {
+      var m = /discord(?:app)?\.com\/api\/webhooks\/(\d+)\/([^/?]+)/.exec(get('webhookUrl') || '');
+      return m ? ('discord://' + m[1] + '/' + m[2]) : null;
+    }
+    var BUILDERS = { email: buildEmailUrl, telegram: buildTelegramUrl, slack: buildSlackUrl, teams: buildTeamsUrl, discord: buildDiscordUrl };
+    var ERRORS = {
+      email: 'Fill in SMTP host, username, password and a recipient.',
+      telegram: 'Fill in the bot token and at least one chat ID.',
+      slack: "Couldn't find a Slack webhook token in that URL — paste the full Incoming Webhook URL.",
+      teams: "Couldn't recognize that as a Teams webhook URL — paste the full Incoming Webhook URL, or switch Service to Custom and enter the Apprise URL directly.",
+      discord: "Couldn't find a Discord webhook ID/token in that URL — paste the full Webhook URL.",
+    };
+
+    document.querySelectorAll('.channel-form').forEach(function (form) {
+      var select = form.querySelector('.channel-service-select');
+      if (!select) return;
+      var urlInput = form.querySelector('.channel-url-input');
+      var preview = form.querySelector('.channel-url-preview');
+
+      function fieldsFor(service) { return form.querySelector('.channel-fields[data-service="' + service + '"]'); }
+      function get(field) {
+        var group = fieldsFor(select.value);
+        var el = group && group.querySelector('[data-field="' + field + '"]');
+        if (!el) return '';
+        return el.type === 'checkbox' ? (el.checked ? 'on' : '') : el.value.trim();
+      }
+
+      function updatePreview() {
+        if (select.value === 'custom') { preview.textContent = ''; return; }
+        var builder = BUILDERS[select.value];
+        var built = builder ? builder(get) : null;
+        preview.textContent = built ? ('Will save as: ' + built) : '';
+      }
+
+      function applyVisibility() {
+        // A `required` input doesn't get exempted from constraint validation just because a
+        // hidden ANCESTOR (not the input itself) has display:none — confirmed empirically, this
+        // silently blocked the whole form's submit with no error and no navigation. Toggling
+        // `required` itself, not just visibility, is what actually fixes it.
+        urlInput.required = select.value === 'custom';
+        form.querySelectorAll('.channel-fields').forEach(function (el) {
+          el.hidden = el.dataset.service !== select.value;
+        });
+        updatePreview();
+      }
+
+      select.addEventListener('change', applyVisibility);
+      form.addEventListener('input', updatePreview);
+      applyVisibility();
+
+      form.addEventListener('submit', function (e) {
+        if (select.value === 'custom') return; // urlInput already holds whatever was typed there
+        var builder = BUILDERS[select.value];
+        var built = builder ? builder(get) : null;
+        if (!built) {
+          e.preventDefault();
+          window.alert(ERRORS[select.value] || 'Fill in the required fields for this service.');
+          return;
+        }
+        urlInput.value = built;
+      });
     });
   })();
 </script>

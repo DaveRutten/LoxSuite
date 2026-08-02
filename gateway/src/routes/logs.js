@@ -67,12 +67,46 @@ function queryLogs({ source, sourceId, filters }) {
   return filtered.slice(0, MAX_ROWS);
 }
 
-// Each of the four tabs is now its own permission area (see permissionAreas.js's LOG_AREAS) — a
+// Each of the five tabs is now its own permission area (see permissionAreas.js's LOG_AREAS) — a
 // role viewable on, say, only the System log would otherwise get bounced to a 403 by this
 // redirect always pointing at MQTT. Send it to the first tab (in the same order they're tabbed
 // in the UI) this user can actually see instead.
-const LOG_TAB_AREAS = ['logs_mqtt', 'logs_loxone', 'logs_loxone_commands', 'logs_system'];
-const LOG_TAB_PATHS = { logs_mqtt: '/logs/mqtt', logs_loxone: '/logs/loxone', logs_loxone_commands: '/logs/loxone-commands', logs_system: '/logs/system' };
+const LOG_TAB_AREAS = ['logs_mqtt', 'logs_loxone', 'logs_loxone_commands', 'logs_system', 'logs_notifications'];
+const LOG_TAB_PATHS = { logs_mqtt: '/logs/mqtt', logs_loxone: '/logs/loxone', logs_loxone_commands: '/logs/loxone-commands', logs_system: '/logs/system', logs_notifications: '/logs/notifications' };
+
+// Own parser, not a reuse of parseFilters() above — notification_events.severity uses a different
+// vocabulary (info/warning/critical, set directly by notifications.js) than classifyLogLevel's
+// (error/warning/info, guessed from free text), so "level" there isn't the same thing as
+// "severity" here.
+function parseNotificationFilters(query) {
+  return {
+    from: toIso(query.from),
+    to: toIso(query.to),
+    severity: ['info', 'warning', 'critical'].includes(query.severity) ? query.severity : '',
+    q: (query.q || '').trim(),
+  };
+}
+
+// notification_events has a real, already-structured severity column (see db.js/notifications.js)
+// — unlike the other four tabs, which only ever have a free-text `line` and need classifyLogLevel's
+// regex guesswork, this can filter directly with WHERE severity = ?, and title/message are its own
+// columns rather than one opaque string to search inside.
+function queryNotificationEvents(filters) {
+  const conditions = ['1=1'];
+  const params = [];
+  if (filters.from) { conditions.push('created_at >= ?'); params.push(filters.from); }
+  if (filters.to) { conditions.push('created_at <= ?'); params.push(filters.to); }
+  if (filters.q) {
+    conditions.push('(title LIKE ? OR message LIKE ?)');
+    params.push(`%${filters.q}%`, `%${filters.q}%`);
+  }
+  if (filters.severity) { conditions.push('severity = ?'); params.push(filters.severity); }
+
+  return db.prepare(
+    `SELECT id, event_type AS eventType, severity, title, message, source_label AS sourceLabel, created_at AS createdAt
+     FROM notification_events WHERE ${conditions.join(' AND ')} ORDER BY id DESC LIMIT ?`
+  ).all(...params, MAX_ROWS);
+}
 
 router.get('/', (req, res) => {
   const area = LOG_TAB_AREAS.find((a) => req.user?.isAdmin || req.user?.permissions[a]?.view);
@@ -156,6 +190,22 @@ router.get('/system/export.txt', requirePermission('logs_system', 'edit'), (req,
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="system.log"');
   res.send(rows.map((r) => r.line).join('\n'));
+});
+
+router.get('/notifications', requirePermission('logs_notifications', 'view'), (req, res) => {
+  const filters = parseNotificationFilters(req.query);
+  const rows = queryNotificationEvents(filters);
+  const settings = db.prepare('SELECT notification_retention_days FROM gateway_settings WHERE id = 1').get();
+  res.render('logs-notifications', { rows, query: req.query, retentionDays: settings.notification_retention_days });
+});
+
+router.get('/notifications/export.txt', requirePermission('logs_notifications', 'edit'), (req, res) => {
+  const rows = db.prepare(
+    'SELECT created_at AS createdAt, severity, title, message, source_label AS sourceLabel FROM notification_events ORDER BY id ASC'
+  ).all();
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="notifications.log"');
+  res.send(rows.map((r) => `${r.createdAt}\t${r.severity}\t${r.title}\t${r.message}\t${r.sourceLabel || ''}`).join('\n'));
 });
 
 module.exports = router;

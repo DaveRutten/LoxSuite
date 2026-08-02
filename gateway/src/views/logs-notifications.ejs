@@ -1,0 +1,84 @@
+<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-notifications', refresh: 5, liveSwap: true }) %>
+
+<div class="tabs">
+  <% if (canView('logs_mqtt')) { %><a href="/logs/mqtt">MQTT broker</a><% } %>
+  <% if (canView('logs_loxone')) { %><a href="/logs/loxone">Loxone Miniservers</a><% } %>
+  <% if (canView('logs_loxone_commands')) { %><a href="/logs/loxone-commands">Loxone commands</a><% } %>
+  <% if (canView('logs_system')) { %><a href="/logs/system">System</a><% } %>
+  <a class="active" href="/logs/notifications">Notifications</a>
+</div>
+
+<p class="hint">
+  Every notification fired by a rule (<a href="/admin/notifications">Notifications settings</a>) or
+  a monitor's own threshold ladder marked "Notify" &mdash; one entry per event, independent of how
+  many channels it was sent to or whether delivery succeeded. Persisted in SQLite and kept for
+  <strong><%= retentionDays %></strong> days &mdash;
+  <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
+</p>
+
+<form method="get" action="/logs/notifications" class="form-grid" style="margin-bottom:1rem; align-items:end;">
+  <div>
+    <label>From</label>
+    <input type="datetime-local" name="from" value="<%= query.from || '' %>">
+  </div>
+  <div>
+    <label>To</label>
+    <input type="datetime-local" name="to" value="<%= query.to || '' %>">
+  </div>
+  <div>
+    <label>Severity</label>
+    <select name="severity">
+      <option value="">Any</option>
+      <option value="info" <%= query.severity === 'info' ? 'selected' : '' %>>Info</option>
+      <option value="warning" <%= query.severity === 'warning' ? 'selected' : '' %>>Warning</option>
+      <option value="critical" <%= query.severity === 'critical' ? 'selected' : '' %>>Critical</option>
+    </select>
+  </div>
+  <div>
+    <label>Contains</label>
+    <input type="text" name="q" value="<%= query.q || '' %>" placeholder="Search title/message">
+  </div>
+  <div style="display:flex; gap:0.5rem;">
+    <button type="submit" class="btn-soft"><%- icon('filter') %> Apply</button>
+    <a href="/logs/notifications"><button type="button" class="btn-soft">Clear</button></a>
+  </div>
+</form>
+
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <span class="log-selection-count hint" style="margin:0;"></span>
+    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label">Copy selection</span></button>
+    <% if (canEdit('logs_notifications')) { %>
+    <a href="/logs/notifications/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
+    <% } %>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th>
+        <th>Time</th><th>Severity</th><th>Title</th><th>Message</th><th>Source</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% rows.forEach(r => { %>
+        <tr>
+          <td class="col-select"><input type="checkbox"></td>
+          <td><%= formatDateTime(r.createdAt) %></td>
+          <td><span class="badge <%= r.severity === 'critical' ? 'badge-off' : r.severity === 'warning' ? 'badge-neutral' : 'badge-ok' %>"><%= r.severity %></span></td>
+          <td><%= r.title %></td>
+          <td class="log-line"><%= r.message %></td>
+          <td><%= r.sourceLabel || '' %></td>
+        </tr>
+      <% }) %>
+      <% if (rows.length === 0) { %>
+        <tr><td colspan="6" class="empty">No notifications recorded yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<script src="/log-select.js" defer></script>
+<%- include('partials/foot') %>

@@ -24,6 +24,45 @@ if (fs.existsSync(PENDING_RESTORE_PATH)) {
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 
+// Logs any query taking longer than this to the System log — "sometimes slow" reports (e.g. on
+// Unraid, where a query can stall on array spin-up or shfs overhead depending on how appdata is
+// mapped) are otherwise near-impossible to diagnose remotely; this turns "it happened again" into
+// "here's which statement and how long, and when." Wraps db.prepare() only (not db.exec(), used
+// for schema/migrations throughout the rest of this file) — real user-facing queries everywhere
+// else in the app go through .prepare(), so this one wrapper, installed before anything else in
+// the app ever requires this module, covers all of them for free. SQL text is truncated in the log
+// line; a threshold this high only ever fires on a genuine stall, where which statement and how
+// long matter far more than the exact bound values.
+const SLOW_QUERY_MS = 200;
+const rawPrepare = db.prepare.bind(db);
+let slowQueryLogStmt = null;
+function logSlowQuery(sql, durationMs) {
+  try {
+    // Lazily prepared and cached on first successful use — log_entries doesn't exist yet the very
+    // first times this could fire, while this same file is still creating its own tables below.
+    if (!slowQueryLogStmt) {
+      slowQueryLogStmt = rawPrepare('INSERT INTO log_entries (source, source_label, line, recorded_at) VALUES (?, ?, ?, ?)');
+    }
+    slowQueryLogStmt.run('system', null, `Slow query (${durationMs}ms): ${sql.replace(/\s+/g, ' ').trim().slice(0, 200)}`, new Date().toISOString());
+  } catch (err) { /* log_entries not created yet — this same slow prepare() gets logged once it exists */ }
+}
+db.prepare = function (sql) {
+  const stmt = rawPrepare(sql);
+  ['all', 'get', 'run', 'iterate'].forEach((method) => {
+    const original = stmt[method];
+    stmt[method] = function (...args) {
+      const start = Date.now();
+      try {
+        return original.apply(stmt, args);
+      } finally {
+        const duration = Date.now() - start;
+        if (duration >= SLOW_QUERY_MS) logSlowQuery(sql, duration);
+      }
+    };
+  });
+  return stmt;
+};
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -302,6 +341,15 @@ function migrateMiniserverStatusColumns() {
     // (routes/miniservers.js), not on every 60s healthcheck sweep — it essentially never changes
     // day to day, unlike firmware_version/cpu_load/etc. above.
     db.exec('ALTER TABLE miniservers ADD COLUMN update_level TEXT');
+  }
+  if (!columns.includes('miniserver_type')) {
+    // msInfo.miniserverType from /data/LoxAPP3.json's structure file — confirmed against Loxone's
+    // own official Structure File documentation (V17.0): 0 Miniserver Gen 1, 1 Miniserver Go Gen 1,
+    // 2 Miniserver Gen 2, 3 Miniserver Go Gen 2, 4 Miniserver Compact (see format.js's
+    // miniserverGenerationLabel). Unlike firmware_version/cpu_load/etc., a physical device's
+    // generation never changes, so healthcheck.js only ever fetches this once (while it's still
+    // NULL here) rather than on every sweep.
+    db.exec('ALTER TABLE miniservers ADD COLUMN miniserver_type INTEGER');
   }
 }
 
@@ -1225,5 +1273,127 @@ function migrateEncryptExistingSecrets() {
 }
 
 migrateEncryptExistingSecrets();
+
+// Per-monitor chart display settings (legend, fill/stepped/curve, y-axis, zoom, thresholds,
+// annotations) for the Monitor detail page's own chart — same shape as a dashboard chart panel's
+// own `config` JSON (see dashboard_panels.config / buildConfig() in routes/dashboards.js), just
+// stored per-monitor instead of per-panel since that page has no separate "panel" of its own.
+// No CHECK constraint needed (same reasoning as dashboard_panels.config being unconstrained JSON),
+// so a plain ALTER TABLE ADD COLUMN is enough — no full-table rebuild like migrateMonitorDiagnosticSource.
+function migrateMonitorChartConfig() {
+  const columns = db.prepare('PRAGMA table_info(monitors)').all().map((c) => c.name);
+  if (!columns.includes('config')) {
+    db.exec("ALTER TABLE monitors ADD COLUMN config TEXT NOT NULL DEFAULT '{}'");
+  }
+}
+
+migrateMonitorChartConfig();
+
+// One saved "house style" for the Monitor detail page's own chart, shared across every monitor —
+// unlike a dashboard chart panel's per-(dashboard, panel_type) default (panel_type_defaults, see
+// panelTypeDefaults.js), a monitor has no dashboard to scope by, and the user explicitly asked for
+// one style applicable to every monitor ("alle monitors dezelfde style"), not a per-monitor default.
+// Still literal '{}' (not a real buildConfig() shape) means "nothing saved yet" — see
+// monitor.js's save-as-default/reset-to-default routes.
+function migrateMonitorChartDefault() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('monitor_chart_default_config')) {
+    db.exec("ALTER TABLE gateway_settings ADD COLUMN monitor_chart_default_config TEXT NOT NULL DEFAULT '{}'");
+  }
+}
+
+migrateMonitorChartDefault();
+
+// The Notification Center's own persisted history — deliberately separate from log_entries (which
+// only ever gets a free-text line per Apprise delivery attempt, one row per channel/subscriber for
+// what a user thinks of as one alert, mixed in with unrelated login/role/SSO audit noise). One row
+// per logical event instead, written from notifications.js's fireRule() (rule_id set, covering all
+// 5 trigger types) or directly by the threshold-ladder notify check (rule_id NULL — no admin rule
+// needed, matching "just check a box on the threshold row").
+//
+// rule_id is deliberately a plain int with NO `REFERENCES notification_rules(id)` — this database
+// doesn't enforce PRAGMA foreign_keys (see the same note on notification_rule_channels above, and
+// routes/notifications.js's own /rules/:id/delete, which hand-deletes its join-table rows for
+// exactly that reason), so a REFERENCES clause here would be purely decorative — and actively
+// misleading, since a future edit "completing the pattern" by also cascade-deleting
+// notification_events when its rule is deleted would silently erase logbook history, defeating the
+// whole point of a persisted log. Modeled on log_entries.source_id instead (a bare nullable int).
+// Any query joining back to notification_rules for display must be a LEFT JOIN.
+function ensureNotificationEventsTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notification_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'info',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      source_id INTEGER,
+      source_label TEXT,
+      rule_id INTEGER,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notification_events_created ON notification_events(created_at);
+  `);
+}
+
+ensureNotificationEventsTable();
+
+// Widens notification_rules.trigger_type's CHECK to add 'firmware_changed' (see notifications.js's
+// TRIGGER_TYPES) — same guard-by-checking-the-CHECK-text-itself pattern as
+// migrateLogEntriesCommandsSource above. Must carry every existing column, INCLUDING owner_user_id
+// (added by migrateNotificationRulesOwner, which by file position here already ran) — dropping it
+// from the rebuild's INSERT...SELECT would silently wipe every rule's personal/admin ownership on
+// an upgrading install.
+function migrateNotificationRulesFirmwareChanged() {
+  const tableSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notification_rules'"
+  ).get();
+  if (!tableSql || tableSql.sql.includes("'firmware_changed'")) return;
+
+  db.exec(`
+    CREATE TABLE notification_rules_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trigger_type TEXT NOT NULL CHECK (trigger_type IN ('monitor_threshold','miniserver_status','mqtt_client_status','backup_failed','firmware_changed')),
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      config TEXT NOT NULL DEFAULT '{}',
+      last_state TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    INSERT INTO notification_rules_new (id, trigger_type, name, enabled, config, last_state, created_at, owner_user_id)
+    SELECT id, trigger_type, name, enabled, config, last_state, created_at, owner_user_id FROM notification_rules;
+
+    DROP TABLE notification_rules;
+    ALTER TABLE notification_rules_new RENAME TO notification_rules;
+  `);
+  console.log("Migrated notification_rules: widened trigger_type CHECK to add 'firmware_changed'.");
+}
+
+migrateNotificationRulesFirmwareChanged();
+
+// Per-user "read up to here" marker — unread count is just notification_events rows with
+// id > this, no per-event-per-user join table needed (see loadUserContext.js).
+function migrateUsersLastSeenNotification() {
+  const columns = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!columns.includes('last_seen_notification_id')) {
+    db.exec('ALTER TABLE users ADD COLUMN last_seen_notification_id INTEGER NOT NULL DEFAULT 0');
+  }
+}
+
+migrateUsersLastSeenNotification();
+
+// Its own setting rather than reusing log_retention_days — these are curated, meaningful events
+// (not raw MQTT/Loxone protocol lines), worth keeping around longer by default (see
+// settings-general.ejs's "Data retention" card).
+function migrateNotificationRetentionSetting() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('notification_retention_days')) {
+    db.exec('ALTER TABLE gateway_settings ADD COLUMN notification_retention_days INTEGER NOT NULL DEFAULT 90');
+  }
+}
+
+migrateNotificationRetentionSetting();
 
 module.exports = db;

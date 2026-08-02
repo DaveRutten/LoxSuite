@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { checkMiniserver, runDetailedCheck } = require('../healthcheck');
+const { miniserverGenerationLabel } = require('../format');
 const { fetchMiniserver } = require('../loxone');
 const { testConnection: testLiveConnection, resetConnection: resetLiveConnection } = require('../loxoneWebSocket');
 const { requirePermission } = require('../middleware/requirePermission');
@@ -10,14 +11,14 @@ const { encrypt } = require('../secretCrypto');
 const router = express.Router();
 
 router.get('/', (req, res) => {
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY id').all();
   res.render('miniservers', { miniservers, error: null });
 });
 
 router.post('/', requirePermission('miniservers', 'edit'), async (req, res) => {
   const { name, host, http_port, udp_port, username, password, use_https, external_url } = req.body;
   if (!name || !host || !username || !password) {
-    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY id').all();
     return res.render('miniservers', { miniservers, error: 'Name, host, username and password are required.' });
   }
 
@@ -100,7 +101,7 @@ router.post('/:id/check', requirePermission('miniservers', 'edit'), async (req, 
     runDetailedCheck(miniserver),
     testLiveConnection(miniserver),
   ]);
-  const updated = db.prepare('SELECT status, last_checked_at, firmware_version, device_monitor_status FROM miniservers WHERE id = ?').get(miniserver.id);
+  const updated = db.prepare('SELECT status, last_checked_at, firmware_version, device_monitor_status, miniserver_type FROM miniservers WHERE id = ?').get(miniserver.id);
   res.json({
     ...detail,
     live,
@@ -108,6 +109,7 @@ router.post('/:id/check', requirePermission('miniservers', 'edit'), async (req, 
     lastCheckedAt: updated.last_checked_at,
     firmwareVersion: updated.firmware_version,
     deviceMonitorStatus: updated.device_monitor_status,
+    generationLabel: miniserverGenerationLabel(updated.miniserver_type),
   });
 });
 

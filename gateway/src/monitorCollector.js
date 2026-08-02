@@ -1,7 +1,7 @@
 const db = require('./db');
 const { fetchMiniserver } = require('./loxone');
-const { ensureConnection, getLiveValue } = require('./loxoneWebSocket');
-const { checkMonitorThreshold } = require('./notifications');
+const { ensureConnection, getLiveValue, resetConnection } = require('./loxoneWebSocket');
+const { checkMonitorThreshold, checkThresholdLadderNotify } = require('./notifications');
 const { parseHeapStatus } = require('./format');
 
 // Shared between the Add-monitor form, the Miniservers page's "Add to Dashboard"/"Add to Monitor"
@@ -17,6 +17,24 @@ const DIAG_FIELD_LABELS = {
 
 const LOXONE_POLL_TICK_MS = 5000;
 const RETENTION_TICK_MS = 60 * 60 * 1000;
+
+// Defensive, not a fix for any confirmed incident: a Miniserver's live websocket connection
+// (loxoneWebSocket.js) gets its whole current-value cache from ONE initial burst right after
+// connecting — verified directly against a real Miniserver, a fresh connection has every state
+// within ~10s. IF that initial burst were ever incomplete for a given UUID, there'd be no other
+// channel to backfill just that one value: the HTTP /jdev/sps/io/<uuid> fallback below only
+// answers for ~8% of states (see loxoneWebSocket.js's own header comment), so a state outside
+// that slice could get silently stuck until its own next organic push. This was the leading
+// theory for a real "monitor values stopped updating" report — investigated at length, including
+// live tracing — but the actual cause turned out to be unrelated: a corrupted SQLite index on
+// monitor_history (idx_monitor_history_monitor_time), fixed with a one-off REINDEX; inserts were
+// succeeding the whole time; only monitor_id-filtered reads were silently missing rows. Kept
+// anyway as cheap, real insurance against the scenario the investigation was originally chasing —
+// high-frequency states self-heal via the next organic push regardless; this only covers ones
+// that wouldn't.
+const LOXONE_STALE_MS = 10 * 60 * 1000; // no recorded value in 10min despite polling every 5s = stuck, not just quiet
+const LOXONE_AUTO_RECONNECT_COOLDOWN_MS = 5 * 60 * 1000; // one reconnect attempt per miniserver per window, not a storm
+const lastAutoReconnectAt = new Map(); // miniserver id -> ms epoch
 
 // topic -> array of monitor ids, rebuilt whenever a monitor is added/removed/toggled so the
 // per-MQTT-message check in recordMqttValue() stays an O(1) map lookup instead of a DB query.
@@ -46,7 +64,10 @@ function insertHistory(monitorId, value) {
   db.prepare('INSERT INTO monitor_history (monitor_id, recorded_at, value, numeric_value) VALUES (?, ?, ?, ?)')
     .run(monitorId, recordedAt, String(value), numericValue);
   currentValues.set(monitorId, { value: String(value), recordedAt });
-  if (numericValue !== null) checkMonitorThreshold(monitorId, numericValue);
+  if (numericValue !== null) {
+    checkMonitorThreshold(monitorId, numericValue);
+    checkThresholdLadderNotify(monitorId, numericValue);
+  }
 }
 
 function recordMqttValue(topic, rawValue) {
@@ -124,7 +145,32 @@ async function pollLoxoneMonitor(monitor) {
     insertHistory(monitor.id, value);
   } catch (err) {
     console.error(`Failed to poll Loxone monitor ${monitor.id} (${monitor.label}):`, err.message);
+    maybeAutoReconnect(miniserver, monitor);
   }
+}
+
+// See the LOXONE_STALE_MS comment above for the incident this is for. Only reachable once neither
+// the live cache nor the HTTP fallback produced a value this tick — cheap to check every time that
+// happens (a single Map read plus, at most once per monitor, getCurrentValue's own history query),
+// since a monitor with a genuinely healthy connection never reaches here at all.
+function maybeAutoReconnect(miniserver, monitor) {
+  const current = getCurrentValue(monitor.id);
+  // A monitor that's never recorded anything yet (current === null) uses its own creation time as
+  // the reference instead of "always stale" — a brand new monitor's connection may just still be
+  // in the middle of its normal handshake, not actually stuck.
+  const referenceIso = current ? current.recordedAt : monitor.created_at;
+  const referenceMs = referenceIso ? new Date(referenceIso).getTime() : 0;
+  if (Date.now() - referenceMs < LOXONE_STALE_MS) return;
+
+  const lastReconnect = lastAutoReconnectAt.get(miniserver.id) || 0;
+  if (Date.now() - lastReconnect < LOXONE_AUTO_RECONNECT_COOLDOWN_MS) return;
+  lastAutoReconnectAt.set(miniserver.id, Date.now());
+
+  console.warn(
+    `Loxone monitor ${monitor.id} (${monitor.label}) on miniserver ${miniserver.id} hasn't recorded a ` +
+    `value in over ${Math.round(LOXONE_STALE_MS / 60000)} minutes — forcing a live connection reconnect to refresh its value cache.`
+  );
+  resetConnection(miniserver.id);
 }
 
 function pollLoxoneMonitors() {

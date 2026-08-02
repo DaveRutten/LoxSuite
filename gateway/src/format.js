@@ -44,4 +44,20 @@ function parseHeapStatus(raw) {
   return { firstKb: Number(match[1]), totalKb: Number(match[2]) };
 }
 
-module.exports = { formatCount, formatHeapStatus, parseHeapStatus };
+// msInfo.miniserverType from /data/LoxAPP3.json — confirmed against Loxone's own official
+// Structure File documentation (V17.0, msInfo section), not guessed. Falls back to showing the
+// raw number for any value outside this documented range rather than asserting a label that isn't
+// backed by the docs.
+const MINISERVER_TYPE_LABELS = {
+  0: 'Miniserver (Gen 1)',
+  1: 'Miniserver Go (Gen 1)',
+  2: 'Miniserver (Gen 2)',
+  3: 'Miniserver Go (Gen 2)',
+  4: 'Miniserver Compact',
+};
+function miniserverGenerationLabel(type) {
+  if (type === null || type === undefined) return null;
+  return MINISERVER_TYPE_LABELS[type] || `Unknown (type ${type})`;
+}
+
+module.exports = { formatCount, formatHeapStatus, parseHeapStatus, miniserverGenerationLabel };

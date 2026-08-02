@@ -21,6 +21,9 @@ const ICONS = {
   columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
   share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.6 15.4 6.4M8.6 13.4 15.4 17.6"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+  // Three plain bars — distinct from `list` above (which has dots, meant for an actual list of
+  // items) so it reads unambiguously as a nav/menu toggle rather than "view as list".
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   // Outline by default like every other icon here — a favorited dashboard's own button toggles a
   // CSS class (.is-favorited, see style.css) that fills it instead, rather than this needing a
   // second icon definition just for that.
@@ -30,6 +33,9 @@ const ICONS = {
   // docs/logo-light.svg and docs/logo-dark.svg (the README banner) and gateway/public/favicon.svg
   // — kept in sync with those if the mark itself ever changes.
   logo: '<circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/><circle cx="3" cy="12" r="2" stroke-width="1.5"/><circle cx="21" cy="12" r="2" stroke-width="1.5"/><path d="M5 12h2.5M16.5 12h2.5" stroke-width="1.5"/>',
+  // The topbar Notification Center toggle (see partials/head.ejs) — its own unread-count badge is
+  // a separate small element layered on top by CSS, not part of this icon.
+  bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
 };
 
 function icon(name, opts) {

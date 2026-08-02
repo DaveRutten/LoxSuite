@@ -37,6 +37,8 @@ module.exports = function loadUserContext(req, res, next) {
   res.locals.currentUser = null; // always defined so every view can safely reference it
   res.locals.collapsedSections = []; // ditto — which sidebar sections (see partials/head.ejs) this user has collapsed
   res.locals.favoriteDashboards = []; // ditto — this user's starred dashboards (see partials/head.ejs's sidebar)
+  res.locals.unreadNotificationCount = 0; // ditto — the topbar bell's badge (see partials/head.ejs)
+  res.locals.recentNotifications = []; // ditto — the bell popover's own list (see partials/foot.ejs)
   Object.assign(res.locals, makeHelpers(null));
 
   if (!req.session || !req.session.userId) return next();
@@ -71,6 +73,11 @@ module.exports = function loadUserContext(req, res, next) {
   res.locals.collapsedSections = db.prepare('SELECT section_key FROM user_nav_prefs WHERE user_id = ? AND collapsed = 1')
     .all(user.id).map((r) => r.section_key);
   res.locals.favoriteDashboards = loadFavoriteDashboards(user.id, req.user.roleId);
+  // Computed fresh per-request like everything else here (no session caching) — correct on first
+  // paint with zero extra round-trip; the topbar's own periodic poll (see foot.ejs) only has to
+  // catch events that land while the user sits on one page without navigating.
+  res.locals.unreadNotificationCount = db.prepare('SELECT COUNT(*) AS n FROM notification_events WHERE id > ?').get(user.last_seen_notification_id).n;
+  res.locals.recentNotifications = db.prepare('SELECT * FROM notification_events ORDER BY id DESC LIMIT 15').all();
 
   next();
 };

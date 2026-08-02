@@ -10,6 +10,7 @@ const LOG_AREAS = [
   { key: 'logs_loxone', label: 'Loxone Miniservers' },
   { key: 'logs_loxone_commands', label: 'Loxone commands' },
   { key: 'logs_system', label: 'System' },
+  { key: 'logs_notifications', label: 'Notifications' },
 ];
 
 // The fixed set of view/edit-gated pages (Access Roles' permission matrix). Shared between the

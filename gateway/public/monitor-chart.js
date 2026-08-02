@@ -166,9 +166,18 @@
     };
   }
 
+  // Chart.js's own type strings for the ones that don't match this app's config vocabulary
+  // 1:1 — 'polar_area'/'bar_compare' are this app's names (matching its own snake_case config
+  // fields, and 'bar_compare' specifically distinguishing it from a true time-series bar chart —
+  // see routes/dashboards.js's CHART_TYPES comment), Chart.js itself calls them 'polarArea'/'bar'.
+  var CHARTJS_TYPE = { polar_area: 'polarArea', bar_compare: 'bar' };
+  var SNAPSHOT_TYPES = ['bar_compare', 'doughnut', 'pie', 'polar_area', 'radar'];
+
   function initChartCanvas(canvas) {
     var monitorIds = canvas.dataset.monitorIds.split(',').map(Number).filter(function (n) { return Number.isInteger(n); });
     var range = canvas.dataset.range || '24h';
+    var chartType = canvas.dataset.chartType || 'line';
+    var isSnapshot = SNAPSHOT_TYPES.indexOf(chartType) !== -1;
     // 'auto' (the default for any panel created before this setting existed) keeps the original
     // behavior — a legend only when there's something to distinguish (>1 monitor). 'off' hides it
     // even then; 'top'/'left'/'right' force it on regardless of monitor count.
@@ -193,7 +202,13 @@
     // readings (e.g. temperature and humidity) on one chart the way Grafana's multi-axis does.
     var seriesConfig = {};
     try { seriesConfig = JSON.parse(canvas.dataset.series || '{}'); } catch (e) { /* malformed — no overrides */ }
-    var stepped = canvas.dataset.stepped === '1';
+    // false|'before'|'after'|'middle' — Chart.js's own vocabulary for this option (see
+    // https://www.chartjs.org/docs/latest/charts/line.html#stepped). Anything else (absent,
+    // legacy '1' from before this was a per-granularity value, ...) means off.
+    var stepped = ['before', 'after', 'middle'].includes(canvas.dataset.stepped) ? canvas.dataset.stepped : false;
+    var curveTension = parseFloat(canvas.dataset.tension);
+    if (!Number.isFinite(curveTension)) curveTension = 0.15;
+    var animationEnabled = canvas.dataset.animation === '1';
     var showPoints = canvas.dataset.points === '1';
     var yScaleType = canvas.dataset.yScaleType === 'logarithmic' ? 'logarithmic' : 'linear';
     var yMin = parseFloat(canvas.dataset.yMin);
@@ -297,10 +312,11 @@
           // whole point of styling one line differently is telling it apart from the others.
           stepped: stepped,
           pointRadius: showPoints ? 2.5 : 0,
+          pointStyle: override.pointStyle || 'circle',
           pointBackgroundColor: color,
           borderDash: lineStyle.dash,
           borderWidth: lineStyle.width,
-          tension: stepped ? 0 : 0.15, // Chart.js ignores tension on a stepped line anyway, but 0 is the honest value
+          tension: stepped ? 0 : curveTension, // Chart.js ignores tension on a stepped line anyway, but 0 is the honest value
           yAxisID: axisId,
           _tooltipUnit: seriesUnit,
           _tooltipDecimals: seriesDecimals,
@@ -365,7 +381,11 @@
         // dashboard have completely different ones.
         plugins: [makeThresholdPlugin(thresholds), makeAnnotationPlugin(annotations)],
         options: {
-          animation: false,
+          // Off by default (opt in per panel, see the Animate on load toggle) — the live 15s
+          // refresh's own chart.update('none') call (below) already skips animation regardless of
+          // this setting, so all this actually controls is first paint and hover/active
+          // transitions, not a per-tick "jump" on every live update.
+          animation: animationEnabled ? { duration: 400, easing: 'easeOutQuart' } : false,
           responsive: true,
           maintainAspectRatio: false,
           // Points usually aren't drawn (pointRadius: 0 unless Show points is on, see datasets
@@ -406,6 +426,95 @@
       });
     }
 
+    // Polar Area/Doughnut/Pie/Radar/Bar-compare — a snapshot of each monitor's CURRENT value, not
+    // a history. Deliberately a separate function from render() above rather than a conditional
+    // threaded through it: the data shape is fundamentally different (one dataset, one point per
+    // monitor, vs. one dataset per monitor plotted over time), and none of render()'s time-axis
+    // machinery (thresholds, annotations, zoom, stepped/curve, the x-scale itself) applies here.
+    function renderSnapshot(values) {
+      var names = [];
+      var data = [];
+      var colors = [];
+      var pointUnits = [];
+      var pointDecimals = [];
+      values.forEach(function (v, i) {
+        var override = seriesConfig[v.monitorId] || {};
+        var numeric = parseFloat(v.value);
+        var seriesScale = override.scale != null ? override.scale : scale;
+        names.push(override.name || v.label);
+        data.push(Number.isFinite(numeric) ? numeric * seriesScale : null);
+        colors.push(override.color || paletteColor(i));
+        pointUnits.push(override.unit || unit);
+        pointDecimals.push(override.decimals != null ? override.decimals : decimals);
+      });
+
+      var surfaceColor = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#fff';
+      // Radar has ONE connected shape (not one mark per monitor), so unlike the others its own
+      // fill/stroke aren't meaningfully "this monitor's color" — a low-opacity wash of the first
+      // palette slot reads as "the shape", while each vertex still gets its own real color via
+      // pointBackgroundColor so the per-monitor distinction isn't lost, just moved to the points.
+      var isRadar = chartType === 'radar';
+      var dataset = {
+        label: unit || 'Value',
+        data: data,
+        backgroundColor: isRadar ? hexToRgba(colors[0] || paletteColor(0), 0.2) : colors,
+        borderColor: isRadar ? (colors[0] || paletteColor(0)) : surfaceColor,
+        borderWidth: isRadar ? 2 : 2,
+        pointBackgroundColor: isRadar ? colors : undefined,
+        pointBorderColor: isRadar ? colors : undefined,
+        _pointUnits: pointUnits,
+        _pointDecimals: pointDecimals,
+      };
+
+      if (chart) {
+        chart.data.labels = names;
+        chart.data.datasets = [dataset];
+        chart.update('none');
+        return;
+      }
+
+      var showLegend = legendPosition === 'off' ? false : (legendPosition === 'auto' ? values.length > 1 : true);
+      var resolvedPosition = (legendPosition === 'auto' || legendPosition === 'off') ? 'top' : legendPosition;
+
+      var scales;
+      if (chartType === 'bar_compare') {
+        scales = {
+          x: { type: 'category' },
+          y: { type: 'linear', beginAtZero: true, ticks: { callback: function (v) { return formatAxisValue(v, decimals) + (unit ? ' ' + unit : ''); } } },
+        };
+      } else if (chartType === 'polar_area' || chartType === 'radar') {
+        scales = { r: { beginAtZero: true, ticks: { callback: function (v) { return formatAxisValue(v, decimals); } } } };
+      } // doughnut/pie: no scales object at all — Chart.js doesn't use one for either.
+
+      chart = new Chart(canvas, {
+        type: CHARTJS_TYPE[chartType] || chartType,
+        data: { labels: names, datasets: [dataset] },
+        // Deliberately no plugins array here (unlike the line chart above) — the hand-written
+        // threshold/annotation plugins both assume a linear time x-axis that simply doesn't exist
+        // on any of these chart types, so they're never even offered a chance to draw on one.
+        options: {
+          animation: animationEnabled ? { duration: 400, easing: 'easeOutQuart' } : false,
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: showLegend, position: resolvedPosition },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  var d = ctx.dataset._pointDecimals[ctx.dataIndex];
+                  var u = ctx.dataset._pointUnits[ctx.dataIndex];
+                  var v = typeof ctx.parsed === 'number' ? ctx.parsed : (ctx.parsed && ctx.parsed.r);
+                  var formatted = typeof v === 'number' ? formatAxisValue(v, d) : ctx.formattedValue;
+                  return (ctx.label || '') + ': ' + formatted + (u ? ' ' + u : '');
+                },
+              },
+            },
+          },
+          scales: scales,
+        },
+      });
+    }
+
     // A live-updating flag, not a fetch abort — an in-flight request from right before a
     // teardown can still land after it; this just makes sure a very-late response can't call
     // render() (and so chart.update()) on a chart that's already been destroyed.
@@ -418,8 +527,20 @@
         .catch(function () { /* best-effort — keep showing the last known data */ });
     }
 
-    refresh();
-    var intervalId = setInterval(refresh, REFRESH_MS);
+    // /monitor/current.json (not series.json) — a snapshot chart only ever needs each monitor's
+    // single latest reading, never its history, so this skips the MAX_ROWS-bounded history query
+    // series.json runs entirely (see that route's own comment in routes/monitor.js).
+    function refreshSnapshot() {
+      if (stopped) return;
+      fetch('/monitor/current.json?ids=' + monitorIds.join(','))
+        .then(function (res) { return res.json(); })
+        .then(function (data) { if (!stopped) renderSnapshot(data.values); })
+        .catch(function () { /* best-effort — keep showing the last known data */ });
+    }
+
+    var tick = isSnapshot ? refreshSnapshot : refresh;
+    tick();
+    var intervalId = setInterval(tick, REFRESH_MS);
 
     // Every settings-triggered auto-save on a chart panel (see panel-grid.ejs's applyPatch)
     // replaces this <canvas> with a brand new one and calls initChartCanvas() on THAT one —

@@ -34,9 +34,16 @@ const navPrefsRoutes = require('./routes/navPrefs');
 const monitorRoutes = require('./routes/monitor');
 const logsRoutes = require('./routes/logs');
 const dashboardsRoutes = require('./routes/dashboards');
+// Requires routes/dashboards itself (for serializeThresholdLadder/serializeAnnotations) — kept
+// below dashboardsRoutes above so that module is already fully loaded first: dashboards.js's own
+// top-level require('./monitor') would otherwise see monitor.js's exports still mid-assembly if
+// this loaded any earlier, since monitor.js requires dashboards.js lazily inside its own route
+// handlers for the exact same reason (see routes/monitor.js's chart-settings route).
+const chartFieldHelpers = require('./chartFieldHelpers');
 const adminRoutes = require('./routes/admin');
 const backupRoutes = require('./routes/backup');
 const notificationsRoutes = require('./routes/notifications');
+const notificationCenterRoutes = require('./routes/notificationCenter');
 const setupRoutes = require('./routes/setup');
 const profileRoutes = require('./routes/profile');
 const avatarRoutes = require('./routes/avatar');
@@ -44,7 +51,7 @@ const { icon } = require('./icons');
 const { toggleSwitch } = require('./toggleSwitch');
 const backup = require('./backup');
 const { formatDateTime, getDisplayTimezone } = require('./dateFormat');
-const { formatCount, formatHeapStatus } = require('./format');
+const { formatCount, formatHeapStatus, miniserverGenerationLabel } = require('./format');
 const panelTypeDefaults = require('./panelTypeDefaults');
 const { getVersionStatus, startVersionCheck } = require('./versionCheck');
 
@@ -57,11 +64,16 @@ app.locals.toggleSwitch = toggleSwitch;
 app.locals.formatDateTime = formatDateTime;
 app.locals.formatCount = formatCount;
 app.locals.formatHeapStatus = formatHeapStatus;
+app.locals.miniserverGenerationLabel = miniserverGenerationLabel;
 app.locals.getVersionStatus = getVersionStatus;
 app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
 app.locals.serializeThresholdLadder = dashboardsRoutes.serializeThresholdLadder;
 app.locals.serializeValueMappings = dashboardsRoutes.serializeValueMappings;
 app.locals.serializeAnnotations = dashboardsRoutes.serializeAnnotations;
+app.locals.escAttr = chartFieldHelpers.escAttr;
+app.locals.unitField = chartFieldHelpers.unitField;
+app.locals.thresholdField = chartFieldHelpers.thresholdField;
+app.locals.annotationField = chartFieldHelpers.annotationField;
 // Exposed as a global for the client-side chart (public/monitor-chart.js) — everything
 // server-rendered uses formatDateTime() directly and never needs this.
 app.use((req, res, next) => { res.locals.displayTimezone = getDisplayTimezone(); next(); });
@@ -163,6 +175,11 @@ app.use('/admin', requireAuth, requireAdmin, adminRoutes);
 app.use('/setup', requireAuth, requireAdmin, setupRoutes);
 app.use('/profile', requireAuth, profileRoutes);
 app.use('/avatar', requireAuth, avatarRoutes);
+// Ambient topbar chrome (the bell's unread-count/mark-read) — any logged-in user, no
+// requirePermission gate, same tier as Help/the account menu (see notificationCenter.js's own
+// header comment for why). The full historical logbook is /logs/notifications instead, which IS
+// gated (see routes/logs.js's requirePermission('logs_notifications', ...)).
+app.use('/notifications', requireAuth, notificationCenterRoutes);
 app.get('/help', requireAuth, (req, res) => res.render('help'));
 
 runBootstrap();

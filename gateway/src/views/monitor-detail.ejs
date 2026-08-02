@@ -15,26 +15,42 @@
 
 <% const presetRanges = ['1h', '24h', '7d', '30d', 'all']; %>
 <% const isCustomRange = !presetRanges.includes(range); %>
-<div class="tabs">
-  <a class="<%= range === '1h' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=1h">Last hour</a>
-  <a class="<%= range === '24h' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=24h">Last 24 hours</a>
-  <a class="<%= range === '7d' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=7d">Last 7 days</a>
-  <a class="<%= range === '30d' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=30d">Last 30 days</a>
-  <a class="<%= range === 'all' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=all">All</a>
-  <form method="get" action="/monitor/<%= monitor.id %>" class="range-custom-form">
-    <input type="text" name="range" placeholder="Custom, e.g. 3h, 10m, 45s" value="<%= isCustomRange ? range : '' %>">
-    <button type="submit" class="<%= isCustomRange ? 'active' : '' %>">Go</button>
-  </form>
+<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem; margin-bottom:1.25rem;">
+  <div class="tabs" style="margin-bottom:0;">
+    <a class="<%= range === '1h' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=1h">Last hour</a>
+    <a class="<%= range === '24h' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=24h">Last 24 hours</a>
+    <a class="<%= range === '7d' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=7d">Last 7 days</a>
+    <a class="<%= range === '30d' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=30d">Last 30 days</a>
+    <a class="<%= range === 'all' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=all">All</a>
+    <form method="get" action="/monitor/<%= monitor.id %>" class="range-custom-form">
+      <input type="text" name="range" placeholder="e.g. 3h, 10m, or 1-8-2026 / now" title="A duration (3h, 10m, 45s) or an absolute date — D-M-YYYY, optionally with a time and a second endpoint: &quot;1-8-2026&quot; (that date until now), &quot;1-8-2026 / now&quot;, &quot;1-8-2026 to 2-8-2026 14:30&quot;" value="<%= isCustomRange ? customRangeDisplay : '' %>">
+      <button type="submit" class="<%= isCustomRange ? 'active' : '' %>">Go</button>
+    </form>
+  </div>
+
+  <%
+    // margin-left:auto (not justify-content:space-between on the shared parent) so this stays
+    // pinned to the right edge of its OWN line even when it wraps onto a second line below .tabs
+    // on a narrower viewport — space-between only pushes two items apart when they share a line;
+    // a lone wrapped item has nothing to space "between" and space-between left it stuck at the
+    // left edge instead.
+  %>
+  <div class="row-actions" style="margin-left:auto;">
+    <% if (hasNumeric && canEdit('monitor')) { %>
+    <button type="button" class="icon-btn icon-btn-edit" title="Chart settings" data-toggle-row="monitor-chart-settings"><%- icon('edit') %></button>
+    <% } %>
+    <a href="/monitor/<%= monitor.id %>/export.csv?range=<%= range %>"><button type="button" class="btn-soft"><%- icon('copy') %> Export CSV</button></a>
+    <% if (canEdit('monitor')) { %>
+    <form method="post" action="/monitor/<%= monitor.id %>/clear-history" data-confirm="Delete all recorded history for this monitor? The monitor itself (and any dashboard panel using it) stays, just with nothing to show until the next reading comes in.">
+      <button type="submit" class="danger" <%= rows.length === 0 ? 'disabled' : '' %>><%- icon('trash') %> Clear history</button>
+    </form>
+    <% } %>
+  </div>
 </div>
 
-<div class="row-actions" style="justify-content:flex-end; margin-bottom:1.25rem;">
-  <a href="/monitor/<%= monitor.id %>/export.csv?range=<%= range %>"><button type="button" class="btn-soft"><%- icon('copy') %> Export CSV</button></a>
-  <% if (canEdit('monitor')) { %>
-  <form method="post" action="/monitor/<%= monitor.id %>/clear-history" data-confirm="Delete all recorded history for this monitor? The monitor itself (and any dashboard panel using it) stays, just with nothing to show until the next reading comes in.">
-    <button type="submit" class="danger" <%= rows.length === 0 ? 'disabled' : '' %>><%- icon('trash') %> Clear history</button>
-  </form>
-  <% } %>
-</div>
+<% if (hasNumeric && canEdit('monitor')) { %>
+<div id="monitor-chart-backdrop" class="panel-edit-backdrop"></div>
+<% } %>
 
 <div id="monitor-meta" data-monitor-id="<%= monitor.id %>" data-range="<%= range %>" data-group-mode="<%= groupMode %>" hidden></div>
 
@@ -42,8 +58,99 @@
   <% if (truncated) { %>
     <p class="hint">This chart and the list below only cover the most recent <%= rows.length %> readings &mdash; a monitor polled every few seconds can log more than that within "<%= range %>", so the plotted line may start partway through the range instead of at its very left edge. Export CSV for the full history, or pick a shorter range for a complete picture.</p>
   <% } %>
+  <% if (canEdit('monitor')) { %>
+    <%
+      // Same buildConfig('chart', ...) shape a dashboard chart panel's own config already uses
+      // (see panel-grid.ejs's Edit-panel Appearance/Y-axis/Interaction sections) — this page is
+      // always a single monitor though, so there's no chart-type or per-series settings here:
+      // just the one line's own appearance, axis, zoom, thresholds and annotations.
+      var legendPos = config.legendPosition || 'auto';
+      var steppedVal = config.stepped === true ? 'before' : (config.stepped || '');
+      var curveTension = config.curveTension != null ? config.curveTension : 0.15;
+      var yScaleType = config.yScaleType || 'linear';
+    %>
+    <form id="monitor-chart-settings" method="post" action="/monitor/<%= monitor.id %>/chart-settings" class="form-grid panel-settings-form">
+        <div class="panel-settings-form-head" style="grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; margin-bottom:0.3rem;">
+          <strong>Chart settings</strong>
+          <div class="row-actions">
+            <%
+              // Unlike a dashboard panel's own save-as-default (scoped per dashboard+panel_type,
+              // see panelTypeDefaults.js), this page has no dashboard to scope by and the user
+              // wants one shared style for every monitor — so there's exactly one saved default,
+              // not a per-(something) lookup. formaction submits THIS form's own live field values
+              // to a different route than the main Save button, same trick a plain <form> already
+              // supports natively — no JS/fetch() needed the way the dashboard panel drawer's
+              // in-place live-patching does, since this page just does a normal full-page reload
+              // on every save already (see the main Save button below).
+            %>
+            <button type="submit" formaction="/monitor/<%= monitor.id %>/chart-settings/save-as-default" class="icon-btn icon-btn-neutral" title="Save these settings as the shared default for every monitor's chart"><%- icon('star') %></button>
+            <% if (chartDefaultExists) { %>
+            <button type="submit" formaction="/monitor/<%= monitor.id %>/chart-settings/reset-to-default" class="icon-btn icon-btn-neutral" title="Apply the shared default chart style to this monitor"><%- icon('refresh') %></button>
+            <% } %>
+            <button type="button" class="icon-btn icon-btn-danger" data-toggle-row="monitor-chart-settings" title="Close" aria-label="Close"><%- icon('x') %></button>
+          </div>
+        </div>
+        <div>
+          <label>Legend</label>
+          <select name="legend_position">
+            <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto</option>
+            <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
+            <option value="bottom" <%= legendPos === 'bottom' ? 'selected' : '' %>>Bottom</option>
+            <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
+            <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
+            <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
+          </select>
+        </div>
+        <div><label>Y-axis unit (optional)</label><%- unitField('unit_chart', config.unit || '') %></div>
+        <div><label>Stepped line</label>
+          <select name="stepped_line">
+            <option value="" <%= steppedVal === '' ? 'selected' : '' %>>Off</option>
+            <option value="before" <%= steppedVal === 'before' ? 'selected' : '' %>>Before</option>
+            <option value="after" <%= steppedVal === 'after' ? 'selected' : '' %>>After</option>
+            <option value="middle" <%= steppedVal === 'middle' ? 'selected' : '' %>>Middle</option>
+          </select>
+        </div>
+        <div><label>Curve</label>
+          <select name="curve_tension">
+            <option value="0" <%= curveTension == 0 ? 'selected' : '' %>>Straight</option>
+            <option value="0.15" <%= curveTension == 0.15 ? 'selected' : '' %>>Slight curve</option>
+            <option value="0.4" <%= curveTension == 0.4 ? 'selected' : '' %>>Smooth</option>
+          </select>
+        </div>
+        <div><label>Show points on line</label><%- toggleSwitch('show_points', !!config.points) %></div>
+        <div><label>Fill area under line</label><%- toggleSwitch('fill_area', !!config.fill) %></div>
+        <div><label>Animate on load</label><%- toggleSwitch('enable_animation', !!config.animation) %></div>
+        <div><label>Y-axis scale</label>
+          <select name="y_scale_type">
+            <option value="linear" <%= yScaleType === 'linear' ? 'selected' : '' %>>Linear</option>
+            <option value="logarithmic" <%= yScaleType === 'logarithmic' ? 'selected' : '' %>>Logarithmic</option>
+          </select>
+        </div>
+        <div><label>Y-axis min (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto" value="<%= config.yMin != null ? config.yMin : '' %>"></div>
+        <div><label>Y-axis max (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto" value="<%= config.yMax != null ? config.yMax : '' %>"></div>
+        <div><label>Zoom &amp; pan (scroll to zoom, drag to pan)</label><%- toggleSwitch('enable_zoom', !!config.zoom) %></div>
+        <div style="grid-column:1/-1;"><%- thresholdField('chart_thresholds', config.thresholds || [], true) %></div>
+        <div style="grid-column:1/-1;"><%- annotationField('chart_annotations', config.annotations || []) %></div>
+        <%
+          // No Save button — every field change auto-saves and live-patches the chart above (see
+          // the script near the bottom of this file, same reasoning/behavior as a dashboard panel's
+          // own Edit form), so a button implying "nothing's saved until you click this" would just
+          // contradict what's actually happening. This status text is the only save affordance.
+        %>
+        <span class="hint panel-save-status" style="grid-column:1/-1; margin:0;">Saved</span>
+    </form>
+    <span class="panel-drawer-resize-handle" title="Drag to resize"></span>
+  <% } %>
+  <%
+    var canvasStepped = config.stepped === true ? 'before' : (config.stepped || '');
+  %>
   <div class="card chart-wrap">
-    <canvas data-monitor-ids="<%= monitor.id %>" data-range="<%= range %>" data-range-until="<%= rangeUntilMs || '' %>" height="90"></canvas>
+    <canvas data-monitor-ids="<%= monitor.id %>" data-range="<%= range %>" data-range-until="<%= rangeUntilMs || '' %>" height="90"
+      data-legend="<%= config.legendPosition || 'auto' %>" data-unit="<%= config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>"
+      data-fill="<%= config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= config.curveTension != null ? config.curveTension : 0.15 %>"
+      data-points="<%= config.points ? '1' : '' %>" data-animation="<%= config.animation ? '1' : '' %>" data-y-scale-type="<%= config.yScaleType || 'linear' %>"
+      data-y-min="<%= config.yMin != null ? config.yMin : '' %>" data-y-max="<%= config.yMax != null ? config.yMax : '' %>" data-zoom="<%= config.zoom ? '1' : '' %>"
+      data-thresholds="<%= JSON.stringify(config.thresholds || []) %>" data-annotations="<%= JSON.stringify(config.annotations || []) %>"></canvas>
   </div>
 <% } else { %>
   <p class="hint">This monitor hasn't recorded any numeric values yet, so there's nothing to chart &mdash; the raw values are listed below instead.</p>
@@ -80,7 +187,131 @@
   <% } %>
 </div>
 
+<% if (canEdit('monitor')) { %>
+  <%
+    // Loaded before threshold-annotation-builder.js — that script's own querySelectorAll('.threshold-
+    // builder')/('.annotation-builder') IIFEs run immediately at parse time (not deferred) and call
+    // LoxColorPicker.buildPickerHtml() synchronously while building each existing row, so the module
+    // has to already exist by the time that tag is reached, not just by the time the page finishes
+    // loading. Only needed when the settings form (and its threshold/annotation builders) actually
+    // rendered above — a view-only visitor gets neither.
+  %>
+  <script src="/color-picker.js"></script>
+  <script src="/threshold-annotation-builder.js"></script>
+  <script src="/panel-drawer-resize.js"></script>
+  <script>
+    // Same fixed-drawer pattern as a dashboard chart panel's own Edit form (see .panel-settings-form
+    // in style.css and its backdrop script in panel-grid.ejs) — reuses the same CSS/classes so it
+    // looks and behaves identically, just without that script's panel-grid-specific re-centering
+    // (there's no multi-panel grid on this page to make room in). The open/close toggle itself is
+    // already handled by the generic [data-toggle-row] delegated handler in foot.ejs; this only
+    // syncs the backdrop to match and adds click/Escape-to-close.
+    (function () {
+      var backdrop = document.getElementById('monitor-chart-backdrop');
+      var form = document.getElementById('monitor-chart-settings');
+      if (!backdrop || !form) return;
+
+      function syncBackdrop() { backdrop.classList.toggle('open', form.classList.contains('open')); }
+      function closeAll() { form.classList.remove('open'); backdrop.classList.remove('open'); }
+
+      document.addEventListener('click', function (e) {
+        if (e.target.closest('[data-toggle-row="monitor-chart-settings"]')) setTimeout(syncBackdrop, 0);
+      });
+      backdrop.addEventListener('click', closeAll);
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+    })();
+  </script>
+  <script>
+    // Auto-saves on every field change and live-patches the chart canvas above, instead of a Save
+    // button that navigates the whole page away and closes the drawer — same behavior/reasoning as
+    // a dashboard chart panel's own Edit form (see panel-grid.ejs's own "Auto-saves every
+    // .panel-settings-form" script), just scoped to a single canvas instead of a whole panel card:
+    // this page has no .dash-panel wrapper or generic "content element" to detect, so it patches
+    // the one element it actually has (canvas[data-monitor-ids] inside .chart-wrap) directly rather
+    // than reusing that script's more generic (and here, unnecessary) card-patching logic.
+    (function () {
+      var form = document.getElementById('monitor-chart-settings');
+      if (!form) return;
+      var SAVE_DELAY_MS = 700;
+      var pending = null;
+
+      function setStatus(text) {
+        var status = form.querySelector('.panel-save-status');
+        if (status) status.textContent = text;
+      }
+
+      function doSave(url) {
+        clearTimeout(pending);
+        pending = null;
+        setStatus('Saving…');
+        var params = new URLSearchParams();
+        new FormData(form).forEach(function (value, key) { params.append(key, value); });
+        fetch(url, { method: 'POST', body: params })
+          .then(function (res) {
+            if (!res.ok) throw new Error('save failed');
+            return res.text();
+          })
+          .then(function (html) {
+            var freshDoc = new DOMParser().parseFromString(html, 'text/html');
+            var freshCanvas = freshDoc.querySelector('canvas[data-monitor-ids]');
+            var oldCanvas = document.querySelector('.chart-wrap canvas[data-monitor-ids]');
+            if (oldCanvas && freshCanvas) {
+              // The OLD canvas's own Chart.js instance + its refresh loop (see monitor-chart.js)
+              // would otherwise just keep running forever in the background after being detached
+              // here — every edit would leave one more of these piled up, still fetching/rendering
+              // into a chart object nothing on screen points at any more.
+              if (oldCanvas._loxsuiteCleanup) oldCanvas._loxsuiteCleanup();
+              oldCanvas.replaceWith(freshCanvas);
+              if (window.initChartCanvas) window.initChartCanvas(freshCanvas);
+            }
+            setStatus('Saved');
+            setTimeout(function () { setStatus(''); }, 1500);
+          })
+          .catch(function () { setStatus('Save failed'); });
+      }
+
+      function scheduleSave() {
+        setStatus('Editing…');
+        clearTimeout(pending);
+        pending = setTimeout(function () { doSave(form.action); }, SAVE_DELAY_MS);
+      }
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        // save-as-default/reset-to-default are type="submit" buttons with their own formaction
+        // (see the drawer header above) — e.submitter is which button actually triggered this,
+        // so a plain Enter-to-submit (no formaction) still correctly falls back to the form's own
+        // main save action instead of picking one of those by accident.
+        var url = (e.submitter && e.submitter.getAttribute('formaction')) || form.action;
+        doSave(url);
+      });
+      ['input', 'change'].forEach(function (evtName) { form.addEventListener(evtName, scheduleSave); });
+
+      // Threshold/annotation row-remove buttons only ever fire a click, never an input/change on
+      // the (now-detached) row itself, so they need their own trigger. Closing the drawer (backdrop
+      // or its own ×) must not silently drop a still-debounced change either.
+      document.addEventListener('click', function (e) {
+        if (e.target.closest('#monitor-chart-settings .threshold-row-remove, #monitor-chart-settings .annotation-row-remove')) {
+          scheduleSave();
+          return;
+        }
+        if (pending && (e.target.closest('#monitor-chart-backdrop') || e.target.closest('[data-toggle-row="monitor-chart-settings"]'))) {
+          doSave(form.action);
+        }
+      });
+    })();
+  </script>
+<% } %>
 <script src="/vendor/chart.umd.min.js"></script>
+<%
+  // chartjs-plugin-zoom reads window.Hammer at its OWN script-evaluation time (it's a UMD module
+  // whose browser-globals branch does `t.ChartZoom = n(t.Chart, t.Hammer, ...)`) — Hammer.js has
+  // to already be loaded before this tag, not just before the plugin is *used*. Without it, the
+  // plugin silently skips setting up its Hammer.Manager entirely (the pinch/pan gesture handling),
+  // while wheel-zoom keeps working fine since that's wired via a plain native 'wheel' listener,
+  // not Hammer — exactly the "zoom works, pan doesn't, no error anywhere" shape this had.
+%>
+<script src="/vendor/hammer.min.js"></script>
 <script src="/vendor/chartjs-plugin-zoom.min.js"></script>
 <script src="/monitor-chart.js" defer></script>
 

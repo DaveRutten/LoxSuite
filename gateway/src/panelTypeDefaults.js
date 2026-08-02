@@ -5,6 +5,16 @@ const db = require('./db');
 // per-monitor breakdown to remap, so their whole config can be saved/restored as-is.
 const SERIES_KEYED_TYPES = ['chart', 'value'];
 
+// A saved "house style" is keyed by panel_type alone everywhere EXCEPT chart panels, which fold
+// their own chartType into the key ('chart:line', 'chart:polar_area', ...) — a Line house style
+// and a Polar Area one are different enough (different config shape, different meaningful fields)
+// that conflating them under one 'chart' key would mean saving one silently overwrites the other.
+// panel_type_defaults.panel_type has no CHECK constraint (plain TEXT, see db.js) — a compound
+// string needs no migration, just this one place computing it consistently both ways.
+function defaultsKey(panelType, config) {
+  return panelType === 'chart' ? `chart:${config.chartType || 'line'}` : panelType;
+}
+
 function getPanelMonitorIdsInOrder(panelId) {
   return db.prepare('SELECT monitor_id FROM dashboard_panel_monitors WHERE panel_id = ? ORDER BY position')
     .all(panelId)
@@ -51,7 +61,7 @@ function saveAsDefault(panelId) {
   db.prepare(
     `INSERT INTO panel_type_defaults (dashboard_id, panel_type, config, updated_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(dashboard_id, panel_type) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`
-  ).run(panel.dashboard_id, panel.panel_type, JSON.stringify(template), new Date().toISOString());
+  ).run(panel.dashboard_id, defaultsKey(panel.panel_type, config), JSON.stringify(template), new Date().toISOString());
   return true;
 }
 
@@ -59,10 +69,11 @@ function saveAsDefault(panelId) {
 // false (no-op) if nothing's ever been saved for that pair yet. Only touches `config`;
 // title/range/monitor selection are panel-instance identity, not style, and are left alone.
 function resetToDefault(panelId) {
-  const panel = db.prepare('SELECT dashboard_id, panel_type FROM dashboard_panels WHERE id = ?').get(panelId);
+  const panel = db.prepare('SELECT dashboard_id, panel_type, config FROM dashboard_panels WHERE id = ?').get(panelId);
   if (!panel) return false;
+  const currentConfig = JSON.parse(panel.config || '{}');
   const row = db.prepare('SELECT config FROM panel_type_defaults WHERE dashboard_id = ? AND panel_type = ?')
-    .get(panel.dashboard_id, panel.panel_type);
+    .get(panel.dashboard_id, defaultsKey(panel.panel_type, currentConfig));
   if (!row) return false;
 
   const template = JSON.parse(row.config);

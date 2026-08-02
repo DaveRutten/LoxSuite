@@ -11,6 +11,7 @@ const {
   DIAG_FIELD_LABELS,
 } = require('../monitorCollector');
 const { requirePermission } = require('../middleware/requirePermission');
+const { getDisplayTimezone, parseInTimezone } = require('../dateFormat');
 
 const router = express.Router();
 
@@ -55,6 +56,53 @@ function buildAbsoluteRange(startMs, endMs) {
   return `abs_${Math.round(startMs)}_${Math.round(endMs)}`;
 }
 
+// Inverse of parseRangeEndpoint below — re-renders an abs_<start>_<end> range back into the same
+// "D-M-YYYY H:MM" shape it (or the Absolute range picker) can be typed as, so re-opening the
+// custom-range field after a reload shows a readable date instead of the raw abs_1754... string,
+// and resubmitting it unchanged round-trips through parseRangeEndpoint correctly.
+function formatRangeEndpointForInput(ms, tz) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date(ms)).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+  return `${parts.day}-${parts.month}-${parts.year} ${parts.hour}:${parts.minute}`;
+}
+
+// A typed absolute date/time, D-M-YYYY (matching how this app's user actually writes dates) or
+// plain ISO YYYY-MM-DD, either alone optionally followed by a time as "H:MM" — distinguished from
+// the D-M-YYYY form by the first segment being 4 digits, so "1-8-2026" and "2026-08-01" are never
+// ambiguous with each other regardless of which one a user happens to type.
+const DMY_RE = /^(\d{1,2})-(\d{1,2})-(\d{4})(?:[ T](\d{1,2}):(\d{2}))?$/;
+const YMD_RE = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?$/;
+
+// One endpoint of a typed custom range — "now", or an absolute date/time interpreted in the
+// gateway's configured display timezone (see dateFormat.js's parseInTimezone for why: a bare
+// `new Date(...)` would silently read it as the server's own timezone, always UTC in Docker).
+function parseRangeEndpoint(text, tz) {
+  const s = text.trim();
+  if (/^now$/i.test(s)) return Date.now();
+  const dmy = s.match(DMY_RE);
+  if (dmy) return parseInTimezone(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]), Number(dmy[4] || 0), Number(dmy[5] || 0), 0, tz);
+  const ymd = s.match(YMD_RE);
+  if (ymd) return parseInTimezone(Number(ymd[1]), Number(ymd[2]), Number(ymd[3]), Number(ymd[4] || 0), Number(ymd[5] || 0), 0, tz);
+  return null;
+}
+
+// Grafana-style typed absolute range for the Monitor detail page's own custom-range field: a
+// single date ("1-8-2026" — that date until now) or two endpoints separated by "/" or "to"
+// ("1-8-2026 / now", "1-8-2026 to 2-8-2026 14:30"). Returns the same abs_<start>_<end> format
+// buildAbsoluteRange() already produces for the dashboard panel's own From/To picker, so nothing
+// downstream (rangeToWindow, historyWindowClause, chooseGroupMode, ...) needs to know this exists.
+function customAbsoluteRange(value, tz) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parts = value.split(/\s*(?:\/|\bto\b)\s*/i);
+  if (parts.length > 2) return null;
+  const startMs = parseRangeEndpoint(parts[0], tz);
+  if (startMs == null) return null;
+  const endMs = parts.length === 2 ? parseRangeEndpoint(parts[1], tz) : Date.now();
+  if (endMs == null || endMs <= startMs) return null;
+  return buildAbsoluteRange(startMs, endMs);
+}
+
 // Every relative range (presets and custom durations alike) only ever needs a lower bound —
 // "now" is always the implicit upper bound, so history queries just never had an upper bound at
 // all before absolute ranges existed. An absolute range fixes BOTH ends, so this now returns a
@@ -77,12 +125,15 @@ function rangeToSince(range) {
 
 // Missing/unrecognized -> '24h'; 'all' is a valid range in its own right (rangeToSince('all')
 // correctly falls through to null, i.e. no lower bound) and must not be coerced away. A
-// custom duration string (e.g. "3h") that parses cleanly is passed through as-is.
+// custom duration string (e.g. "3h") that parses cleanly is passed through as-is. A typed
+// absolute date ("1-8-2026", "1-8-2026 / now", ...) resolves to the same abs_<start>_<end> form
+// an explicit From/To pick would have produced.
 function resolveRange(value) {
   if (RANGE_MS[value] || value === 'all') return value;
   const absMatch = typeof value === 'string' ? value.match(ABS_RANGE_RE) : null;
   if (absMatch) return Number(absMatch[1]) < Number(absMatch[2]) ? value : '24h'; // reject inverted/zero-width
-  return customRangeMs(value) ? value : '24h';
+  if (customRangeMs(value)) return value;
+  return customAbsoluteRange(value, getDisplayTimezone()) || '24h';
 }
 
 // "AND recorded_at >= ? [AND recorded_at <= ?]" plus its matching params, spread into whichever
@@ -105,7 +156,13 @@ function historyWindowClause(range) {
 // hundreds of mostly-empty buckets instead of a useful overview).
 function chooseGroupMode(range) {
   if (range === '1h' || range === '24h') return 'hour';
-  const ms = RANGE_MS[range] || customRangeMs(range);
+  // An absolute range's own span (e.g. the "1.5 days" a typed "1-8-2026 / now" resolves to)
+  // wasn't considered here before absolute ranges could come from a typed date at all — every one
+  // fell through to 'day' regardless of how short it actually was, same gap the dashboard panel's
+  // own From/To picker already had. A short absolute span deserves hour groups exactly like an
+  // equally-short relative one already gets, not just presets/custom-durations.
+  const absMatch = typeof range === 'string' ? range.match(ABS_RANGE_RE) : null;
+  const ms = absMatch ? Number(absMatch[2]) - Number(absMatch[1]) : (RANGE_MS[range] || customRangeMs(range));
   if (ms && ms <= 48 * 60 * 60 * 1000) return 'hour';
   return 'day';
 }
@@ -387,6 +444,29 @@ router.get('/series.json', (req, res) => {
   res.json({ series });
 });
 
+// Feeds the snapshot chart types (Polar Area/Doughnut/Pie/Radar/Bar-compare, see monitor-chart.js's
+// renderSnapshot) — each of those shows one CURRENT value per monitor, not a history, so this
+// skips the MAX_ROWS-bounded monitor_history scan series.json above does entirely and just reads
+// whatever's already cached (getCurrentValue, the same cache/fallback insertHistory keeps warm for
+// every monitor — see monitorCollector.js). registered before /:id for the same reason series.json
+// is, just above.
+router.get('/current.json', (req, res) => {
+  const ids = String(req.query.ids || '')
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n));
+  if (ids.length === 0) return res.json({ values: [] });
+
+  const values = ids.map((id) => {
+    const monitor = db.prepare('SELECT id, label FROM monitors WHERE id = ?').get(id);
+    if (!monitor) return null;
+    const current = getCurrentValue(id);
+    return { monitorId: id, label: monitor.label, value: current ? current.value : null, recordedAt: current ? current.recordedAt : null };
+  }).filter(Boolean);
+
+  res.json({ values });
+});
+
 router.get('/:id', (req, res) => {
   const monitor = loadMonitor(req.params.id);
   if (!monitor) return res.status(404).send('Monitor not found');
@@ -405,9 +485,34 @@ router.get('/:id', (req, res) => {
   const groupMode = chooseGroupMode(range);
   const groups = groupHistoryRows(rows, groupMode, res.locals.displayTimezone, 'recordedAt');
 
+  // Lazily required (not at module top) — routes/dashboards.js itself requires this module for
+  // resolveRange/historyWindowClause/etc., so a top-level require here would be circular and could
+  // hand dashboards.js this module's exports before they're all assigned. By the time any request
+  // is actually being handled the whole app has already finished its startup require() pass, so
+  // this always resolves to the real, fully-loaded module — see server.js for the load order this
+  // depends on.
+  const { getDefaultPanelDecimals } = require('./dashboards');
+  let config;
+  try { config = JSON.parse(monitor.config || '{}'); } catch (e) { config = {}; }
+  const chartDefaultRow = db.prepare('SELECT monitor_chart_default_config FROM gateway_settings WHERE id = 1').get();
+  const chartDefaultExists = !!chartDefaultRow && chartDefaultRow.monitor_chart_default_config !== '{}';
+
+  // The custom-range text field shows this back, not the raw `range` value — an abs_<start>_<end>
+  // range (from either endpoint being a typed absolute date, see customAbsoluteRange above) is
+  // reformatted into the same readable "D-M-YYYY H:MM to D-M-YYYY H:MM" shape it can be typed as,
+  // so reopening/resubmitting the field after a reload doesn't show raw epoch millisecond gibberish.
+  const absMatch = typeof range === 'string' ? range.match(ABS_RANGE_RE) : null;
+  const customRangeDisplay = absMatch
+    ? `${formatRangeEndpointForInput(Number(absMatch[1]), res.locals.displayTimezone)} to ${formatRangeEndpointForInput(Number(absMatch[2]), res.locals.displayTimezone)}`
+    : range;
+
   res.render('monitor-detail', {
     monitor,
+    config,
+    chartDefaultExists,
+    defaultPanelDecimals: getDefaultPanelDecimals(),
     range,
+    customRangeDisplay,
     rows,
     groups,
     groupMode,
@@ -416,6 +521,46 @@ router.get('/:id', (req, res) => {
     rangeUntilMs: until ? new Date(until).getTime() : null,
     DIAG_FIELD_LABELS,
   });
+});
+
+// Saves the Monitor detail page's own chart display settings (legend, fill/stepped/curve, y-axis,
+// zoom, thresholds, annotations) — same buildConfig('chart', ...) shape/parsing a dashboard chart
+// panel's Edit form already submits (see panel-grid.ejs's chart-fields block), just persisted on
+// the monitor itself instead of a dashboard_panels row since this page has no panel of its own.
+// chart_type/chart_series are never submitted from this page's own form, so buildConfig defaults
+// them to 'line'/{} — this page is always a single-monitor line chart, by design (see the chart
+// capabilities plan: snapshot types are N-monitor comparisons and don't fit a single-monitor page).
+router.post('/:id/chart-settings', requirePermission('monitor', 'edit'), (req, res) => {
+  const monitor = db.prepare('SELECT id FROM monitors WHERE id = ?').get(req.params.id);
+  if (!monitor) return res.redirect('/monitor');
+
+  const { buildConfig } = require('./dashboards');
+  const config = buildConfig('chart', req.body);
+  db.prepare('UPDATE monitors SET config = ? WHERE id = ?').run(JSON.stringify(config), monitor.id);
+  res.redirect(req.get('referer') || `/monitor/${monitor.id}`);
+});
+
+// Saves whatever this monitor's chart-settings form currently has entered (its live values —
+// submitted the same way the main Save button's form does, via formaction, regardless of whether
+// Save itself was clicked first) as the ONE shared chart style every monitor's own "Reset to
+// default" applies. Global rather than per-monitor: this page has no dashboard to scope a default
+// by the way panel_type_defaults does, and the user explicitly wants one style for every monitor.
+router.post('/:id/chart-settings/save-as-default', requirePermission('monitor', 'edit'), (req, res) => {
+  const { buildConfig } = require('./dashboards');
+  const config = buildConfig('chart', req.body);
+  db.prepare('UPDATE gateway_settings SET monitor_chart_default_config = ? WHERE id = 1').run(JSON.stringify(config));
+  res.redirect(req.get('referer') || `/monitor/${req.params.id}`);
+});
+
+router.post('/:id/chart-settings/reset-to-default', requirePermission('monitor', 'edit'), (req, res) => {
+  const monitor = db.prepare('SELECT id FROM monitors WHERE id = ?').get(req.params.id);
+  if (!monitor) return res.redirect('/monitor');
+
+  const row = db.prepare('SELECT monitor_chart_default_config FROM gateway_settings WHERE id = 1').get();
+  if (row && row.monitor_chart_default_config !== '{}') {
+    db.prepare('UPDATE monitors SET config = ? WHERE id = ?').run(row.monitor_chart_default_config, monitor.id);
+  }
+  res.redirect(req.get('referer') || `/monitor/${monitor.id}`);
 });
 
 router.get('/:id/data.json', (req, res) => {

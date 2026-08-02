@@ -17,10 +17,10 @@ test('AREA_KEYS matches AREAS exactly, same order', () => {
   assert.deepEqual(AREA_KEYS, AREAS.map((a) => a.key));
 });
 
-test('LOG_AREAS covers exactly the four Logs tabs', () => {
+test('LOG_AREAS covers exactly the five Logs tabs', () => {
   assert.deepEqual(
     LOG_AREAS.map((a) => a.key).sort(),
-    ['logs_loxone', 'logs_loxone_commands', 'logs_mqtt', 'logs_system'].sort()
+    ['logs_loxone', 'logs_loxone_commands', 'logs_mqtt', 'logs_notifications', 'logs_system'].sort()
   );
 });
 

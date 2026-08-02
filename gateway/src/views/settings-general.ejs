@@ -49,6 +49,15 @@
         </p>
       </div>
       <div class="settings-field">
+        <label>Notification history (days)</label>
+        <input type="number" name="notification_retention_days" min="1" value="<%= gatewaySettings.notification_retention_days %>">
+        <p class="hint">
+          Entries on the <a href="/logs/notifications">Notifications</a> log older than this are
+          deleted automatically. Kept longer than raw logs by default — these are curated events,
+          not high-volume protocol lines.
+        </p>
+      </div>
+      <div class="settings-field">
         <label>Client Activity, after disconnect (hours)</label>
         <input type="number" name="client_retention_hours" min="1" value="<%= gatewaySettings.client_retention_hours %>">
         <p class="hint">

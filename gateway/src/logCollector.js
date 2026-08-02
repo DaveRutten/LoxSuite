@@ -12,6 +12,13 @@ function purgeOldLogEntries() {
   db.prepare('DELETE FROM log_entries WHERE recorded_at < ?').run(cutoff);
 }
 
+function purgeOldNotificationEvents() {
+  const settings = db.prepare('SELECT notification_retention_days FROM gateway_settings WHERE id = 1').get();
+  const days = settings?.notification_retention_days ?? 90;
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare('DELETE FROM notification_events WHERE created_at < ?').run(cutoff);
+}
+
 function pruneOldClients() {
   const settings = db.prepare('SELECT client_retention_hours FROM gateway_settings WHERE id = 1').get();
   pruneDisconnectedClients(settings?.client_retention_hours ?? 24);
@@ -20,6 +27,9 @@ function pruneOldClients() {
 function startLogCollector() {
   purgeOldLogEntries();
   setInterval(purgeOldLogEntries, RETENTION_TICK_MS);
+
+  purgeOldNotificationEvents();
+  setInterval(purgeOldNotificationEvents, RETENTION_TICK_MS);
 
   pruneOldClients();
   setInterval(pruneOldClients, RETENTION_TICK_MS);

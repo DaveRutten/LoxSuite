@@ -18,6 +18,13 @@
 </head>
 <body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>" data-dash-range="<%= typeof dashboardRange !== 'undefined' && dashboardRange ? 'true' : '' %>">
 <div class="app-shell">
+  <%
+    // Hidden on desktop entirely via CSS (display:none outside the mobile breakpoint) — always
+    // rendered, same "control visibility in CSS/JS, not server-side UA-sniffing" approach every
+    // other conditionally-shown element in this app already uses. Toggle script is in foot.ejs,
+    // right alongside the Help drawer's own open/close handlers (same backdrop-click/Escape idiom).
+  %>
+  <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
   <aside class="sidebar">
     <div class="brand">
       <span class="brand-icon"><%- icon('logo', { size: 18 }) %></span>
@@ -75,14 +82,19 @@
             // Starred from a dashboard's own "Add to sidebar" button (dashboards.ejs,
             // dashboard-detail.ejs) — favoriteDashboards itself already only ever holds ones this
             // user can still actually reach (see loadFavoriteDashboards in loadUserContext.js).
-            const favoritesExpanded = active === 'dashboards';
+            // dashboardId isn't set by every page (only dashboard.ejs/dashboard-detail.ejs pass
+            // it) — typeof-guarded the same way refresh/liveSwap are on <body> above, rather than
+            // requiring every other page's own include('partials/head', {...}) call to know about
+            // a local it has no use for.
+            const currentDashboardId = typeof dashboardId !== 'undefined' ? dashboardId : null;
+            const favoritesExpanded = active === 'dashboards' || active === 'dashboard';
           %>
           <button type="button" class="nav-section-label" data-nav-section="favorite-dashboards" aria-expanded="<%= isCollapsed('favorite-dashboards', favoritesExpanded) ? 'false' : 'true' %>">
             <span>Favorite Dashboards</span><%- icon('chevron') %>
           </button>
           <div class="nav-group" <%= isCollapsed('favorite-dashboards', favoritesExpanded) ? 'hidden' : '' %>>
             <% favoriteDashboards.forEach(d => { %>
-              <a href="/dashboards/<%= d.id %>"><%= d.name %></a>
+              <a href="/dashboards/<%= d.id %>" class="<%= currentDashboardId != null && d.id === currentDashboardId ? 'active' : '' %>"><%= d.name %></a>
             <% }) %>
           </div>
         <% } %>
@@ -133,6 +145,7 @@
   </aside>
   <div class="content">
     <header class="topbar">
+      <button type="button" id="mobile-nav-toggle" class="icon-btn mobile-nav-toggle" title="Menu"><%- icon('menu') %></button>
       <h1><%= pageTitle %></h1>
       <%
         const helpAnchors = {
@@ -145,11 +158,36 @@
       %>
       <div class="topbar-right">
         <% if (helpAnchor) { %>
-          <a class="topbar-help" href="/help#help-<%= helpAnchor %>" data-help-open data-help-anchor="help-<%= helpAnchor %>" title="Explain this page">
-            <%- icon('help') %> Help
+          <a class="topbar-help" href="/help#help-<%= helpAnchor %>" data-help-open data-help-anchor="help-<%= helpAnchor %>" title="Explain this page" aria-label="Help">
+            <%- icon('help') %>
           </a>
         <% } %>
         <% if (currentUser) { %>
+          <div class="notification-center">
+            <button type="button" id="notification-center-btn" class="notification-center-btn" title="Notifications" aria-label="Notifications">
+              <%- icon('bell') %>
+              <% if (unreadNotificationCount > 0) { %>
+                <span id="notification-center-badge" class="notification-center-badge"><%= unreadNotificationCount > 99 ? '99+' : unreadNotificationCount %></span>
+              <% } %>
+            </button>
+            <div id="notification-center-panel" class="account-menu-panel notification-center-panel" hidden>
+              <% if (recentNotifications.length === 0) { %>
+                <p class="hint" style="margin:0.6rem 0.9rem;">No notifications yet.</p>
+              <% } else { %>
+                <% recentNotifications.forEach(n => { %>
+                  <div class="notification-center-item notification-center-item-<%= n.severity %>">
+                    <div class="notification-center-item-title"><%= n.title %></div>
+                    <div class="notification-center-item-message"><%= n.message %></div>
+                    <div class="notification-center-item-time"><%= formatDateTime(n.created_at) %></div>
+                  </div>
+                <% }) %>
+              <% } %>
+              <% if (canView('logs_notifications')) { %>
+                <div class="account-menu-divider"></div>
+                <a href="/logs/notifications">View all</a>
+              <% } %>
+            </div>
+          </div>
           <div class="account-menu">
             <button type="button" id="account-menu-btn" class="account-menu-btn">
               <% if (currentUser.avatarUrl) { %>

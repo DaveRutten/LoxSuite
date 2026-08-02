@@ -4,7 +4,7 @@
 </picture>
 
 A self-hosted Docker stack for Loxone Miniservers: an MQTT gateway, log viewing, value monitoring,
-and a web UI to manage all of it — with more planned (backup/restore among it).
+scheduled backups, and a web UI to manage all of it.
 
 It provides:
 
@@ -135,7 +135,30 @@ auto-creating a monitor for that topic if one doesn't exist yet. Leave a panel's
 is generated from the topic (e.g. `shellies/shellyplug-ZWEMBADVerwarming/relay/0/power` becomes
 "Zwembad Verwarming - Power") — this is a heuristic (splitting on case changes, stripping
 brand/channel noise), so it won't always be perfect, especially for topics that are just an opaque
+device ID with no descriptive words in them at all — rename the panel by hand in that case.
 
+### Notification Center
+
+A bell icon next to Help in the topbar, visible to every logged-in user, polling for new events
+every 60 seconds. Opening it shows the most recent events and marks them read; **View all** links
+to a full history under **Logs → Notifications** (its own permission area, separate from the other
+Logs tabs). Reuses the existing [Apprise](https://github.com/caronc/apprise) rule engine for
+delivery (Monitor threshold, Miniserver/MQTT client status, backup failure) and adds two more
+event sources that only ever show up here, in-app:
+
+- **Firmware changed** — a Miniserver's reported firmware version changed since the last check
+  (Loxone doesn't expose a plain "update available" flag over HTTP, so this reports an actual
+  version change, not a check against a release feed).
+- **Threshold ladder** — any threshold row on a Monitor or Dashboard chart can be flagged
+  **Notify** (alongside its existing color); crossing into a flagged rung logs an event here
+  directly, no separate rule/channel setup needed.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/notification-center-dark.png">
+  <img src="docs/screenshots/notification-center-light.png" alt="The notification center popover open, showing recent events with severity-colored bars">
+</picture>
+
+*(Demo data.)*
 
 ### Monitor
 
@@ -155,8 +178,13 @@ Track a value over time and view it as a chart and/or a raw table, with a CSV ex
 Readings are stored in SQLite and survive a gateway restart. Old readings are purged automatically
 after a configurable retention period (default 30 days, editable on the Monitor page). A monitor's
 detail page shows a line chart (Chart.js, bundled locally — no CDN) for monitors with at least one
-numeric reading, plus the full raw-values table, both filterable by time range (1h/24h/7d/30d/all)
-and exportable as a plain `timestamp,value` CSV file.
+numeric reading, plus the full raw-values table, both filterable by time range (1h/24h/7d/30d/all or
+a custom range — type an absolute date like `1-8-2026` or `1-8-2026/-now`, Grafana-style) and
+exportable as a plain `timestamp,value` CSV file. The chart itself gets the same configurability as
+a Dashboard chart panel — appearance, thresholds (with the optional per-rung **Notify**, see
+Notification Center above), Y-axis, annotations — via an edit drawer with a live preview, resizable
+by dragging its edge; **star**/**reset** save that style as the default for every Monitor's chart at
+once, so they can all share one look in a couple of clicks.
 
 ### My Dashboards
 
@@ -165,11 +193,15 @@ Monitor page — the same panel system the shared home Dashboard above uses, jus
 account instead of shared, and always editable by you regardless of Access Role (ownership is enough).
 Create any number of named dashboards, each holding **panels**:
 
-- **Chart** — a line chart; pick more than one monitor to overlay them for comparison. Per panel:
-  legend position, Y-axis unit, straight or stepped line, optional point markers, fill-under-line,
-  linear or logarithmic Y-axis with an optional fixed min/max, scroll-to-zoom/drag-to-pan, threshold
-  lines *or* filled bands, and time-anchored annotations. Per series: rename, its own unit/scale/
-  decimals, the right-hand axis, a fixed color, and a line style (solid/thick/dashed/dotted).
+- **Chart** — a line chart by default; pick more than one monitor to overlay them for comparison. Per
+  panel: legend position, Y-axis unit, straight or stepped line, optional point markers,
+  fill-under-line, linear or logarithmic Y-axis with an optional fixed min/max,
+  scroll-to-zoom/drag-to-pan, threshold lines *or* filled bands, and time-anchored annotations. Per
+  series: rename, its own unit/scale/decimals, the right-hand axis, a fixed color, and a line style
+  (solid/thick/dashed/dotted). **Chart type** can also be switched to **Bar (compare)**,
+  **Doughnut**, **Pie**, **Polar Area**, or **Radar** — these five are snapshots (each monitor's
+  *current* value, side by side) rather than a time series, for comparing several monitors at a
+  glance instead of tracking one over time.
 - **Table** — one monitor's raw values (single-monitor by design — a true multi-series comparison
   table would need aligning independently-sampled timestamps, which a chart panel already covers).
 - **Current value** — a compact tile listing the latest reading for one or more monitors, stacked or
@@ -179,6 +211,13 @@ Create any number of named dashboards, each holding **panels**:
   an up/down arrow; optionally colored once you specify whether higher or lower is "better".
 - **Threshold indicator** — a colored badge (with customizable normal/alert labels) that flips once
   the value crosses a configured limit.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-chart-types-dark.png">
+  <img src="docs/screenshots/dashboard-chart-types-light.png" alt="Three chart panels comparing five monitors' current values as a doughnut, a bar chart, and a radar chart">
+</picture>
+
+*(Demo data — three of the five snapshot chart types, each comparing the same five monitors.)*
 
 Every panel type's Edit form is grouped into the same labeled sections (Appearance, Axis, Range,
 Condition, ...) regardless of type, so a given kind of setting always lives under the same heading.
@@ -212,8 +251,14 @@ background on an interval you set (Settings, default 60s) and shows an Online/Of
 badge plus its firmware version; **Test now** runs that check immediately, plus a **Loxone API**
 line specifically confirming the response actually looks like a Loxone Miniserver's own API
 (distinct from the plain Local/External reachability checks, which only prove *something*
-answered HTTP there). Editing a Miniserver never displays its stored password — leave the field
-blank to keep it, or type a new one to change it.
+answered HTTP there). A **Generation** column (Miniserver Gen 1/Gen 2, Miniserver Go Gen 1/Gen 2, or
+Compact) reads `msInfo.miniserverType` from the structure file once per Miniserver — confirmed
+against Loxone's own Structure File documentation — and never needs fetching again, since a
+physical device's generation doesn't change. Editing a Miniserver never displays its stored
+password — leave the field blank to keep it, or type a new one to change it.
+
+Sparse or rarely-needed columns (Generation, UDP port, External URL) start hidden and can be
+switched back on from the same **Columns** button every table has (see Other UI features below).
 
 Click the arrow on any row to expand a **diagnostics** panel: PLC run state (Loxone's own
 documented 0–8 values, e.g. "Running"), CPU load, heap usage, task count, firmware date, and
@@ -344,9 +389,10 @@ in-memory only (cleared on a gateway restart):
 
 ### Logs
 
-Different from Monitor: real **log files**, not tracked values. Two tabs, both live (refreshing
-every 5 seconds) and persisted in SQLite (kept for a configurable retention, purged automatically —
-same model as Monitor's history):
+Different from Monitor: real **log files** and structured events, not tracked values. Five tabs,
+each with its own view/edit permission area, all live (refreshing every 5 seconds where it applies)
+and persisted in SQLite (kept for a configurable retention, purged automatically — same model as
+Monitor's history):
 
 - **MQTT broker** — the raw Mosquitto broker log file, tailed the same way Connected Clients already
   reads it for connect/disconnect events, except every line is stored here.
@@ -356,13 +402,24 @@ same model as Monitor's history):
   for this on the Loxone side, so the gateway polls once a minute and stores only newly appended
   lines; the first poll for a Miniserver backfills the last 500 lines instead of its full history. A
   Miniserver filter dropdown appears once more than one is configured.
+- **Loxone commands** — every Virtual Output command Loxone sends this gateway (UDP or HTTP),
+  accepted or rejected, with who sent it, when, which MQTT topic it targeted, and the value
+  transition. A rejected row caused by a missing mapping gets a one-click **+ Mapping** button
+  (pre-fills the Loxone → MQTT add form with that exact topic); an accepted row gets **+ Reject**
+  to disable its mapping on the spot if it's misbehaving.
+- **System** — everything else worth an audit trail: settings changes, account/role changes,
+  scheduled-job results, and any single database query that took 200ms or longer (a symptom worth
+  seeing on its own, e.g. slow storage on some self-hosting setups, without needing to reproduce it
+  live).
+- **Notifications** — every event the Notification Center has ever recorded, filterable the same way
+  as the other tabs; see Notification Center above.
 
 Each line gets a best-effort **Level** badge (info/warning/error), guessed from its own wording
-since neither source tags lines with a real severity — a scanning aid, not a guarantee.
+since most sources don't tag lines with a real severity — a scanning aid, not a guarantee.
 
-Both tabs have a filter bar: **From**/**To** (date/time range), **Level**, and **Contains** (plain
+Every tab has a filter bar: **From**/**To** (date/time range), **Level**, and **Contains** (plain
 substring search). Filters combine, live in the URL, and survive the 5-second live refresh; the
-table still caps out at 1000 rows even when filtered. **Export .log** on either tab downloads
+table still caps out at 1000 rows even when filtered. **Export .log** on any tab downloads
 everything currently retained as plain text, unfiltered.
 
 ### Users (MQTT accounts)
@@ -431,13 +488,22 @@ Visible only to users whose Access Role has **Administrator** checked. Six tabs:
   gateway's own SQLite database and, optionally, Mosquitto's dynamic-security/broker config, with a
   **Keep last** retention count so it can run indefinitely without slowly filling the disk. An
   optional **offsite copy (rclone)** step additionally pushes every backup to any of rclone's 70+
-  supported storage backends right after it's created.
+  supported storage backends right after it's created — **S3-compatible** (AWS S3, MinIO, Wasabi,
+  DigitalOcean Spaces, Cloudflare R2, ...), **SFTP**, **WebDAV** (Nextcloud, ownCloud, ...), and
+  **Backblaze B2** each get a plain field-by-field form that builds the underlying `rclone.conf`
+  for you (passwords obscured via rclone's own `rclone obscure`, never stored in plain text) —
+  pasting a hand-written `rclone.conf` (any of rclone's 70+ backends, not just these four) is still
+  there as the general-purpose option.
 - **Notifications** — alert rules for a Monitor crossing a threshold, a Miniserver or MQTT client
   going online/offline, or a backup failing, sent through
   [Apprise](https://github.com/caronc/apprise) to Teams, Slack, Telegram, Email, or 100+ other
   services. **Channels** (a name plus one Apprise URL) and **Rules** (which event, and which
-  channel(s) it fires to) are kept as two separate, reusable lists. Every user can *also* set up
-  their own, entirely independent notifications — see Profile below.
+  channel(s) it fires to) are kept as two separate, reusable lists. A channel's **Service** picker
+  offers **Email (SMTP)**, **Telegram**, **Slack**, **Microsoft Teams**, and **Discord** — paste
+  the webhook URL/bot token/SMTP details the service itself gives you and the actual Apprise URL is
+  built for you, with a live preview before saving; **Custom (Apprise URL)** still takes any raw
+  Apprise URL directly, for the 100+ services without their own form here. Every user can *also* set
+  up their own, entirely independent notifications — see Profile below.
 - **Security** — the login page's rate limit (max attempts and time window), and **Single Sign-On**:
   connect a self-hosted [Pocket ID](https://pocket-id.org) instance so people can log in with it
   *alongside* (not instead of) the existing username/password login. The first sign-in via Pocket ID
@@ -467,6 +533,13 @@ Visible only to users whose Access Role has **Administrator** checked. Six tabs:
 </tr>
 </table>
 
+*(The Backups screenshot above shows the graphical S3-compatible rclone form; below is the
+Notifications page's graphical Discord channel form, both filled in but not yet saved.)*
+
+<picture>
+  <img src="docs/screenshots/notifications-add-channel-light.png" alt="The Add channel form with Service set to Discord, a pasted webhook URL, and a live preview of the Apprise URL it will save">
+</picture>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/security-dark.png">
   <img src="docs/screenshots/security-light.png" alt="The Security admin page with the login rate limit and Single Sign-On settings">
@@ -490,8 +563,9 @@ whatever channel(s) they already send to.
 ### Other UI features
 
 - **Per-user table customization** — drag a column header to reorder it, use the **Columns**
-  button to show/hide columns. Stored server-side per logged-in user, so it follows you across
-  browsers/devices (not `localStorage`).
+  button to show/hide columns (a handful of rarely-needed ones, e.g. Miniservers' Generation/UDP
+  port/External URL, start hidden until you turn them on). Stored server-side per logged-in user,
+  so it follows you across browsers/devices (not `localStorage`).
 - **Remember me** on login keeps a session for 30 days. Sessions live in the same SQLite database
   as everything else, so a remembered login also survives a gateway restart — it isn't just a
   longer cookie on top of an in-memory session.

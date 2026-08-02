@@ -5,6 +5,7 @@
   <% if (canView('logs_loxone')) { %><a href="/logs/loxone">Loxone Miniservers</a><% } %>
   <a class="active" href="/logs/loxone-commands">Loxone commands</a>
   <% if (canView('logs_system')) { %><a href="/logs/system">System</a><% } %>
+  <% if (canView('logs_notifications')) { %><a href="/logs/notifications">Notifications</a><% } %>
 </div>
 
 <p class="hint">
@@ -56,9 +57,17 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th>Time</th><th>Client</th><th>Command</th><th>From value</th><th>To value</th><th>Result</th></tr>
+      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th>Time</th><th>Client</th><th>Command</th><th>From value</th><th>To value</th><th>Result</th><th>Actions</th></tr>
     </thead>
     <tbody>
+      <%
+        // "no matching Loxone → MQTT mapping" is the only rejection reason a NEW mapping actually
+        // fixes — the other reasons (malformed message, broker not connected, publish failed,
+        // missing value) either have no usable token to map at all, or already have a mapping (the
+        // mapping just failed to USE it), so offering "+ Mapping" there would create a pointless
+        // duplicate at best. See loxoneCommandLog.js's logRejected call sites for the exact reasons.
+        const NO_MAPPING_REASON = 'Rejected: no matching Loxone → MQTT mapping';
+      %>
       <% rows.forEach(r => { %>
         <% const accepted = r.level !== 'error'; %>
         <tr>
@@ -72,10 +81,20 @@
             <span class="badge <%= accepted ? 'badge-ok' : 'badge-off' %>"><%= accepted ? 'Accepted' : 'Rejected' %></span>
             <% if (!accepted) { %><div class="hint" style="margin:0.25rem 0 0;"><%= r.line.replace(/^Rejected:\s*/, '') %></div><% } %>
           </td>
+          <td>
+            <% if (canEdit('loxone_to_mqtt') && !accepted && r.line === NO_MAPPING_REASON && r.commandTopic) { %>
+              <a href="/mappings/loxone-to-mqtt?topic=<%= encodeURIComponent(r.commandTopic) %>"><button type="button" class="btn-soft"><%- icon('plus') %> Mapping</button></a>
+            <% } else if (canEdit('loxone_to_mqtt') && accepted && r.commandTopic) { %>
+              <form method="post" action="/mappings/loxone-to-mqtt/disable-by-topic" data-confirm="Disable the mapping for &quot;<%= r.commandTopic %>&quot;? Loxone commands for it will start showing as rejected instead of being applied.">
+                <input type="hidden" name="mqtt_topic" value="<%= r.commandTopic %>">
+                <button type="submit" class="danger"><%- icon('x') %> Reject</button>
+              </form>
+            <% } %>
+          </td>
         </tr>
       <% }) %>
       <% if (rows.length === 0) { %>
-        <tr><td colspan="7" class="empty">No Loxone commands received yet.</td></tr>
+        <tr><td colspan="8" class="empty">No Loxone commands received yet.</td></tr>
       <% } %>
     </tbody>
   </table>

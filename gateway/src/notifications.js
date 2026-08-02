@@ -1,14 +1,16 @@
 const { execFile } = require('child_process');
 const db = require('./db');
 const { logSystemEvent } = require('./auditLog');
+const { matchedRung } = require('./thresholdLadder');
 
-// The four trigger types selectable when creating a rule — kept here since routes/notifications.js
+// The five trigger types selectable when creating a rule — kept here since routes/notifications.js
 // and this file are the only two places that need the list.
 const TRIGGER_TYPES = [
   { key: 'monitor_threshold', label: 'Monitor threshold breached' },
   { key: 'miniserver_status', label: 'Miniserver online/offline' },
   { key: 'mqtt_client_status', label: 'MQTT client online/offline' },
   { key: 'backup_failed', label: 'Backup failed' },
+  { key: 'firmware_changed', label: 'Miniserver firmware changed' },
 ];
 
 // Sending goes through Apprise (https://github.com/caronc/apprise, installed as a CLI in the
@@ -103,7 +105,28 @@ function getSubscriberChannelsForRule(ruleId) {
   `).all(ruleId);
 }
 
+// One row per logical event (not per channel/subscriber delivery below — a rule with 3 channels
+// is still one alert, not three) — the Notification Center's own persisted history, independent of
+// whether any channel is even configured or a send succeeds. See db.js's notification_events
+// comment for why rule_id carries no REFERENCES/cascade.
+function recordNotificationEvent(event, opts) {
+  db.prepare(
+    'INSERT INTO notification_events (event_type, severity, title, message, source_id, source_label, rule_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    opts.eventType,
+    event.severity || 'info',
+    event.title,
+    event.message,
+    event.sourceId != null ? event.sourceId : null,
+    event.sourceLabel || null,
+    opts.ruleId != null ? opts.ruleId : null,
+    event.timestamp || new Date().toISOString()
+  );
+}
+
 async function fireRule(rule, event) {
+  recordNotificationEvent(event, { eventType: rule.trigger_type, ruleId: rule.id });
+
   const channels = getChannelsForRule(rule.id);
   for (const channel of channels) {
     try {
@@ -178,6 +201,8 @@ function checkMonitorThreshold(monitorId, numericValue) {
           { label: 'Current value', value: numericValue },
           { label: 'Threshold', value: `${operatorLabel(cfg.operator)} ${cfg.value}` },
         ],
+        sourceId: monitor.id,
+        sourceLabel: monitor.label,
         timestamp: new Date().toISOString(),
       });
     } else if (cfg.notify_on_recover) {
@@ -186,10 +211,59 @@ function checkMonitorThreshold(monitorId, numericValue) {
         message: `${monitor.label} is no longer ${operatorLabel(cfg.operator)} ${cfg.value} (current: ${numericValue}).`,
         severity: 'info',
         fields: [{ label: 'Monitor', value: monitor.label }, { label: 'Current value', value: numericValue }],
+        sourceId: monitor.id,
+        sourceLabel: monitor.label,
         timestamp: new Date().toISOString(),
       });
     }
   }
+}
+
+// A monitor's OWN threshold ladder (monitors.config.thresholds, the Monitor detail page's own
+// chart — see thresholdLadder.js) firing a notification when a reading enters a rung marked
+// notify:true, entirely separate from the monitor_threshold rule above: no rule to create, no
+// channel to pick — the user just checks a box on the threshold row itself, and it lands straight
+// in the Notification Center (rule_id NULL below — see db.js's notification_events comment for
+// why). Deliberately NOT evaluated against a dashboard panel's own ladder — a monitor can sit on
+// several panels each with a different ladder, so there's no single unambiguous one to check
+// there; only this page's own ladder is unambiguous.
+//
+// lastMatchedRung is in-memory only (keyed by monitor id -> last matched rung's numeric *value*,
+// not array index — an index would misfire if the ladder itself is reordered/edited) — same
+// simplicity/tradeoff as the existing lastAutoReconnectAt Map in monitorCollector.js: resets on a
+// process restart, which can cost at most one possibly-redundant or (rarely) missed notification
+// right after a restart, not an ongoing correctness issue.
+const lastMatchedRung = new Map();
+function checkThresholdLadderNotify(monitorId, numericValue) {
+  const monitor = db.prepare('SELECT id, label, config FROM monitors WHERE id = ?').get(monitorId);
+  if (!monitor) return;
+
+  let config;
+  try { config = JSON.parse(monitor.config || '{}'); } catch (err) { return; }
+  const ladder = config.thresholds;
+  if (!ladder || ladder.length === 0) return;
+
+  const rung = matchedRung(numericValue, ladder);
+  const rungKey = rung ? rung.value : null;
+  const hadPrevious = lastMatchedRung.has(monitorId);
+  const previousKey = lastMatchedRung.get(monitorId);
+  lastMatchedRung.set(monitorId, rungKey);
+  // No baseline to compare against yet (nothing to "transition" from), so the first reading ever
+  // seen for a monitor never fires — same reasoning as checkFirmwareChanged's own !miniserver.
+  // firmware_version guard just below: without it, `null === undefined` is false, so a monitor
+  // that starts out below every rung (rungKey null) would wrongly look like a transition on read 1.
+  if (!hadPrevious) return;
+  if (rungKey === previousKey) return; // still in the same rung (or still below every rung)
+  if (!rung || !rung.notify) return;
+
+  recordNotificationEvent({
+    title: `${monitor.label}: ${rung.value}`,
+    message: `${monitor.label} reached ${rung.value} (current: ${numericValue}).`,
+    severity: 'warning',
+    sourceId: monitor.id,
+    sourceLabel: monitor.label,
+    timestamp: new Date().toISOString(),
+  }, { eventType: 'threshold_ladder', ruleId: null });
 }
 
 // Called by healthcheck.js's checkMiniserver whenever a poll's outcome differs from the status
@@ -212,6 +286,42 @@ function checkMiniserverStatus(miniserver, newStatus) {
       message: `Miniserver "${miniserver.name}" (${miniserver.host}) is now ${newStatus}.`,
       severity: newStatus === 'offline' ? 'critical' : 'info',
       fields: [{ label: 'Miniserver', value: miniserver.name }, { label: 'Host', value: miniserver.host }, { label: 'Status', value: newStatus }],
+      sourceId: miniserver.id,
+      sourceLabel: miniserver.name,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+// Called by healthcheck.js's checkMiniserver on the SUCCESS path only, right after
+// checkMiniserverStatus — comparing the freshly-fetched version string against whatever was
+// already on record before this tick's UPDATE overwrites it. Loxone doesn't expose a plain
+// update-available flag over HTTP (see the Miniservers page's own "Check for update" button and
+// its tooltip explaining exactly this), so this deliberately only detects that the version
+// CHANGED, not that a newer one is available — an honest, checkable signal instead of a guess at
+// an external release feed this app doesn't talk to. No last_state needed: the version-string
+// comparison itself already IS the transition check, no separate persisted flag required.
+function checkFirmwareChanged(miniserver, newVersion) {
+  // The !miniserver.firmware_version guard matters — without it, a brand-new Miniserver's very
+  // first successful read (previous version genuinely unknown, not "unchanged") would look like a
+  // change from nothing and fire a spurious alert.
+  if (!newVersion || !miniserver.firmware_version || newVersion === miniserver.firmware_version) return;
+
+  for (const rule of getRulesByTrigger('firmware_changed')) {
+    const cfg = JSON.parse(rule.config || '{}');
+    if (cfg.miniserver_id && Number(cfg.miniserver_id) !== miniserver.id) continue;
+
+    fireRule(rule, {
+      title: `${miniserver.name}: firmware changed`,
+      message: `Miniserver "${miniserver.name}" firmware changed from ${miniserver.firmware_version} to ${newVersion}.`,
+      severity: 'info',
+      fields: [
+        { label: 'Miniserver', value: miniserver.name },
+        { label: 'Previous version', value: miniserver.firmware_version },
+        { label: 'New version', value: newVersion },
+      ],
+      sourceId: miniserver.id,
+      sourceLabel: miniserver.name,
       timestamp: new Date().toISOString(),
     });
   }
@@ -236,6 +346,7 @@ function checkMqttClientStatus(username, status) {
       message: `MQTT client "${username}" is now ${status}.`,
       severity: status === 'disconnected' ? 'warning' : 'info',
       fields: [{ label: 'Client', value: username }, { label: 'Status', value: status }],
+      sourceLabel: username,
       timestamp: new Date().toISOString(),
     });
   }
@@ -251,6 +362,7 @@ function notifyBackupFailed(errorMessage, context) {
       message: errorMessage,
       severity: 'critical',
       fields: [{ label: 'Step', value: context || 'backup' }],
+      sourceLabel: context || 'backup',
       timestamp: new Date().toISOString(),
     });
   }
@@ -260,7 +372,9 @@ module.exports = {
   TRIGGER_TYPES,
   sendTestMessage,
   checkMonitorThreshold,
+  checkThresholdLadderNotify,
   checkMiniserverStatus,
+  checkFirmwareChanged,
   checkMqttClientStatus,
   notifyBackupFailed,
   // Pure helpers, exported mainly so test/notifications.test.js can exercise them directly rather

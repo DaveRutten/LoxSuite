@@ -61,6 +61,22 @@ router.post('/rclone/settings', (req, res) => {
   res.redirect('/admin/backup');
 });
 
+// Powers the Offsite copy card's per-backend forms (S3-compatible/SFTP/WebDAV/Backblaze B2) — an
+// alternative to pasting a whole rclone.conf by hand. Always replaces both rclone_remote and
+// rclone_config wholesale (see buildRcloneConfig's own comment on why); redirects back to the same
+// page, which reloads showing the generated config in the plain "Custom" fields for review/tweaking
+// — nothing about that fallback goes away, this is just another way to fill in the same two fields.
+router.post('/rclone/build-config', async (req, res) => {
+  const { backend_type: backendType, remote_name: remoteName, remote_path: remotePath, ...fields } = req.body;
+  try {
+    const config = await backup.buildRcloneConfig(backendType, remoteName, fields);
+    backup.updateSettings({ rclone_remote: `${(remoteName || '').trim()}:${(remotePath || '').trim()}`, rclone_config: config });
+    res.redirect('/admin/backup');
+  } catch (err) {
+    renderPage(res, { error: `Couldn't build rclone config: ${err.message}` });
+  }
+});
+
 // Uses whatever's currently saved (not whatever's still unsaved in the form) — same "save first,
 // then test" convention as the Miniservers edit page's own Test button, and for the same reason:
 // this exercises the real config the next scheduled/manual backup will actually use.

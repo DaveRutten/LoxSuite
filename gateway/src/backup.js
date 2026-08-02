@@ -313,6 +313,71 @@ async function uploadToRclone(localZipPath, settings) {
   }
 }
 
+// Shells out to rclone's own `obscure` subcommand rather than reimplementing its (reversible,
+// not-for-security, just-avoids-shoulder-surfing) obfuscation format by hand — this is the exact
+// encoding rclone's own config parser expects for password-type fields (SFTP/WebDAV's `pass`),
+// verified against the real binary already used everywhere else in this file rather than guessed
+// at from rclone's docs.
+function obscurePassword(plain) {
+  return new Promise((resolve, reject) => {
+    execFile('rclone', ['obscure', plain], (err, stdout) => {
+      if (err) { reject(new Error(`Could not obscure password: ${err.message}`)); return; }
+      resolve(stdout.toString().trim());
+    });
+  });
+}
+
+function assertNoLineBreaks(value, label) {
+  if (/[\r\n]/.test(value || '')) throw new Error(`${label} must not contain line breaks.`);
+}
+
+// Builds one rclone.conf stanza from a handful of plain fields for one of a few common backend
+// types, instead of requiring an admin to already know rclone.conf's own INI syntax (and, for
+// SFTP/WebDAV, that a plaintext password there simply doesn't work — it has to be pre-obscured).
+// Only replaces the WHOLE saved rclone_config — this app only ever drives a single active remote
+// (see rclone_remote), not a multi-remote conf file, so there's nothing to merge into.
+async function buildRcloneConfig(backendType, remoteName, fields) {
+  const name = (remoteName || '').trim();
+  if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) {
+    throw new Error('Remote name must be letters, numbers, "-" or "_" only.');
+  }
+  Object.entries(fields).forEach(([key, value]) => assertNoLineBreaks(value, key));
+
+  const lines = [`[${name}]`];
+  if (backendType === 's3') {
+    if (!fields.access_key_id || !fields.secret_access_key) throw new Error('Access key ID and secret access key are required.');
+    if (fields.provider !== 'AWS' && !fields.endpoint) throw new Error('Endpoint is required for this provider.');
+    lines.push('type = s3');
+    lines.push(`provider = ${fields.provider || 'Other'}`);
+    lines.push(`access_key_id = ${fields.access_key_id}`);
+    lines.push(`secret_access_key = ${fields.secret_access_key}`);
+    if (fields.endpoint) lines.push(`endpoint = ${fields.endpoint}`);
+    if (fields.region) lines.push(`region = ${fields.region}`);
+  } else if (backendType === 'sftp') {
+    if (!fields.host || !fields.user || !fields.pass) throw new Error('Host, username and password are required.');
+    lines.push('type = sftp');
+    lines.push(`host = ${fields.host}`);
+    if (fields.port && Number(fields.port) !== 22) lines.push(`port = ${fields.port}`);
+    lines.push(`user = ${fields.user}`);
+    lines.push(`pass = ${await obscurePassword(fields.pass)}`);
+  } else if (backendType === 'webdav') {
+    if (!fields.url || !fields.user || !fields.pass) throw new Error('URL, username and password are required.');
+    lines.push('type = webdav');
+    lines.push(`url = ${fields.url}`);
+    lines.push(`vendor = ${fields.vendor || 'other'}`);
+    lines.push(`user = ${fields.user}`);
+    lines.push(`pass = ${await obscurePassword(fields.pass)}`);
+  } else if (backendType === 'b2') {
+    if (!fields.account || !fields.key) throw new Error('Account ID and application key are required.');
+    lines.push('type = b2');
+    lines.push(`account = ${fields.account}`);
+    lines.push(`key = ${fields.key}`);
+  } else {
+    throw new Error('Unknown backend type.');
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 // Backs the Backups page's "Test connection" button — lists the remote path's own contents without
 // touching any files, the lightest read-only operation that still proves both the pasted config and
 // the remote path actually work end to end.
@@ -391,4 +456,5 @@ module.exports = {
   startScheduler,
   rescheduleFromSettings,
   testRcloneConnection,
+  buildRcloneConfig,
 };

@@ -10,7 +10,18 @@ const router = express.Router();
 const PANEL_TYPES = ['chart', 'table', 'value', 'gauge', 'stat_delta', 'threshold'];
 const SINGLE_MONITOR_TYPES = ['table', 'gauge', 'stat_delta', 'threshold'];
 const THRESHOLD_OPERATORS = ['gt', 'gte', 'lt', 'lte'];
-const LEGEND_POSITIONS = ['auto', 'top', 'left', 'right', 'off'];
+const LEGEND_POSITIONS = ['auto', 'top', 'bottom', 'left', 'right', 'off'];
+const CURVE_TENSIONS = [0, 0.15, 0.4];
+const STEPPED_VALUES = ['before', 'after', 'middle'];
+const POINT_STYLES = ['circle', 'cross', 'rect', 'rectRot', 'star', 'triangle'];
+// 'line' is the only time-series type — the rest are snapshots (one CURRENT value per monitor,
+// not a history), fed by a completely different client-side data path (see monitor-chart.js's
+// renderSnapshot). 'bar_compare' (not just 'bar') names that distinction explicitly: a real
+// time-bucketed bar chart is a materially different, larger feature (needs server-side
+// aggregation of irregularly-spaced readings) that's deliberately out of scope here — see the
+// CHANGELOG/plan for why. Kept in the same 'chart' panel_type rather than becoming new panel
+// types of their own: see panelTypeDefaults.js's defaultsKey() for the reasoning.
+const CHART_TYPES = ['line', 'bar_compare', 'doughnut', 'pie', 'polar_area', 'radar'];
 const MIN_COL_SPAN = 2;
 const MAX_COL_SPAN = 12; // the grid itself is 12 columns wide — this is a real ceiling, not an arbitrary one
 const MIN_ROW_SPAN = 2;
@@ -95,46 +106,10 @@ function serializeKeyValueLines(map) {
   return Object.entries(map || {}).map(([key, value]) => `${key}=${value}`).join('\n');
 }
 
-// A CSS-safe-ish check, not a full validator — just enough to stop something like
-// "red; } body { display:none" (an attempted style injection via this free-text field) from ever
-// reaching a rendered inline style="color: ...". Named colors, hex, rgb()/hsl() all pass.
-const SAFE_CSS_COLOR_RE = /^[a-zA-Z][a-zA-Z0-9]*$|^#[0-9a-fA-F]{3,8}$|^(rgb|hsl)a?\([0-9.,%\s]+\)$/;
-function sanitizeColor(value) {
-  return SAFE_CSS_COLOR_RE.test(value.trim()) ? value.trim() : null;
-}
-
-// Grafana-style threshold ladder: each line is "<value>=<color>[=<style>]"; the color that applies
-// to a given reading is the HIGHEST threshold the reading meets or exceeds (e.g. "1=orange, 2=red,
-// 3=purple" means 0.5 stays uncolored, 1.5 is orange, 2.5 is red, 4 is purple) — not a single
-// on/off alert the way the dedicated 'threshold' panel type's own config is. The optional third
-// segment ('line', the default, or 'band') only means anything on a Chart panel's own plotted
-// thresholds (see makeThresholdPlugin in monitor-chart.js) — every other panel type that reuses
-// this same builder for its value-coloring ladder (table/value/gauge/stat_delta) just ignores it.
-function parseThresholdLadder(text) {
-  return (text || '').split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
-    const parts = line.split('=');
-    if (parts.length < 2) return null;
-    const value = Number(parts[0]);
-    const color = sanitizeColor(parts[1]);
-    const style = parts[2] === 'band' ? 'band' : 'line';
-    if (!Number.isFinite(value) || !color) return null;
-    return { value, color, style };
-  }).filter(Boolean).sort((a, b) => a.value - b.value);
-}
-
-function serializeThresholdLadder(ladder) {
-  return (ladder || []).map((t) => `${t.value}=${t.color}=${t.style === 'band' ? 'band' : 'line'}`).join('\n');
-}
-
-function colorForThresholdLadder(numeric, ladder) {
-  if (!Number.isFinite(numeric) || !ladder || ladder.length === 0) return null;
-  let color = null;
-  for (const t of ladder) {
-    if (numeric >= t.value) color = t.color; // ladder is sorted ascending, so the last match wins
-    else break;
-  }
-  return color;
-}
+// parseThresholdLadder/serializeThresholdLadder/colorForThresholdLadder/sanitizeColor moved to
+// thresholdLadder.js once notifications.js became a second consumer (see that file's own header
+// comment for why a plain top-level require of this file from there would be circular).
+const { sanitizeColor, parseThresholdLadder, serializeThresholdLadder, colorForThresholdLadder } = require('../thresholdLadder');
 
 // Exact-value mapping (not a threshold ladder's >= comparison) — each line is
 // "<value>=<label>[=<color>]", the color segment optional since not every mapped value needs its
@@ -212,7 +187,8 @@ function parseSeriesConfig(text) {
     const axis = entry.axis === 'right' ? 'right' : 'left';
     const color = typeof entry.color === 'string' && entry.color.trim() ? sanitizeColor(entry.color) : null;
     const style = ['solid-thick', 'dashed', 'dotted'].includes(entry.style) ? entry.style : null;
-    if (name || unit || hasScale || hasDecimals || axis === 'right' || color || style) {
+    const pointStyle = POINT_STYLES.includes(entry.pointStyle) ? entry.pointStyle : null;
+    if (name || unit || hasScale || hasDecimals || axis === 'right' || color || style || pointStyle) {
       result[id] = {
         name: name || null,
         unit: unit || null,
@@ -221,6 +197,7 @@ function parseSeriesConfig(text) {
         axis,
         color,
         style,
+        pointStyle,
       };
     }
   }
@@ -274,12 +251,22 @@ function buildConfig(panelType, body) {
     // Settings-page global default at render time instead (see panel-grid.ejs's canvas).
     const yMin = Number(body.y_min);
     const yMax = Number(body.y_max);
+    // stepped_line is now a <select> (Off/Before/After/Middle) whose "Off" option submits '' —
+    // anything not one of the three real granularities (including '', or the field being absent)
+    // means off. Old saved panels with the pre-upgrade `stepped: true` boolean are normalized to
+    // 'before' at the one place that reads them back out for rendering (panel-grid.ejs's canvas
+    // data-stepped attr), not here — this only ever sees a fresh submission from the new select.
+    const stepped = STEPPED_VALUES.includes(body.stepped_line) ? body.stepped_line : false;
+    const curveTension = CURVE_TENSIONS.includes(Number(body.curve_tension)) ? Number(body.curve_tension) : 0.15;
     return {
+      chartType: CHART_TYPES.includes(body.chart_type) ? body.chart_type : 'line',
       legendPosition: LEGEND_POSITIONS.includes(body.legend_position) ? body.legend_position : 'auto',
       unit: fieldStr(body.unit_chart),
       fill: !!body.fill_area,
-      stepped: !!body.stepped_line,
+      stepped,
+      curveTension,
       points: !!body.show_points,
+      animation: !!body.enable_animation,
       yScaleType: body.y_scale_type === 'logarithmic' ? 'logarithmic' : 'linear',
       yMin: fieldStr(body.y_min) !== '' && Number.isFinite(yMin) ? yMin : null,
       yMax: fieldStr(body.y_max) !== '' && Number.isFinite(yMax) ? yMax : null,

@@ -160,6 +160,16 @@
             </div>
           </div>
 
+          <div class="form-grid rule-fields" data-for="firmware_changed" style="margin-top:0.85rem;">
+            <div>
+              <label>Miniserver</label>
+              <select name="firmware_miniserver_id">
+                <option value="">Any Miniserver</option>
+                <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
+              </select>
+            </div>
+          </div>
+
           <div class="form-grid rule-fields" data-for="mqtt_client_status" style="margin-top:0.85rem;">
             <div><label>MQTT username (blank = any client)</label><input type="text" name="mqtt_username" placeholder="e.g. shelly-livingroom"></div>
           </div>
@@ -236,6 +246,16 @@
                       <div>
                         <label>Miniserver</label>
                         <select name="miniserver_id">
+                          <option value="">Any Miniserver</option>
+                          <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="form-grid rule-fields" data-for="firmware_changed" style="margin-top:0.85rem;">
+                      <div>
+                        <label>Miniserver</label>
+                        <select name="firmware_miniserver_id">
                           <option value="">Any Miniserver</option>
                           <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
                         </select>

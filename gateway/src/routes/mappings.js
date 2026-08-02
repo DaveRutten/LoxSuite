@@ -334,6 +334,21 @@ router.post('/loxone-to-mqtt/:id/toggle', requirePermission('loxone_to_mqtt', 'e
   res.redirect('/mappings/loxone-to-mqtt');
 });
 
+// The "+ Reject" quick-action on an accepted row in Logs > Loxone commands (logs-loxone-commands.
+// ejs) — that page only ever knows the mqtt_topic an accepted command matched (see loxoneCommandLog
+// .js's logAccepted, which logs mapping.mqtt_topic, not the mapping's id), so this looks the
+// mapping up by that rather than taking an :id the way the row-level toggle above does. An
+// explicit "set disabled" (not a blind toggle) is deliberate: unlike the Mappings page's own
+// toggle switch, this button's page never shows the mapping's current enabled state, so flipping
+// whichever state it happens to already be in could silently RE-enable a mapping someone already
+// turned off for an unrelated reason. No-ops (still redirects) if the topic no longer matches any
+// mapping — nothing to disable, not an error.
+router.post('/loxone-to-mqtt/disable-by-topic', requirePermission('loxone_to_mqtt', 'edit'), (req, res) => {
+  const topic = (req.body.mqtt_topic || '').trim();
+  if (topic) db.prepare('UPDATE mappings_loxone_to_mqtt SET enabled = 0 WHERE mqtt_topic = ?').run(topic);
+  res.redirect(req.get('referer') || '/logs/loxone-commands');
+});
+
 router.post('/loxone-to-mqtt/enable-all', requirePermission('loxone_to_mqtt', 'edit'), (req, res) => {
   db.prepare('UPDATE mappings_loxone_to_mqtt SET enabled = 1').run();
   res.redirect('/mappings/loxone-to-mqtt');

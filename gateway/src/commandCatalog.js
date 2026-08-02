@@ -34,6 +34,14 @@ function rollerCommand() {
 function lightCommand() {
   return { key: 'light', label: 'Light (dimmer)', topicTemplate: 'shellies/{device}/light/{channel}/command', actions: ['on', 'off', 'toggle'] };
 }
+// Separate from lightCommand() above — on/off/toggle and brightness are two different topics on
+// real Gen1 dimmable-light devices (confirmed against a real Shelly Dimmer: .../light/0/command
+// takes on/off/toggle, .../light/0/set takes a bare brightness number, 0-100 — not JSON, and not
+// the same topic as the on/off one). A representative spread is listed as quick picks; any value
+// 0-100 is valid, same as every other "actions" list here is a helper, not an enforced whitelist.
+function lightSetCommand() {
+  return { key: 'light-set', label: 'Light brightness (0-100)', topicTemplate: 'shellies/{device}/light/{channel}/set', actions: ['0', '25', '50', '75', '100'] };
+}
 function colorCommand() {
   return { key: 'color', label: 'Color', topicTemplate: 'shellies/{device}/color/{channel}/command', actions: ['on', 'off', 'toggle'] };
 }
@@ -52,10 +60,10 @@ const CATALOG = [
   { key: 'shelly-2', label: 'Shelly 2 (relay or roller)', topicPrefixPattern: '^shellies/(shellyswitch-[^/]+)/', commands: [relayCommand(), rollerCommand()] },
   { key: 'shelly-25', label: 'Shelly 2.5 (relay or roller)', topicPrefixPattern: '^shellies/(shellyswitch25-[^/]+)/', commands: [relayCommand(), rollerCommand()] },
   { key: 'shelly-4pro', label: 'Shelly 4Pro', topicPrefixPattern: '^shellies/(shelly4pro-[^/]+)/', commands: [relayCommand()] },
-  { key: 'shelly-dimmer', label: 'Shelly Dimmer / Dimmer 2', topicPrefixPattern: '^shellies/(shellydimmer2?-[^/]+)/', commands: [lightCommand()] },
+  { key: 'shelly-dimmer', label: 'Shelly Dimmer / Dimmer 2', topicPrefixPattern: '^shellies/(shellydimmer2?-[^/]+)/', commands: [lightCommand(), lightSetCommand()] },
   { key: 'shelly-bulb', label: 'Shelly Bulb (RGBW, color mode)', topicPrefixPattern: '^shellies/(shellybulb-[^/]+)/', commands: [colorCommand(), whiteCommand()] },
-  { key: 'shelly-bulb-duo', label: 'Shelly Bulb Duo (white/tunable)', topicPrefixPattern: '^shellies/(shellybulbduo-[^/]+)/', commands: [lightCommand()] },
-  { key: 'shelly-vintage', label: 'Shelly Vintage', topicPrefixPattern: '^shellies/(shellyvintage-[^/]+)/', commands: [lightCommand()] },
+  { key: 'shelly-bulb-duo', label: 'Shelly Bulb Duo (white/tunable)', topicPrefixPattern: '^shellies/(shellybulbduo-[^/]+)/', commands: [lightCommand(), lightSetCommand()] },
+  { key: 'shelly-vintage', label: 'Shelly Vintage', topicPrefixPattern: '^shellies/(shellyvintage-[^/]+)/', commands: [lightCommand(), lightSetCommand()] },
   { key: 'shelly-rgbw2', label: 'Shelly RGBW2', topicPrefixPattern: '^shellies/(shellyrgbw2-[^/]+)/', commands: [colorCommand(), whiteCommand()] },
   { key: 'shelly-em', label: 'Shelly EM (energy meter + relay)', topicPrefixPattern: '^shellies/(shellyem-[^/]+)/', commands: [relayCommand()] },
   { key: 'shelly-3em', label: 'Shelly 3EM (energy meter + relay)', topicPrefixPattern: '^shellies/(shelly3em-[^/]+)/', commands: [relayCommand()] },
@@ -139,7 +147,7 @@ const CATALOG = [
     key: 'shelly-gen1',
     label: 'Shelly Gen1 (other/unlisted model)',
     topicPrefixPattern: '^shellies/([^/]+)/',
-    commands: [relayCommand(), rollerCommand(), lightCommand(), colorCommand(), whiteCommand()],
+    commands: [relayCommand(), rollerCommand(), lightCommand(), lightSetCommand(), colorCommand(), whiteCommand()],
   },
 ];
 

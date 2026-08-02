@@ -129,4 +129,4 @@ async function getRoomDetail(miniserver, roomUuid, { forceRefresh } = {}) {
   return tree.find((room) => room.roomUuid === roomUuid) || null;
 }
 
-module.exports = { getMonitorableStates, getRoomCategoryTree, getRoomSummaries, getRoomDetail };
+module.exports = { getStructure, getMonitorableStates, getRoomCategoryTree, getRoomSummaries, getRoomDetail };

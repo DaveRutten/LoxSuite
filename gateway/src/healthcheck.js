@@ -1,9 +1,10 @@
 const db = require('./db');
 const { fetchMiniserver, miniserverBaseUrl, insecureAgent } = require('./loxone');
-const { checkMiniserverStatus } = require('./notifications');
+const { checkMiniserverStatus, checkFirmwareChanged } = require('./notifications');
 const { decrypt } = require('./secretCrypto');
 const { recordMiniserverDiagValue } = require('./monitorCollector');
 const { parseHeapStatus } = require('./format');
+const { getStructure } = require('./loxoneStructure');
 
 const TIMEOUT_MS = 4000;
 
@@ -129,6 +130,25 @@ async function fetchSystemStats(miniserver) {
   return { cpuLoad, heapStatus, numTasks, firmwareDate };
 }
 
+// msInfo.miniserverType, from the structure file rather than a dedicated /jdev/... command (no
+// such command is known to exist for this). Unlike firmware_version/cpu_load/etc., a physical
+// Miniserver's hardware generation never changes, so this only fetches while the column is still
+// NULL — reuses loxoneStructure.js's own in-memory cache (already warm for free if the user has
+// visited Live Data or Monitor's add-state picker for this Miniserver), and never re-fetches the
+// full structure file just for this one field again afterward. Swallows any failure (offline,
+// old firmware, malformed response) since a missing generation label is harmless — it just leaves
+// the column NULL to retry on a later sweep.
+async function fetchMiniserverType(miniserver) {
+  if (miniserver.miniserver_type !== null && miniserver.miniserver_type !== undefined) return null;
+  try {
+    const structure = await getStructure(miniserver);
+    const type = structure?.msInfo?.miniserverType;
+    return Number.isInteger(type) ? type : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 async function checkMiniserver(miniserver) {
   const now = new Date().toISOString();
 
@@ -140,6 +160,7 @@ async function checkMiniserver(miniserver) {
     const firmwareVersion = await fetchFirmwareVersion(miniserver);
     const plcState = await fetchPlcState(miniserver);
     const { cpuLoad, heapStatus, numTasks, firmwareDate } = await fetchSystemStats(miniserver);
+    const miniserverType = await fetchMiniserverType(miniserver);
     // COALESCE keeps whatever was last successfully read if this particular sweep's fetch failed
     // — a hiccup reading any one of these shouldn't flip an otherwise-successful check's columns
     // back to unknown.
@@ -147,10 +168,14 @@ async function checkMiniserver(miniserver) {
       `UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = NULL,
        firmware_version = COALESCE(?, firmware_version), plc_state = COALESCE(?, plc_state),
        cpu_load = COALESCE(?, cpu_load), heap_status = COALESCE(?, heap_status), num_tasks = COALESCE(?, num_tasks),
-       firmware_date = COALESCE(?, firmware_date)
+       firmware_date = COALESCE(?, firmware_date), miniserver_type = COALESCE(?, miniserver_type)
        WHERE id = ?`
-    ).run('online', now, firmwareVersion, plcState, cpuLoad, heapStatus, numTasks, firmwareDate, miniserver.id);
+    ).run('online', now, firmwareVersion, plcState, cpuLoad, heapStatus, numTasks, firmwareDate, miniserverType, miniserver.id);
     checkMiniserverStatus(miniserver, 'online');
+    // miniserver.firmware_version here is still this sweep's PRE-update value (miniserver is the
+    // in-memory row checkAllMiniservers passed in, never mutated in place) — firmwareVersion above
+    // is the freshly-fetched one, so this is exactly the before/after pair a change check needs.
+    checkFirmwareChanged(miniserver, firmwareVersion);
 
     // Feeds any Monitor tracking one of these fields (source_type 'miniserver_diag') — a no-op
     // query if none exist for this Miniserver. Fed from THIS cycle's own fresh readings, not the

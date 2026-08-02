@@ -167,9 +167,12 @@ a { color: var(--accent); }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); background-clip: content-box; }
 
 .icon { vertical-align: -3px; flex-shrink: 0; }
-/* Only when there's a text label to separate from — an icon-only .icon-btn keeps this margin off,
-   otherwise it throws off centering (the icon sits visibly left of true center). */
-button:not(.icon-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35rem; }
+/* Only when there's a text label to separate from — an icon-only button (.icon-btn, or
+   .notification-center-btn/.topbar-help further below, both icon-only circles of their own) keeps
+   this margin off, otherwise it throws off centering (the icon sits visibly left of true center) —
+   exactly the bug a real screenshot measurement caught on the notification bell: SVG vertically
+   centered to within a sub-pixel, but 0.35rem off horizontally, matching this margin exactly. */
+button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35rem; }
 
 /* ---- App shell ---- */
 .app-shell {
@@ -358,23 +361,27 @@ button:not(.icon-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35r
 }
 
 /* .topbar-help, .refresh-control, and .account-menu-btn (further below) are the same row of
-   bordered topbar pills — explicit height + font-size on all three (rather than letting each
-   size itself from its own padding/content) is what actually keeps them visually level with each
-   other, since their internal content otherwise differs enough (an icon+text link vs. a
-   select+button group vs. an avatar+name) to size slightly differently left to their own devices. */
+   bordered topbar controls — explicit height on all of them (rather than letting each size itself
+   from its own padding/content) is what actually keeps them visually level with each other, since
+   their internal content otherwise differs enough (an icon-only circle vs. a select+button group
+   vs. an avatar+name pill) to size slightly differently left to their own devices. Icon-only and
+   circular, matching .notification-center-btn right next to it — no text label, since a page's own
+   name already says where you are, and "?" alone reads as "explain this page" clearly enough. */
 .topbar-help {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: center;
+  width: 2.25rem;
   height: 2.25rem;
-  font-size: 0.82rem;
   color: var(--text-muted);
   text-decoration: none;
-  padding: 0 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  white-space: nowrap;
+  border-radius: 50%;
 }
+
+/* The global .icon rule's vertical-align:-3px is calibrated for an icon sitting inline next to
+   text — with no text label here any more, that same offset visibly pulls it off true center. */
+.topbar-help .icon { vertical-align: 0; }
 
 .topbar-help:hover {
   color: var(--accent);
@@ -560,6 +567,68 @@ button:not(.icon-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35r
   background: var(--border);
   margin: 0.3rem 0.2rem;
 }
+
+/* Same show/hide-popover mechanics as .account-menu right next to it (see the toggle script in
+   foot.ejs) — a circular icon button (matching .topbar-help's own sizing) rather than a pill, since
+   there's no name/avatar to show alongside it, just the bell + its own badge. */
+.notification-center { position: relative; }
+
+.notification-center-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.notification-center-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* The global .icon rule's vertical-align:-3px (see near the top of this file) is calibrated for an
+   icon sitting inline next to text ("? Help") — inside a plain flex-centered circle with no text
+   alongside it, that same offset instead nudges it visibly off true center. */
+.notification-center-btn .icon { vertical-align: 0; }
+
+.notification-center-badge {
+  position: absolute;
+  top: -0.25rem;
+  right: -0.25rem;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.1rem;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* Wider than .account-menu-panel's own min-width — that one only ever holds short menu links,
+   this holds a title/message/time per notification. max-height + scroll rather than growing
+   unbounded, since it's capped at the 15 most recent (see loadUserContext.js) but could still be
+   tall on a short viewport. */
+.notification-center-panel { min-width: 20rem; max-width: 24rem; max-height: 70vh; overflow-y: auto; }
+
+.notification-center-item {
+  padding: 0.55rem 0.7rem;
+  border-left: 3px solid var(--border);
+  margin-bottom: 0.2rem;
+}
+.notification-center-item-critical { border-left-color: var(--danger); }
+.notification-center-item-warning { border-left-color: var(--warning); }
+.notification-center-item-info { border-left-color: var(--accent); }
+
+.notification-center-item-title { font-size: 0.85rem; font-weight: 600; }
+.notification-center-item-message { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; }
+.notification-center-item-time { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem; }
 
 main {
   padding: 0 2rem 2.5rem;
@@ -822,6 +891,13 @@ th {
   letter-spacing: 0.03em;
   background: var(--surface-alt);
 }
+
+/* Opt-in tighter padding for a table with enough columns that the roomier default (1rem each
+   side, ~32px/column) is the difference between fitting the viewport and needing horizontal
+   scroll — see Miniservers, which pairs this with data-default-hidden on its more rarely-needed
+   columns for the same reason. Not the site-wide default since most tables have room to spare and
+   read better with it. */
+.table-compact th, .table-compact td { padding: 0.45rem 0.6rem; }
 
 tbody tr:last-child td { border-bottom: none; }
 tbody tr { transition: background 0.12s var(--ease); }
@@ -1480,6 +1556,19 @@ label.switch { display: inline-flex; align-items: center; cursor: pointer; margi
 .value-mapping-row input.value-mapping-row-color[type="color"]::-moz-color-swatch { border: none; border-radius: 50%; }
 .threshold-builder-row .threshold-row-remove,
 .value-mapping-row .value-mapping-row-remove { flex-shrink: 0; }
+/* Only rendered when thresholdField() is called with allowNotify (see chartFieldHelpers.js) — the
+   Monitor detail page's own threshold builder only, not any dashboard panel's. */
+.threshold-row-notify-label {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.threshold-row-notify-label input.threshold-row-notify { width: auto; margin: 0; }
 
 /* One row per currently-checked monitor (see chart series settings JS in panel-grid.ejs) — a
    chart-only feature, so this only ever appears once at least one monitor is checked, and stays
@@ -1546,12 +1635,92 @@ label.switch { display: inline-flex; align-items: center; cursor: pointer; margi
 .chart-series-row input.chart-series-row-color[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 50%; overflow: hidden; }
 .chart-series-row input.chart-series-row-color[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
 .chart-series-row input.chart-series-row-color[type="color"]::-moz-color-swatch { border: none; border-radius: 50%; }
-/* Unchecking "give this series its own color" used to visibility:hidden this swatch entirely —
-   its circular border (the row's only hint that a color picker lives here at all) disappeared
-   along with the fill, leaving a blank gap instead. Dimmed instead: the ring stays visible so the
-   control itself is still legible, and pointer-events:none stops a click from opening the native
-   picker and changing a color that wouldn't even be submitted until the checkbox is on anyway. */
-.chart-series-row input.chart-series-row-color[type="color"].is-disabled { opacity: 0.35; pointer-events: none; }
+/* Shared color-picker control (color-picker.js) — a circular swatch button (same size/shape the
+   plain native <input type="color"> it replaces already had everywhere) that opens a small
+   popover: a palette select, a swatch grid, and a "Custom" fallback revealing the native picker
+   plus a hex field. Lives inline wherever a color input already sat (threshold/value-mapping/
+   annotation/chart-series rows), so it needs relative positioning of its own for the popover to
+   anchor against without disturbing the row's own flex layout. */
+.color-picker-wrap { position: relative; display: inline-flex; flex: 0 0 auto; }
+.color-picker-swatch {
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s var(--ease);
+}
+.color-picker-swatch:hover { transform: scale(1.08); }
+/* Unchecking "give this series its own color" used to visibility:hidden the old plain <input
+   type="color">'s swatch entirely — its circular border (the row's only hint that a color picker
+   lives here at all) disappeared along with the fill, leaving a blank gap instead. Dimmed instead:
+   the ring stays visible so the control itself is still legible, and pointer-events:none stops a
+   click from opening the picker and changing a color that wouldn't even be submitted until the
+   checkbox is on anyway. Targets the wrap (see setSwatchDisabled in color-picker.js), not the
+   value input directly — that input is type="hidden" now, with no visual state of its own to dim. */
+.color-picker-wrap.is-disabled .color-picker-swatch { opacity: 0.35; pointer-events: none; }
+/* :not([hidden]) rather than a plain .color-picker-popover selector — an unconditional display
+   here would tie the browser's own built-in `[hidden] { display: none }` rule on specificity, and
+   since this stylesheet loads after the UA one, this rule would win the tie and defeat `hidden`
+   entirely: the popover stayed permanently open (display:flex) regardless of the attribute JS was
+   toggling. Only setting display when [hidden] is genuinely absent leaves the browser's own rule
+   free to apply otherwise. */
+.color-picker-popover:not([hidden]) {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  margin-top: 0.4rem;
+  width: 11rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+/* Added by color-picker.js's positionPopover() when the swatch sits close enough to the right
+   edge that the popover's own fixed width would otherwise run off-screen (the annotation/
+   threshold builders both run their rows nearly full-width, so their trailing color swatch has
+   little to no room on its right) — anchors the popover's right edge to the trigger instead of
+   its left. */
+.color-picker-popover.color-picker-popover-align-right { left: auto; right: 0; }
+.color-picker-palette-select { width: 100%; }
+.color-picker-swatch-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; }
+.color-picker-grid-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.1s var(--ease);
+}
+.color-picker-grid-swatch:hover { transform: scale(1.1); border-color: var(--text-muted); }
+.color-picker-custom-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--text-muted); cursor: pointer; }
+.color-picker-custom-fields { display: flex; align-items: center; gap: 0.4rem; }
+/* Rounded-square, not circular like the trigger swatch — deliberately different from it (per
+   feedback) so the precise "typed/dragged a custom value" control inside the popover doesn't read
+   as just another palette-style swatch choice; it matches .color-picker-grid-swatch's own shape
+   right above instead, both being "a small square you interact with inside this popover". */
+.color-picker-custom-fields input[type="color"] {
+  flex: 0 0 auto;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 6px;
+  overflow: hidden;
+  background: none;
+  cursor: pointer;
+}
+.color-picker-custom-fields input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 6px; overflow: hidden; }
+.color-picker-custom-fields input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
+.color-picker-custom-fields input[type="color"]::-moz-color-swatch { border: none; border-radius: 6px; }
+.color-picker-custom-fields input[type="text"] { flex: 1; min-width: 0; font-size: 0.78rem; }
 
 /* "Manage catalog" editor (see mappings-commands.ejs) — one .catalog-editor-family card per
    device type, each holding a dynamic list of .catalog-editor-row entries (commands or data
@@ -2140,14 +2309,16 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 14rem; }
 .dash-panel:hover { box-shadow: var(--shadow-md); border-color: color-mix(in srgb, var(--accent) 25%, var(--border)); }
 .dash-panel.dragging { opacity: 0.4; }
 
-/* A dashboard panel's own edit form — opens as a fixed side drawer (the same pattern as the app's
-   Help drawer: fixed, full-height, sliding in from the right edge over a backdrop) rather than
-   expanding inline from the Edit button. The inline version had to grow the WHOLE card to fit the
-   form (a MutationObserver watching for its .open class), which shoved every later panel down the
-   grid and, for a small panel, dwarfed its own content just to show its own settings. Deliberately
-   scoped to dashboard panels only — everywhere else's [data-toggle-row] (Rename/Test/Reset
-   password/...) stays inline, per an earlier explicit decision to limit this change to panels. */
-.dash-panel > .panel-settings-form {
+/* A dashboard panel's own edit form (and the Monitor detail page's own chart-settings form, see
+   monitor-detail.ejs) — opens as a fixed side drawer (the same pattern as the app's Help drawer:
+   fixed, full-height, sliding in from the right edge over a backdrop) rather than expanding inline
+   from the Edit button. The inline version had to grow the WHOLE card to fit the form (a
+   MutationObserver watching for its .open class), which shoved every later panel down the grid
+   and, for a small panel, dwarfed its own content just to show its own settings. Scoped by the
+   .panel-settings-form class alone (not a parent selector) — everywhere else's [data-toggle-row]
+   (Rename/Test/Reset password/...) stays inline, per an earlier explicit decision to limit this
+   treatment to forms that opt into the class, not to dashboard panels specifically. */
+.panel-settings-form {
   position: fixed;
   top: 0;
   right: 0;
@@ -2173,7 +2344,7 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 14rem; }
   align-content: start;
   row-gap: 0.75rem;
 }
-.dash-panel > .panel-settings-form.open { transform: translateX(0); }
+.panel-settings-form.open { transform: translateX(0); }
 
 /* One drag handle per panel (a sibling right after its own .panel-settings-form, see
    panel-grid.ejs), but only the currently-open one's is ever shown — position:fixed with 100% -
@@ -2433,4 +2604,82 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 14rem; }
   flex: 1;
   overflow-y: auto;
   padding: 1.4rem;
+}
+
+/* ---- Phone-width layout ----
+   First pass, scoped to nav + Dashboard + Miniservers rather than the whole app (see the comment
+   on .mobile-nav-toggle/.sidebar-backdrop below for why this exists as one block here instead of
+   scattered inline next to each desktop rule: everything phone-specific lives together so it's
+   obvious at a glance what changes below this breakpoint and what doesn't).
+   Not handled here (deliberately, out of scope for this pass): the Dashboard grid's drag-reorder
+   and panel resize-handle both rely on mouse events / HTML5 drag-and-drop, neither of which iOS
+   Safari supports over touch — panels stack and are fully viewable/editable (via the Edit drawer)
+   below the breakpoint, just not draggable by touch. Wide tables elsewhere (Miniservers included)
+   already scroll horizontally via .table-wrap's own overflow-x:auto — untouched here, that already
+   works by touch-swipe. */
+
+/* display:none by default (desktop) — this button and the sidebar's off-canvas behavior only
+   apply once the mobile breakpoint below is in effect. Always rendered in the DOM either way (see
+   partials/head.ejs) rather than conditionally server-rendered, same reasoning as every other
+   viewport-dependent element in this app: CSS/JS decide visibility, not the server guessing at a
+   User-Agent. */
+.mobile-nav-toggle { display: none; }
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 998;
+  opacity: 0;
+  /* Closed by default even once display:block applies below — without this, an invisible
+     full-viewport layer still sat in front of everything (including the hamburger button itself)
+     and silently ate every tap, since opacity:0 hides paint but not hit-testing on its own. */
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease);
+}
+
+@media (max-width: 768px) {
+  .mobile-nav-toggle { display: inline-flex; }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 999;
+    transform: translateX(-100%);
+    transition: transform 0.2s var(--ease);
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .sidebar-backdrop { display: block; }
+  .sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+
+  /* Same three children as desktop (mobile-nav-toggle, h1, topbar-right) — space-between works
+     fine on desktop where the toggle is display:none (a flex container skips it entirely), but
+     with all three visible here it would spread them apart evenly instead of grouping the toggle
+     with the title. margin-left:auto on topbar-right reproduces just the "push the last one to
+     the far edge" part without needing that. */
+  .topbar {
+    padding: 1rem 1rem 0;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  /* .topbar-right's own flex-shrink:0/no-wrap (see its base rule) is deliberate on desktop — a
+     shrunk refresh-control/Help/account-menu pill clips its own contents rather than the row just
+     growing wider. On a phone-width topbar there's no room for its three pills (refresh-control +
+     Help + account-menu, the Dashboard page's date-range picker among the widest) side by side
+     regardless — wrapping them onto their own lines here keeps every control fully visible and
+     reachable instead of running off the right edge. */
+  .topbar-right { margin-left: auto; flex-shrink: 1; flex-wrap: wrap; justify-content: flex-end; }
+  .topbar h1 { font-size: 1.15rem; margin-bottom: 0.85rem; }
+
+  main { padding: 0 1rem 1.5rem; }
+
+  /* The 12-column grid and each panel's own inline grid-column/grid-row span (set per-panel from
+     its stored col_span/row_span, see partials/panel-grid.ejs) both stay exactly as saved — only
+     how they're PRESENTED changes here. !important is the only way to win against an inline
+     style from a stylesheet rule; row span is deliberately left alone (still whatever height the
+     panel was sized to on desktop) since that's still a reasonable chart/value height full-width. */
+  .dash-grid { grid-template-columns: 1fr; }
+  .dash-panel { grid-column: 1 / -1 !important; }
 }

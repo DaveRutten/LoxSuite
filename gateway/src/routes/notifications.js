@@ -98,6 +98,12 @@ function buildRuleConfig(triggerType, body) {
       };
     case 'miniserver_status':
       return { miniserver_id: body.miniserver_id ? Number(body.miniserver_id) : null };
+    // Its own field name, not a shared "miniserver_id" with the case above — the HTML `hidden`
+    // attribute the trigger-type toggle script uses (see admin-notifications.ejs) only affects
+    // rendering, not form submission, so a same-named <select> in both (visually hidden) field
+    // groups would still both submit and collide on which one "wins" in req.body.
+    case 'firmware_changed':
+      return { miniserver_id: body.firmware_miniserver_id ? Number(body.firmware_miniserver_id) : null };
     case 'mqtt_client_status':
       return { username: (body.mqtt_username || '').trim() || null };
     case 'backup_failed':

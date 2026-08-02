@@ -449,6 +449,34 @@
   })();
 </script>
 <script>
+  // Off-canvas sidebar for narrow (phone-width) viewports — the sidebar itself is always in the
+  // DOM (see partials/head.ejs), CSS just slides it off-screen below the mobile breakpoint and
+  // this toggles it back on/off. Same backdrop-click/Escape-to-close idiom as the Help drawer
+  // right below, deliberately not shared code with it — different element, no state in common.
+  (function () {
+    var toggle = document.getElementById('mobile-nav-toggle');
+    var sidebar = document.querySelector('.sidebar');
+    var backdrop = document.getElementById('sidebar-backdrop');
+    if (!toggle || !sidebar || !backdrop) return;
+
+    function closeSidebar() {
+      sidebar.classList.remove('open');
+      backdrop.classList.remove('open');
+    }
+
+    toggle.addEventListener('click', function () {
+      sidebar.classList.add('open');
+      backdrop.classList.add('open');
+    });
+    backdrop.addEventListener('click', closeSidebar);
+    // A nav link tap navigates immediately (full page load), so there's no visible close
+    // animation to wait for — this just avoids the sidebar still being marked "open" for an
+    // instant on whatever page loads next, before its own script re-runs this same setup fresh.
+    sidebar.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', closeSidebar); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSidebar(); });
+  })();
+</script>
+<script>
   // The in-page Help drawer — opened from the topbar's per-page "Help" button
   // (marked [data-help-open], see partials/head.ejs), instead of navigating to
   // /help. Content is already in the DOM (partials/help-content.ejs, included
@@ -555,6 +583,66 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') panel.hidden = true;
     });
+  })();
+</script>
+<script>
+  // Topbar Notification Center bell — same show/hide-popover mechanics as the account menu just
+  // above (independent element ids, so both can coexist without interfering). Two things it adds
+  // on top: marking everything read the moment the popover is opened (not on every toggle click —
+  // only the transition into view counts as "seen"), and its own periodic poll for the badge count,
+  // since this is topbar chrome present on every page, unlike the existing data-refresh mechanism
+  // (see the live-refresh script above), which is opt-in per page and refreshes page content, not
+  // chrome — unsuitable here regardless of page.
+  (function () {
+    var btn = document.getElementById('notification-center-btn');
+    var panel = document.getElementById('notification-center-panel');
+    if (!btn || !panel) return;
+
+    function markRead() {
+      var badge = document.getElementById('notification-center-badge');
+      if (badge) badge.remove();
+      // Content-Type: application/json is what lets this skip the CSRF token entirely (see
+      // middleware/csrf.js) — the route reads no request body, same trick the dashboard panel's
+      // own save-as-default/reset-to-default fetch() calls already use (see panel-grid.ejs).
+      fetch('/notifications/mark-read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () {});
+    }
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var opening = panel.hidden;
+      panel.hidden = !panel.hidden;
+      if (opening) markRead();
+    });
+    document.addEventListener('click', function () { panel.hidden = true; });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') panel.hidden = true;
+    });
+
+    var POLL_MS = 60000; // matches healthcheck_interval_seconds's own default cadence
+    function poll() {
+      fetch('/notifications/unread-count').then(function (res) { return res.json(); }).then(function (data) {
+        var badge = document.getElementById('notification-center-badge');
+        // Popover open (via markRead above) or an already-visible badge with a matching count —
+        // don't overwrite what the user is currently looking at with a fetch that started before
+        // they opened it.
+        if (!panel.hidden) return;
+        if (!data.count) {
+          if (badge) badge.remove();
+          return;
+        }
+        var text = data.count > 99 ? '99+' : String(data.count);
+        if (badge) {
+          badge.textContent = text;
+        } else {
+          badge = document.createElement('span');
+          badge.id = 'notification-center-badge';
+          badge.className = 'notification-center-badge';
+          badge.textContent = text;
+          btn.appendChild(badge);
+        }
+      }).catch(function () {});
+    }
+    setInterval(poll, POLL_MS);
   })();
 </script>
 <script>
