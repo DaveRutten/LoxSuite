@@ -14,6 +14,11 @@ All notable changes to this project are documented in this file.
   (new `?open=<id>` support there). The other three trigger types (MQTT client status, backup
   failure, LoxSuite update available) have no single entity of their own to land on, so those stay
   plain text.
+- Live Data's Control/state filter now has a clear ("&times;") button in the search box, and
+  pressing **Escape** while it has focus clears the filter the same way.
+- Settings → Broker connection now shows the same live "Connected"/"Not connected" status badge as
+  the home dashboard, right next to the **MQTT Broker** title — previously you could only see this
+  on the home page.
 
 ### Fixed
 - The Notification Center bell's unread badge cleared the moment you opened the popover, even if
@@ -30,7 +35,13 @@ All notable changes to this project are documented in this file.
 - Live Data's **Control / state** filter left every room visible regardless of match, even an
   already-expanded one with nothing matching in it — only a room that's never been expanded at all
   (nothing loaded yet to check) still stays visible now, since hiding that one really would be a
-  guess.
+  guess. That fix alone still meant a non-matching room only disappeared once you happened to click
+  it open yourself, so typing a query now also auto-expands every not-yet-loaded room right away —
+  it correctly drops out (or stays, if it matches) the moment its own content actually arrives.
+- Live Data's filter also never actually cleared: emptying the search box out was supposed to
+  restore every hidden room/category/row, but a leftover early-return above that reset code made it
+  unreachable, and even then it never touched individual rows. Clearing the box (or now, Escape/the
+  new clear button) properly restores everything again.
 
 ## [0.6.0-alpha.1] - 2026-08-03
 

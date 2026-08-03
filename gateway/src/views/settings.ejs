@@ -10,7 +10,12 @@
 <% } %>
 
 <div class="card">
-  <h2>MQTT Broker</h2>
+  <h2>
+    MQTT Broker
+    <span class="badge badge-live <%= mqttConnected ? 'badge-ok' : 'badge-off' %>" style="vertical-align:middle; margin-left:0.5rem;">
+      <%= mqttConnected ? 'Connected' : 'Not connected' %>
+    </span>
+  </h2>
   <p class="hint">
     The bundled Mosquitto broker runs inside this same container and listens internally on
     <code>127.0.0.1:1883</code>. You can also point this at a different/external broker &mdash;

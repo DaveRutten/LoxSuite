@@ -55,7 +55,10 @@
       <option value="room">Room</option>
       <option value="control">Control / state (in opened rooms)</option>
     </select>
-    <input type="text" id="live-data-filter-query" placeholder="Filter…">
+    <div class="clearable-input-wrap">
+      <input type="text" id="live-data-filter-query" placeholder="Filter…">
+      <button type="button" id="live-data-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+    </div>
   </div>
   <% } %>
   <a href="/live-data?miniserver_id=<%= miniserverId %>&refresh=1"><button type="button" class="btn-soft" title="Re-read this Miniserver's structure file — picks up rooms/controls added in Loxone Config since the gateway last read it"><%- icon('refresh') %> Refresh</button></a>
@@ -519,35 +522,63 @@
   })();
 </script>
 <script>
-  // Rooms and their categories are only fetched once expanded (see the big IIFE above) — so
-  // "Control / state" filtering can only ever act on whatever's already been loaded: an EXPANDED
-  // room with no matching control hides along with its empty categories, but a room that hasn't
-  // been opened at all yet (nothing to check a match against) stays visible rather than guessing
-  // whether it would match. "Room" filtering needs no such caveat since every room's name is
-  // already in the initial page render.
+  // Rooms and their categories are only fetched once expanded (see the big IIFE above), so
+  // "Control / state" filtering auto-expands every room the moment a query is typed (below) purely
+  // to have something to check a match against — a room whose fetch is still in flight (or that
+  // failed) stays visible rather than guessing, but that's a brief transitional state now, not a
+  // "you have to click it yourself to find out" one. "Room" filtering needs none of this since
+  // every room's name is already in the initial page render.
   (function () {
     var fieldSelect = document.getElementById('live-data-filter-field');
     var queryInput = document.getElementById('live-data-filter-query');
+    var clearBtn = document.getElementById('live-data-filter-clear');
     if (!fieldSelect) return;
+
+    // Whether the PREVIOUS call actually filtered anything — lets an empty query skip straight
+    // back out (the common case: this also runs on every DOM mutation anywhere on the page, see
+    // the MutationObserver below, including every 3-second live-value refresh tick) while still
+    // guaranteeing the one reset pass that clearing a real filter needs actually runs, exactly
+    // once, instead of being skipped forever the way an unconditional early-return would.
+    var hadFilter = false;
 
     function applyFilter() {
       var mode = fieldSelect.value;
       var q = queryInput.value.trim().toLowerCase();
-      // Skip entirely once nothing is filtered — this also runs on every DOM mutation anywhere on
-      // the page (see the MutationObserver below, needed to catch lazily-loaded content), which
-      // includes every 3-second live-value refresh; newly-inserted elements need no reset since
-      // they're never given an inline display:none in the first place.
-      if (!q) return;
+      if (clearBtn) clearBtn.hidden = !q;
+
+      // Auto-expand every not-yet-loaded room the instant a Control/state search is actually
+      // typed — without this, the filter below can only ever act on whatever's ALREADY been
+      // manually expanded (see its own comment further down), so a genuinely non-matching room
+      // would just sit there until you happened to click it open yourself to find that out.
+      // Setting .open here fires the same native `toggle` event a manual click does, so it reuses
+      // that room's existing lazy-load fetch as-is — no second loading path to keep in sync — and
+      // the MutationObserver below already re-runs this whole function once that fetch's content
+      // actually lands, so a non-matching room disappears the moment that becomes known.
+      if (mode === 'control' && q) {
+        document.querySelectorAll('.live-data-room:not([open])').forEach(function (roomDetails) {
+          roomDetails.open = true;
+        });
+      }
+
+      if (!q) {
+        if (!hadFilter) return;
+        hadFilter = false;
+        document.querySelectorAll('.live-data-room').forEach(function (roomDetails) {
+          roomDetails.style.display = '';
+          var preview = roomDetails.nextElementSibling;
+          if (preview && preview.classList.contains('suggest-preview')) preview.style.display = '';
+          roomDetails.querySelectorAll('.live-data-category').forEach(function (cat) {
+            cat.style.display = '';
+            cat.querySelectorAll('.live-data-body tr').forEach(function (row) { row.style.display = ''; });
+          });
+        });
+        return;
+      }
+      hadFilter = true;
+
       document.querySelectorAll('.live-data-room').forEach(function (roomDetails) {
         var preview = roomDetails.nextElementSibling;
         var hasPreview = preview && preview.classList.contains('suggest-preview');
-
-        if (!q) {
-          roomDetails.style.display = '';
-          if (hasPreview) preview.style.display = '';
-          roomDetails.querySelectorAll('.live-data-category').forEach(function (cat) { cat.style.display = ''; });
-          return;
-        }
 
         if (mode === 'room') {
           var roomName = roomDetails.querySelector('summary').textContent.toLowerCase();
@@ -590,6 +621,23 @@
     // Re-applies once a room/category finishes lazily loading, so an already-typed filter keeps
     // working on content that didn't exist yet when it was first typed.
     new MutationObserver(applyFilter).observe(document.body, { childList: true, subtree: true });
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        queryInput.value = '';
+        applyFilter();
+        queryInput.focus();
+      });
+    }
+    // Escape clears rather than also bubbling up to close some other overlay (e.g. the account
+    // menu) that happens to also listen for it — an active filter is the more specific, more
+    // likely-intended thing to dismiss first while focus is actually in this field.
+    queryInput.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !queryInput.value) return;
+      e.stopPropagation();
+      queryInput.value = '';
+      applyFilter();
+    });
   })();
 </script>
 

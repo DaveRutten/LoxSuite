@@ -86,7 +86,7 @@ router.post('/', requirePermission('settings', 'edit'), (req, res) => {
 });
 
 router.get('/broker', (req, res) => {
-  res.render('settings', { settings: loadSettings(), gatewaySettings: loadGatewaySettings(), error: null, saved: false });
+  res.render('settings', { settings: loadSettings(), gatewaySettings: loadGatewaySettings(), error: null, saved: false, mqttConnected: mqttClient.state.connected });
 });
 
 router.post('/broker', requirePermission('settings', 'edit'), (req, res) => {
@@ -98,6 +98,7 @@ router.post('/broker', requirePermission('settings', 'edit'), (req, res) => {
       gatewaySettings: loadGatewaySettings(),
       error: 'Host and port are required.',
       saved: false,
+      mqttConnected: mqttClient.state.connected,
     });
   }
 
@@ -110,7 +111,7 @@ router.post('/broker', requirePermission('settings', 'edit'), (req, res) => {
   mqttClient.reconnect();
 
   logSystemEvent(`"${req.user.username}" updated broker connection settings.`);
-  res.render('settings', { settings: loadSettings(), gatewaySettings: loadGatewaySettings(), error: null, saved: true });
+  res.render('settings', { settings: loadSettings(), gatewaySettings: loadGatewaySettings(), error: null, saved: true, mqttConnected: mqttClient.state.connected });
 });
 
 module.exports = router;

@@ -856,6 +856,24 @@ h2 {
 .search-combo:focus-within select, .search-combo:focus-within input { border-color: var(--accent); }
 .search-combo select:focus, .search-combo input:focus { box-shadow: none; }
 
+/* An optional third piece for a .search-combo's text input — a small "x" to clear it in one click
+   (see live-data.ejs), for a filter with no separate "Clear" button of its own next to Apply. A
+   plain wrapper rather than trying to inline the button into the input itself (not possible) or
+   restyle the whole combo into a three-way join — .search-combo input[type="text"]'s own
+   flex/border-radius/border-left rules above still apply exactly as before since they match by
+   descendant selector, regardless of this extra nesting level. */
+.search-combo .clearable-input-wrap { flex: 1; min-width: 0; position: relative; display: flex; }
+.search-combo .clearable-input-wrap input[type="text"] { padding-right: 2rem; }
+.clearable-input-clear {
+  position: absolute;
+  right: 0.3rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.15rem 0.4rem;
+}
+
 /* A custom-styled stand-in for <input list="..."> — the native <datalist> popup can't be styled
    at all (it's rendered by the OS/browser, not the page), which on at least one real browser
    showed up as a plain black box with white text totally at odds with the rest of the app. */
