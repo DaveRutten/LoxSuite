@@ -56,6 +56,11 @@ function normalizeFamily(raw, sourceLabel) {
 
   const family = { key, label };
   if (raw.topicPrefixPattern) family.topicPrefixPattern = raw.topicPrefixPattern;
+  // Opt-in flag (see shelly-rgbw2.json/shelly-bulb.json's own families) — lets the Suggest
+  // Commands page (mappings-commands.ejs) offer its "Create RGB + White mappings" button only for
+  // a family that actually has a meaningful Shelly RGBW/White transform to wire up to, rather than
+  // showing it (uselessly) for every device type.
+  if (raw.supportsShellyRgbw === true || raw.supportsShellyRgbw === 'true') family.supportsShellyRgbw = true;
   // Auto-detection (deviceDiscovery.js) matches every family's topicPrefixPattern against real
   // broker traffic, first-match-wins BY ARRAY ORDER — so a broad, catch-all pattern (e.g. Shelly
   // Gen1's own generic "other/unlisted model" fallback, ^shellies/([^/]+)/, which would otherwise
@@ -165,6 +170,7 @@ function mergeDeviceTemplates(commandsCatalog, dataCatalog, families) {
         label: family.label,
         topicPrefixPattern: family.topicPrefixPattern || (existing && existing.topicPrefixPattern),
         commands: family.commands,
+        supportsShellyRgbw: family.supportsShellyRgbw || (existing && existing.supportsShellyRgbw) || false,
       });
     }
     if (family.dataPoints) {

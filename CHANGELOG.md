@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.0-alpha.1] - 2026-08-03
+
+### Added
+- A **"Create RGB + White mappings"** button on Suggest Commands, shown for device types that need
+  the Shelly RGBW/White transform (Shelly RGBW2, Shelly Bulb) — creates both the RGB and White
+  Loxone → MQTT mappings in one step, already pointed at the right shared topic with the correct
+  transform and mode preselected, instead of having to add each one by hand and remember to pick
+  `shelly_rgbw` (not `passthrough`) and the right mode on both.
+
 ## [0.7.3-alpha.1] - 2026-08-03
 
 ### Added

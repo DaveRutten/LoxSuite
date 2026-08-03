@@ -3,6 +3,7 @@
   "label": "Shelly Bulb (RGBW, color mode)",
   "topicPrefixPattern": "^shellies/(shellybulb-[^/]+)/",
   "_comment": "Same shape as shelly-rgbw2.json, and for the same reason -- see that file's own comment. Not verified against a real Shelly Bulb device (unlike RGBW2, which was tested end-to-end), only against the documented API shape being identical to RGBW2's own color-mode one.",
+  "supportsShellyRgbw": true,
   "commands": [
     {
       "key": "color",
@@ -16,11 +17,12 @@
     },
     {
       "key": "color-set",
-      "label": "Set color (needs Shelly RGBW/White transform, mode rgb)",
+      "label": "Set color (needs Shelly RGBW/White transform, mode rgb or rgb-percent)",
       "topicTemplate": "shellies/{device}/color/{channel}/set",
       "actions": [
         "rgb <hue 0-360>",
-        "rgb <hue>,<saturation>,<value>"
+        "rgb <hue>,<saturation>,<value>",
+        "rgb <red%+green%*1000+blue%*1000000>"
       ]
     },
     {

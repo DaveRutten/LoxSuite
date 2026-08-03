@@ -60,6 +60,29 @@
   </div>
 </div>
 
+<div class="card" id="rgbw-create-card" style="margin-bottom:1.5rem; display:none;">
+  <p class="hint" style="margin-top:0;">
+    This device type needs two Loxone &rarr; MQTT mappings sharing one topic to work (RGB color and
+    White %, see the "Set color"/"Set white %" commands above) &mdash; create both in one step, already
+    set to the right topic and the <strong>Shelly RGBW/White</strong> transform, instead of adding
+    them by hand one at a time.
+  </p>
+  <form method="post" action="/mappings/commands/create-rgbw" class="form-grid" style="align-items:end;" id="rgbw-create-form">
+    <input type="hidden" name="device" id="rgbw-device-hidden">
+    <input type="hidden" name="family" id="rgbw-family-hidden">
+    <div>
+      <label for="rgbw-mode-select">RGB value format Loxone sends</label>
+      <select name="rgb_mode" id="rgbw-mode-select">
+        <option value="rgb">Hue,Saturation,Value (or a bare hue)</option>
+        <option value="rgb-percent">Loxone's "Analoge ingang RGB" packed %</option>
+      </select>
+    </div>
+    <div>
+      <button type="submit" class="primary"><%- icon('plus') %> Create RGB + White mappings</button>
+    </div>
+  </form>
+</div>
+
 <% if (isCustomized) { %><p class="hint"><strong>Catalog is customized</strong> — kept even after an app update.</p><% } %>
 
 <form method="post" action="/mappings/commands/catalog" id="catalog-editor-form">
@@ -226,6 +249,10 @@
     var useInMappingLink = document.getElementById('use-in-mapping-link');
     var copyBtn = document.getElementById('copy-topic-btn');
     var copyPayloadBtn = document.getElementById('copy-payload-btn');
+    var rgbwCreateCard = document.getElementById('rgbw-create-card');
+    var rgbwDeviceHidden = document.getElementById('rgbw-device-hidden');
+    var rgbwFamilyHidden = document.getElementById('rgbw-family-hidden');
+    var rgbwCreateForm = document.getElementById('rgbw-create-form');
 
     function currentFamily() {
       return catalog.find(function (f) { return f.key === familySelect.value; }) || catalog[0];
@@ -309,7 +336,19 @@
       payloadPreviewRow.style.display = show ? '' : 'none';
       copyPayloadBtn.style.display = show ? '' : 'none';
       payloadPreview.textContent = payload;
+
+      var device = deviceInput.value.trim();
+      rgbwCreateCard.style.display = currentFamily().supportsShellyRgbw ? '' : 'none';
+      rgbwDeviceHidden.value = device;
+      rgbwFamilyHidden.value = familySelect.value;
     }
+
+    rgbwCreateForm.addEventListener('submit', function (e) {
+      if (!rgbwDeviceHidden.value) {
+        e.preventDefault();
+        alert('Enter a device first.');
+      }
+    });
 
     deviceInput.addEventListener('input', function () {
       if (autoDetectFamily()) { fillCommands(); fillActions(); }

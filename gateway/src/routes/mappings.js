@@ -207,6 +207,37 @@ router.post('/commands/catalog/reset', requirePermission('commands', 'edit'), (r
   res.redirect('/mappings/commands');
 });
 
+// "Create RGB + White mappings" button (mappings-commands.ejs, shown only for a family with
+// supportsShellyRgbw — see shelly-rgbw2.json/shelly-bulb.json) — a color-mode Shelly needs TWO
+// Loxone -> MQTT mappings sharing one topic (see applyShellyRgbwTransform's shared rgbwChannelState
+// in loxone.js) to work at all, and picking the right transform_arg by hand on each one is exactly
+// the two-step, easy-to-get-wrong setup this session's real-hardware debugging kept tripping over.
+// transport is fixed to 'udp' and miniserver_id left unset — this page has no miniserver/transport
+// context to reuse (unlike the Loxone commands log's own "+ Mapping" button), both are easy to set
+// afterward via Edit if wanted.
+router.post('/commands/create-rgbw', requirePermission('loxone_to_mqtt', 'edit'), (req, res) => {
+  const device = (req.body.device || '').trim();
+  const family = (req.body.family || '').trim();
+  const rgbMode = req.body.rgb_mode === 'rgb-percent' ? 'rgb-percent' : 'rgb';
+  if (!device) return res.redirect(`/mappings/commands?family=${encodeURIComponent(family)}`);
+
+  const { catalog } = loadCommandCatalogs();
+  const familyEntry = catalog.find((f) => f.key === family);
+  const colorCommand = familyEntry && familyEntry.commands.find((c) => c.key === 'color-set');
+  if (!colorCommand) return res.redirect(`/mappings/commands?family=${encodeURIComponent(family)}&device=${encodeURIComponent(device)}`);
+
+  const mqttTopic = colorCommand.topicTemplate.replace('{device}', device).replace('{channel}', '0');
+
+  const insert = db.prepare(
+    `INSERT INTO mappings_loxone_to_mqtt (miniserver_id, token, mqtt_topic, qos, retain, transport, value_transform, transform_arg)
+     VALUES (NULL, ?, ?, 0, 0, 'udp', 'shelly_rgbw', ?)`
+  );
+  insert.run(nanoid(16), mqttTopic, rgbMode);
+  insert.run(nanoid(16), mqttTopic, 'white');
+
+  res.redirect('/mappings/loxone-to-mqtt');
+});
+
 router.get('/loxone-to-mqtt', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const mappings = loadLoxoneToMqttView(baseUrl);
