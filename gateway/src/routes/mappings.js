@@ -26,6 +26,14 @@ function loadMqttToLoxoneView() {
   ).all();
 }
 
+// Loxone Virtual Input names aren't in a Miniserver's structure export (see the Miniservers
+// section of the README for why), so there's nothing to autocomplete them against there. The
+// next best thing: suggest names already typed into an existing mapping, which covers the common
+// case of one Virtual Input receiving several different mapped commands.
+function loadTargetSuggestions() {
+  return db.prepare('SELECT DISTINCT target FROM mappings_mqtt_to_loxone ORDER BY target').all().map((r) => r.target);
+}
+
 const loxoneTranslationValuesStmt = db.prepare('SELECT match_value FROM loxone_mapping_translations WHERE mapping_id = ? ORDER BY match_value');
 
 function loadLoxoneToMqttView(baseUrl) {
@@ -52,7 +60,8 @@ function loadLoxoneToMqttView(baseUrl) {
 router.get('/mqtt-to-loxone', (req, res) => {
   const mappings = loadMqttToLoxoneView();
   const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
-  res.render('mappings-mqtt-to-loxone', { mappings, miniservers, error: null, prefillTopic: req.query.topic || '' });
+  const targetSuggestions = loadTargetSuggestions();
+  res.render('mappings-mqtt-to-loxone', { mappings, miniservers, targetSuggestions, error: null, prefillTopic: req.query.topic || '' });
 });
 
 router.post('/mqtt-to-loxone', requirePermission('mqtt_to_loxone', 'edit'), (req, res) => {
@@ -69,7 +78,8 @@ router.get('/mqtt-to-loxone/:id/edit', (req, res) => {
   const mapping = db.prepare('SELECT * FROM mappings_mqtt_to_loxone WHERE id = ?').get(req.params.id);
   if (!mapping) return res.status(404).send('Mapping not found');
   const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
-  res.render('mapping-mqtt-to-loxone-edit', { mapping, miniservers, error: null });
+  const targetSuggestions = loadTargetSuggestions();
+  res.render('mapping-mqtt-to-loxone-edit', { mapping, miniservers, targetSuggestions, error: null });
 });
 
 router.post('/mqtt-to-loxone/:id/update', requirePermission('mqtt_to_loxone', 'edit'), (req, res) => {
@@ -201,7 +211,17 @@ router.get('/loxone-to-mqtt', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const mappings = loadLoxoneToMqttView(baseUrl);
   const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
-  res.render('mappings-loxone-to-mqtt', { mappings, miniservers, error: null, prefillTopic: req.query.topic || '' });
+  // transport/miniserver_id: only ever sent by the Loxone commands log's own "+ Mapping" button
+  // (see logs-loxone-commands.ejs), which knows exactly what this specific rejected command
+  // actually arrived as — pre-selects both instead of leaving them at their plain defaults.
+  res.render('mappings-loxone-to-mqtt', {
+    mappings,
+    miniservers,
+    error: null,
+    prefillTopic: req.query.topic || '',
+    prefillTransport: req.query.transport === 'udp' ? 'udp' : (req.query.transport === 'http' ? 'http' : ''),
+    prefillMiniserverId: Number(req.query.miniserver_id) || null,
+  });
 });
 
 // value_transform for this (Loxone -> MQTT) direction: 'passthrough' (default), 'translation_table'

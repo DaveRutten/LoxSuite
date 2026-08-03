@@ -226,6 +226,44 @@ function findOrAutoCreateLoxoneMapping(token, transport) {
   return db.prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE token = ?').get(token);
 }
 
+// Splits a Loxone UDP Virtual Output message ("<token>=<value>" or "<token> <value>")
+// into its token/topic and value. Matches against every enabled mapping's own token
+// and mqtt_topic FIRST, longest first — the only reliable way to find the boundary
+// once the value itself can contain "=" or spaces, e.g. a Shelly JSON payload like
+// {"turn": "off", "brightness": 30}. A naive "split on the last space" breaks on
+// exactly that case: it treats everything up to the JSON's own last space as the
+// token and leaves only its tail (e.g. "30}") as the value.
+// Falls back to the plain first-"="-then-first-space heuristic when nothing matches
+// a known token/topic yet — e.g. the very first message for a topic, before
+// auto-create (see findOrAutoCreateLoxoneMapping) has had a chance to register it.
+function splitUdpMessage(text, transport) {
+  const tokens = db.prepare('SELECT token FROM mappings_loxone_to_mqtt WHERE enabled = 1').all();
+  const topics = db
+    .prepare('SELECT mqtt_topic FROM mappings_loxone_to_mqtt WHERE enabled = 1 AND transport = ?')
+    .all(transport);
+  const candidates = [...tokens.map((r) => r.token), ...topics.map((r) => r.mqtt_topic)]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  for (const candidate of candidates) {
+    if (!text.startsWith(candidate)) continue;
+    const delimiter = text[candidate.length];
+    if (delimiter === '=' || delimiter === ' ') {
+      return { token: candidate, rawValue: text.slice(candidate.length + 1) };
+    }
+  }
+
+  const eqIndex = text.indexOf('=');
+  if (eqIndex !== -1) {
+    return { token: text.slice(0, eqIndex), rawValue: text.slice(eqIndex + 1) };
+  }
+  const spaceIndex = text.indexOf(' ');
+  if (spaceIndex !== -1) {
+    return { token: text.slice(0, spaceIndex), rawValue: text.slice(spaceIndex + 1) };
+  }
+  return null;
+}
+
 async function forwardToLoxone(mapping, rawValue, actualTopic) {
   const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(mapping.miniserver_id);
   if (!miniserver) {
@@ -249,6 +287,7 @@ module.exports = {
   applyTransform,
   applyLoxoneToMqttTransform,
   findOrAutoCreateLoxoneMapping,
+  splitUdpMessage,
   miniserverBaseUrl,
   fetchMiniserver,
   insecureAgent,

@@ -10,6 +10,17 @@ DYNSEC_FILE=/mosquitto/config/dynamic-security.json
 
 mkdir -p /mosquitto/data /mosquitto/log
 
+# First boot only, on a fresh/empty bind-mounted device-templates volume — same "seed once, never
+# again" idempotency as mosquitto.conf above, just checked by directory emptiness instead of one
+# file's existence (there's no single fixed filename to check for here). The image's own copy at
+# device-templates-defaults (see Dockerfile) stays untouched either way, so it's always there to
+# reseed from if this volume is ever wiped.
+mkdir -p /device-templates
+if [ -z "$(ls -A /device-templates 2>/dev/null)" ]; then
+  echo "Seeding device-templates with built-in examples..."
+  cp /app/device-templates-defaults/* /device-templates/ 2>/dev/null || true
+fi
+
 # First boot only, on a fresh/empty bind-mounted config volume (e.g. a brand new Unraid appdata
 # folder, or any host directory that's never had this stack running against it before). The image
 # itself has no baked-in fallback to copy from here — mosquitto/config/mosquitto.conf lives at the

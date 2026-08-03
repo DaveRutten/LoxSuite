@@ -1,0 +1,43 @@
+{
+  "key": "shelly-plug-s",
+  "label": "Shelly Plug S",
+  "topicPrefixPattern": "^shellies/(shellyplug-s-[^/]+)/",
+  "commands": [
+    {
+      "key": "relay",
+      "label": "Relay switch",
+      "topicTemplate": "shellies/{device}/relay/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    }
+  ],
+  "dataPoints": [
+    {
+      "key": "relay-state",
+      "label": "Relay state (on/off/overpower)",
+      "topicTemplate": "shellies/{device}/relay/{channel}",
+      "channel": true
+    },
+    {
+      "key": "relay-power",
+      "label": "Relay power (W)",
+      "topicTemplate": "shellies/{device}/relay/{channel}/power",
+      "channel": true
+    },
+    {
+      "key": "relay-energy",
+      "label": "Relay energy (running total, ×10 = Wh)",
+      "topicTemplate": "shellies/{device}/relay/{channel}/energy",
+      "channel": true
+    },
+    {
+      "key": "temperature",
+      "label": "Device temperature (°C)",
+      "topicTemplate": "shellies/{device}/temperature",
+      "channel": false
+    }
+  ]
+}

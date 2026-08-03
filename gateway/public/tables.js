@@ -63,36 +63,42 @@
     });
   }
 
+  // table-layout:auto only ever treats a <col>'s width as a hint — a column's own nowrap content
+  // can still force it wider regardless, which is exactly why dragging a column narrower than its
+  // text (or wider, for a .truncate cell — see style.css's .table-cols-fixed override) had no
+  // visible effect. Freezing every OTHER column's current (auto-computed) width into a real pixel
+  // value before switching the whole table to table-layout:fixed keeps them looking exactly as
+  // they already did, while letting the actually-resized column go narrower (or wider) than its
+  // own content from here on. The added class is what style.css keys off of to let .truncate
+  // actually track the column's real width instead of its own fixed cap, once that's meaningful.
+  // Idempotent — safe to call before the very first resize a table ever sees, not just once
+  // widths are already known (applyWidths below), so a live drag switches layout immediately
+  // instead of only taking effect after the next page load.
+  function ensureFixedLayout(table, colgroup, widths) {
+    if (!table || table.style.tableLayout === 'fixed') return;
+    var headerRow = table.querySelector('thead tr');
+    if (headerRow) {
+      Array.prototype.forEach.call(headerRow.children, function (th) {
+        var idx = th.dataset.originalIndex;
+        if (idx == null || widths[idx]) return; // this one gets its real width from applyWidths below
+        // A hidden column's th (display:none) measures as 0×0 — freezing that in would leave it
+        // permanently collapsed even after being shown again from the Columns menu, visually
+        // compressing every column after it and making the WRONG one line up under whichever
+        // resize handle the user thinks they're dragging. Left with no explicit width instead —
+        // table-layout:fixed gives it a share of whatever space is left over once it's visible.
+        if (th.classList.contains('col-hidden')) return;
+        var col = colgroup.querySelector('col[data-original-index="' + idx + '"]');
+        if (col) col.style.width = th.getBoundingClientRect().width + 'px';
+      });
+    }
+    table.style.tableLayout = 'fixed';
+    table.classList.add('table-cols-fixed');
+  }
+
   function applyWidths(colgroup, widths) {
     if (!colgroup) return;
     var table = colgroup.closest('table');
-    if (table && Object.keys(widths).length > 0 && table.style.tableLayout !== 'fixed') {
-      // table-layout:auto only ever treats a <col>'s width as a hint — a column's own nowrap
-      // content can still force it wider regardless, which is exactly why dragging a column
-      // narrower than its text had no visible effect. Freezing every OTHER column's current
-      // (auto-computed) width into a real pixel value before switching the whole table to
-      // table-layout:fixed keeps them looking exactly as they already did, while letting the
-      // actually-resized column go narrower than its own content from here on — see th/td's
-      // overflow:hidden;text-overflow:ellipsis in style.css for what happens to text that no
-      // longer fits. Guarded so this only ever runs once per table (idempotent on later calls
-      // from a live-refresh reapplying the same saved widths).
-      var headerRow = table.querySelector('thead tr');
-      if (headerRow) {
-        Array.prototype.forEach.call(headerRow.children, function (th) {
-          var idx = th.dataset.originalIndex;
-          if (idx == null || widths[idx]) return; // this one gets its real width from the loop below
-          // A hidden column's th (display:none) measures as 0×0 — freezing that in would leave it
-          // permanently collapsed even after being shown again from the Columns menu, visually
-          // compressing every column after it and making the WRONG one line up under whichever
-          // resize handle the user thinks they're dragging. Left with no explicit width instead —
-          // table-layout:fixed gives it a share of whatever space is left over once it's visible.
-          if (th.classList.contains('col-hidden')) return;
-          var col = colgroup.querySelector('col[data-original-index="' + idx + '"]');
-          if (col) col.style.width = th.getBoundingClientRect().width + 'px';
-        });
-      }
-      table.style.tableLayout = 'fixed';
-    }
+    if (table && Object.keys(widths).length > 0) ensureFixedLayout(table, colgroup, widths);
     Array.prototype.forEach.call(colgroup.children, function (col) {
       var px = widths[col.dataset.originalIndex];
       if (px) col.style.width = px + 'px';
@@ -117,7 +123,7 @@
     return colgroup;
   }
 
-  function addResizeHandle(th, colgroup, onResized) {
+  function addResizeHandle(th, colgroup, widths, onResized) {
     var handle = document.createElement('span');
     handle.className = 'col-resize-handle';
     th.appendChild(handle);
@@ -133,6 +139,10 @@
       var originalIndex = th.dataset.originalIndex;
       var col = colgroup.querySelector('col[data-original-index="' + originalIndex + '"]');
       if (!col) { th.draggable = true; return; }
+      // Switched to fixed layout from the very first pixel of this drag, not just once it's saved
+      // and the page reloads — otherwise the live drag itself still runs under table-layout:auto,
+      // where a column's own nowrap content can silently override the width being dragged in.
+      ensureFixedLayout(colgroup.closest('table'), colgroup, widths);
       var startX = e.clientX;
       var startWidth = th.getBoundingClientRect().width;
       // The handle's own CSS cursor:col-resize (see style.css) only shows while the mouse is
@@ -495,6 +505,7 @@
       defaultHiddenIndices.forEach(function (i) { hiddenSet.add(i); });
       Object.keys(widths).forEach(function (k) { delete widths[k]; });
       table.style.tableLayout = '';
+      table.classList.remove('table-cols-fixed');
       Array.prototype.forEach.call(colgroup.children, function (col) { col.style.width = ''; });
       state.sort = null;
 
@@ -558,7 +569,7 @@
         updateSortIndicators(table, next);
       });
 
-      addResizeHandle(th, colgroup, function (originalIndex, px) {
+      addResizeHandle(th, colgroup, widths, function (originalIndex, px) {
         if (px) widths[originalIndex] = Math.round(px);
         else delete widths[originalIndex];
         savePrefs(key, state);

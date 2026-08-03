@@ -90,7 +90,7 @@ router.get('/broker', (req, res) => {
 });
 
 router.post('/broker', requirePermission('settings', 'edit'), (req, res) => {
-  const { host, port, username, password, use_tls, auto_create_enabled } = req.body;
+  const { host, port, username, password, use_tls, auto_create_enabled, auto_scope_device_roles_enabled } = req.body;
 
   if (!host || !port) {
     return res.render('settings', {
@@ -105,6 +105,7 @@ router.post('/broker', requirePermission('settings', 'edit'), (req, res) => {
     'UPDATE mqtt_settings SET host = ?, port = ?, username = ?, password = ?, use_tls = ? WHERE id = 1'
   ).run(host, Number(port), username || null, encrypt(password) || null, use_tls ? 1 : 0);
   db.prepare('UPDATE gateway_settings SET auto_create_loxone_mappings = ? WHERE id = 1').run(auto_create_enabled ? 1 : 0);
+  db.prepare('UPDATE gateway_settings SET auto_scope_device_roles = ? WHERE id = 1').run(auto_scope_device_roles_enabled ? 1 : 0);
 
   mqttClient.reconnect();
 

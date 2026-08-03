@@ -76,7 +76,7 @@
 <div class="table-wrap">
   <table class="table-compact">
     <thead>
-      <tr><th data-no-controls></th><th>Status</th><th>Firmware</th><th data-default-hidden>Generation</th><th>Name</th><th>Host</th><th>HTTP port</th><th>HTTPS</th><th data-default-hidden>UDP port</th><th data-default-hidden>External URL</th><th>User</th><th>Last checked</th><th>Actions</th></tr>
+      <tr><th data-no-controls></th><th>Status</th><th>Name</th><th>Host</th><th>HTTP port</th><th>HTTPS</th><th data-default-hidden>UDP port</th><th data-default-hidden>External URL</th><th>User</th><th>Last checked</th><th>Actions</th></tr>
     </thead>
     <tbody>
       <% miniservers.forEach(ms => { %>
@@ -89,8 +89,6 @@
             <% const badgeText = ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown'; %>
             <span class="badge badge-live <%= badgeClass %>"><%= badgeText %></span>
           </td>
-          <td data-ms-firmware-id="<%= ms.id %>"><%= ms.firmware_version || '-' %></td>
-          <td data-ms-generation-id="<%= ms.id %>" <% if (ms.miniserver_type !== null && ms.miniserver_type !== undefined) { %>title="Reported by this Miniserver itself (msInfo.miniserverType)."<% } %>><%= miniserverGenerationLabel(ms.miniserver_type) || '-' %></td>
           <td><span class="truncate" style="max-width:150px;" title="<%= ms.name %>"><%= ms.name %></span></td>
           <td><%= ms.host %></td>
           <td><%= ms.http_port %></td>
@@ -123,16 +121,16 @@
           </td>
         </tr>
         <tr class="expand-row" id="ms-diag-<%= ms.id %>">
-          <td colspan="13">
+          <td colspan="11">
             <%
               // Everything here comes from the healthcheck cycle (healthcheck.js's
               // checkMiniserver/fetchSystemStats/fetchPlcState/fetchFirmwareVersion), not fetched
-              // fresh on expand — same "already current, no extra round trip" reasoning as the
-              // Firmware column right above. /jdev/sys/cpu|heap|numtasks|state|.. are real, working
-              // commands verified directly against a live Miniserver, but undocumented by Loxone —
-              // shown as their raw values rather than a guessed interpretation wherever the meaning
-              // isn't certain (see format.js's formatHeapStatus), except PLC state, which Loxone
-              // does fully document (see PLC_STATE_LABELS above).
+              // fresh on expand — nothing here needs an extra round trip just because the panel
+              // was just opened. /jdev/sys/cpu|heap|numtasks|state|.. are real, working commands
+              // verified directly against a live Miniserver, but undocumented by Loxone — shown as
+              // their raw values rather than a guessed interpretation wherever the meaning isn't
+              // certain (see format.js's formatHeapStatus), except PLC/Miniserver state, which
+              // Loxone does fully document (see PLC_STATE_LABELS above).
               const plc = PLC_STATE_LABELS[ms.plc_state];
               // Every action below either talks to this Miniserver directly (Check/Update) or
               // pins its last-known reading elsewhere (Add to Dashboard/Monitor) — neither is
@@ -144,14 +142,22 @@
             <div class="ms-diagnostics-card">
               <div class="ms-diagnostics" data-ms-diagnostics-id="<%= ms.id %>">
                 <div>
-                  <span class="hint" style="margin:0;">PLC state</span>
+                  <span class="hint" style="margin:0;">Miniserver state</span>
                   <div>
                     <% if (plc) { %>
-                      <span class="badge <%= plc[1] %>" title="Miniserver's own PLC run state (jdev/sps/state).">PLC <%= ms.plc_state %>: <%= plc[0] %></span>
+                      <span class="badge <%= plc[1] %>" title="Miniserver's own PLC run state (jdev/sps/state), code <%= ms.plc_state %>."><%= plc[0] %></span>
                     <% } else { %>
                       -
                     <% } %>
                   </div>
+                </div>
+                <div>
+                  <span class="hint" style="margin:0;">Firmware</span>
+                  <div data-ms-firmware-id="<%= ms.id %>"><%= ms.firmware_version || '-' %></div>
+                </div>
+                <div>
+                  <span class="hint" style="margin:0;">Generation</span>
+                  <div data-ms-generation-id="<%= ms.id %>" <% if (ms.miniserver_type !== null && ms.miniserver_type !== undefined) { %>title="Reported by this Miniserver itself (msInfo.miniserverType)."<% } %>><%= miniserverGenerationLabel(ms.miniserver_type) || '-' %></div>
                 </div>
                 <div>
                   <span class="hint" style="margin:0;">CPU load</span>
@@ -225,7 +231,7 @@
         </tr>
       <% }) %>
       <% if (miniservers.length === 0) { %>
-        <tr><td colspan="13" class="empty">No miniservers added yet.</td></tr>
+        <tr><td colspan="11" class="empty">No miniservers added yet.</td></tr>
       <% } %>
     </tbody>
   </table>

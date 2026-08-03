@@ -17,7 +17,7 @@
 </p>
 
 <% if (canEdit('loxone_to_mqtt')) { %>
-<details class="add-panel" <%= prefillTopic ? 'open' : '' %>>
+<details class="add-panel" <%= (prefillTopic || prefillTransport || prefillMiniserverId) ? 'open' : '' %>>
   <summary>Add mapping</summary>
   <div class="add-panel-body">
     <form method="post" action="/mappings/loxone-to-mqtt">
@@ -32,15 +32,15 @@
           <select name="miniserver_id">
             <option value="">-</option>
             <% miniservers.forEach(ms => { %>
-              <option value="<%= ms.id %>"><%= ms.name %></option>
+              <option value="<%= ms.id %>" <%= prefillMiniserverId === ms.id ? 'selected' : '' %>><%= ms.name %></option>
             <% }) %>
           </select>
         </div>
         <div>
           <label>Transport</label>
           <select name="transport">
-            <option value="http">HTTP (Virtual Output)</option>
-            <option value="udp">UDP (Virtual Output)</option>
+            <option value="http" <%= prefillTransport === 'http' ? 'selected' : '' %>>HTTP (Virtual Output)</option>
+            <option value="udp" <%= prefillTransport === 'udp' ? 'selected' : '' %>>UDP (Virtual Output)</option>
           </select>
         </div>
         <div>

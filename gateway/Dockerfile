@@ -70,6 +70,11 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
 COPY public ./public
+# Seed-only copy, kept separate from the bind-mounted runtime folder (/device-templates, see
+# docker-compose.yml and docker-entrypoint.sh) — a bind mount replaces a directory's contents
+# entirely rather than merging with what the image already has there, so the built-in HeatMeister
+# examples would otherwise vanish the moment a host folder is mounted over /app/device-templates.
+COPY device-templates ./device-templates-defaults
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 

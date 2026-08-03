@@ -1,0 +1,29 @@
+{
+  "key": "shelly-vintage",
+  "label": "Shelly Vintage",
+  "topicPrefixPattern": "^shellies/(shellyvintage-[^/]+)/",
+  "commands": [
+    {
+      "key": "light",
+      "label": "Light (dimmer)",
+      "topicTemplate": "shellies/{device}/light/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    },
+    {
+      "key": "light-set",
+      "label": "Light brightness (0-100)",
+      "topicTemplate": "shellies/{device}/light/{channel}/set",
+      "actions": [
+        "0",
+        "25",
+        "50",
+        "75",
+        "100"
+      ]
+    }
+  ]
+}

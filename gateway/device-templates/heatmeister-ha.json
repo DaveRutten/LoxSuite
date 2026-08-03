@@ -1,0 +1,103 @@
+{
+  "key": "heatmeister-ha",
+  "label": "SDR HeatMeister (Home Assistant discovery)",
+  "topicPrefixPattern": "^heatbooster/([^/]+)/",
+  "commands": [
+    {
+      "key": "heatmeister-ha-control-state",
+      "label": "Discovery: Control state sensor",
+      "topicTemplate": "homeassistant/sensor/{device}/control_state/config",
+      "actions": [
+        "{\"name\":\"Control state\",\"unique_id\":\"{device}_control_state\",\"state_topic\":\"heatbooster/{device}/control-state\",\"value_template\":\"{{ {'0':'Idle','1':'Overrun','2':'Manual','3':'Heat','4':'Defrost','5':'Startup support','6':'Cool','7':'Slave','8':'Sensor error'}[value] | default('Unknown') }}\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-fan-speed",
+      "label": "Discovery: Fan speed sensor",
+      "topicTemplate": "homeassistant/sensor/{device}/fan_speed/config",
+      "actions": [
+        "{\"name\":\"Fan speed\",\"unique_id\":\"{device}_fan_speed\",\"state_topic\":\"heatbooster/{device}/fan-speed\",\"unit_of_measurement\":\"%\",\"state_class\":\"measurement\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-temp-ambient",
+      "label": "Discovery: Ambient temperature sensor",
+      "topicTemplate": "homeassistant/sensor/{device}/temp-ambient/config",
+      "actions": [
+        "{\"name\":\"Ambient temperature\",\"unique_id\":\"{device}_temp-ambient\",\"state_topic\":\"heatbooster/{device}/temp-ambient\",\"unit_of_measurement\":\"°C\",\"device_class\":\"temperature\",\"state_class\":\"measurement\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-temp-inlet",
+      "label": "Discovery: Inlet water temperature sensor",
+      "topicTemplate": "homeassistant/sensor/{device}/temp-inlet/config",
+      "actions": [
+        "{\"name\":\"Inlet water temperature\",\"unique_id\":\"{device}_temp-inlet\",\"state_topic\":\"heatbooster/{device}/temp-inlet\",\"unit_of_measurement\":\"°C\",\"device_class\":\"temperature\",\"state_class\":\"measurement\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-temp-outlet",
+      "label": "Discovery: Outlet water temperature sensor",
+      "topicTemplate": "homeassistant/sensor/{device}/temp-outlet/config",
+      "actions": [
+        "{\"name\":\"Outlet water temperature\",\"unique_id\":\"{device}_temp-outlet\",\"state_topic\":\"heatbooster/{device}/temp-outlet\",\"unit_of_measurement\":\"°C\",\"device_class\":\"temperature\",\"state_class\":\"measurement\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-temp-delta-io",
+      "label": "Discovery: Inlet/outlet delta sensor",
+      "topicTemplate": "homeassistant/sensor/{device}/temp-delta-io/config",
+      "actions": [
+        "{\"name\":\"Inlet/outlet delta\",\"unique_id\":\"{device}_temp-delta-io\",\"state_topic\":\"heatbooster/{device}/temp-delta-io\",\"unit_of_measurement\":\"°C\",\"device_class\":\"temperature\",\"state_class\":\"measurement\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-rssi",
+      "label": "Discovery: WiFi signal sensor",
+      "topicTemplate": "homeassistant/sensor/{device}/rssi/config",
+      "actions": [
+        "{\"name\":\"WiFi signal\",\"unique_id\":\"{device}_rssi\",\"state_topic\":\"heatbooster/{device}/rssi\",\"unit_of_measurement\":\"dB\",\"device_class\":\"signal_strength\",\"state_class\":\"measurement\",\"entity_category\":\"diagnostic\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-fan-boost",
+      "label": "Discovery: Fan boost mode switch",
+      "topicTemplate": "homeassistant/switch/{device}/fan-boost/config",
+      "actions": [
+        "{\"name\":\"Fan boost mode\",\"unique_id\":\"{device}_fan-boost\",\"state_topic\":\"heatbooster/{device}/fan-boostmode\",\"command_topic\":\"heatbooster/{device}/fan-boostmode-ref\",\"payload_on\":\"1\",\"payload_off\":\"0\",\"state_on\":\"1\",\"state_off\":\"0\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-fan-controlmode",
+      "label": "Discovery: Manual fan control switch",
+      "topicTemplate": "homeassistant/switch/{device}/fan-controlmode/config",
+      "actions": [
+        "{\"name\":\"Manual fan control\",\"unique_id\":\"{device}_fan-controlmode\",\"state_topic\":\"heatbooster/{device}/fan-controlmode\",\"command_topic\":\"heatbooster/{device}/fan-controlmode-ref\",\"payload_on\":\"1\",\"payload_off\":\"0\",\"state_on\":\"1\",\"state_off\":\"0\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-ambient-enable",
+      "label": "Discovery: Ambient temperature control switch",
+      "topicTemplate": "homeassistant/switch/{device}/ambient-enable/config",
+      "actions": [
+        "{\"name\":\"Ambient temperature control\",\"unique_id\":\"{device}_ambient-enable\",\"state_topic\":\"heatbooster/{device}/ambientcontrol-enable\",\"command_topic\":\"heatbooster/{device}/ambientcontrol-enable-ref\",\"payload_on\":\"1\",\"payload_off\":\"0\",\"state_on\":\"1\",\"state_off\":\"0\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-fan-speed-set",
+      "label": "Discovery: Manual fan speed number",
+      "topicTemplate": "homeassistant/number/{device}/fan_speed_set/config",
+      "actions": [
+        "{\"name\":\"Manual fan speed\",\"unique_id\":\"{device}_fan_speed_set\",\"state_topic\":\"heatbooster/{device}/fan-speed\",\"command_topic\":\"heatbooster/{device}/fan-speed-ref\",\"min\":0,\"max\":100,\"step\":1,\"unit_of_measurement\":\"%\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    },
+    {
+      "key": "heatmeister-ha-ambient-temp-set",
+      "label": "Discovery: Ambient temperature setpoint number",
+      "topicTemplate": "homeassistant/number/{device}/ambient_temp_set/config",
+      "actions": [
+        "{\"name\":\"Ambient temperature setpoint\",\"unique_id\":\"{device}_ambient_temp_set\",\"state_topic\":\"heatbooster/{device}/ambientcontrol-temp\",\"command_topic\":\"heatbooster/{device}/ambientcontrol-temp-ref\",\"min\":10,\"max\":30,\"step\":0.5,\"unit_of_measurement\":\"°C\",\"device\":{\"identifiers\":[\"{device}\"],\"name\":\"HeatMeister {device}\",\"manufacturer\":\"SDR Innovation\",\"model\":\"HeatMeister\"}}"
+      ]
+    }
+  ]
+}

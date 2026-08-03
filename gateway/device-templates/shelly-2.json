@@ -1,0 +1,47 @@
+{
+  "key": "shelly-2",
+  "label": "Shelly 2 (relay or roller)",
+  "topicPrefixPattern": "^shellies/(shellyswitch-[^/]+)/",
+  "commands": [
+    {
+      "key": "relay",
+      "label": "Relay switch",
+      "topicTemplate": "shellies/{device}/relay/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    },
+    {
+      "key": "roller",
+      "label": "Roller shutter",
+      "topicTemplate": "shellies/{device}/roller/{channel}/command",
+      "actions": [
+        "open",
+        "close",
+        "stop"
+      ]
+    }
+  ],
+  "dataPoints": [
+    {
+      "key": "relay-state",
+      "label": "Relay state (on/off/overpower)",
+      "topicTemplate": "shellies/{device}/relay/{channel}",
+      "channel": true
+    },
+    {
+      "key": "roller-state",
+      "label": "Roller state (open/close/stop)",
+      "topicTemplate": "shellies/{device}/roller/{channel}",
+      "channel": true
+    },
+    {
+      "key": "roller-position",
+      "label": "Roller position (0-100)",
+      "topicTemplate": "shellies/{device}/roller/{channel}/pos",
+      "channel": true
+    }
+  ]
+}

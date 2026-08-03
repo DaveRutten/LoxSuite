@@ -1,0 +1,31 @@
+{
+  "key": "shelly-4pro",
+  "label": "Shelly 4Pro",
+  "topicPrefixPattern": "^shellies/(shelly4pro-[^/]+)/",
+  "commands": [
+    {
+      "key": "relay",
+      "label": "Relay switch",
+      "topicTemplate": "shellies/{device}/relay/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    }
+  ],
+  "dataPoints": [
+    {
+      "key": "relay-state",
+      "label": "Relay state (on/off/overpower)",
+      "topicTemplate": "shellies/{device}/relay/{channel}",
+      "channel": true
+    },
+    {
+      "key": "temperature",
+      "label": "Device temperature (°C)",
+      "topicTemplate": "shellies/{device}/temperature",
+      "channel": false
+    }
+  ]
+}

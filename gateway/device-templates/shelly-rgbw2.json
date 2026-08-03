@@ -1,0 +1,27 @@
+{
+  "key": "shelly-rgbw2",
+  "label": "Shelly RGBW2",
+  "topicPrefixPattern": "^shellies/(shellyrgbw2-[^/]+)/",
+  "commands": [
+    {
+      "key": "color",
+      "label": "Color",
+      "topicTemplate": "shellies/{device}/color/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    },
+    {
+      "key": "white",
+      "label": "White channel",
+      "topicTemplate": "shellies/{device}/white/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    }
+  ]
+}

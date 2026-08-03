@@ -618,6 +618,41 @@
       if (e.key === 'Escape') panel.hidden = true;
     });
 
+    // "x" per item and the footer's "Mark all read" both live inside the popover — stopPropagation
+    // keeps the document-level closer above from snapping the whole thing shut on every click, the
+    // same reason the bell button itself needs it.
+    var list = document.getElementById('notification-center-list');
+    var dismissAllBtn = document.getElementById('notification-center-dismiss-all');
+
+    function showEmptyState() {
+      if (!list || list.querySelector('.notification-center-empty')) return;
+      list.innerHTML = '<p class="hint notification-center-empty" style="margin:0.6rem 0.9rem;">No notifications yet.</p>';
+      if (dismissAllBtn) dismissAllBtn.disabled = true;
+    }
+
+    if (list) {
+      list.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var dismissBtn = e.target.closest('[data-dismiss-notification]');
+        if (!dismissBtn) return;
+        var item = dismissBtn.closest('.notification-center-item');
+        var id = dismissBtn.dataset.dismissNotification;
+        fetch('/notifications/' + id + '/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () {});
+        if (item) item.remove();
+        if (!list.querySelector('.notification-center-item')) showEmptyState();
+      });
+    }
+
+    if (dismissAllBtn) {
+      dismissAllBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (dismissAllBtn.disabled) return;
+        fetch('/notifications/dismiss-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () {});
+        markRead();
+        showEmptyState();
+      });
+    }
+
     var POLL_MS = 60000; // matches healthcheck_interval_seconds's own default cadence
     function poll() {
       fetch('/notifications/unread-count').then(function (res) { return res.json(); }).then(function (data) {

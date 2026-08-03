@@ -1162,6 +1162,18 @@ function migrateLogEntriesCommandColumns() {
 
 migrateLogEntriesCommandColumns();
 
+// Also 'loxone_commands'-only (see the comment above) — source_id already existed generically on
+// this table but was never actually populated for this source; this is a genuinely new column,
+// not a widening of an existing one. Lets a rejected row's own "+ Mapping" button (Logs > Loxone
+// commands) pre-fill transport and Miniserver on the new mapping form instead of just the topic —
+// source_id alone can't do that (it's the matched Miniserver's id, transport is "http"/"udp"/null).
+function migrateLogEntriesTransportColumn() {
+  const columns = db.prepare('PRAGMA table_info(log_entries)').all().map((c) => c.name);
+  if (!columns.includes('transport')) db.exec('ALTER TABLE log_entries ADD COLUMN transport TEXT');
+}
+
+migrateLogEntriesTransportColumn();
+
 // Per-column pixel widths from the table header's drag-to-resize handles (public/tables.js) —
 // same simple TEXT/JSON-blob shape as column_order/hidden_columns above, so a plain ALTER TABLE
 // covers it (no CHECK constraint involved).
@@ -1395,5 +1407,39 @@ function migrateNotificationRetentionSetting() {
 }
 
 migrateNotificationRetentionSetting();
+
+// Off by default: MQTT device accounts keep sharing the one broad `client` role like today. On,
+// adding a new device account (routes/mqttUsers.js) creates and assigns a role scoped to just that
+// device's own topic prefix instead — see dynamicSecurity.js's createDeviceScopedRole.
+function migrateAutoScopeDeviceRolesSetting() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('auto_scope_device_roles')) {
+    db.exec('ALTER TABLE gateway_settings ADD COLUMN auto_scope_device_roles INTEGER NOT NULL DEFAULT 0');
+  }
+}
+
+migrateAutoScopeDeviceRolesSetting();
+
+// Per-user, per-event dismissal for the topbar bell popover's own "x" button — separate from (and
+// unrelated to) users.last_seen_notification_id above, which only ever tracks the unread *badge*
+// count. Dismissing an event just hides it from THIS user's own popover list from now on; it's
+// still a real row in notification_events, still shows on Logs > Notifications for anyone with
+// that permission, and still visible to every other user's own popover. No REFERENCES on
+// notification_event_id, same reasoning as notification_events.rule_id (see that table's own
+// comment) — a dismissal row outliving the event it points at is harmless dead weight, whereas a
+// CASCADE "helpfully" completing the pattern would just be one more surprising side effect to
+// remember when deciding whether purging old notification_events is safe.
+function ensureNotificationDismissalsTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notification_dismissals (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      notification_event_id INTEGER NOT NULL,
+      dismissed_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, notification_event_id)
+    );
+  `);
+}
+
+ensureNotificationDismissalsTable();
 
 module.exports = db;

@@ -58,7 +58,8 @@ function queryLogs({ source, sourceId, filters }) {
   const limit = filters.level ? FILTER_CANDIDATE_ROWS : MAX_ROWS;
   const rows = db.prepare(
     `SELECT line, source_label AS sourceLabel, recorded_at AS recordedAt,
-            command_topic AS commandTopic, value_from AS valueFrom, value_to AS valueTo
+            command_topic AS commandTopic, value_from AS valueFrom, value_to AS valueTo,
+            source_id AS sourceMiniserverId, transport
      FROM log_entries
      WHERE ${conditions.join(' AND ')} ORDER BY id DESC LIMIT ?`
   ).all(...params, limit).map((r) => ({ ...r, level: classifyLogLevel(r.line) }));

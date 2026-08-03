@@ -11,6 +11,7 @@ const TRIGGER_TYPES = [
   { key: 'mqtt_client_status', label: 'MQTT client online/offline' },
   { key: 'backup_failed', label: 'Backup failed' },
   { key: 'firmware_changed', label: 'Miniserver firmware changed' },
+  { key: 'loxsuite_update_available', label: 'LoxSuite update available' },
 ];
 
 // Sending goes through Apprise (https://github.com/caronc/apprise, installed as a CLI in the
@@ -327,6 +328,33 @@ function checkFirmwareChanged(miniserver, newVersion) {
   }
 }
 
+// Called by versionCheck.js whenever its own daily GitHub tags check finds a latest tag that
+// differs from the version currently running (see that file for why this is a plain string
+// inequality, not real semver ranking). No per-instance scoping needed — there's only ever one
+// LoxSuite install to be "this rule" about, so unlike the trigger types above, a rule here has
+// nothing in its own config to match against. last_state just remembers the last version already
+// notified about, so this doesn't refire on every one of versionCheck's daily re-checks — only
+// once a genuinely different tag shows up.
+function checkLoxSuiteUpdate(currentVersion, latestVersion) {
+  for (const rule of getRulesByTrigger('loxsuite_update_available')) {
+    const state = JSON.parse(rule.last_state || '{}');
+    if (state.notifiedVersion === latestVersion) continue;
+    updateRuleState(rule.id, { notifiedVersion: latestVersion });
+
+    fireRule(rule, {
+      title: `LoxSuite v${latestVersion} available`,
+      message: `A newer LoxSuite release (v${latestVersion}) is available on GitHub — currently running v${currentVersion}.`,
+      severity: 'info',
+      fields: [
+        { label: 'Running version', value: `v${currentVersion}` },
+        { label: 'Latest version', value: `v${latestVersion}` },
+      ],
+      sourceLabel: 'LoxSuite',
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
 // Subscribed to mosquittoLog.js's client-status events (see server.js wiring it up at boot).
 // Anonymous connections (no username — shouldn't normally happen, the broker requires auth, but a
 // malformed/edge-case log line could still parse one out) aren't meaningful to alert on by
@@ -375,6 +403,7 @@ module.exports = {
   checkThresholdLadderNotify,
   checkMiniserverStatus,
   checkFirmwareChanged,
+  checkLoxSuiteUpdate,
   checkMqttClientStatus,
   notifyBackupFailed,
   // Pure helpers, exported mainly so test/notifications.test.js can exercise them directly rather

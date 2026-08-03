@@ -2,6 +2,59 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.6.0-alpha.1] - 2026-08-03
+
+### Added
+- **Device templates**: every Common Commands/Data device (all 16 named Shelly Gen1 types,
+  Shelly Gen2/Gen3, and the new SDR Innovation HeatMeister below) is now a plain `.json`/`.xml`
+  file under `device-templates/`, read once at startup — drop your own file in that same folder to
+  add or override a device, no code or UI editing required. An invalid file is skipped with a log
+  line naming the file and the problem, not a broken catalog. A generic fallback device (like
+  Shelly's own "other/unlisted model") can set an explicit `order` so more specific devices are
+  still auto-detected first.
+- **SDR Innovation HeatMeister** (radiator/fan-coil controller): fan boost/control mode, fan
+  speed, ambient temperature control, and the external sensor-override topics as commands; control
+  state, fan speed, all four temperatures, and WiFi/firmware/runtime as data — confirmed against
+  its own protocol spec and a real installation. A separate "Home Assistant discovery" variant
+  publishes MQTT Discovery configs for the same topics (LoxSuite's own addition — Home Assistant
+  has no native integration with this device).
+- **Notification Center**: a "LoxSuite update available" trigger type — the sidebar's existing
+  daily GitHub tags check can now also log here and notify a channel, not just show its own badge.
+  Each item gained a "×" to dismiss just that one from your own popover (not a delete — it still
+  shows in Logs → Notifications and everyone else's popover), and a "Mark all read" button at the
+  bottom.
+- **Users (MQTT accounts)**: an off-by-default "Per-device MQTT roles" setting (Settings → MQTT
+  Broker) — filling in a topic prefix when adding a device account creates a role scoped to just
+  `<prefix>/#` and assigns it, instead of the shared `client` role with access to every topic.
+- Mappings → MQTT to Loxone: the Virtual input name field now suggests names already used in
+  other mappings, covering the common case of one Virtual Input receiving several commands.
+- Logs → Loxone commands: a rejected row's **+ Mapping** button now also pre-selects Transport
+  (HTTP/UDP) and Miniserver on the new mapping form, matching exactly what that command actually
+  arrived as, instead of just pre-filling the topic.
+- Dashboard: **Total messages since start** is now abbreviated past 1000 (`1.2K`, `3.4M`, full
+  number on hover), same convention Live Messages' own per-topic count already used.
+
+### Fixed
+- A Loxone UDP Virtual Output command whose value contains spaces (e.g. a Shelly JSON payload like
+  `{"turn": "off", "brightness": 30}`) got silently truncated to just its last few characters — the
+  parser split on the *last* space in the whole message, which is the JSON's own last space, not
+  the boundary between topic and value. Now matches against already-registered tokens/topics
+  first, only falling back to the first space for a brand-new, not-yet-registered one.
+- Dragging a table column wider or narrower didn't change how much of its own text showed — a
+  truncated cell's ellipsis width was a fixed value, completely disconnected from the column's
+  actual (possibly resized) width. Fixed together with a related issue where the very first resize
+  on a table only took effect after the next page load, not during the drag itself.
+- Miniservers diagnostics panel: the state row showed a redundant/opaque `PLC 5: Running` — now
+  just `Running`, with the numeric code moved into the tooltip.
+
+### Changed
+- Miniservers page: Firmware and Generation moved out of the main table into the diagnostics
+  expand panel (labeled "Miniserver state" instead of "PLC state"), alongside the other
+  per-Miniserver details; a bit more spacing between that panel and its action buttons.
+- Monitor's "Loxone (direct)" source description corrected in the README — it already reads from a
+  persistent, shared, pushed websocket connection (same one Live Data uses), not HTTP polling; the
+  interval you set only controls how often a history *row* gets written from that live cache.
+
 ## [0.5.0-alpha.1] - 2026-08-02
 
 ### Added

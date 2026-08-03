@@ -23,4 +23,27 @@ router.post('/mark-read', (req, res) => {
   res.json({ ok: true });
 });
 
+// Removes one event from THIS user's own popover list (see loadUserContext.js's own dismissed
+// filter) — not a delete, so Logs > Notifications and every other user's popover are unaffected.
+// INSERT OR IGNORE: clicking "x" twice on the same item (a slow connection, a double click before
+// the DOM removal below finishes) is a no-op the second time, not an error.
+router.post('/:id/dismiss', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid notification id.' });
+  db.prepare('INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at) VALUES (?, ?, ?)')
+    .run(req.user.id, id, new Date().toISOString());
+  res.json({ ok: true });
+});
+
+// "Clear all" in the popover footer — dismisses every event currently in this user's own list in
+// one round trip, rather than the client firing one /dismiss call per visible item.
+router.post('/dismiss-all', (req, res) => {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at)
+    SELECT ?, id, ? FROM notification_events
+  `).run(req.user.id, now);
+  res.json({ ok: true });
+});
+
 module.exports = router;

@@ -7,11 +7,11 @@
 const db = require('./db');
 
 const insertLogEntry = db.prepare(
-  `INSERT INTO log_entries (source, source_label, line, command_topic, value_from, value_to, recorded_at)
-   VALUES ('loxone_commands', ?, ?, ?, ?, ?, ?)`
+  `INSERT INTO log_entries (source, source_label, line, command_topic, value_from, value_to, source_id, transport, recorded_at)
+   VALUES ('loxone_commands', ?, ?, ?, ?, ?, ?, ?, ?)`
 );
 
-const findMiniserverByHost = db.prepare('SELECT name FROM miniservers WHERE host = ?');
+const findMiniserverByHost = db.prepare('SELECT id, name FROM miniservers WHERE host = ?');
 
 // In-memory only: the last value actually published through a Loxone-originated command, per
 // MQTT topic — this is what lets a row show "Off" -> "On" instead of just "On" on its own.
@@ -26,19 +26,24 @@ const lastPublishedValue = new Map();
 function describeClient(transport, address, port) {
   const miniserver = address ? findMiniserverByHost.get(address) : null;
   const location = port ? `${address}:${port}` : address || 'unknown';
-  return miniserver ? `${miniserver.name} (${location})` : `${transport} ${location}`;
+  const label = miniserver ? `${miniserver.name} (${location})` : `${transport} ${location}`;
+  // The composed label above drops the transport entirely once a Miniserver name is matched (it
+  // reads "MiniserverName (host:port)", not "UDP MiniserverName (...)") — this pair is stored
+  // alongside it precisely so that information survives, for the rejected row's own "+ Mapping"
+  // button (Logs > Loxone commands) to pre-fill transport and Miniserver on the new mapping form.
+  return { label, miniserverId: miniserver ? miniserver.id : null };
 }
 
 function logAccepted({ transport, address, port, topic, value }) {
-  const clientLabel = describeClient(transport, address, port);
+  const { label, miniserverId } = describeClient(transport, address, port);
   const from = lastPublishedValue.has(topic) ? lastPublishedValue.get(topic) : null;
   lastPublishedValue.set(topic, value);
-  insertLogEntry.run(clientLabel, 'OK', topic, from, value, new Date().toISOString());
+  insertLogEntry.run(label, 'OK', topic, from, value, miniserverId, transport, new Date().toISOString());
 }
 
 function logRejected({ transport, address, port, topic, attemptedValue, reason }) {
-  const clientLabel = describeClient(transport, address, port);
-  insertLogEntry.run(clientLabel, `Rejected: ${reason}`, topic ?? null, null, attemptedValue ?? null, new Date().toISOString());
+  const { label, miniserverId } = describeClient(transport, address, port);
+  insertLogEntry.run(label, `Rejected: ${reason}`, topic ?? null, null, attemptedValue ?? null, miniserverId, transport, new Date().toISOString());
 }
 
 module.exports = { logAccepted, logRejected };

@@ -56,6 +56,19 @@
       </p>
     </div>
 
+    <div class="settings-field">
+      <label>Per-device MQTT roles</label>
+      <%- toggleSwitch('auto_scope_device_roles_enabled', gatewaySettings.auto_scope_device_roles) %>
+      <p class="hint">
+        Off by default: every new device account on <strong>Users (MQTT accounts)</strong> gets the
+        shared <code>client</code> role, with publish/subscribe on every topic. On, that page's Add
+        form gains a "Device topic prefix" field — filling it in creates a role scoped to just
+        <code>&lt;prefix&gt;/#</code> and assigns that instead, so a compromised device credential
+        can't read or write topics belonging to any other device. Leaving the prefix blank still
+        falls back to picking a role from the list, same as when this is off.
+      </p>
+    </div>
+
     <div style="margin-top:0.9rem;">
       <button type="submit" class="btn-edit"><%- icon('edit') %> Save &amp; reconnect</button>
     </div>

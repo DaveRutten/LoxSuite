@@ -41,7 +41,13 @@ Logged in as <strong><%= username %></strong>
     </div>
     <div class="stat-card">
       <div class="label">Total messages since start</div>
-      <div class="value" data-live-id="stat-total-msgs"><%= stats.totalMessages %></div>
+      <%
+        // The title attribute has to live on an element INSIDE this div, not the div itself —
+        // the live-refresh swap (foot.ejs's swapFrom) only ever replaces a [data-live-id]
+        // element's innerHTML, never its own attributes, so a title placed directly on this div
+        // would go stale (stuck at the page's first-load value) on every later refresh.
+      %>
+      <div class="value" data-live-id="stat-total-msgs"><span title="<%= stats.totalMessages %>"><%= formatCount(stats.totalMessages) %></span></div>
     </div>
     <div class="stat-card">
       <div class="label">Unique topics seen</div>

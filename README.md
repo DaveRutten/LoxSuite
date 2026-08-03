@@ -142,16 +142,25 @@ device ID with no descriptive words in them at all — rename the panel by hand 
 A bell icon next to Help in the topbar, visible to every logged-in user, polling for new events
 every 60 seconds. Opening it shows the most recent events and marks them read; **View all** links
 to a full history under **Logs → Notifications** (its own permission area, separate from the other
-Logs tabs). Reuses the existing [Apprise](https://github.com/caronc/apprise) rule engine for
-delivery (Monitor threshold, Miniserver/MQTT client status, backup failure) and adds two more
-event sources that only ever show up here, in-app:
+Logs tabs). Every event logged here also went through the existing
+[Apprise](https://github.com/caronc/apprise) rule engine for delivery — Monitor threshold,
+Miniserver/MQTT client status, backup failure, Miniserver firmware changed, and LoxSuite update
+available are all real, admin-creatable rule types, sendable to any channel exactly like the
+others — except one:
 
-- **Firmware changed** — a Miniserver's reported firmware version changed since the last check
-  (Loxone doesn't expose a plain "update available" flag over HTTP, so this reports an actual
-  version change, not a check against a release feed).
 - **Threshold ladder** — any threshold row on a Monitor or Dashboard chart can be flagged
   **Notify** (alongside its existing color); crossing into a flagged rung logs an event here
-  directly, no separate rule/channel setup needed.
+  directly, no rule or channel to set up at all — the only event source that's genuinely in-app
+  only, everything else above can also reach Teams/Slack/Telegram/email/etc.
+- **LoxSuite update available** — the sidebar's own version badge (a plain daily GitHub tags
+  check, see `versionCheck.js`) already shows this passively; creating a rule for this trigger type
+  additionally logs it here and can notify a channel, the same way a Miniserver's own firmware
+  change can.
+
+Each item has its own **&times;** to dismiss just that one — personal to you, not a delete; the
+underlying event still shows in Logs → Notifications and in every other user's own popover.
+**Mark all read** at the bottom dismisses everything currently listed in one go and resets the
+unread badge, same as opening the popover already does on its own.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/notification-center-dark.png">
@@ -166,11 +175,14 @@ Track a value over time and view it as a chart and/or a raw table, with a CSV ex
 
 - **MQTT topic** — records every message on a topic you pick (or add one straight from the "Monitor"
   button on Live Traffic).
-- **Loxone (direct, polled)** — pick a Miniserver, then a control/state from its structure export
-  (`LoxAPP3.json`), and the gateway polls that value's live reading
-  (`/jdev/sps/io/<uuid>`) on an interval you choose (5s&ndash;5min). This is polling, not a websocket
-  push subscription — simpler to build and operate, at the cost of only-as-fresh-as-the-interval
-  updates.
+- **Loxone (direct)** — pick a Miniserver, then a control/state from its structure export
+  (`LoxAPP3.json`). Values come from one persistent, shared websocket connection per Miniserver
+  (`getLiveValue` in `loxoneWebSocket.js`, also used by Live Data) that receives Loxone's own
+  pushed state updates in real time — the interval you choose (5s&ndash;5min) controls how often a
+  *history row* gets written from that live cache, not how fresh the value itself is. A plain HTTP
+  request (`/jdev/sps/io/<uuid>`) is used only as a fallback, for the small slice of states that
+  endpoint actually answers for (most sub-states are websocket-only), and only until the live
+  connection has pushed a first value.
 - **Miniserver diagnostic** — CPU load, heap, or task count from a Miniserver's own diagnostics
   (see Miniservers below). Fed from that page's existing background check, not polled a second
   time — a reading only lands here on the same interval the Miniservers page already refreshes on.
@@ -214,10 +226,12 @@ Create any number of named dashboards, each holding **panels**:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-chart-types-dark.png">
-  <img src="docs/screenshots/dashboard-chart-types-light.png" alt="Three chart panels comparing five monitors' current values as a doughnut, a bar chart, and a radar chart">
+  <img src="docs/screenshots/dashboard-chart-types-light.png" alt="Six dashboard panels comparing the same five monitors: a time-series line chart, a bar chart, a doughnut, a radar chart, a gauge, and a stat-with-change tile">
 </picture>
 
-*(Demo data — three of the five snapshot chart types, each comparing the same five monitors.)*
+*(Demo data — a line chart plus three of the five snapshot chart types (bar compare, doughnut,
+radar), all comparing the same five monitors, alongside a gauge and a stat-with-change tile to show
+the non-chart panel types too.)*
 
 Every panel type's Edit form is grouped into the same labeled sections (Appearance, Axis, Range,
 Condition, ...) regardless of type, so a given kind of setting always lives under the same heading.
@@ -287,10 +301,13 @@ Host/IP first and only falls back to the external URL if the local one fails at 
 (timeout, refused, DNS), so one Miniserver entry stays usable both on the local network and
 remotely without switching configuration.
 
-There is intentionally no autocomplete for Virtual Input names: they are pure programming blocks
+There is no Loxone-sourced autocomplete for Virtual Input names: they are pure programming blocks
 in Loxone Config and don't appear anywhere in a Miniserver's structure export (`LoxAPP3.json`) —
 confirmed against a real Miniserver with 365 controls and zero Virtual Inputs in the export. Type
-the name exactly as configured in Loxone Config.
+the name exactly as configured in Loxone Config — the field on the MQTT &rarr; Loxone mapping form
+does suggest names you've already used in other mappings, which covers the common case of one
+Virtual Input receiving several different mapped commands, but there's nothing to suggest for a
+name you haven't typed anywhere yet.
 
 ### Live Data
 
@@ -344,7 +361,7 @@ device reacts before wiring up the actual Virtual Output.
 
 ### Common commands & Common data
 
-An interactive builder for devices with well-known MQTT topic shapes — 18 named Shelly Gen1 device
+An interactive builder for devices with well-known MQTT topic shapes — 16 named Shelly Gen1 device
 types (Plug, Plug S, Dimmer, Bulb, Bulb Duo, RGBW2, EM, 3EM, Uni, ...) plus Shelly Gen2/Gen3 (both
 the full JSON-RPC form and the simpler `command/switch:N`/`command/cover:N` form some devices also
 support). **Common commands** covers relay/roller/light/color/white commands; **Common data** covers
@@ -356,10 +373,29 @@ or re-imported from — JSON or XML, or reset back to the built-in defaults at a
 traffic** → *Connected Clients*, devices that look like a Shelly link here with the device
 pre-selected; a data point's "Use as Monitor" link jumps straight to a pre-filled Monitor form.
 
+A separate, file-based way to add or override a device: drop a `.json` or `.xml` file into
+`device-templates/` (same shape this page's own export/import already uses — see that folder's own
+`README.md`), read once at gateway startup. Meant for a device definition you'd rather hand-write,
+keep in version control, or share, without going through the UI at all; a file naming an existing
+key (built-in or another file's) replaces that device, and an invalid file is skipped with a
+message in the gateway's log naming the file and the problem, rather than failing the whole catalog.
+`device-templates/heatmeister.json` and `heatmeister-ha.json` (see below) are real, working examples
+of the format, not placeholders.
+
 A Loxone &rarr; MQTT mapping also has a **Shelly RGBW/White/Tunable-white** value transform, which
 converts Loxone's own RGB ("H,S,V") or Lumitech tunable-white ("brightness,kelvin") output format
 into the JSON payload a Shelly RGBW2/Bulb/Duo actually expects — built in, no separate LoxBerry-style
 UDP transformer needed.
+
+Also covers [SDR Innovation's HeatMeister](https://www.sdr-engineering.nl) (radiator/fan-coil
+controller) — confirmed against its own protocol spec (firmware v2.8.2) and a real installation, all
+under `heatbooster/<module name>/...`: fan boost/control mode, fan speed, ambient temperature
+control, and the external sensor-override topics as commands; control state, fan speed, all four
+temperatures, WiFi/firmware/runtime as data. A separate **SDR HeatMeister (Home Assistant
+discovery)** family publishes Home Assistant MQTT Discovery configs for the same topics — this is
+LoxSuite's own addition, not part of HeatMeister's own spec, since Home Assistant has no native
+integration with it; tick **Retain** on whichever Loxone → MQTT mapping sends these; or Home
+Assistant forgets the entity on its own next restart.
 
 ### Transformations
 
@@ -430,6 +466,12 @@ so this can be managed live from the UI. Change a device's role right in the tab
 password without recreating the account. The gateway's own account (`gateway` by default) can't be
 edited or deleted here, since that would lock the gateway itself out of the broker.
 
+With **Per-device MQTT roles** turned on (Settings &rarr; MQTT Broker, off by default), the Add form
+gains an optional **Device topic prefix** field — filling it in (e.g. `shellies/shellydimmer-Toilet`)
+creates (or reuses) a role scoped to just `<prefix>/#` and assigns that instead of the shared
+`client` role, so a compromised device credential can't read or write topics belonging to any other
+device. Leaving it blank falls back to the Role dropdown, same as when the setting is off.
+
 ### Roles
 
 A role is a named set of ACL rules (publish/subscribe permissions on topic patterns); a user is
@@ -457,6 +499,9 @@ changes, ordered so a failed add never leaves a role with neither the old nor th
   topic and a new passthrough mapping is created on the spot instead of returning 404. Convenient
   for wiring up Loxone quickly, but it means any string reaching that endpoint becomes a real
   topic — leave it off unless you specifically want that.
+- **Per-device MQTT roles** — off by default; see Users (MQTT accounts) above. When enabled, adding
+  a device account with a topic prefix filled in scopes its role to just that device's own topics
+  instead of the shared `client` role.
 - **Miniservers check interval** — how often every configured Miniserver is re-checked for
   reachability, firmware version, and diagnostics (default 60s, 10s minimum). Takes effect on the
   very next check, no gateway restart needed.
@@ -495,7 +540,8 @@ Visible only to users whose Access Role has **Administrator** checked. Six tabs:
   pasting a hand-written `rclone.conf` (any of rclone's 70+ backends, not just these four) is still
   there as the general-purpose option.
 - **Notifications** — alert rules for a Monitor crossing a threshold, a Miniserver or MQTT client
-  going online/offline, or a backup failing, sent through
+  going online/offline, a backup failing, a Miniserver's firmware changing, or a newer LoxSuite
+  release becoming available, sent through
   [Apprise](https://github.com/caronc/apprise) to Teams, Slack, Telegram, Email, or 100+ other
   services. **Channels** (a name plus one Apprise URL) and **Rules** (which event, and which
   channel(s) it fires to) are kept as two separate, reusable lists. A channel's **Service** picker
@@ -537,6 +583,7 @@ Visible only to users whose Access Role has **Administrator** checked. Six tabs:
 Notifications page's graphical Discord channel form, both filled in but not yet saved.)*
 
 <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/notifications-add-channel-dark.png">
   <img src="docs/screenshots/notifications-add-channel-light.png" alt="The Add channel form with Service set to Discord, a pasted webhook URL, and a live preview of the Apprise URL it will save">
 </picture>
 
@@ -555,7 +602,7 @@ change, that's managed by Pocket ID.
 
 **Notifications** is personal, self-service alerting, independent of anything an administrator sets
 up: your own [Apprise](https://github.com/caronc/apprise) channel URL (**My channel**), your own
-trigger rules (**My rules** — the same four trigger types the admin Notifications page offers, but
+trigger rules (**My rules** — the same trigger types the admin Notifications page offers, but
 private to you and needing no admin involvement, always delivered to your own channel), and the
 option to subscribe yourself to any of the admin-configured rules too (**Subscriptions**), on top of
 whatever channel(s) they already send to.
@@ -597,21 +644,19 @@ whatever channel(s) they already send to.
 
 ## Known scope limitations
 
-- No way to autocomplete Virtual Input names — see the Miniservers section above.
-- MQTT device accounts all share one `client` role with access to every topic; there's no
-  per-device topic restriction out of the box (build one yourself under **Roles** if you need it).
-- Loxone-direct monitors and Live Data both read from one persistent, shared websocket connection
-  per Miniserver (`getLiveValue` in `loxoneWebSocket.js`) rather than each opening its own — a
-  monitor's own poll interval controls how often a *history row* gets written from that live
-  cache, not how the value itself is obtained. A plain HTTP request
-  (`/jdev/sps/io/<uuid>`) is only used as a fallback for the states that endpoint actually answers
-  for, and only when nothing has been pushed onto the live connection yet.
+- No autocomplete for a brand-new Virtual Input name — see the Miniservers section above (the
+  mapping form does suggest names you've already used elsewhere).
+- MQTT device accounts share one `client` role with access to every topic by default; per-device
+  topic restriction is opt-in (**Per-device MQTT roles** in Settings, see Users (MQTT accounts)
+  above), not automatic for accounts already created before turning it on.
 
 ## Data and persistence
 
 - Mosquitto data/logs and its dynamic-security state live in Docker volumes / `./mosquitto/config`.
 - All mappings, Miniserver configuration, users, and sessions live in one SQLite file at
   `./data/gateway.db` (bind-mounted, so it's easy to back up).
+- Common Commands/Data device templates (built-in examples plus any of your own) live as plain
+  `.json`/`.xml` files under `./device-templates` — see that folder's own `README.md`.
 
 ## Environment variables
 
@@ -623,6 +668,7 @@ whatever channel(s) they already send to.
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Web UI admin account, created on first boot if the `users` table is empty. |
 | `DB_PATH` | SQLite database path (set in `docker-compose.yml`, rarely needs changing). |
 | `LOXONE_UDP_PORT` | UDP port the gateway listens on for Loxone &rarr; MQTT UDP mappings (default 11884). |
+| `DEVICE_TEMPLATES_PATH` | Directory the gateway reads Common Commands/Data device template files from at startup (set in `docker-compose.yml`, rarely needs changing). |
 
 ## Security notes
 

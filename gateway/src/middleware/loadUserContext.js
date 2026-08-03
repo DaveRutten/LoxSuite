@@ -77,7 +77,14 @@ module.exports = function loadUserContext(req, res, next) {
   // paint with zero extra round-trip; the topbar's own periodic poll (see foot.ejs) only has to
   // catch events that land while the user sits on one page without navigating.
   res.locals.unreadNotificationCount = db.prepare('SELECT COUNT(*) AS n FROM notification_events WHERE id > ?').get(user.last_seen_notification_id).n;
-  res.locals.recentNotifications = db.prepare('SELECT * FROM notification_events ORDER BY id DESC LIMIT 15').all();
+  // Dismissed (see routes/notificationCenter.js's own /:id/dismiss) is purely about what shows up
+  // in THIS user's own popover list — unrelated to the unread count above, which stays keyed off
+  // last_seen_notification_id regardless of anything dismissed here.
+  res.locals.recentNotifications = db.prepare(`
+    SELECT * FROM notification_events
+    WHERE id NOT IN (SELECT notification_event_id FROM notification_dismissals WHERE user_id = ?)
+    ORDER BY id DESC LIMIT 15
+  `).all(user.id);
 
   next();
 };

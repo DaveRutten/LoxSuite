@@ -6,6 +6,8 @@
 // far less useful to know than simply "the tag you're running doesn't match the latest one
 // upstream — go take a look" (a manual downgrade/rollback is a perfectly normal thing to have
 // running here, not a mistake to warn about as if it were behind).
+const { checkLoxSuiteUpdate } = require('./notifications');
+
 const REPO = 'DaveRutten/LoxSuite';
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -34,6 +36,12 @@ async function checkForUpdate() {
     if (latest) {
       state.latestVersion = latest;
       state.updateAvailable = latest !== normalize(state.currentVersion);
+      // Notification Center + Apprise (see notifications.js) — separate from the sidebar badge
+      // above, opt-in via an admin-created "LoxSuite update available" rule, same as every other
+      // trigger type. Safe to call on every check regardless of whether this is a genuinely new
+      // finding: checkLoxSuiteUpdate's own last_state dedupe only actually fires a rule once per
+      // distinct tag.
+      if (state.updateAvailable) checkLoxSuiteUpdate(normalize(state.currentVersion), latest);
     }
   } catch {
     // Offline, DNS failure, timeout, ... — the version number itself still always renders fine

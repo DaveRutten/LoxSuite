@@ -1,0 +1,199 @@
+{
+  "key": "heatmeister",
+  "label": "SDR HeatMeister (radiator/fan-coil controller)",
+  "topicPrefixPattern": "^heatbooster/([^/]+)/",
+  "commands": [
+    {
+      "key": "heatmeister-fan-boost",
+      "label": "Fan boost mode (0=off, 1=on)",
+      "topicTemplate": "heatbooster/{device}/fan-boostmode-ref",
+      "actions": [
+        "0",
+        "1"
+      ]
+    },
+    {
+      "key": "heatmeister-fan-controlmode",
+      "label": "Fan control mode (0=auto, 1=manual)",
+      "topicTemplate": "heatbooster/{device}/fan-controlmode-ref",
+      "actions": [
+        "0",
+        "1"
+      ]
+    },
+    {
+      "key": "heatmeister-fan-speed",
+      "label": "Fan speed, manual mode only (0-100%)",
+      "topicTemplate": "heatbooster/{device}/fan-speed-ref",
+      "actions": [
+        "0",
+        "25",
+        "50",
+        "75",
+        "100"
+      ]
+    },
+    {
+      "key": "heatmeister-ambient-enable",
+      "label": "Ambient temperature control (0=off, 1=on)",
+      "topicTemplate": "heatbooster/{device}/ambientcontrol-enable-ref",
+      "actions": [
+        "0",
+        "1"
+      ]
+    },
+    {
+      "key": "heatmeister-ambient-temp",
+      "label": "Ambient temperature setpoint (°C)",
+      "topicTemplate": "heatbooster/{device}/ambientcontrol-temp-ref",
+      "actions": [
+        "18",
+        "20",
+        "21",
+        "22"
+      ]
+    },
+    {
+      "key": "heatmeister-ext-ambient",
+      "label": "External ambient temp override, °C (resend every <30s)",
+      "topicTemplate": "heatbooster/{device}/temp-ambient-ext",
+      "actions": [
+        "20"
+      ]
+    },
+    {
+      "key": "heatmeister-ext-inlet",
+      "label": "External inlet temp override, °C (resend every <30s)",
+      "topicTemplate": "heatbooster/{device}/temp-inlet-ext",
+      "actions": [
+        "35"
+      ]
+    },
+    {
+      "key": "heatmeister-ext-outlet",
+      "label": "External outlet temp override, °C (resend every <30s)",
+      "topicTemplate": "heatbooster/{device}/temp-outlet-ext",
+      "actions": [
+        "30"
+      ]
+    },
+    {
+      "key": "heatmeister-ota-all",
+      "label": "Start OTA update — ALL HeatMeister modules on this broker",
+      "topicTemplate": "heatbooster/start-ota-update",
+      "actions": [
+        "1"
+      ]
+    }
+  ],
+  "dataPoints": [
+    {
+      "key": "control-state",
+      "label": "Control state (0 idle, 1 overrun, 2 manual, 3 heat, 4 defrost, 5 startup, 6 cool, 7 slave, 8 sensor error)",
+      "topicTemplate": "heatbooster/{device}/control-state",
+      "channel": false
+    },
+    {
+      "key": "fan-boostmode",
+      "label": "Fan boost mode (0/1)",
+      "topicTemplate": "heatbooster/{device}/fan-boostmode",
+      "channel": false
+    },
+    {
+      "key": "fan-controlmode",
+      "label": "Fan control mode (0=auto, 1=manual)",
+      "topicTemplate": "heatbooster/{device}/fan-controlmode",
+      "channel": false
+    },
+    {
+      "key": "fan-enabled",
+      "label": "Fan power enabled (0/1)",
+      "topicTemplate": "heatbooster/{device}/fan-enabled",
+      "channel": false
+    },
+    {
+      "key": "fan-speed",
+      "label": "Fan speed (%)",
+      "topicTemplate": "heatbooster/{device}/fan-speed",
+      "channel": false
+    },
+    {
+      "key": "ambientcontrol-enable",
+      "label": "Ambient temperature control enabled (0/1)",
+      "topicTemplate": "heatbooster/{device}/ambientcontrol-enable",
+      "channel": false
+    },
+    {
+      "key": "ambientcontrol-temp",
+      "label": "Ambient temperature target (°C)",
+      "topicTemplate": "heatbooster/{device}/ambientcontrol-temp",
+      "channel": false
+    },
+    {
+      "key": "temp-ambient",
+      "label": "Ambient temperature (°C)",
+      "topicTemplate": "heatbooster/{device}/temp-ambient",
+      "channel": false
+    },
+    {
+      "key": "temp-inlet",
+      "label": "Inlet water temperature (°C)",
+      "topicTemplate": "heatbooster/{device}/temp-inlet",
+      "channel": false
+    },
+    {
+      "key": "temp-inlet-rate",
+      "label": "Inlet water temperature rate of change (°C/min)",
+      "topicTemplate": "heatbooster/{device}/temp-inlet-rate",
+      "channel": false
+    },
+    {
+      "key": "temp-outlet",
+      "label": "Outlet water temperature (°C)",
+      "topicTemplate": "heatbooster/{device}/temp-outlet",
+      "channel": false
+    },
+    {
+      "key": "temp-delta-io",
+      "label": "Inlet/outlet temperature delta (°C)",
+      "topicTemplate": "heatbooster/{device}/temp-delta-io",
+      "channel": false
+    },
+    {
+      "key": "ip",
+      "label": "WiFi IP address",
+      "topicTemplate": "heatbooster/{device}/ip",
+      "channel": false
+    },
+    {
+      "key": "ssid",
+      "label": "WiFi SSID",
+      "topicTemplate": "heatbooster/{device}/ssid",
+      "channel": false
+    },
+    {
+      "key": "rssi",
+      "label": "WiFi signal strength (dB)",
+      "topicTemplate": "heatbooster/{device}/rssi",
+      "channel": false
+    },
+    {
+      "key": "firmware",
+      "label": "Firmware version",
+      "topicTemplate": "heatbooster/{device}/firmware",
+      "channel": false
+    },
+    {
+      "key": "runtime",
+      "label": "Runtime (seconds)",
+      "topicTemplate": "heatbooster/{device}/runtime",
+      "channel": false
+    },
+    {
+      "key": "reconnects",
+      "label": "MQTT reconnect count",
+      "topicTemplate": "heatbooster/{device}/reconnects",
+      "channel": false
+    }
+  ]
+}

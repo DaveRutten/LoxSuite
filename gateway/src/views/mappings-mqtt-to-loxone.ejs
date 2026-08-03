@@ -36,7 +36,10 @@
           </div>
           <div>
             <label>Virtual input name <span class="hint" style="margin:0;display:inline;">(UDP: documentation only, not sent)</span></label>
-            <input type="text" name="target" placeholder="LivingRoomLight" required>
+            <input type="text" name="target" list="target-suggestions" placeholder="LivingRoomLight" required>
+            <datalist id="target-suggestions">
+              <% targetSuggestions.forEach(t => { %><option value="<%= t %>"><% }) %>
+            </datalist>
           </div>
           <div>
             <label>Value transform</label>

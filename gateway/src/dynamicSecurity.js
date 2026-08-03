@@ -110,6 +110,34 @@ async function editRoleAcl(rolename, oldAcltype, oldTopic, newAcltype, newTopic,
   }
 }
 
+// Backs Settings > MQTT Broker's "Per-device MQTT roles" toggle: instead of a new device account
+// getting the shared `client` role (full publish/subscribe on every topic, "#"), it gets a role
+// restricted to just its own topic prefix. Mirrors dynsecBootstrap.js's own full-access grant on
+// `client` (same four ACL types), just scoped to "<prefix>/#" instead of "#".
+function deviceRoleName(topicPrefix) {
+  const slug = topicPrefix.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `device-${slug}`;
+}
+
+async function createDeviceScopedRole(topicPrefix) {
+  const prefix = topicPrefix.replace(/^\/+|\/+$/g, '');
+  if (!prefix) throw new Error('Device topic prefix is required.');
+
+  const rolename = deviceRoleName(prefix);
+  const topic = `${prefix}/#`;
+
+  try {
+    await createRole(rolename);
+  } catch (err) {
+    // Another device already using the same topic prefix created this exact role — reuse it
+    // rather than failing the whole "add device" flow over a name collision.
+  }
+  for (const acltype of ['publishClientSend', 'publishClientReceive', 'subscribePattern', 'unsubscribePattern']) {
+    await addRoleAcl(rolename, acltype, topic, true);
+  }
+  return rolename;
+}
+
 // A one-shot, standalone connection attempt with a specific username/password — used right after
 // createClient()/setClientPassword() (see routes/mqttUsers.js), the only moment the plaintext
 // password is ever in hand. Unlike a Miniserver, an existing MQTT user's password isn't stored
@@ -159,5 +187,6 @@ module.exports = {
   addRoleAcl,
   removeRoleAcl,
   editRoleAcl,
+  createDeviceScopedRole,
   testClientConnection,
 };

@@ -39,6 +39,17 @@
             <% }) %>
           </select>
         </div>
+        <% if (autoScopeDeviceRoles) { %>
+        <div>
+          <label>Device topic prefix <span class="hint" style="margin:0;display:inline;">(optional)</span></label>
+          <input type="text" name="device_topic_prefix" placeholder="shellies/shellydimmer-Toilet">
+          <p class="hint">
+            Filled in, this creates (or reuses) a role scoped to just <code>&lt;prefix&gt;/#</code>
+            and assigns that instead of the Role picked above. Left blank, the Role above is used
+            as-is.
+          </p>
+        </div>
+        <% } %>
         <button type="submit" class="primary"><%- icon('plus') %> Add</button>
       </div>
     </form>

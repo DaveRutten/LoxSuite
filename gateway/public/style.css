@@ -618,7 +618,8 @@ button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-bt
 .notification-center-panel { min-width: 20rem; max-width: 24rem; max-height: 70vh; overflow-y: auto; }
 
 .notification-center-item {
-  padding: 0.55rem 0.7rem;
+  position: relative;
+  padding: 0.55rem 1.9rem 0.55rem 0.7rem;
   border-left: 3px solid var(--border);
   margin-bottom: 0.2rem;
 }
@@ -629,6 +630,34 @@ button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-bt
 .notification-center-item-title { font-size: 0.85rem; font-weight: 600; }
 .notification-center-item-message { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; }
 .notification-center-item-time { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+/* Two classes each (not just .notification-center-dismiss/-footer alone) so these definitely beat
+   .account-menu-panel a/button's own width:100%/padding/display further up this file — that rule
+   is 0,1,1 (class + type), and this whole panel inherits its base look from that shared
+   .account-menu-panel class, but a dismiss "x" and a side-by-side footer both need their own
+   layout instead. */
+.notification-center-item .notification-center-dismiss {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: auto;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.15rem 0.4rem;
+}
+
+.notification-center-panel .notification-center-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.5rem 0.9rem 0.2rem;
+}
+.notification-center-panel .notification-center-footer a,
+.notification-center-panel .notification-center-footer button {
+  width: auto;
+  padding: 0.3rem 0.5rem;
+}
 
 main {
   padding: 0 2rem 2.5rem;
@@ -1231,6 +1260,18 @@ code.recognition-string {
   white-space: nowrap;
   vertical-align: bottom;
   cursor: help;
+}
+
+/* Once a table's own column widths are actually meaningful (tables.js's ensureFixedLayout has
+   switched it to table-layout:fixed, live-drag or a previously-saved width), the fixed 320px/220px
+   caps above stop making sense — they're what happens BEFORE any column has a real width to defer
+   to. Tied to the .table-cols-fixed class tables.js adds at that exact moment, not to
+   table-layout:fixed directly (an attribute-string CSS selector on inline styles is fragile) —
+   this is what makes widening a column reveal more text and narrowing one properly re-ellipsize
+   instead of a hard, "..."-less clip right at the new edge. */
+.table-cols-fixed .truncate,
+.table-cols-fixed code.recognition-string {
+  max-width: 100%;
 }
 
 /* Click toggles this (see partials/foot.ejs) — shows the full text in place, wrapping within
@@ -2194,7 +2235,7 @@ tr.expand-row.open td > .ms-diagnostics-card { border-width: 1px; padding: 0.85r
 /* Deliberately NOT .row-actions — see the comment on this div in miniservers.ejs for why (that
    class name has tables.js's collapseRowActions() attached, which would sweep this into its own
    "..." kebab menu instead of showing the buttons directly). Same plain flex/gap layout either way. */
-.ms-update-actions { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.75rem; }
+.ms-update-actions { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 1.5rem; }
 .ms-update-result { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; }
 
 /* This card's real content height is much shorter than the shared tr.expand-row.open cap (40rem —
@@ -2206,7 +2247,7 @@ tr.expand-row.open td > .ms-diagnostics-card { border-width: 1px; padding: 0.85r
    tr.expand-row td > *:not(.confirm-bar) rule itself, not repeated here — that rule's own comment
    covers why (the same residual-height issue also affects collapseRowActions()'s generated
    .row-actions-expanded row, not just this card, so it belongs at the shared level). */
-tr.expand-row.open td > .ms-diagnostics-card { max-height: 14rem; }
+tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
 
 .help-highlight { animation: help-pulse 2.2s ease-out; }
 @keyframes help-pulse {

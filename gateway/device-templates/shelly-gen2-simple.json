@@ -1,0 +1,27 @@
+{
+  "key": "shelly-gen2-simple",
+  "label": "Shelly Gen2/Gen3 (Plus/Pro, simple mode)",
+  "topicPrefixPattern": "^shellies/(shelly[a-z0-9]+-[0-9a-f]+)/",
+  "commands": [
+    {
+      "key": "switch",
+      "label": "Switch (relay)",
+      "topicTemplate": "shellies/{device}/command/switch:{channel}",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    },
+    {
+      "key": "cover",
+      "label": "Cover (roller shutter)",
+      "topicTemplate": "shellies/{device}/command/cover:{channel}",
+      "actions": [
+        "open",
+        "close",
+        "stop"
+      ]
+    }
+  ]
+}

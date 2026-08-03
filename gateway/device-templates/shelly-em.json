@@ -1,0 +1,17 @@
+{
+  "key": "shelly-em",
+  "label": "Shelly EM (energy meter + relay)",
+  "topicPrefixPattern": "^shellies/(shellyem-[^/]+)/",
+  "commands": [
+    {
+      "key": "relay",
+      "label": "Relay switch",
+      "topicTemplate": "shellies/{device}/relay/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    }
+  ]
+}

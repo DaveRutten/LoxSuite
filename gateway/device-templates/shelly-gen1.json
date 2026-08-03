@@ -1,0 +1,120 @@
+{
+  "key": "shelly-gen1",
+  "label": "Shelly Gen1 (other/unlisted model)",
+  "topicPrefixPattern": "^shellies/([^/]+)/",
+  "order": 100,
+  "commands": [
+    {
+      "key": "relay",
+      "label": "Relay switch",
+      "topicTemplate": "shellies/{device}/relay/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    },
+    {
+      "key": "roller",
+      "label": "Roller shutter",
+      "topicTemplate": "shellies/{device}/roller/{channel}/command",
+      "actions": [
+        "open",
+        "close",
+        "stop"
+      ]
+    },
+    {
+      "key": "light",
+      "label": "Light (dimmer)",
+      "topicTemplate": "shellies/{device}/light/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    },
+    {
+      "key": "light-set",
+      "label": "Light brightness (0-100)",
+      "topicTemplate": "shellies/{device}/light/{channel}/set",
+      "actions": [
+        "0",
+        "25",
+        "50",
+        "75",
+        "100"
+      ]
+    },
+    {
+      "key": "color",
+      "label": "Color",
+      "topicTemplate": "shellies/{device}/color/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    },
+    {
+      "key": "white",
+      "label": "White channel",
+      "topicTemplate": "shellies/{device}/white/{channel}/command",
+      "actions": [
+        "on",
+        "off",
+        "toggle"
+      ]
+    }
+  ],
+  "dataPoints": [
+    {
+      "key": "relay-state",
+      "label": "Relay state (on/off/overpower)",
+      "topicTemplate": "shellies/{device}/relay/{channel}",
+      "channel": true
+    },
+    {
+      "key": "relay-power",
+      "label": "Relay power (W)",
+      "topicTemplate": "shellies/{device}/relay/{channel}/power",
+      "channel": true
+    },
+    {
+      "key": "relay-energy",
+      "label": "Relay energy (running total, ×10 = Wh)",
+      "topicTemplate": "shellies/{device}/relay/{channel}/energy",
+      "channel": true
+    },
+    {
+      "key": "roller-state",
+      "label": "Roller state (open/close/stop)",
+      "topicTemplate": "shellies/{device}/roller/{channel}",
+      "channel": true
+    },
+    {
+      "key": "roller-position",
+      "label": "Roller position (0-100)",
+      "topicTemplate": "shellies/{device}/roller/{channel}/pos",
+      "channel": true
+    },
+    {
+      "key": "light-power",
+      "label": "Light/dimmer power (W)",
+      "topicTemplate": "shellies/{device}/light/{channel}/power",
+      "channel": true
+    },
+    {
+      "key": "light-energy",
+      "label": "Light/dimmer energy (running total, ×10 = Wh)",
+      "topicTemplate": "shellies/{device}/light/{channel}/energy",
+      "channel": true
+    },
+    {
+      "key": "temperature",
+      "label": "Device temperature (°C)",
+      "topicTemplate": "shellies/{device}/temperature",
+      "channel": false
+    }
+  ]
+}

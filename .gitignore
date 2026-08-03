@@ -3,6 +3,12 @@ data/
 node_modules/
 gateway/node_modules/
 
+# Runtime bind-mount for Common Commands device templates (see docker-compose.yml) — same
+# treatment as data/ above, a per-install local artifact, not source. Anchored to the repo root
+# (leading slash) so it does NOT also match gateway/device-templates/, which holds the tracked,
+# built-in seed files this gets populated from on first boot.
+/device-templates/
+
 # Mosquitto's own runtime state — password hashes and live ACL/role data, not source. The base
 # mosquitto.conf stays tracked; only what the broker itself writes at runtime is excluded here.
 mosquitto/config/passwd

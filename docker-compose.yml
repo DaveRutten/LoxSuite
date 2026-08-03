@@ -22,9 +22,11 @@ services:
       MOSQUITTO_CONFIG_PATH: /mosquitto/config
       LOXONE_UDP_PORT: 11885
       PORT: 5582
+      DEVICE_TEMPLATES_PATH: /device-templates
     volumes:
       - ./data:/data
       - ./mosquitto/config:/mosquitto/config
+      - ./device-templates:/device-templates
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     ports:

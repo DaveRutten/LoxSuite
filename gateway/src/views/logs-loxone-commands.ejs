@@ -83,7 +83,15 @@
           </td>
           <td>
             <% if (canEdit('loxone_to_mqtt') && !accepted && r.line === NO_MAPPING_REASON && r.commandTopic) { %>
-              <a href="/mappings/loxone-to-mqtt?topic=<%= encodeURIComponent(r.commandTopic) %>"><button type="button" class="btn-soft"><%- icon('plus') %> Mapping</button></a>
+              <%
+                // transport/sourceMiniserverId are only ever known here (see loxoneCommandLog.js) —
+                // carried through as query params so the new mapping form can pre-select them
+                // instead of just the topic, matching what this exact command actually arrived as.
+                let mappingHref = `/mappings/loxone-to-mqtt?topic=${encodeURIComponent(r.commandTopic)}`;
+                if (r.transport) mappingHref += `&transport=${encodeURIComponent(r.transport.toLowerCase())}`;
+                if (r.sourceMiniserverId) mappingHref += `&miniserver_id=${encodeURIComponent(r.sourceMiniserverId)}`;
+              %>
+              <a href="<%= mappingHref %>"><button type="button" class="btn-soft"><%- icon('plus') %> Mapping</button></a>
             <% } else if (canEdit('loxone_to_mqtt') && accepted && r.commandTopic) { %>
               <form method="post" action="/mappings/loxone-to-mqtt/disable-by-topic" data-confirm="Disable the mapping for &quot;<%= r.commandTopic %>&quot;? Loxone commands for it will start showing as rejected instead of being applied.">
                 <input type="hidden" name="mqtt_topic" value="<%= r.commandTopic %>">

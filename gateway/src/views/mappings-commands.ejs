@@ -275,8 +275,11 @@
     // Both the topic AND the payload can carry these placeholders — Gen1 Shelly only ever needs it
     // in the topic (its payloads are bare "on"/"off"/...), but Gen2/Gen3's JSON-RPC payloads carry
     // {channel} instead, so the same substitution is applied to whichever string it's given.
+    // replaceAll, not replace: a Home Assistant discovery payload legitimately needs {device} more
+    // than once in the same string (unique_id, state_topic, device.identifiers, ...) — a plain
+    // replace() would silently leave every occurrence after the first un-substituted.
     function substitute(str, device, channel) {
-      return str.replace('{device}', device || '<device>').replace('{channel}', channel);
+      return str.replaceAll('{device}', device || '<device>').replaceAll('{channel}', channel);
     }
 
     function currentTopic() {
@@ -375,7 +378,7 @@
       var device = deviceInput.value.trim();
       var channel = channelInput.value || '0';
       channelField.style.display = point.channel ? '' : 'none';
-      return point.topicTemplate.replace('{device}', device || '<device>').replace('{channel}', channel);
+      return point.topicTemplate.replaceAll('{device}', device || '<device>').replaceAll('{channel}', channel);
     }
     function update() {
       var topic = currentTopic();
