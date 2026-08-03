@@ -22,6 +22,21 @@ if (!process.env.SESSION_SECRET) {
   console.error('='.repeat(78));
 }
 
+// docker-entrypoint.sh treats either of its two supervised processes (this one, Mosquitto) exiting
+// as fatal for the whole container — so an uncaught error anywhere in here used to take Mosquitto
+// down with it too, on what should have been just one failed request. Node's own default response
+// to an unhandled promise rejection (any throw inside an async route handler that isn't its own
+// try/catch — Express 4 doesn't catch those for you the way it does a synchronous throw) is to
+// crash the process outright; confirmed the hard way when a bug in one dashboard route did exactly
+// that. Logging and continuing is the correct tradeoff for a web server: a broken request should
+// surface as a 500, not end the process every other request is also relying on.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection (recovered, not crashing):', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception (recovered, not crashing):', err);
+});
+
 const express = require('express');
 const session = require('express-session');
 const SqliteStore = require('better-sqlite3-session-store')(session);

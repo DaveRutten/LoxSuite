@@ -169,92 +169,105 @@ router.post('/suggest', requirePermission('monitor', 'edit'), async (req, res) =
   const room = await getRoomDetail(miniserver, req.body.room_uuid).catch(() => null);
   if (!room) return res.status(404).json({ error: 'Room not found' });
 
-  // uuid -> { controlName, stateName }, every state of every control actually in this room —
-  // the allow-list a submitted item's uuid must appear in.
-  const knownStates = new Map();
-  room.categories.forEach((cat) => cat.controls.forEach((control) => {
-    control.states.forEach((s) => knownStates.set(s.uuid, { controlName: control.name, stateName: s.stateName }));
-  }));
+  try {
+    // uuid -> { controlName, stateName }, every state of every control actually in this room —
+    // the allow-list a submitted item's uuid must appear in.
+    const knownStates = new Map();
+    room.categories.forEach((cat) => cat.controls.forEach((control) => {
+      control.states.forEach((s) => knownStates.set(s.uuid, { controlName: control.name, stateName: s.stateName }));
+    }));
 
-  const rawItems = Array.isArray(req.body.items) ? req.body.items : [];
-  const selected = rawItems
-    .filter((item) => item && typeof item.uuid === 'string' && BUCKET_BY_KEY.has(item.bucketKey) && knownStates.has(item.uuid))
-    .map((item) => {
-      const known = knownStates.get(item.uuid);
-      return { uuid: item.uuid, bucketKey: item.bucketKey, controlName: known.controlName, stateName: known.stateName, label: `${known.controlName} / ${known.stateName}` };
-    });
-  if (selected.length === 0) return res.status(400).json({ error: 'Nothing selected.' });
+    const rawItems = Array.isArray(req.body.items) ? req.body.items : [];
+    const selected = rawItems
+      .filter((item) => item && typeof item.uuid === 'string' && BUCKET_BY_KEY.has(item.bucketKey) && knownStates.has(item.uuid))
+      .map((item) => {
+        const known = knownStates.get(item.uuid);
+        return { uuid: item.uuid, bucketKey: item.bucketKey, controlName: known.controlName, stateName: known.stateName, label: `${known.controlName} / ${known.stateName}` };
+      });
+    if (selected.length === 0) return res.status(400).json({ error: 'Nothing selected.' });
 
-  const dashboardName = (req.body.dashboard_name || '').trim() || room.name;
-  const range = resolveRange(req.body.range);
-  const pollIntervalMs = POLL_INTERVALS_MS.includes(Number(req.body.poll_interval_ms)) ? Number(req.body.poll_interval_ms) : 10000;
+    const dashboardName = (req.body.dashboard_name || '').trim() || room.name;
+    const range = resolveRange(req.body.range);
+    const pollIntervalMs = POLL_INTERVALS_MS.includes(Number(req.body.poll_interval_ms)) ? Number(req.body.poll_interval_ms) : 10000;
 
-  const insertHistory = db.prepare(
-    'INSERT INTO monitor_history (monitor_id, recorded_at, value, numeric_value) VALUES (?, ?, ?, ?)'
-  );
+    const insertHistory = db.prepare(
+      'INSERT INTO monitor_history (monitor_id, recorded_at, value, numeric_value) VALUES (?, ?, ?, ?)'
+    );
 
-  // A brand new monitor otherwise shows nothing until its first scheduled poll (up to
-  // pollIntervalMs away) — seeding one reading immediately from the websocket's already-live cache
-  // is what makes a freshly-created panel show something right away instead of looking empty.
-  const findOrCreateMonitor = db.transaction((item) => {
-    const existing = db.prepare(
-      "SELECT id FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ? AND loxone_uuid = ?"
-    ).get(miniserver.id, item.uuid);
-    const monitorId = existing
-      ? existing.id
-      : db.prepare(
-          "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, ?, 1, ?)"
-        ).run(item.label, miniserver.id, item.uuid, pollIntervalMs, new Date().toISOString()).lastInsertRowid;
+    // A brand new monitor otherwise shows nothing until its first scheduled poll (up to
+    // pollIntervalMs away) — seeding one reading immediately from the websocket's already-live cache
+    // is what makes a freshly-created panel show something right away instead of looking empty.
+    const findOrCreateMonitor = db.transaction((item) => {
+      const existing = db.prepare(
+        "SELECT id FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ? AND loxone_uuid = ?"
+      ).get(miniserver.id, item.uuid);
+      const monitorId = existing
+        ? existing.id
+        : db.prepare(
+            "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, ?, 1, ?)"
+          ).run(item.label, miniserver.id, item.uuid, pollIntervalMs, new Date().toISOString()).lastInsertRowid;
 
-    if (!existing) {
-      const liveValue = getLiveValue(miniserver.id, item.uuid);
-      if (liveValue !== undefined && liveValue !== null) {
-        const numeric = Number(liveValue);
-        insertHistory.run(monitorId, new Date().toISOString(), String(liveValue), Number.isFinite(numeric) ? numeric : null);
+      if (!existing) {
+        const liveValue = getLiveValue(miniserver.id, item.uuid);
+        if (liveValue !== undefined && liveValue !== null) {
+          const numeric = Number(liveValue);
+          insertHistory.run(monitorId, new Date().toISOString(), String(liveValue), Number.isFinite(numeric) ? numeric : null);
+        }
       }
-    }
-    return monitorId;
-  });
+      return monitorId;
+    });
 
-  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM custom_dashboards WHERE user_id = ?').get(req.session.userId).m;
-  const dashboardId = db.prepare(
-    'INSERT INTO custom_dashboards (user_id, name, position, created_at) VALUES (?, ?, ?, ?)'
-  ).run(req.session.userId, dashboardName, maxPos + 1, new Date().toISOString()).lastInsertRowid;
+    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM custom_dashboards WHERE user_id = ?').get(req.session.userId).m;
+    const dashboardId = db.prepare(
+      'INSERT INTO custom_dashboards (user_id, name, position, created_at) VALUES (?, ?, ?, ?)'
+    ).run(req.session.userId, dashboardName, maxPos + 1, new Date().toISOString()).lastInsertRowid;
 
-  const insertPanel = db.prepare(
-    'INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, ?, ?, ?, ?, ?)'
-  );
-  const insertPanelMonitor = db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)');
+    const insertPanel = db.prepare(
+      'INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    const insertPanelMonitor = db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)');
 
-  // Each bucket's own suggested panelType (BUCKET_BY_KEY) is only the default — the preview lets
-  // it be overridden per bucket (e.g. Climate as a Current value panel instead of a chart), same
-  // type list and same single-vs-multi-monitor rule as the regular "Add panel" form uses.
-  const panelTypeOverrides = req.body.panel_types && typeof req.body.panel_types === 'object' ? req.body.panel_types : {};
+    // Each bucket's own suggested panelType (BUCKET_BY_KEY) is only the default — the preview lets
+    // it be overridden per bucket (e.g. Climate as a Current value panel instead of a chart), same
+    // type list and same single-vs-multi-monitor rule as the regular "Add panel" form uses.
+    const panelTypeOverrides = req.body.panel_types && typeof req.body.panel_types === 'object' ? req.body.panel_types : {};
 
-  // Group the flat, hand-picked item list back into one panel per bucket, preserving the bucket
-  // order from BUCKET_BY_KEY (insertion order) rather than whatever order items happened to arrive
-  // in from the form.
-  const itemsByBucket = new Map();
-  selected.forEach((item) => {
-    if (!itemsByBucket.has(item.bucketKey)) itemsByBucket.set(item.bucketKey, []);
-    itemsByBucket.get(item.bucketKey).push(item);
-  });
+    // Group the flat, hand-picked item list back into one panel per bucket, preserving the bucket
+    // order from BUCKET_BY_KEY (insertion order) rather than whatever order items happened to arrive
+    // in from the form. A bucketKey with no matching bucket (stale/tampered — never possible from
+    // the real UI, but the request body is still just JSON from the client) is skipped rather than
+    // trusted, same as an unknown one already is above via BUCKET_BY_KEY.has() when building `selected`.
+    const itemsByBucket = new Map();
+    selected.forEach((item) => {
+      if (!BUCKET_BY_KEY.has(item.bucketKey)) return;
+      if (!itemsByBucket.has(item.bucketKey)) itemsByBucket.set(item.bucketKey, []);
+      itemsByBucket.get(item.bucketKey).push(item);
+    });
 
-  Array.from(itemsByBucket.entries()).forEach(([bucketKey, items], position) => {
-    const bucket = BUCKET_BY_KEY.get(bucketKey);
-    const override = panelTypeOverrides[bucketKey];
-    const panelType = PANEL_TYPES.includes(override) ? override : bucket.panelType;
-    // table/gauge/stat_delta/threshold each show exactly one monitor — same truncation the
-    // regular panel form applies (routes/dashboards.js), so switching a multi-item bucket to one
-    // of these doesn't try to attach items it can't actually display.
-    const pickedItems = SINGLE_MONITOR_TYPES.includes(panelType) ? items.slice(0, 1) : items;
-    const monitorIds = pickedItems.map((item) => findOrCreateMonitor(item));
-    const config = JSON.stringify(buildConfig(panelType, {}));
-    const panelId = insertPanel.run(dashboardId, panelType, bucket.label, range, config, position).lastInsertRowid;
-    monitorIds.forEach((monitorId, i) => insertPanelMonitor.run(panelId, monitorId, i));
-  });
+    Array.from(itemsByBucket.entries()).forEach(([bucketKey, items], position) => {
+      const bucket = BUCKET_BY_KEY.get(bucketKey);
+      const override = panelTypeOverrides[bucketKey];
+      const panelType = PANEL_TYPES.includes(override) ? override : bucket.panelType;
+      // table/gauge/stat_delta/threshold each show exactly one monitor — same truncation the
+      // regular panel form applies (routes/dashboards.js), so switching a multi-item bucket to one
+      // of these doesn't try to attach items it can't actually display.
+      const pickedItems = SINGLE_MONITOR_TYPES.includes(panelType) ? items.slice(0, 1) : items;
+      const monitorIds = pickedItems.map((item) => findOrCreateMonitor(item));
+      const config = JSON.stringify(buildConfig(panelType, {}));
+      const panelId = insertPanel.run(dashboardId, panelType, bucket.label, range, config, position).lastInsertRowid;
+      monitorIds.forEach((monitorId, i) => insertPanelMonitor.run(panelId, monitorId, i));
+    });
 
-  res.json({ dashboardId });
+    res.json({ dashboardId });
+  } catch (err) {
+    // Whatever the actual cause (a bad bucket/panel-type override, a DB constraint, ...), this
+    // must come back as a normal 500 — an async handler that throws past this point instead
+    // becomes an unhandled promise rejection, and Node's default response to one of those is to
+    // kill the whole process (see server.js's own process-level safety net, added after this was
+    // caught taking the entire container down over exactly this route).
+    console.error('POST /live-data/suggest failed:', err);
+    res.status(500).json({ error: 'Something went wrong creating the dashboard.' });
+  }
 });
 
 module.exports = router;

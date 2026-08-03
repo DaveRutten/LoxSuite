@@ -1,0 +1,10 @@
+#!/bin/sh
+# Strips any "Co-authored-by" trailer crediting an AI assistant (Claude, in particular) from every
+# commit made in this repo — the project owner doesn't want an AI listed as a contributor, ever.
+# A trailer added by a real person stays untouched; only lines naming an AI assistant are removed.
+# Enabled via `git config core.hooksPath .githooks` (see README/git setup notes) so it's a real,
+# tracked repo setting rather than something living only in one person's local .git/hooks (which
+# git never syncs on clone) or in an assistant's own memory of "please don't do that."
+
+msg_file="$1"
+grep -viE '^co-authored-by:.*claude' "$msg_file" > "$msg_file.tmp" && mv "$msg_file.tmp" "$msg_file"
