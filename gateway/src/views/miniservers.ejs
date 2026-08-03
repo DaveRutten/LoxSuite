@@ -402,4 +402,20 @@
   });
 </script>
 
+<script>
+  // ?open=<miniserver id> — used by Logs > Notifications' own source link (a miniserver_status/
+  // firmware_changed event) to land here with that exact row's diagnostics panel already expanded,
+  // instead of just dropping you on the page to go find it yourself. Plain class-toggle + scroll,
+  // not a synthetic click on the [data-toggle-row] button — same end state (see foot.ejs's own
+  // delegated toggle handler), just doesn't depend on that script having already run first.
+  (function () {
+    var id = new URLSearchParams(location.search).get('open');
+    if (!id) return;
+    var row = document.getElementById('ms-diag-' + id);
+    if (!row) return;
+    row.classList.add('open');
+    row.scrollIntoView({ block: 'center' });
+  })();
+</script>
+
 <%- include('partials/foot') %>

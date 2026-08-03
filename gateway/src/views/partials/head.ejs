@@ -171,20 +171,7 @@
               <% } %>
             </button>
             <div id="notification-center-panel" class="account-menu-panel notification-center-panel" hidden>
-              <div id="notification-center-list">
-              <% if (recentNotifications.length === 0) { %>
-                <p class="hint notification-center-empty" style="margin:0.6rem 0.9rem;">No notifications yet.</p>
-              <% } else { %>
-                <% recentNotifications.forEach(n => { %>
-                  <div class="notification-center-item notification-center-item-<%= n.severity %>" data-notification-id="<%= n.id %>">
-                    <button type="button" class="icon-btn notification-center-dismiss" data-dismiss-notification="<%= n.id %>" title="Dismiss" aria-label="Dismiss">&times;</button>
-                    <div class="notification-center-item-title"><%= n.title %></div>
-                    <div class="notification-center-item-message"><%= n.message %></div>
-                    <div class="notification-center-item-time"><%= formatDateTime(n.created_at) %></div>
-                  </div>
-                <% }) %>
-              <% } %>
-              </div>
+              <div id="notification-center-list"><%- include('notification-center-items', { recentNotifications }) %></div>
               <div class="account-menu-divider"></div>
               <div class="notification-center-footer">
                 <button type="button" id="notification-center-dismiss-all" class="btn-soft" <%= recentNotifications.length === 0 ? 'disabled' : '' %>>Mark all read</button>

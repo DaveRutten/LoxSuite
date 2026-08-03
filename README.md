@@ -452,7 +452,10 @@ Monitor's history):
   seeing on its own, e.g. slow storage on some self-hosting setups, without needing to reproduce it
   live).
 - **Notifications** — every event the Notification Center has ever recorded, filterable the same way
-  as the other tabs; see Notification Center above.
+  as the other tabs; see Notification Center above. Its **Source** column links straight to
+  whatever the event was actually about, where there's a single entity to land on — a Monitor's own
+  detail page for a threshold breach/notify rung, or the Miniservers page with that row's
+  diagnostics panel already open for a status/firmware change.
 
 Each line gets a best-effort **Level** badge (info/warning/error), guessed from its own wording
 since most sources don't tag lines with a real severity — a scanning aid, not a guarantee.

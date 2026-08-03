@@ -682,6 +682,19 @@
           btn.appendChild(badge);
         }
       }).catch(function () {});
+
+      // The badge count above and this list are two separate fetches/endpoints, but both were
+      // going stale for the same underlying reason: only the badge used to poll live, so a new
+      // notification could bump the count to "1" while the popover's own content — baked into the
+      // page at its last full load — still didn't include that item at all until an actual
+      // navigation or F5. Same "don't overwrite what's currently open" guard as above.
+      if (list && !panel.hidden) return;
+      if (list) {
+        fetch('/notifications/recent').then(function (res) { return res.text(); }).then(function (html) {
+          list.innerHTML = html;
+          if (dismissAllBtn) dismissAllBtn.disabled = !list.querySelector('.notification-center-item');
+        }).catch(function () {});
+      }
     }
     setInterval(poll, POLL_MS);
   })();

@@ -520,9 +520,11 @@
 </script>
 <script>
   // Rooms and their categories are only fetched once expanded (see the big IIFE above) — so
-  // "Control / state" filtering can only ever act on whatever's already been loaded, and simply
-  // leaves not-yet-loaded rooms visible rather than guessing whether they'd match. "Room" filtering
-  // needs no such caveat since every room's name is already in the initial page render.
+  // "Control / state" filtering can only ever act on whatever's already been loaded: an EXPANDED
+  // room with no matching control hides along with its empty categories, but a room that hasn't
+  // been opened at all yet (nothing to check a match against) stays visible rather than guessing
+  // whether it would match. "Room" filtering needs no such caveat since every room's name is
+  // already in the initial page render.
   (function () {
     var fieldSelect = document.getElementById('live-data-filter-field');
     var queryInput = document.getElementById('live-data-filter-query');
@@ -555,12 +557,16 @@
           return;
         }
 
-        // mode === 'control': the room itself always stays visible (its categories may not be
-        // loaded yet), but any already-loaded category's individual rows get filtered, and a
-        // category with zero matching rows collapses out of view entirely.
-        roomDetails.style.display = '';
-        if (hasPreview) preview.style.display = '';
-        roomDetails.querySelectorAll('.live-data-category').forEach(function (cat) {
+        // mode === 'control': any already-loaded category's individual rows get filtered, and a
+        // category with zero matching rows collapses out of view entirely. The room itself then
+        // follows suit — hidden once every one of its loaded categories came up empty — EXCEPT
+        // when the room hasn't been expanded at all yet (zero categories loaded, so there's
+        // nothing to check a match against) or still has an unloaded category of its own (rows.
+        // length === 0 counts as "unknown", not "no match", for the same reason) — either way,
+        // hiding it would be a guess this filter can't actually back up, so it stays visible.
+        var categories = roomDetails.querySelectorAll('.live-data-category');
+        var anyCategoryVisible = false;
+        categories.forEach(function (cat) {
           var rows = cat.querySelectorAll('.live-data-body tr');
           var anyMatch = false;
           rows.forEach(function (row) {
@@ -569,8 +575,13 @@
             if (match) anyMatch = true;
             row.style.display = match ? '' : 'none';
           });
-          cat.style.display = rows.length === 0 || anyMatch ? '' : 'none';
+          var showCategory = rows.length === 0 || anyMatch;
+          cat.style.display = showCategory ? '' : 'none';
+          if (showCategory) anyCategoryVisible = true;
         });
+        var showRoom = categories.length === 0 || anyCategoryVisible;
+        roomDetails.style.display = showRoom ? '' : 'none';
+        if (hasPreview) preview.style.display = showRoom ? '' : 'none';
       });
     }
 

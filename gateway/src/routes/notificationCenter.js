@@ -10,12 +10,32 @@ const router = express.Router();
 // gate — matching the decision that seeing *that* something notified isn't gated the way reading
 // the full history is.
 
+// Shared with middleware/loadUserContext.js (the initial page-load render) so the popover's list
+// is never a second, drifting copy of this query — this file owns it since it's also what the
+// /recent poll below re-runs on every fetch.
+function loadRecentNotifications(userId) {
+  return db.prepare(`
+    SELECT * FROM notification_events
+    WHERE id NOT IN (SELECT notification_event_id FROM notification_dismissals WHERE user_id = ?)
+    ORDER BY id DESC LIMIT 15
+  `).all(userId);
+}
+
 router.get('/unread-count', (req, res) => {
   // req.user (loadUserContext.js) doesn't carry last_seen_notification_id — re-read it directly
   // rather than widening that object for a value nothing else currently needs.
   const user = db.prepare('SELECT last_seen_notification_id FROM users WHERE id = ?').get(req.user.id);
   const row = db.prepare('SELECT COUNT(*) AS n FROM notification_events WHERE id > ?').get(user.last_seen_notification_id);
   res.json({ count: row.n });
+});
+
+// Re-renders the popover's own item list — polled alongside /unread-count (see foot.ejs) so the
+// LIST catches up to a newly-arrived notification too, not just the badge count. Before this
+// existed, the list was whatever got baked into the page at its last full load; the badge could
+// already show "1" while the popover's own content still didn't include that new item at all,
+// until an actual navigation or F5 re-rendered the page from scratch.
+router.get('/recent', (req, res) => {
+  res.render('partials/notification-center-items', { recentNotifications: loadRecentNotifications(req.user.id) });
 });
 
 router.post('/mark-read', (req, res) => {
@@ -47,3 +67,4 @@ router.post('/dismiss-all', (req, res) => {
 });
 
 module.exports = router;
+module.exports.loadRecentNotifications = loadRecentNotifications;

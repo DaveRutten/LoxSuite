@@ -8,14 +8,29 @@ All notable changes to this project are documented in this file.
 - **Monitor**: a new **Notification** column — shows whether a monitor's own threshold ladder (its
   chart settings, edited from this page) has at least one rung flagged **Notify**, without having
   to open each monitor's own chart settings to check.
+- Logs → Notifications: the **Source** column is now a link straight to whatever the event was
+  actually about — a Monitor's own detail page for a threshold breach/notify rung, or the
+  Miniservers page with that row's diagnostics panel already open for a status/firmware change
+  (new `?open=<id>` support there). The other three trigger types (MQTT client status, backup
+  failure, LoxSuite update available) have no single entity of their own to land on, so those stay
+  plain text.
 
 ### Fixed
 - The Notification Center bell's unread badge cleared the moment you opened the popover, even if
   you'd only glanced at it — now only clears via **Mark all read**, **View all**, or once there's
   genuinely nothing left unread.
+- The bell popover's own list of events only ever reflected whatever was baked into the page at its
+  last full load — the unread badge already polled live, but a notification that arrived while you
+  stayed on one page without navigating didn't show up in the list itself until an actual page
+  reload. Now polls alongside the badge (same 60s cadence, same "don't overwrite what's currently
+  open" guard).
 - Logs → Notifications: a **warning**-severity row showed a plain gray badge instead of the
   existing yellow "warning" style already used elsewhere in the app — a leftover placeholder class
   that was never updated to the real one.
+- Live Data's **Control / state** filter left every room visible regardless of match, even an
+  already-expanded one with nothing matching in it — only a room that's never been expanded at all
+  (nothing loaded yet to check) still stays visible now, since hiding that one really would be a
+  guess.
 
 ## [0.6.0-alpha.1] - 2026-08-03
 

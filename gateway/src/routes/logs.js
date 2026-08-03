@@ -104,7 +104,8 @@ function queryNotificationEvents(filters) {
   if (filters.severity) { conditions.push('severity = ?'); params.push(filters.severity); }
 
   return db.prepare(
-    `SELECT id, event_type AS eventType, severity, title, message, source_label AS sourceLabel, created_at AS createdAt
+    `SELECT id, event_type AS eventType, severity, title, message, source_label AS sourceLabel,
+            source_id AS sourceId, created_at AS createdAt
      FROM notification_events WHERE ${conditions.join(' AND ')} ORDER BY id DESC LIMIT ?`
   ).all(...params, MAX_ROWS);
 }

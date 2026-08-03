@@ -62,14 +62,33 @@
       </tr>
     </thead>
     <tbody>
+      <%
+        // Jumps straight to whatever this event was actually about — a Monitor's own detail page
+        // for the two trigger types that carry a monitor id, or the Miniservers page with that row's
+        // diagnostics panel already open (see its own ?open= handling) for the two that carry a
+        // Miniserver id. The other three trigger types (mqtt_client_status/backup_failed/
+        // loxsuite_update_available) have no single entity of their own to land on — source_id is
+        // NULL for those (see notifications.js's fireRule call sites), so they just stay plain text.
+        function notificationSourceLink(r) {
+          if (!r.sourceId) return null;
+          if ((r.eventType === 'monitor_threshold' || r.eventType === 'threshold_ladder') && canView('monitor')) {
+            return `/monitor/${r.sourceId}`;
+          }
+          if ((r.eventType === 'miniserver_status' || r.eventType === 'firmware_changed') && canView('miniservers')) {
+            return `/miniservers?open=${r.sourceId}`;
+          }
+          return null;
+        }
+      %>
       <% rows.forEach(r => { %>
+        <% var sourceLink = notificationSourceLink(r); %>
         <tr>
           <td class="col-select"><input type="checkbox"></td>
           <td><%= formatDateTime(r.createdAt) %></td>
           <td><span class="badge <%= r.severity === 'critical' ? 'badge-off' : r.severity === 'warning' ? 'badge-warning' : 'badge-ok' %>"><%= r.severity %></span></td>
           <td><%= r.title %></td>
           <td class="log-line"><%= r.message %></td>
-          <td><%= r.sourceLabel || '' %></td>
+          <td><% if (sourceLink) { %><a href="<%= sourceLink %>"><%= r.sourceLabel %></a><% } else { %><%= r.sourceLabel || '' %><% } %></td>
         </tr>
       <% }) %>
       <% if (rows.length === 0) { %>

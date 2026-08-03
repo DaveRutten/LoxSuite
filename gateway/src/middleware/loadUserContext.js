@@ -1,4 +1,5 @@
 const db = require('../db');
+const { loadRecentNotifications } = require('../routes/notificationCenter');
 
 // Mounted right after requireAuth on every route. Loads the logged-in user's role and permissions
 // fresh from the DB on every request (never cached in the session cookie) so a role change made by
@@ -79,12 +80,10 @@ module.exports = function loadUserContext(req, res, next) {
   res.locals.unreadNotificationCount = db.prepare('SELECT COUNT(*) AS n FROM notification_events WHERE id > ?').get(user.last_seen_notification_id).n;
   // Dismissed (see routes/notificationCenter.js's own /:id/dismiss) is purely about what shows up
   // in THIS user's own popover list — unrelated to the unread count above, which stays keyed off
-  // last_seen_notification_id regardless of anything dismissed here.
-  res.locals.recentNotifications = db.prepare(`
-    SELECT * FROM notification_events
-    WHERE id NOT IN (SELECT notification_event_id FROM notification_dismissals WHERE user_id = ?)
-    ORDER BY id DESC LIMIT 15
-  `).all(user.id);
+  // last_seen_notification_id regardless of anything dismissed here. Shared query (not repeated
+  // here) with that same file's own /recent endpoint, which foot.ejs polls to keep this list from
+  // going stale between full page loads — see that endpoint's own comment for why that's needed.
+  res.locals.recentNotifications = loadRecentNotifications(user.id);
 
   next();
 };
