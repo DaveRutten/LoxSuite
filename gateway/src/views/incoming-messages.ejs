@@ -15,7 +15,10 @@
         <option value="2">Previous value</option>
         <option value="5">Command Recognition</option>
       </select>
-      <input type="text" id="live-filter-query" placeholder="Filter…">
+      <div class="clearable-input-wrap">
+        <input type="text" id="live-filter-query" placeholder="Filter…">
+        <button type="button" id="live-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+      </div>
     </div>
     <% if (canEdit('incoming')) { %>
     <form method="post" action="/incoming/messages/clear" data-confirm="Clear the live message list? It will start filling up again from the next message." style="margin:0;">
@@ -96,12 +99,14 @@
   (function () {
     var fieldSelect = document.getElementById('live-filter-field');
     var queryInput = document.getElementById('live-filter-query');
+    var clearBtn = document.getElementById('live-filter-clear');
     var tbody = document.querySelector('.table-wrap tbody');
     if (!fieldSelect || !tbody) return;
 
     function applyFilter() {
       var colIndex = Number(fieldSelect.value);
       var q = queryInput.value.trim().toLowerCase();
+      if (clearBtn) clearBtn.hidden = !q;
       tbody.querySelectorAll('tr').forEach(function (row) {
         if (!q) { row.style.display = ''; return; }
         var cell = row.children[colIndex];
@@ -112,6 +117,19 @@
 
     fieldSelect.addEventListener('change', applyFilter);
     queryInput.addEventListener('input', applyFilter);
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        queryInput.value = '';
+        applyFilter();
+        queryInput.focus();
+      });
+    }
+    queryInput.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !queryInput.value) return;
+      e.stopPropagation();
+      queryInput.value = '';
+      applyFilter();
+    });
     new MutationObserver(applyFilter).observe(tbody, { childList: true });
   })();
 </script>

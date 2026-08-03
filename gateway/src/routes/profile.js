@@ -7,7 +7,7 @@ const { buildRuleConfig } = require('./notifications');
 const router = express.Router();
 
 function loadProfile(userId) {
-  return db.prepare('SELECT id, username, email, display_name, avatar_url, auth_provider, role_id, notify_url FROM users WHERE id = ?').get(userId);
+  return db.prepare('SELECT id, username, email, display_name, avatar_url, auth_provider, role_id, notify_url, table_page_size FROM users WHERE id = ?').get(userId);
 }
 
 // Every enabled ADMIN-WIDE rule (owner_user_id IS NULL — see admin-notifications.ejs and

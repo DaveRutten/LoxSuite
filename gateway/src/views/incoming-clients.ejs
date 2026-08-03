@@ -31,7 +31,10 @@
         <option value="2">User</option>
         <option value="3">Status</option>
       </select>
-      <input type="text" id="clients-filter-query" placeholder="Filter…">
+      <div class="clearable-input-wrap">
+        <input type="text" id="clients-filter-query" placeholder="Filter…">
+        <button type="button" id="clients-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+      </div>
     </div>
     <% if (canEdit('incoming')) { %>
     <form method="post" action="/incoming/clients/clear" data-confirm="Clear disconnected clients from this list? Clients that are still actively connected stay listed." style="margin:0;">
@@ -99,12 +102,14 @@
   (function () {
     var fieldSelect = document.getElementById('clients-filter-field');
     var queryInput = document.getElementById('clients-filter-query');
+    var clearBtn = document.getElementById('clients-filter-clear');
     var tbody = document.querySelector('.table-wrap tbody');
     if (!fieldSelect || !tbody) return;
 
     function applyFilter() {
       var colIndex = Number(fieldSelect.value);
       var q = queryInput.value.trim().toLowerCase();
+      if (clearBtn) clearBtn.hidden = !q;
       tbody.querySelectorAll('tr').forEach(function (row) {
         if (!q) { row.style.display = ''; return; }
         var cell = row.children[colIndex];
@@ -115,6 +120,19 @@
 
     fieldSelect.addEventListener('change', applyFilter);
     queryInput.addEventListener('input', applyFilter);
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        queryInput.value = '';
+        applyFilter();
+        queryInput.focus();
+      });
+    }
+    queryInput.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !queryInput.value) return;
+      e.stopPropagation();
+      queryInput.value = '';
+      applyFilter();
+    });
     new MutationObserver(applyFilter).observe(tbody, { childList: true });
   })();
 </script>

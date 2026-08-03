@@ -631,6 +631,13 @@ button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-bt
 .notification-center-item-message { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; }
 .notification-center-item-time { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem; }
 
+/* Wraps title/message/time (not the dismiss "x", which stays its own absolutely-positioned
+   sibling — see .notification-center-dismiss below) when this event has a source page to jump
+   to. Plain block, no link styling, so a clickable item looks identical to a non-clickable one
+   apart from the cursor and a slight hover tint. */
+.notification-center-item-link { display: block; color: inherit; text-decoration: none; margin: -0.1rem -0.3rem; padding: 0.1rem 0.3rem; border-radius: var(--radius); }
+.notification-center-item-link:hover { background: var(--surface-alt); }
+
 /* Two classes each (not just .notification-center-dismiss/-footer alone) so these definitely beat
    .account-menu-panel a/button's own width:100%/padding/display further up this file — that rule
    is 0,1,1 (class + type), and this whole panel inherits its base look from that shared
@@ -815,6 +822,40 @@ h2 {
   margin-bottom: 0;
 }
 
+/* Built by tables.js, one per paginated table (only appears once a table actually has more rows
+   than the user's own "rows per page" setting — see profile.ejs) — inserted as .table-wrap's next
+   sibling, so inside a .filterable-table-card this naturally becomes its last child and picks up
+   the card's own overflow:hidden rounded-corner clipping for free, same as .table-toolbar already
+   does at the top. */
+.table-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  background: var(--surface-alt);
+  border-top: 1px solid var(--border);
+}
+/* Without this, tables.js's own pager.el.hidden = true (toggled once a filter drops the visible
+   row count back to/below one page) has no visual effect at all — an author stylesheet's
+   `display` always wins over the browser's own non-!important `[hidden] { display: none }`
+   default, regardless of selector specificity, so the plain .table-pager rule above was silently
+   overriding "hidden" entirely. The extra [hidden] attribute selector here is specific enough to
+   win back over it. */
+.table-pager[hidden] { display: none; }
+.table-pager-label { white-space: nowrap; margin: 0 0 0 0.5rem; }
+.table-pager-numbers { display: flex; align-items: center; gap: 0.3rem; }
+.table-pager-page { min-width: 2.2rem; padding: 0.3rem 0.5rem; }
+.table-pager-page-current, .table-pager-page-current:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.table-pager-ellipsis { color: var(--text-muted); padding: 0 0.15rem; }
+
+/* Toggled by tables.js to hide a row that matches the current search/filter but falls outside the
+   current page — kept as its own class rather than writing style.display directly, so pagination
+   never fights with whatever a page's own filter script (which uses inline style.display) is
+   independently doing to the same row. */
+.pg-off-page { display: none !important; }
+
 /* A <select> + <input> pair that reads as one seamless control (a "topic: [search]" combo)
    instead of two separate boxes glued together — shared border, no gap or radius at the seam,
    only the outer corners rounded. Grows to fill the toolbar's available width, right up to
@@ -872,6 +913,11 @@ h2 {
   font-size: 1.1rem;
   line-height: 1;
   padding: 0.15rem 0.4rem;
+  /* Higher than .search-combo input:focus's own z-index:1 (above) — without this, focusing the
+     input promoted IT to its own stacking context above this button, so the input's own opaque
+     background painted straight over the "x" sitting in the padding-right space reserved for it,
+     the moment you clicked into the box instead of only once you clicked away. */
+  z-index: 2;
 }
 
 /* A custom-styled stand-in for <input list="..."> — the native <datalist> popup can't be styled
@@ -1916,6 +1962,37 @@ summary.btn-edit::-webkit-details-marker, summary.btn-test::-webkit-details-mark
   font-size: 0.85rem;
   margin-bottom: 1.25rem;
 }
+
+/* Admin > General's "View changelog" popup (see admin-general.ejs) — native <dialog>, first one in
+   the app, so this styles it to match the rest (surface/border/shadow) rather than the browser's
+   own bare default box; ::backdrop is what dims the page behind it. */
+.update-changelog-dialog {
+  max-width: 32rem;
+  width: 90vw;
+  max-height: 80vh;
+  padding: 1.2rem 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.update-changelog-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+.update-changelog-body {
+  font-size: 0.85rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0.8rem 0 0;
+}
+.update-changelog-body h1, .update-changelog-body h2, .update-changelog-body h3 {
+  font-size: 0.95rem;
+  margin: 0.9rem 0 0.35rem;
+}
+.update-changelog-body h1:first-child, .update-changelog-body h2:first-child, .update-changelog-body h3:first-child { margin-top: 0; }
+.update-changelog-body ul { margin: 0 0 0.6rem; padding-left: 1.2rem; }
+.update-changelog-body li { margin-bottom: 0.3rem; }
+.update-changelog-body p { margin: 0 0 0.6rem; }
+.update-changelog-body code { font-size: 0.82em; }
 
 code {
   background: var(--surface-alt);

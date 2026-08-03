@@ -516,6 +516,7 @@
       Object.keys(columnsMenu.checkboxesByIndex).forEach(function (idx) {
         columnsMenu.checkboxesByIndex[idx].checked = !hiddenSet.has(Number(idx));
       });
+      if (state.pager) renderPage(table, 1);
 
       // A bare header with no body isn't reliably kept by every fetch implementation on a
       // bodyless method like DELETE — sending an explicit (empty) JSON body is what actually
@@ -567,6 +568,7 @@
         state.sort = next;
         applySort(table, next);
         updateSortIndicators(table, next);
+        if (state.pager) renderPage(table, 1);
       });
 
       addResizeHandle(th, colgroup, widths, function (originalIndex, px) {
@@ -605,10 +607,162 @@
     });
   }
 
+  var DEFAULT_PAGE_SIZE = 25;
+
+  function getPageSize() {
+    var raw = Number(document.body.dataset.pageSize);
+    return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_PAGE_SIZE;
+  }
+
+  // A kebab-menu's own generated <tr class="expand-row"> (collapseRowActions above) or a
+  // page-specific one (e.g. Miniservers' diagnostics panel) is a sibling of the data row it
+  // belongs to, not a child of it — has to be paginated together with that row or it ends up
+  // floating under whichever row happens to land on the visible page instead of following its own.
+  function rowGroup(row) {
+    var group = [row];
+    var sib = row.nextElementSibling;
+    while (sib && sib.classList.contains('expand-row')) {
+      group.push(sib);
+      sib = sib.nextElementSibling;
+    }
+    return group;
+  }
+
+  // Every page's own search/filter script (Monitor, Incoming Clients/Messages, Live Data, ...)
+  // hides a non-matching row the same generic way: row.style.display = 'none'. Reacting to exactly
+  // that attribute, rather than any one page's own filter markup or element ids, is what lets
+  // pagination apply automatically on every table-bearing page without this file needing to know
+  // anything about how any particular page's own search box works.
+  function visibleDataRows(table, columnCount) {
+    var tbody = table.querySelector('tbody');
+    return Array.prototype.slice.call(tbody.children).filter(function (row) {
+      return row.children.length === columnCount && !row.classList.contains('expand-row') && row.style.display !== 'none';
+    });
+  }
+
+  // First 3 pages, last 3 pages, current page and its immediate neighbors — everything else
+  // collapses into a "…" separator rather than one button per page, which would otherwise run
+  // unusably wide on a table with dozens of pages. The current-page window (not just first/last)
+  // is what keeps a deep page reachable without clicking Next a dozen times to get there.
+  function buildPageList(current, total) {
+    var keep = new Set();
+    [1, 2, 3, total - 2, total - 1, total, current - 1, current, current + 1].forEach(function (p) {
+      if (p >= 1 && p <= total) keep.add(p);
+    });
+    var sorted = Array.from(keep).sort(function (a, b) { return a - b; });
+    var result = [];
+    sorted.forEach(function (p, i) {
+      if (i > 0 && p - sorted[i - 1] > 1) result.push(null); // null = "…" gap
+      result.push(p);
+    });
+    return result;
+  }
+
+  function renderPage(table, page) {
+    var state = registry.get(table);
+    if (!state || !state.pager) return;
+    var pager = state.pager;
+    var rows = visibleDataRows(table, state.columnCount);
+    var pageSize = getPageSize();
+    var totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    page = Math.min(Math.max(1, page), totalPages);
+    pager.page = page;
+
+    if (rows.length <= pageSize) {
+      pager.el.hidden = true;
+      rows.forEach(function (row) {
+        rowGroup(row).forEach(function (el) { el.classList.remove('pg-off-page'); });
+      });
+      return;
+    }
+
+    pager.el.hidden = false;
+    var start = (page - 1) * pageSize;
+    var end = start + pageSize;
+    rows.forEach(function (row, i) {
+      var onPage = i >= start && i < end;
+      rowGroup(row).forEach(function (el) { el.classList.toggle('pg-off-page', !onPage); });
+    });
+
+    pager.numbers.innerHTML = '';
+    buildPageList(page, totalPages).forEach(function (p) {
+      if (p === null) {
+        var ellipsis = document.createElement('span');
+        ellipsis.className = 'table-pager-ellipsis';
+        ellipsis.textContent = '…';
+        pager.numbers.appendChild(ellipsis);
+        return;
+      }
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-soft table-pager-page' + (p === page ? ' table-pager-page-current' : '');
+      btn.textContent = String(p);
+      if (p === page) btn.setAttribute('aria-current', 'true');
+      btn.addEventListener('click', function () { renderPage(table, p); });
+      pager.numbers.appendChild(btn);
+    });
+
+    pager.label.textContent = rows.length + ' rows';
+    pager.prevBtn.disabled = page <= 1;
+    pager.nextBtn.disabled = page >= totalPages;
+  }
+
+  // Builds the pager UI once per table (kept across live-refreshes via the registry, same as every
+  // other piece of per-table state here) but re-attaches its MutationObserver every call — a
+  // live-refresh replaces the whole <tbody> element (see refreshTables below), which would
+  // otherwise leave the old observer watching a detached node that no longer receives anything.
+  function initPagination(table) {
+    var state = registry.get(table);
+    if (!state) return;
+    var wrap = table.closest('.table-wrap');
+    if (!wrap) return;
+
+    if (!state.pager) {
+      var pager = document.createElement('div');
+      pager.className = 'table-pager';
+      pager.hidden = true;
+      var prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
+      prevBtn.className = 'btn-soft';
+      prevBtn.textContent = 'Prev';
+      var nextBtn = document.createElement('button');
+      nextBtn.type = 'button';
+      nextBtn.className = 'btn-soft';
+      nextBtn.textContent = 'Next';
+      var numbers = document.createElement('div');
+      numbers.className = 'table-pager-numbers';
+      var label = document.createElement('span');
+      label.className = 'table-pager-label hint';
+      pager.appendChild(prevBtn);
+      pager.appendChild(numbers);
+      pager.appendChild(nextBtn);
+      pager.appendChild(label);
+      wrap.parentNode.insertBefore(pager, wrap.nextSibling);
+
+      state.pager = { el: pager, prevBtn: prevBtn, nextBtn: nextBtn, numbers: numbers, label: label, page: 1, observer: null };
+      prevBtn.addEventListener('click', function () { renderPage(table, state.pager.page - 1); });
+      nextBtn.addEventListener('click', function () { renderPage(table, state.pager.page + 1); });
+    }
+
+    if (state.pager.observer) state.pager.observer.disconnect();
+    var observer = new MutationObserver(function () { renderPage(table, 1); });
+    observer.observe(table.querySelector('tbody'), { attributes: true, attributeFilter: ['style'], subtree: true });
+    state.pager.observer = observer;
+
+    renderPage(table, 1);
+  }
+
   document.querySelectorAll('.table-wrap table').forEach(function (table, index) {
     initTable(table, index);
   });
   collapseRowActions();
+  // Run after collapseRowActions() (not from inside initTable itself, which runs per-table before
+  // every table has necessarily been through collapseRowActions()) — a data row's own .expand-row
+  // sibling (see rowGroup above) has to already exist for the very first render to paginate it
+  // correctly, not just from the second render onward.
+  document.querySelectorAll('.table-wrap table').forEach(function (table) {
+    initPagination(table);
+  });
 
   // Called after something outside this file has replaced a table's <tbody>
   // (e.g. a partial-refresh fetch) with fresh, originally-ordered rows: tags
@@ -630,5 +784,8 @@
       if (state.sort) applySort(table, state.sort);
     });
     collapseRowActions();
+    document.querySelectorAll('.table-wrap table').forEach(function (table) {
+      initPagination(table);
+    });
   };
 })();

@@ -1396,6 +1396,18 @@ function migrateUsersLastSeenNotification() {
 
 migrateUsersLastSeenNotification();
 
+// NULL, not a hardcoded default — lets the recommended default (see loadUserContext.js) change in
+// one place later without a migration silently overwriting whatever every existing user already
+// has stored as "unset."
+function migrateUsersTablePageSize() {
+  const columns = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!columns.includes('table_page_size')) {
+    db.exec('ALTER TABLE users ADD COLUMN table_page_size INTEGER');
+  }
+}
+
+migrateUsersTablePageSize();
+
 // Its own setting rather than reusing log_retention_days — these are curated, meaningful events
 // (not raw MQTT/Loxone protocol lines), worth keeping around longer by default (see
 // settings-general.ejs's "Data retention" card).

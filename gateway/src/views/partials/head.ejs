@@ -16,7 +16,7 @@
     })();
   </script>
 </head>
-<body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>" data-dash-range="<%= typeof dashboardRange !== 'undefined' && dashboardRange ? 'true' : '' %>">
+<body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>" data-dash-range="<%= typeof dashboardRange !== 'undefined' && dashboardRange ? 'true' : '' %>" data-page-size="<%= tablePageSize %>">
 <div class="app-shell">
   <%
     // Hidden on desktop entirely via CSS (display:none outside the mobile breakpoint) — always

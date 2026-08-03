@@ -5,6 +5,7 @@ const { AREAS, MAIN_AREAS, LOG_AREAS } = require('../permissionAreas');
 const { logSystemEvent } = require('../auditLog');
 const { reloadLoginLimiter } = require('./auth');
 const { encrypt } = require('../secretCrypto');
+const { checkForUpdate } = require('../versionCheck');
 
 const router = express.Router();
 
@@ -49,7 +50,16 @@ function isLastAdmin(userId) {
 router.get('/', (req, res) => res.redirect('/admin/general'));
 
 router.get('/general', (req, res) => {
-  res.render('admin-general', { error: null });
+  res.render('admin-general', { error: null, justChecked: false });
+});
+
+// On-demand version of the same check startVersionCheck() already runs once at boot and every 24h
+// (see versionCheck.js) — getVersionStatus() alone (already available in every view via
+// app.locals, see server.js) only ever re-reads that in-memory state, it never makes the GitHub
+// call itself, so a "Check now" button needs this instead.
+router.post('/check-update', async (req, res) => {
+  await checkForUpdate();
+  res.render('admin-general', { error: null, justChecked: true });
 });
 
 router.get('/users', (req, res) => {

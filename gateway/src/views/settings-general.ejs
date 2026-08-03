@@ -112,6 +112,19 @@
     </label>
   </div>
 
+  <div class="card">
+    <h2>Table preferences</h2>
+    <div class="settings-field">
+      <label>Rows per page</label>
+      <input type="number" name="table_page_size" value="<%= tablePageSize %>" min="5" max="500" style="max-width:8rem;">
+      <p class="hint">
+        Applies to every table with more rows than this, across the whole app. Your own
+        preference, not shared with other users — saved per-account even though every other
+        field on this page is a shared, gateway-wide setting.
+      </p>
+    </div>
+  </div>
+
   <div>
     <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
   </div>

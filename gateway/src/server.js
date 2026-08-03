@@ -91,6 +91,7 @@ const { formatDateTime, getDisplayTimezone } = require('./dateFormat');
 const { formatCount, formatHeapStatus, miniserverGenerationLabel } = require('./format');
 const panelTypeDefaults = require('./panelTypeDefaults');
 const { getVersionStatus, startVersionCheck } = require('./versionCheck');
+const { notificationSourceLink } = require('./notificationLinks');
 
 const app = express();
 
@@ -103,6 +104,7 @@ app.locals.formatCount = formatCount;
 app.locals.formatHeapStatus = formatHeapStatus;
 app.locals.miniserverGenerationLabel = miniserverGenerationLabel;
 app.locals.getVersionStatus = getVersionStatus;
+app.locals.notificationSourceLink = notificationSourceLink;
 app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
 app.locals.serializeThresholdLadder = dashboardsRoutes.serializeThresholdLadder;
 app.locals.serializeValueMappings = dashboardsRoutes.serializeValueMappings;

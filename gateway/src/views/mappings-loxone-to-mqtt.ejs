@@ -91,7 +91,10 @@
         <option value="8">UDP port</option>
         <option value="9">Connection info</option>
       </select>
-      <input type="text" id="mappings-filter-query" placeholder="Filter…">
+      <div class="clearable-input-wrap">
+        <input type="text" id="mappings-filter-query" placeholder="Filter…">
+        <button type="button" id="mappings-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+      </div>
     </div>
     <% if (canEdit('loxone_to_mqtt')) { %>
     <% var disabledCount = mappings.filter(m => !m.enabled).length; var enabledCount = mappings.length - disabledCount; %>
@@ -213,12 +216,14 @@
   (function () {
     var fieldSelect = document.getElementById('mappings-filter-field');
     var queryInput = document.getElementById('mappings-filter-query');
+    var clearBtn = document.getElementById('mappings-filter-clear');
     var tbody = document.querySelector('.table-wrap tbody');
     if (!fieldSelect || !tbody) return;
 
     function applyFilter() {
       var colIndex = Number(fieldSelect.value);
       var q = queryInput.value.trim().toLowerCase();
+      if (clearBtn) clearBtn.hidden = !q;
       tbody.querySelectorAll('tr').forEach(function (row) {
         if (row.classList.contains('expand-row')) return;
         var next = row.nextElementSibling;
@@ -238,6 +243,19 @@
 
     fieldSelect.addEventListener('change', applyFilter);
     queryInput.addEventListener('input', applyFilter);
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        queryInput.value = '';
+        applyFilter();
+        queryInput.focus();
+      });
+    }
+    queryInput.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !queryInput.value) return;
+      e.stopPropagation();
+      queryInput.value = '';
+      applyFilter();
+    });
   })();
 </script>
 <script>

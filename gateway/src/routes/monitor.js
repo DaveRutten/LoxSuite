@@ -214,7 +214,7 @@ router.get('/', (req, res) => {
     .prepare(
       `SELECT monitors.*, miniservers.name AS miniserver_name,
               COUNT(DISTINCT dashboard_panel_monitors.panel_id) AS panelCount,
-              GROUP_CONCAT(DISTINCT custom_dashboards.name) AS dashboardNames
+              GROUP_CONCAT(DISTINCT custom_dashboards.id || ':' || custom_dashboards.name) AS dashboardPairs
        FROM monitors
        LEFT JOIN miniservers ON miniservers.id = monitors.miniserver_id
        LEFT JOIN dashboard_panel_monitors ON dashboard_panel_monitors.monitor_id = monitors.id

@@ -609,6 +609,33 @@
       fetch('/notifications/mark-read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () {});
     }
 
+    function applyBadgeCount(count) {
+      var badge = document.getElementById('notification-center-badge');
+      if (!count) { if (badge) badge.remove(); return; }
+      var text = count > 99 ? '99+' : String(count);
+      if (badge) {
+        badge.textContent = text;
+      } else {
+        badge = document.createElement('span');
+        badge.id = 'notification-center-badge';
+        badge.className = 'notification-center-badge';
+        badge.textContent = text;
+        btn.appendChild(badge);
+      }
+    }
+
+    // Dismissing one item (see the list click handler below) advances the read watermark past it
+    // server-side (routes/notificationCenter.js's own /:id/dismiss), so the badge can genuinely
+    // have changed — but that always happens WHILE the popover is open, unlike poll()'s own
+    // periodic badge refresh a little further down (which deliberately skips updating while open,
+    // so it never overwrites something the user is mid-way through acting on). Unconditional here
+    // for exactly that reason: this one only ever runs because of an action the user just took.
+    function refreshBadgeCount() {
+      fetch('/notifications/unread-count').then(function (res) { return res.json(); }).then(function (data) {
+        applyBadgeCount(data.count);
+      }).catch(function () {});
+    }
+
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
       panel.hidden = !panel.hidden;
@@ -640,12 +667,27 @@
       list.addEventListener('click', function (e) {
         e.stopPropagation();
         var dismissBtn = e.target.closest('[data-dismiss-notification]');
-        if (!dismissBtn) return;
-        var item = dismissBtn.closest('.notification-center-item');
-        var id = dismissBtn.dataset.dismissNotification;
-        fetch('/notifications/' + id + '/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () {});
-        if (item) item.remove();
-        if (!list.querySelector('.notification-center-item')) showEmptyState();
+        if (dismissBtn) {
+          var item = dismissBtn.closest('.notification-center-item');
+          var id = dismissBtn.dataset.dismissNotification;
+          fetch('/notifications/' + id + '/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+            .then(function () { refreshBadgeCount(); })
+            .catch(function () {});
+          if (item) item.remove();
+          if (!list.querySelector('.notification-center-item')) showEmptyState();
+          return;
+        }
+        // Clicking through to a notification's own source page (see notification-center-items.ejs's
+        // notificationSourceLink()) is treated as having dealt with it — keepalive so the request
+        // still lands even though the very same click also starts navigating the page away.
+        var sourceLink = e.target.closest('.notification-center-item-link');
+        if (sourceLink) {
+          var linkedItem = sourceLink.closest('.notification-center-item');
+          var linkedId = linkedItem && linkedItem.dataset.notificationId;
+          if (linkedId) {
+            fetch('/notifications/' + linkedId + '/mark-read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', keepalive: true }).catch(function () {});
+          }
+        }
       });
     }
 
@@ -662,25 +704,12 @@
     var POLL_MS = 60000; // matches healthcheck_interval_seconds's own default cadence
     function poll() {
       fetch('/notifications/unread-count').then(function (res) { return res.json(); }).then(function (data) {
-        var badge = document.getElementById('notification-center-badge');
-        // Popover open (via markRead above) or an already-visible badge with a matching count —
-        // don't overwrite what the user is currently looking at with a fetch that started before
-        // they opened it.
+        // Popover open — don't overwrite what the user is currently looking at with a fetch that
+        // started before they opened it. (Dismissing/clicking through an item while it's open
+        // updates the badge its own way — see refreshBadgeCount/applyBadgeCount above — this guard
+        // is specifically about this periodic background poll, not those direct user actions.)
         if (!panel.hidden) return;
-        if (!data.count) {
-          if (badge) badge.remove();
-          return;
-        }
-        var text = data.count > 99 ? '99+' : String(data.count);
-        if (badge) {
-          badge.textContent = text;
-        } else {
-          badge = document.createElement('span');
-          badge.id = 'notification-center-badge';
-          badge.className = 'notification-center-badge';
-          badge.textContent = text;
-          btn.appendChild(badge);
-        }
+        applyBadgeCount(data.count);
       }).catch(function () {});
 
       // The badge count above and this list are two separate fetches/endpoints, but both were

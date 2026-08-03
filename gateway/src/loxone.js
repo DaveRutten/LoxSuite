@@ -143,17 +143,30 @@ function loxoneHsvToRgb(raw) {
 // same as LoxBerry's own transformer does — Shelly itself is what merges partial updates onto
 // whatever it's already showing, this doesn't need to send a complete state every time.
 //
-// Best-effort against community-documented field names (Shelly's own official RGBW2 API doc isn't
-// something this app has direct access to) — verify actual color output against a real device
-// before relying on this, and it's easy to adjust once confirmed.
+// Confirmed against a real RGBW2's own status payload (color/0/status reports red/green/blue/
+// white/gain/turn — see loxone.js's own commit history for the captured example) — the JSON shape
+// built below is exactly right. What needed fixing was the INPUT side: some real-world Loxone
+// virtual output configs prefix the value with the mode name itself ("rgb 17", "white 20.0"), on
+// top of (or instead of) the plain "H,S,V"/percentage this was originally written against — this
+// strips that prefix first so either style works.
+function stripModePrefix(mode, rawValue) {
+  return String(rawValue).trim().replace(new RegExp(`^${mode}\\s+`, 'i'), '');
+}
+
 function applyShellyRgbwTransform(mode, rawValue) {
   if (mode === 'white') {
-    const pct = Math.max(0, Math.min(100, Math.round(Number(rawValue))));
+    const value = stripModePrefix('white', rawValue);
+    const pct = Math.max(0, Math.min(100, Math.round(Number(value))));
     if (!Number.isFinite(pct)) return String(rawValue);
     return JSON.stringify({ white: pct, turn: pct > 0 ? 'on' : 'off' });
   }
   if (mode === 'rgb') {
-    const rgb = loxoneHsvToRgb(rawValue);
+    const value = stripModePrefix('rgb', rawValue);
+    // A single bare number (no comma) is treated as hue alone, at full saturation/brightness —
+    // some Loxone RGB outputs (e.g. a simple color-wheel control rather than the full Lighting
+    // Controller color picker) only ever send hue this way. Comma-separated "H,S,V" (the original,
+    // fuller convention) still takes priority when present.
+    const rgb = value.includes(',') ? loxoneHsvToRgb(value) : loxoneHsvToRgb(`${value},100,100`);
     // Passes the raw value through unchanged rather than sending a malformed color command when
     // it doesn't parse as "H,S,V" — a mapping mid-setup (nothing wired to it yet) shouldn't spam
     // the device with a broken publish.

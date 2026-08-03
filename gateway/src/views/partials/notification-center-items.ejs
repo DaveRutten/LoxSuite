@@ -10,11 +10,14 @@
   <p class="hint notification-center-empty" style="margin:0.6rem 0.9rem;">No notifications yet.</p>
 <% } else { %>
   <% recentNotifications.forEach(n => { %>
+    <% var sourceLink = notificationSourceLink(n.event_type, n.source_id, canView); %>
     <div class="notification-center-item notification-center-item-<%= n.severity %>" data-notification-id="<%= n.id %>">
       <button type="button" class="icon-btn notification-center-dismiss" data-dismiss-notification="<%= n.id %>" title="Dismiss" aria-label="Dismiss">&times;</button>
-      <div class="notification-center-item-title"><%= n.title %></div>
-      <div class="notification-center-item-message"><%= n.message %></div>
-      <div class="notification-center-item-time"><%= formatDateTime(n.created_at) %></div>
+      <% if (sourceLink) { %><a href="<%= sourceLink %>" class="notification-center-item-link"><% } %>
+        <div class="notification-center-item-title"><%= n.title %></div>
+        <div class="notification-center-item-message"><%= n.message %></div>
+        <div class="notification-center-item-time"><%= formatDateTime(n.created_at) %></div>
+      <% if (sourceLink) { %></a><% } %>
     </div>
   <% }) %>
 <% } %>

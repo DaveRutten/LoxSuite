@@ -13,6 +13,68 @@
   <p class="error"><%= error %></p>
 <% } %>
 
+<%
+  // getVersionStatus() (see versionCheck.js) is a plain in-memory read — the GitHub call itself
+  // only runs on its own timer (boot + daily) or when this page's own "Check now" button below
+  // posts to /admin/check-update, same reasoning as the sidebar's own version display (head.ejs).
+  const versionStatus = getVersionStatus();
+%>
+<div class="card">
+  <h2>LoxSuite version</h2>
+  <p class="hint">
+    Running v<%= versionStatus.currentVersion %>.
+    <% if (versionStatus.updateAvailable) { %>
+      v<%= versionStatus.latestVersion %> is available on
+      <a href="https://github.com/DaveRutten/LoxSuite/releases" target="_blank" rel="noopener">GitHub</a>.
+    <% } else if (versionStatus.latestVersion) { %>
+      Up to date.
+    <% } else if (versionStatus.lastCheckReached === false) { %>
+      Could not reach GitHub (offline, timeout, or rate-limited).
+    <% } else if (versionStatus.lastCheckReached === true) { %>
+      No release tags found on GitHub yet.
+    <% } else { %>
+      Not checked yet.
+    <% } %>
+    <% if (versionStatus.checkedAt) { %>
+      <span style="display:block; margin-top:0.2rem;">Last checked: <%= formatDateTime(versionStatus.checkedAt) %><% if (justChecked) { %> &mdash; just now<% } %></span>
+    <% } %>
+  </p>
+  <div class="row-actions" style="justify-content:flex-start;">
+    <form method="post" action="/admin/check-update" style="margin:0;">
+      <button type="submit" class="btn-test"><%- icon('refresh') %> Check for updates now</button>
+    </form>
+    <% if (versionStatus.updateAvailable && versionStatus.changelog) { %>
+      <button type="button" class="btn-soft" id="view-changelog-btn"><%- icon('list') %> View changelog</button>
+    <% } %>
+  </div>
+</div>
+
+<% if (versionStatus.updateAvailable && versionStatus.changelog) { %>
+<dialog id="update-changelog-dialog" class="update-changelog-dialog">
+  <h2>What's new in v<%= versionStatus.latestVersion %></h2>
+  <div class="update-changelog-body"><%- versionStatus.changelogHtml %></div>
+  <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
+    <button type="button" class="btn-soft" id="close-changelog-btn">Close</button>
+  </div>
+</dialog>
+<script>
+  (function () {
+    var dialog = document.getElementById('update-changelog-dialog');
+    var viewBtn = document.getElementById('view-changelog-btn');
+    var closeBtn = document.getElementById('close-changelog-btn');
+    if (!dialog) return;
+    if (viewBtn) viewBtn.addEventListener('click', function () { dialog.showModal(); });
+    if (closeBtn) closeBtn.addEventListener('click', function () { dialog.close(); });
+    // Only pops up on its own right after a check that found something new — on a plain page
+    // load (e.g. navigating here later that same day) it stays closed until "View changelog" is
+    // clicked, since by then this is old news, not something that just happened.
+    <% if (justChecked) { %>
+    dialog.showModal();
+    <% } %>
+  })();
+</script>
+<% } %>
+
 <div class="card">
   <h2>Setup wizard</h2>
   <p class="hint">

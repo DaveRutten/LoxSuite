@@ -106,9 +106,24 @@
 <% } %>
 
 <div class="filterable-table-card">
-  <% if (canEdit('monitor')) { %>
   <% var disabledCount = monitors.filter(m => !m.enabled).length; var enabledCount = monitors.length - disabledCount; %>
   <div class="table-toolbar">
+    <div class="search-combo">
+      <select id="monitor-filter-field">
+        <option value="0">Status</option>
+        <option value="1">Label</option>
+        <option value="2">Source</option>
+        <option value="3">Dashboard</option>
+        <option value="4">Notification</option>
+        <option value="5">Current value</option>
+        <option value="6">Last updated</option>
+      </select>
+      <div class="clearable-input-wrap">
+        <input type="text" id="monitor-filter-query" placeholder="Filter…">
+        <button type="button" id="monitor-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+      </div>
+    </div>
+    <% if (canEdit('monitor')) { %>
     <form method="post" action="/monitor/enable-all" style="margin:0;">
       <button type="submit" class="btn-edit" <%= disabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Enable all (<%= disabledCount %>)</button>
     </form>
@@ -121,8 +136,8 @@
     <form method="post" action="/monitor/clear-all" data-confirm="Delete ALL <%= monitors.length %> monitors and their history, including ones still on a dashboard? Those panels will be left with nothing to show. This can't be undone." style="margin:0;">
       <button type="submit" class="danger" <%= monitors.length === 0 ? 'disabled' : '' %>><%- icon('trash') %> Clear all (<%= monitors.length %>)</button>
     </form>
+    <% } %>
   </div>
-  <% } %>
 
   <div class="table-wrap">
   <table>
@@ -144,19 +159,22 @@
             <% } %>
           </td>
           <td>
-            <% if (m.dashboardNames) { %>
-              <% m.dashboardNames.split(',').forEach(name => { %>
-                <span class="badge badge-neutral" style="margin:0 0.2rem 0.2rem 0;"><%= name %></span>
+            <% if (m.dashboardPairs) { %>
+              <% m.dashboardPairs.split(',').forEach(pair => { %>
+                <% var sep = pair.indexOf(':'); var dashId = pair.slice(0, sep); var dashName = pair.slice(sep + 1); %>
+                <a href="/dashboards/<%= dashId %>" style="margin:0 0.2rem 0.2rem 0; display:inline-block;">
+                  <span class="badge badge-neutral"><%= dashName %></span>
+                </a>
               <% }) %>
             <% } else { %>
-              <span class="badge badge-neutral">Unused</span>
+              <span class="badge badge-neutral">None</span>
             <% } %>
           </td>
           <td>
             <% if (m.hasNotifyThreshold) { %>
               <span class="badge badge-warning" title="At least one threshold rung on this monitor's own chart is flagged Notify — crossing into it logs an event to the Notification Center.">Notify</span>
             <% } else { %>
-              -
+              <span class="badge badge-neutral">None</span>
             <% } %>
           </td>
           <td><% if (m.current) { %><span class="truncate" title="<%= m.current.value %>"><%= m.current.value %></span><% } else { %>-<% } %></td>
@@ -291,6 +309,46 @@
           stateSelect.innerHTML = '<option value="">-</option>';
           fetchStatus.textContent = err.message;
         });
+    });
+  })();
+</script>
+
+<script>
+  // Same pattern as Incoming Clients/Messages' own filter — column-index based, no live-refresh on
+  // this page to re-apply after (unlike those), so no MutationObserver needed here.
+  (function () {
+    var fieldSelect = document.getElementById('monitor-filter-field');
+    var queryInput = document.getElementById('monitor-filter-query');
+    var clearBtn = document.getElementById('monitor-filter-clear');
+    var tbody = document.querySelector('.table-wrap tbody');
+    if (!fieldSelect || !tbody) return;
+
+    function applyFilter() {
+      var colIndex = Number(fieldSelect.value);
+      var q = queryInput.value.trim().toLowerCase();
+      if (clearBtn) clearBtn.hidden = !q;
+      tbody.querySelectorAll('tr').forEach(function (row) {
+        if (!q) { row.style.display = ''; return; }
+        var cell = row.children[colIndex];
+        var text = cell ? cell.textContent.toLowerCase() : '';
+        row.style.display = text.indexOf(q) !== -1 ? '' : 'none';
+      });
+    }
+
+    fieldSelect.addEventListener('change', applyFilter);
+    queryInput.addEventListener('input', applyFilter);
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        queryInput.value = '';
+        applyFilter();
+        queryInput.focus();
+      });
+    }
+    queryInput.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !queryInput.value) return;
+      e.stopPropagation();
+      queryInput.value = '';
+      applyFilter();
     });
   })();
 </script>

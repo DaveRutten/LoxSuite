@@ -314,5 +314,19 @@
 <script src="/vendor/hammer.min.js"></script>
 <script src="/vendor/chartjs-plugin-zoom.min.js"></script>
 <script src="/monitor-chart.js" defer></script>
+<script>
+  // "?open=settings" (see notificationLinks.js) — a threshold-ladder notification lands here
+  // with this set, so it opens straight into the same Chart settings drawer the "edit" icon
+  // button toggles, instead of just landing on the page and leaving you to find and click it.
+  // Same trick as Miniservers' own "?open=<id>" (see miniservers.ejs), just triggered via a
+  // simulated click on the existing toggle button — it's already wired to foot.ejs's shared
+  // delegated [data-toggle-row] handler, so there's no separate open-logic to duplicate here.
+  // No-ops if the button doesn't exist at all (no chart to configure, or view-only permission).
+  (function () {
+    if (new URLSearchParams(location.search).get('open') !== 'settings') return;
+    var btn = document.querySelector('[data-toggle-row="monitor-chart-settings"]');
+    if (btn) btn.click();
+  })();
+</script>
 
 <%- include('partials/foot') %>

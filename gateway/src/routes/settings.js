@@ -81,6 +81,12 @@ router.post('/', requirePermission('settings', 'edit'), (req, res) => {
   }
   db.prepare('UPDATE gateway_settings SET dashboard_suggestions_enabled = ? WHERE id = 1').run(req.body.dashboard_suggestions_enabled ? 1 : 0);
 
+  // The one per-user field on this otherwise gateway-wide page (see settings-general.ejs's own
+  // "Table preferences" card) — still saved against THIS user's own row, not gateway_settings.
+  const pageSizeRaw = Number(req.body.table_page_size);
+  const pageSize = Number.isInteger(pageSizeRaw) && pageSizeRaw >= 5 && pageSizeRaw <= 500 ? pageSizeRaw : null;
+  db.prepare('UPDATE users SET table_page_size = ? WHERE id = ?').run(pageSize, req.user.id);
+
   logSystemEvent(`"${req.user.username}" updated general settings.`);
   res.render('settings-general', { gatewaySettings: loadGatewaySettings(), timezones: TIMEZONES, saved: true, error: null });
 });

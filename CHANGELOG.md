@@ -2,7 +2,62 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.0-alpha.1] - 2026-08-03
+
+### Added
+- **Pagination**: any table with more rows than your own "Rows per page" setting (Profile → Account,
+  default 25) now paginates automatically, with Prev/Next and a windowed set of page-number buttons
+  (first 3, last 3, current page and its neighbors, "…" for the gap). Works alongside every
+  existing per-page search filter and column sort without conflicting with either.
+- **Monitor**: a search bar (matching every other filterable table in the app), with a Dashboard
+  column that's now clickable straight through to each dashboard, and a "None" badge instead of a
+  bare "-" when no notification threshold is set.
+- Settings → Broker connection shows the same live "Connected"/"Not connected" badge the home
+  dashboard already has, next to the page title.
+- Admin → General: a "Check for updates now" button (the existing daily check only ever re-read
+  its own cached result — this actually triggers a fresh GitHub lookup) and, when a newer version is
+  found, a changelog dialog pulled straight from that release's own CHANGELOG.md.
+- Live Data and Monitor's search filters gained a clear ("×") button and Escape-to-clear — since
+  rolled out to every other search bar in the app (Incoming Clients/Messages, both Mapping pages)
+  for consistency.
+- The topbar bell's own popover list is now clickable the same way Logs → Notifications already is
+  — straight to a threshold breach's own Chart settings drawer (already expanded), or a status/
+  firmware change's Miniserver diagnostics panel. Dismissing an item (or clicking through) now also
+  marks it — and anything older — read, so the badge count actually reflects it.
+- "Rows per page" lives on Settings → General now (still your own per-user value, not shared) —
+  folded into that page's single existing Save button rather than a second one of its own.
+- The Shelly RGBW/White transform (Loxone → MQTT mapping) now also accepts a value prefixed with
+  its own mode name ("rgb 17", "white 20.0") — some real-world Loxone virtual output configs send
+  it that way rather than the plain "H,S,V"/percentage this was originally written against. Also
+  accepts a bare hue number (no comma) for RGB, at full saturation/brightness. Verified end-to-end
+  against a real RGBW2: hue 0/120/240 produced exactly red/green/blue, confirmed via the device's
+  own status topic.
+
+### Fixed
+- A bug in creating a dashboard from Live Data's "Suggest dashboard" flow could crash the whole
+  gateway process — and since the container stops itself if either of its two processes dies, that
+  took Mosquitto down with it too. The route now catches its own errors and returns a normal 500,
+  and a process-level safety net was added so no future uncaught error in any route can do this
+  again.
+- The version-check card wrongly blamed "offline, or GitHub unreachable" even when the real reason
+  was simply that no release had ever been tagged yet — now distinguishes the two.
+- A stray z-index rule meant a search bar's own clear ("×") button was hidden behind the input the
+  moment you actually clicked into the box — only visible while it *wasn't* focused, backwards from
+  the point of the button.
+- Dismissing a notification from the bell popover previously left it still counted in the unread
+  badge — dismissing now advances the read watermark the same way clicking through already does.
+- Tables.js's own pagination toggle (`hidden = true`) silently had no effect once a table had any
+  filter narrowing it below one page's worth of rows — an unrelated `display` rule on the same
+  element was overriding the browser's default `[hidden]` behavior.
+
 ## [0.6.1-alpha.1] - 2026-08-03
+
+### Fixed (stability)
+- A bug in creating a dashboard from Live Data's "Suggest dashboard" flow could crash the whole
+  gateway process — and since the container stops itself if either of its two processes dies,
+  that took Mosquitto down with it too. The route now catches its own errors and returns a normal
+  500 instead, and a process-level safety net was added so no future uncaught error in any route
+  can do this again.
 
 ### Added
 - **Monitor**: a new **Notification** column — shows whether a monitor's own threshold ladder (its
@@ -13,7 +68,8 @@ All notable changes to this project are documented in this file.
   Miniservers page with that row's diagnostics panel already open for a status/firmware change
   (new `?open=<id>` support there). The other three trigger types (MQTT client status, backup
   failure, LoxSuite update available) have no single entity of their own to land on, so those stay
-  plain text.
+  plain text. The topbar bell's own popover list now links the same way — clicking through to an
+  item's source there also marks that notification (and anything older) as read.
 - Live Data's Control/state filter now has a clear ("&times;") button in the search box, and
   pressing **Escape** while it has focus clears the filter the same way.
 - Settings → Broker connection now shows the same live "Connected"/"Not connected" status badge as

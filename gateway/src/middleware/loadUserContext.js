@@ -40,6 +40,7 @@ module.exports = function loadUserContext(req, res, next) {
   res.locals.favoriteDashboards = []; // ditto — this user's starred dashboards (see partials/head.ejs's sidebar)
   res.locals.unreadNotificationCount = 0; // ditto — the topbar bell's badge (see partials/head.ejs)
   res.locals.recentNotifications = []; // ditto — the bell popover's own list (see partials/foot.ejs)
+  res.locals.tablePageSize = 25; // ditto — client-side pagination's own default (see public/tables.js), overridden below once a user (and their own saved preference, if any) is known
   Object.assign(res.locals, makeHelpers(null));
 
   if (!req.session || !req.session.userId) return next();
@@ -84,6 +85,7 @@ module.exports = function loadUserContext(req, res, next) {
   // here) with that same file's own /recent endpoint, which foot.ejs polls to keep this list from
   // going stale between full page loads — see that endpoint's own comment for why that's needed.
   res.locals.recentNotifications = loadRecentNotifications(user.id);
+  res.locals.tablePageSize = user.table_page_size || 25;
 
   next();
 };
