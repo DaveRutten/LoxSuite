@@ -1,5 +1,27 @@
 require('dotenv').config();
 
+// Both the session-cookie signing key (below) and every secret-at-rest's encryption key
+// (secretCrypto.js) derive from this, and BOTH silently fall back to a hardcoded dev string if
+// it's missing — deliberately, so a fresh checkout still runs without any setup. In a real
+// deployment that fallback is exactly the wrong thing to do silently: every already-encrypted
+// Miniserver/MQTT/SSO/rclone secret instantly stops decrypting, and the resulting errors (MQTT
+// "not authorised", a Miniserver's HTTP 403, ...) look nothing like "SESSION_SECRET is wrong" —
+// confirmed the hard way when an Unraid container edit blanked this field out from under a working
+// install and it took real diagnostic effort to trace those symptoms back to this. Loud and early
+// (before anything else even has a chance to log something more confusing first), not a hard
+// refusal to start — an already-broken production instance shouldn't ALSO become unreachable.
+if (!process.env.SESSION_SECRET) {
+  console.error('='.repeat(78));
+  console.error('WARNING: SESSION_SECRET is not set.');
+  console.error('Falling back to an insecure, hardcoded development value — session cookies');
+  console.error('and every secret already encrypted at rest (Miniserver passwords, the MQTT');
+  console.error('broker password, SSO client secret, saved rclone.conf) will now fail with');
+  console.error('errors that look unrelated (MQTT "not authorised", a Miniserver HTTP 403, ...).');
+  console.error('Set SESSION_SECRET to a stable random value (e.g. `openssl rand -hex 32`) and');
+  console.error('restart, then re-enter each affected password/secret once through the web UI.');
+  console.error('='.repeat(78));
+}
+
 const express = require('express');
 const session = require('express-session');
 const SqliteStore = require('better-sqlite3-session-store')(session);

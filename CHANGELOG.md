@@ -53,6 +53,12 @@ All notable changes to this project are documented in this file.
   own always-available copy of the built-in devices, used as a fallback whenever the configurable
   folder is missing, empty, or not yet mounted, so a not-yet-updated `docker-compose.yml`/Unraid
   template degrades to "your own customizations aren't picked up yet," not "no devices at all."
+- A missing `SESSION_SECRET` at boot (e.g. an Unraid container edit that blanked the field — see
+  the Security section) silently fell back to an insecure hardcoded value with no indication
+  anything was wrong, until every already-encrypted secret started failing to decrypt with errors
+  that looked completely unrelated (MQTT "not authorised", a Miniserver HTTP 403, ...). The
+  container log now prints an unmissable warning the moment this happens, naming the actual cause
+  and what to do about it.
 
 ### Changed
 - Miniservers page: Firmware and Generation moved out of the main table into the diagnostics

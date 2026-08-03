@@ -632,7 +632,12 @@ whatever channel(s) they already send to.
   plain text. The key is derived from `SESSION_SECRET` (see Environment variables below) — **that
   value has to stay the same across restarts**, or these secrets become unreadable (they aren't
   lost, just unrecoverable until you re-enter them). Set it once to a real random value and don't
-  change it afterward.
+  change it afterward. If it's ever missing at boot (e.g. a container edit that blanked the field
+  out — a known Unraid gotcha, see the Unraid section above), the container log prints an
+  unmissable warning rather than silently limping along on an insecure fallback whose only other
+  symptoms are confusing, seemingly unrelated errors (MQTT "not authorised", a Miniserver HTTP 403).
+  Recovering just means setting a stable value again and re-entering each affected password/secret
+  once through the web UI — it doesn't have to be the original value.
 - **Emergency password reset** — if you're ever locked out of the web UI, drop a file named
   `reset-password.txt` into the same directory as `gateway.db` (the `Data` volume/path), containing
   just the affected username. On the next boot, that account gets a fresh random password (printed
