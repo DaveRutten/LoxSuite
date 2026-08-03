@@ -13,6 +13,17 @@ const path = require('path');
 const { XMLParser } = require('fast-xml-parser');
 
 const TEMPLATES_DIR = process.env.DEVICE_TEMPLATES_PATH || path.join(__dirname, '../device-templates');
+// Docker image only (see Dockerfile's `COPY device-templates ./device-templates-defaults` and
+// docker-entrypoint.sh's first-boot seeding of the bind-mounted TEMPLATES_DIR from this same
+// folder) — doesn't exist at all outside the image (a bare `node src/server.js` checkout has no
+// "-defaults" copy, only the tracked device-templates/ folder that TEMPLATES_DIR already points
+// at by default). Scanned unconditionally alongside TEMPLATES_DIR below specifically so a
+// misconfigured or not-yet-updated bind mount (stale docker-compose.yml/Unraid template missing
+// the new volume line, wrong host path, ...) degrades to "the built-ins still work, your own
+// customizations just aren't picked up yet" instead of silently emptying the ENTIRE Common
+// Commands catalog — every device in it, including every built-in one, used to live only in
+// TEMPLATES_DIR once the hardcoded arrays in commandCatalog.js were removed.
+const BUNDLED_DEFAULTS_DIR = path.join(__dirname, '../device-templates-defaults');
 
 // parseAttributeValue/parseTagValue both off: this schema uses plain numeric-looking strings all
 // over the place (a Shelly brightness command's "0"/"50"/"100", a channel index, ...) that must
@@ -96,31 +107,44 @@ function parseTemplateFile(filePath) {
   return families.map((f) => normalizeFamily(f, path.basename(filePath)));
 }
 
-// Scans TEMPLATES_DIR once (see commandCatalog.js — this only ever runs at module load, i.e. at
+// Scans one directory once (see commandCatalog.js — this only ever runs at module load, i.e. at
 // gateway startup; a file dropped in or edited afterward needs a restart to be picked up, same as
 // every other piece of static config this app reads once at boot). A malformed or invalid file is
 // logged and skipped — one bad file must never take the whole Common Commands catalog down with
-// it, built-in devices included.
-function loadDeviceTemplates() {
-  if (!fs.existsSync(TEMPLATES_DIR)) return [];
+// it, built-in devices included. Returns [] without a word if the directory itself doesn't exist —
+// completely normal for BUNDLED_DEFAULTS_DIR outside Docker, and for TEMPLATES_DIR the very first
+// time (before the entrypoint's seeding step, or a bare checkout that never created it).
+function scanDir(dir, sourceLabel) {
+  if (!fs.existsSync(dir)) return [];
 
-  const entries = fs.readdirSync(TEMPLATES_DIR).filter((f) => ['.json', '.xml'].includes(path.extname(f).toLowerCase())).sort();
+  const entries = fs.readdirSync(dir).filter((f) => ['.json', '.xml'].includes(path.extname(f).toLowerCase())).sort();
   const families = [];
   for (const entry of entries) {
-    const filePath = path.join(TEMPLATES_DIR, entry);
+    const filePath = path.join(dir, entry);
     try {
       const parsed = parseTemplateFile(filePath);
       if (parsed) {
         families.push(...parsed);
-        console.log(`Device templates: loaded "${entry}" (${parsed.map((f) => f.key).join(', ')}).`);
+        console.log(`Device templates: loaded "${entry}" from ${sourceLabel} (${parsed.map((f) => f.key).join(', ')}).`);
       }
     } catch (err) {
-      console.error(`Device templates: skipping "${entry}" — ${err.message}`);
+      console.error(`Device templates: skipping "${entry}" (${sourceLabel}) — ${err.message}`);
     }
   }
-  // Stable sort (V8's Array#sort is stable) — same-order families keep the alphabetical-by-file
-  // order they were already loaded in; only a family that explicitly set a non-zero "order" moves
-  // relative to that. See normalizeFamily's own comment on why this has to be a thing at all.
+  return families;
+}
+
+function loadDeviceTemplates() {
+  // Bundled defaults load FIRST — a baseline that's always there inside the Docker image, immune
+  // to a stale/missing/misconfigured bind mount at TEMPLATES_DIR (an out-of-date docker-compose.yml
+  // or Unraid template still pointing nowhere, a typo'd host path, ...). TEMPLATES_DIR loads SECOND
+  // so a file there with the same key — including a deliberately edited copy of a built-in — wins
+  // (mergeDeviceTemplates below is last-one-wins by key), while a TEMPLATES_DIR that doesn't exist
+  // or resolve correctly just means "no customizations yet," not "no devices at all."
+  const families = [...scanDir(BUNDLED_DEFAULTS_DIR, 'bundled defaults'), ...scanDir(TEMPLATES_DIR, 'device-templates')];
+  // Stable sort (V8's Array#sort is stable) — same-order families keep the load order they were
+  // already in; only a family that explicitly set a non-zero "order" moves relative to that. See
+  // normalizeFamily's own comment on why this has to be a thing at all.
   return families.sort((a, b) => a.order - b.order);
 }
 

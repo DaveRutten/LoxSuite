@@ -46,6 +46,13 @@ All notable changes to this project are documented in this file.
   on a table only took effect after the next page load, not during the drag itself.
 - Miniservers diagnostics panel: the state row showed a redundant/opaque `PLC 5: Running` — now
   just `Running`, with the numeric code moved into the tooltip.
+- **Upgrade safety**: an existing install upgrading to this version without also adding the new
+  `device-templates` volume/path mapping (see Data and persistence in the README) ended up with an
+  entirely EMPTY Common Commands catalog — every built-in device, not just custom ones, used to
+  live only in that folder once the old hardcoded list was removed. The image now also carries its
+  own always-available copy of the built-in devices, used as a fallback whenever the configurable
+  folder is missing, empty, or not yet mounted, so a not-yet-updated `docker-compose.yml`/Unraid
+  template degrades to "your own customizations aren't picked up yet," not "no devices at all."
 
 ### Changed
 - Miniservers page: Firmware and Generation moved out of the main table into the diagnostics
