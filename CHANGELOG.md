@@ -59,6 +59,14 @@ All notable changes to this project are documented in this file.
   that looked completely unrelated (MQTT "not authorised", a Miniserver HTTP 403, ...). The
   container log now prints an unmissable warning the moment this happens, naming the actual cause
   and what to do about it.
+- Client Activity's **Suggest commands** shortcut only ever guessed "this looks like a Shelly" from
+  the client id's own text — broke down for any device whose id isn't self-describing (a HeatMeister
+  module is just whatever name you gave it in its own config, e.g. "radiator-gang", nothing in that
+  string says "heatmeister"). Now uses the same family resolution Common Commands auto-detection
+  already relies on, so it works for HeatMeister (and any future device template) too, not just
+  Shelly. Also fixed HeatMeister's own two families (the real one and its Home Assistant discovery
+  variant) sharing one topic pattern, which meant a real device could get auto-detected as the HA
+  variant depending on file load order — the real one now always wins that tie.
 
 ### Changed
 - Miniservers page: Firmware and Generation moved out of the main table into the diagnostics

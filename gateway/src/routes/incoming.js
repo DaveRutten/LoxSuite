@@ -29,7 +29,7 @@ function isSystemClient(clientId) {
 }
 
 router.get('/clients', (req, res) => {
-  const { allDevices } = discoverDevices();
+  const { allDevices, deviceFamily } = discoverDevices();
   const allClients = getClients().map((c) => {
     const prefix = resolveTopicPrefix(c.clientId, allDevices);
     return { ...c, displayName: prefix || c.clientId, resolvedFromTopic: !!prefix };
@@ -44,6 +44,13 @@ router.get('/clients', (req, res) => {
     systemCount: systemClients.length,
     tab,
     retentionHours: settings.client_retention_hours,
+    // Which Common Commands family (if any) each resolved device id actually belongs to — see
+    // incoming-clients.ejs's own "Suggest commands" link, which used to only ever guess "Shelly"
+    // from the name itself. That breaks down for any device whose id isn't self-describing (a
+    // HeatMeister module is just whatever name you gave it in its own config, e.g.
+    // "radiator-gang" — nothing in that string says "heatmeister"), unlike deviceFamily here,
+    // which already knows the real answer from which topicPrefixPattern actually matched.
+    deviceFamily,
   });
 });
 

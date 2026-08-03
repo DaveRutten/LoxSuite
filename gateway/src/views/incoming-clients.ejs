@@ -47,7 +47,14 @@
     </thead>
     <tbody>
       <% clients.forEach(c => { %>
-        <% var isShelly = /shelly/i.test(c.displayName); %>
+        <%
+          // The real, already-known answer (which topicPrefixPattern actually matched this
+          // device's own traffic) first — falls back to the old name-guessing heuristic only for
+          // a Shelly that hasn't been resolved to a device id yet (e.g. no traffic seen under its
+          // own topic prefix so far), since that's the one family whose raw client ID is reliably
+          // self-describing enough to guess from at all.
+          var family = deviceFamily[c.displayName] || (/shelly/i.test(c.displayName) ? 'shelly-gen1' : null);
+        %>
         <tr>
           <td>
             <span class="truncate" title="<%= c.resolvedFromTopic ? `MQTT client ID: ${c.clientId}` : c.displayName %>"><%= c.displayName %></span>
@@ -62,8 +69,8 @@
           <td><%= formatDateTime(c.connectedAt) %></td>
           <td><%= c.disconnectedAt ? formatDateTime(c.disconnectedAt) : '-' %></td>
           <td>
-            <% if (isShelly) { %>
-              <a class="inline" href="/mappings/commands?family=shelly-gen1&device=<%= encodeURIComponent(c.displayName) %>">
+            <% if (family) { %>
+              <a class="inline" href="/mappings/commands?family=<%= encodeURIComponent(family) %>&device=<%= encodeURIComponent(c.displayName) %>">
                 <button type="button" class="btn-soft"><%- icon('link') %> Suggest commands</button>
               </a>
             <% } %>
@@ -79,8 +86,10 @@
 </div>
 
 <p class="hint">
-  "Suggest commands" appears for client IDs that look like a Shelly device and opens the
-  <a href="/mappings/commands">Common commands</a> builder with this device type and device pre-selected.
+  "Suggest commands" appears once a device's traffic has been recognized as belonging to a known
+  Common Commands family (see that page — includes anything added via a
+  <a href="/mappings/commands">device template</a>, not just the built-in ones) and opens that
+  builder with the device type and device pre-selected.
 </p>
 
 <script>

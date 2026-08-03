@@ -2,6 +2,7 @@
   "key": "heatmeister-ha",
   "label": "SDR HeatMeister (Home Assistant discovery)",
   "topicPrefixPattern": "^heatbooster/([^/]+)/",
+  "order": 50,
   "commands": [
     {
       "key": "heatmeister-ha-control-state",
