@@ -153,31 +153,49 @@ function stripModePrefix(mode, rawValue) {
   return String(rawValue).trim().replace(new RegExp(`^${mode}\\s+`, 'i'), '');
 }
 
-function applyShellyRgbwTransform(mode, rawValue) {
+// Shared, in-memory, keyed by the underlying Shelly topic — tracks each channel's last known
+// value across BOTH the rgb-mode and white-mode mappings for the same device (they're two
+// separate Loxone -> MQTT mappings that happen to publish to the same topic), so on/off can be
+// derived from all four channels together: off only once every one of them is genuinely zero, on
+// the moment any of them isn't. Neither mapping knows the other's value on its own otherwise.
+// Resets on restart (in-memory only, same tradeoff loxoneCommandLog.js's own history map accepts).
+const rgbwChannelState = new Map();
+
+function isRgbwAllZero(state) {
+  return state.red === 0 && state.green === 0 && state.blue === 0 && state.white === 0;
+}
+
+function applyShellyRgbwTransform(mode, rawValue, topic) {
+  const state = rgbwChannelState.get(topic) || { red: 0, green: 0, blue: 0, white: 0 };
   if (mode === 'white') {
     const value = stripModePrefix('white', rawValue);
     const pct = Math.max(0, Math.min(100, Math.round(Number(value))));
     if (!Number.isFinite(pct)) return String(rawValue);
-    return JSON.stringify({ white: pct, turn: pct > 0 ? 'on' : 'off' });
+    state.white = pct;
+    rgbwChannelState.set(topic, state);
+    return JSON.stringify({ white: pct, turn: isRgbwAllZero(state) ? 'off' : 'on' });
   }
   if (mode === 'rgb') {
     const value = stripModePrefix('rgb', rawValue);
-    // A single bare number (no comma) is treated as hue alone, at full saturation/brightness —
-    // some Loxone RGB outputs (e.g. a simple color-wheel control rather than the full Lighting
-    // Controller color picker) only ever send hue this way. Comma-separated "H,S,V" (the original,
-    // fuller convention) still takes priority when present.
-    const rgb = value.includes(',') ? loxoneHsvToRgb(value) : loxoneHsvToRgb(`${value},100,100`);
+    // A bare, unqualified "0" (no comma) is Loxone's own shorthand for "no color at all" — part
+    // of its off sequence alongside white 0 — not hue 0° (which is mathematically pure red).
+    // Explicit comma-separated "H,S,V" still means exactly what it says even when H is 0; only
+    // the bare shorthand gets this special case.
+    // A single bare number otherwise (no comma) is treated as hue alone, at full saturation/
+    // brightness — some Loxone RGB outputs (a simple color-wheel control rather than the full
+    // Lighting Controller color picker) only ever send hue this way.
+    const rgb = value === '0'
+      ? { red: 0, green: 0, blue: 0 }
+      : (value.includes(',') ? loxoneHsvToRgb(value) : loxoneHsvToRgb(`${value},100,100`));
     // Passes the raw value through unchanged rather than sending a malformed color command when
     // it doesn't parse as "H,S,V" — a mapping mid-setup (nothing wired to it yet) shouldn't spam
     // the device with a broken publish.
     if (!rgb) return String(rawValue).trim();
-    // No "turn" here (unlike white mode below) — Loxone's Lighting Controller commonly resends
-    // the RGB output alongside any brightness/white change on the same light circuit, and forcing
-    // "on" here would silently undo an off command sent moments earlier through the white mapping
-    // the instant the next color refresh arrives. Shelly leaves on/off untouched when the key is
-    // just absent from the JSON body, same partial-merge behavior already relied on for red/green/
-    // blue/white themselves — on/off stays exclusively the white mapping's job.
-    return JSON.stringify(rgb);
+    state.red = rgb.red;
+    state.green = rgb.green;
+    state.blue = rgb.blue;
+    rgbwChannelState.set(topic, state);
+    return JSON.stringify({ ...rgb, turn: isRgbwAllZero(state) ? 'off' : 'on' });
   }
   if (mode === 'tunablew') {
     // Loxone's Lumitech output sends "brightness,kelvin" (brightness 0-100, kelvin 2700-6500).
@@ -206,7 +224,7 @@ function applyLoxoneToMqttTransform(mapping, rawValue) {
     return row ? row.output_value : value;
   }
   if (mapping.value_transform === 'shelly_rgbw') {
-    return applyShellyRgbwTransform(mapping.transform_arg, rawValue);
+    return applyShellyRgbwTransform(mapping.transform_arg, rawValue, mapping.mqtt_topic);
   }
   return value;
 }

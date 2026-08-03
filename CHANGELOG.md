@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.2-alpha.1] - 2026-08-03
+
+### Fixed
+- The Shelly RGBW/White transform's on/off now reflects **both** the RGB and White mappings
+  together, not just whichever one happened to publish last: off only once every channel
+  (red/green/blue/white) is genuinely zero, on the moment any of them isn't — matching how a real
+  Loxone RGBW output actually signals off (sending zero on every channel at once, not just one).
+  Previously White alone controlled on/off and RGB never touched it at all, which meant a
+  same-family light that used the RGB mapping to indicate on/off never actually turned on.
+- A bare, unqualified `rgb 0` (no comma) is now treated as true zero — red:0,green:0,blue:0 — not
+  hue 0° (which is mathematically pure red). This was silently breaking the "all channels zero"
+  off detection: Loxone's own off sequence sends `rgb 0` specifically to mean nothing, and it was
+  instead being turned into full red. An explicit comma-separated `H,S,V` still means exactly what
+  it says even when H is 0 — only the bare shorthand gets this special case. Verified via the
+  published JSON for all four transitions (both zero -> off, either one going nonzero -> on, back
+  to both zero -> off again) — not re-confirmed against the physical device's own status topic
+  this round the way earlier RGBW2 fixes were.
+
 ## [0.7.1-alpha.1] - 2026-08-03
 
 ### Fixed
