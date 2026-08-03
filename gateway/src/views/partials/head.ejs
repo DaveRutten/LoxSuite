@@ -189,7 +189,7 @@
               <div class="notification-center-footer">
                 <button type="button" id="notification-center-dismiss-all" class="btn-soft" <%= recentNotifications.length === 0 ? 'disabled' : '' %>>Mark all read</button>
                 <% if (canView('logs_notifications')) { %>
-                  <a href="/logs/notifications">View all</a>
+                  <a href="/logs/notifications" id="notification-center-view-all">View all</a>
                 <% } %>
               </div>
             </div>

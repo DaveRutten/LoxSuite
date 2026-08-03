@@ -224,7 +224,18 @@ router.get('/', (req, res) => {
        ORDER BY monitors.label`
     )
     .all()
-    .map((m) => ({ ...m, current: getCurrentValue(m.id) }));
+    .map((m) => {
+      // Whether THIS monitor's own threshold ladder (its chart-settings config, edited from this
+      // page — see notifications.js's checkThresholdLadderNotify) has at least one rung flagged
+      // Notify — surfaced as its own column so this doesn't stay hidden until you happen to open
+      // a monitor's own chart settings to look.
+      let hasNotifyThreshold = false;
+      try {
+        const thresholds = JSON.parse(m.config || '{}').thresholds;
+        hasNotifyThreshold = Array.isArray(thresholds) && thresholds.some((t) => t.notify);
+      } catch { /* malformed config — treat as no notify threshold rather than erroring the whole list */ }
+      return { ...m, current: getCurrentValue(m.id), hasNotifyThreshold };
+    });
 
   const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
   const retention = db.prepare('SELECT monitor_retention_days FROM gateway_settings WHERE id = 1').get();

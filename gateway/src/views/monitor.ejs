@@ -127,7 +127,7 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Status</th><th>Label</th><th>Source</th><th>Dashboard</th><th>Current value</th><th>Last updated</th><th>Actions</th></tr>
+      <tr><th>Status</th><th>Label</th><th>Source</th><th>Dashboard</th><th>Notification</th><th>Current value</th><th>Last updated</th><th>Actions</th></tr>
     </thead>
     <tbody>
       <% monitors.forEach(m => { %>
@@ -152,6 +152,13 @@
               <span class="badge badge-neutral">Unused</span>
             <% } %>
           </td>
+          <td>
+            <% if (m.hasNotifyThreshold) { %>
+              <span class="badge badge-warning" title="At least one threshold rung on this monitor's own chart is flagged Notify — crossing into it logs an event to the Notification Center.">Notify</span>
+            <% } else { %>
+              -
+            <% } %>
+          </td>
           <td><% if (m.current) { %><span class="truncate" title="<%= m.current.value %>"><%= m.current.value %></span><% } else { %>-<% } %></td>
           <td><%= m.current ? formatDateTime(m.current.recordedAt) : '-' %></td>
           <td>
@@ -171,7 +178,7 @@
         </tr>
         <% if (canEdit('monitor')) { %>
         <tr class="expand-row" id="monitor-edit-<%= m.id %>">
-          <td colspan="7">
+          <td colspan="8">
             <form method="post" action="/monitor/<%= m.id %>/update" class="form-grid" style="max-width:28rem;">
               <div><label>Label</label><input type="text" name="label" value="<%= m.label %>" required></div>
               <% if (m.source_type === 'loxone') { %>
@@ -197,7 +204,7 @@
         <% } %>
       <% }) %>
       <% if (monitors.length === 0) { %>
-        <tr><td colspan="7" class="empty">No monitors yet &mdash; add one above, or use the "Monitor" shortcut on a topic in <a href="/incoming/messages">Live Traffic</a>.</td></tr>
+        <tr><td colspan="8" class="empty">No monitors yet &mdash; add one above, or use the "Monitor" shortcut on a topic in <a href="/incoming/messages">Live Traffic</a>.</td></tr>
       <% } %>
     </tbody>
   </table>

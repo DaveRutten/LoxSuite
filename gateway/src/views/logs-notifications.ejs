@@ -66,7 +66,7 @@
         <tr>
           <td class="col-select"><input type="checkbox"></td>
           <td><%= formatDateTime(r.createdAt) %></td>
-          <td><span class="badge <%= r.severity === 'critical' ? 'badge-off' : r.severity === 'warning' ? 'badge-neutral' : 'badge-ok' %>"><%= r.severity %></span></td>
+          <td><span class="badge <%= r.severity === 'critical' ? 'badge-off' : r.severity === 'warning' ? 'badge-warning' : 'badge-ok' %>"><%= r.severity %></span></td>
           <td><%= r.title %></td>
           <td class="log-line"><%= r.message %></td>
           <td><%= r.sourceLabel || '' %></td>

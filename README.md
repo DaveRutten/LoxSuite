@@ -140,9 +140,11 @@ device ID with no descriptive words in them at all — rename the panel by hand 
 ### Notification Center
 
 A bell icon next to Help in the topbar, visible to every logged-in user, polling for new events
-every 60 seconds. Opening it shows the most recent events and marks them read; **View all** links
-to a full history under **Logs → Notifications** (its own permission area, separate from the other
-Logs tabs). Every event logged here also went through the existing
+every 60 seconds. Opening it just shows the most recent events — the unread badge only clears via
+**Mark all read**, **View all**, or once there's genuinely nothing left unread, not from merely
+glancing at the list. **View all** links to a full history under **Logs → Notifications** (its own
+permission area, separate from the other Logs tabs). Every event logged here also went through the
+existing
 [Apprise](https://github.com/caronc/apprise) rule engine for delivery — Monitor threshold,
 Miniserver/MQTT client status, backup failure, Miniserver firmware changed, and LoxSuite update
 available are all real, admin-creatable rule types, sendable to any channel exactly like the
@@ -196,7 +198,9 @@ exportable as a plain `timestamp,value` CSV file. The chart itself gets the same
 a Dashboard chart panel — appearance, thresholds (with the optional per-rung **Notify**, see
 Notification Center above), Y-axis, annotations — via an edit drawer with a live preview, resizable
 by dragging its edge; **star**/**reset** save that style as the default for every Monitor's chart at
-once, so they can all share one look in a couple of clicks.
+once, so they can all share one look in a couple of clicks. The monitor list's own **Notification**
+column flags which monitors currently have a Notify-flagged rung, without opening each one's chart
+settings to check.
 
 ### My Dashboards
 

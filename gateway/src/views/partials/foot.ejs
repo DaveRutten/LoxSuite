@@ -588,11 +588,13 @@
 <script>
   // Topbar Notification Center bell — same show/hide-popover mechanics as the account menu just
   // above (independent element ids, so both can coexist without interfering). Two things it adds
-  // on top: marking everything read the moment the popover is opened (not on every toggle click —
-  // only the transition into view counts as "seen"), and its own periodic poll for the badge count,
-  // since this is topbar chrome present on every page, unlike the existing data-refresh mechanism
-  // (see the live-refresh script above), which is opt-in per page and refreshes page content, not
-  // chrome — unsuitable here regardless of page.
+  // on top: its own periodic poll for the badge count, since this is topbar chrome present on
+  // every page, unlike the existing data-refresh mechanism (see the live-refresh script above),
+  // which is opt-in per page and refreshes page content, not chrome — unsuitable here regardless
+  // of page; and explicit mark-read triggers. Deliberately NOT on every popover open — just
+  // glancing at the list isn't the same as having dealt with it, so the badge only clears via
+  // "Mark all read", "View all" (both explicit acknowledgements), or naturally once nothing's left
+  // unread.
   (function () {
     var btn = document.getElementById('notification-center-btn');
     var panel = document.getElementById('notification-center-panel');
@@ -609,14 +611,18 @@
 
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
-      var opening = panel.hidden;
       panel.hidden = !panel.hidden;
-      if (opening) markRead();
     });
     document.addEventListener('click', function () { panel.hidden = true; });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') panel.hidden = true;
     });
+
+    // "View all" navigates away to the full Logs > Notifications history — treated the same as
+    // "Mark all read" (see below) rather than left to clear on its own the next time the badge
+    // happens to get polled after that page load.
+    var viewAllLink = document.getElementById('notification-center-view-all');
+    if (viewAllLink) viewAllLink.addEventListener('click', function () { markRead(); });
 
     // "x" per item and the footer's "Mark all read" both live inside the popover — stopPropagation
     // keeps the document-level closer above from snapping the whole thing shut on every click, the

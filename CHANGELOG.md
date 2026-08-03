@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.6.1-alpha.1] - 2026-08-03
+
+### Added
+- **Monitor**: a new **Notification** column — shows whether a monitor's own threshold ladder (its
+  chart settings, edited from this page) has at least one rung flagged **Notify**, without having
+  to open each monitor's own chart settings to check.
+
+### Fixed
+- The Notification Center bell's unread badge cleared the moment you opened the popover, even if
+  you'd only glanced at it — now only clears via **Mark all read**, **View all**, or once there's
+  genuinely nothing left unread.
+- Logs → Notifications: a **warning**-severity row showed a plain gray badge instead of the
+  existing yellow "warning" style already used elsewhere in the app — a leftover placeholder class
+  that was never updated to the real one.
+
 ## [0.6.0-alpha.1] - 2026-08-03
 
 ### Added
