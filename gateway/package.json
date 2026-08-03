@@ -1,6 +1,6 @@
 {
   "name": "loxsuite",
-  "version": "0.7.2-alpha.1",
+  "version": "0.7.3-alpha.1",
   "private": true,
   "license": "MIT",
   "description": "LoxSuite: MQTT gateway, logging, monitoring, and backup/restore for Loxone Miniservers",

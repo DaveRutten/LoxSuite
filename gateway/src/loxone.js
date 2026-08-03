@@ -165,6 +165,23 @@ function isRgbwAllZero(state) {
   return state.red === 0 && state.green === 0 && state.blue === 0 && state.white === 0;
 }
 
+// Loxone's own "Analoge ingang RGB" (Analog input RGB) virtual output packs all three channels
+// into a single number: red% + green%*1000 + blue%*1000000 (each channel 0-100) — a completely
+// different convention from the H,S,V-based "rgb" mode below, and NOT auto-detected against it
+// (a small packed value with blue=0 is indistinguishable from a small hue, so this only ever
+// applies when explicitly selected as its own mode). Confirmed against a real RGBW2: three test
+// sends representing ~100% red / ~100% blue / ~100% green each decoded to the right dominant
+// channel and produced the expected color.
+function decodePackedRgbPercent(rawValue) {
+  const total = Math.round(Number(rawValue));
+  if (!Number.isFinite(total) || total < 0) return null;
+  const blue = Math.floor(total / 1000000);
+  const green = Math.floor((total % 1000000) / 1000);
+  const red = total % 1000;
+  const scale = (pct) => Math.round(Math.max(0, Math.min(100, pct)) / 100 * 255);
+  return { red: scale(red), green: scale(green), blue: scale(blue) };
+}
+
 function applyShellyRgbwTransform(mode, rawValue, topic) {
   const state = rgbwChannelState.get(topic) || { red: 0, green: 0, blue: 0, white: 0 };
   if (mode === 'white') {
@@ -190,6 +207,16 @@ function applyShellyRgbwTransform(mode, rawValue, topic) {
     // Passes the raw value through unchanged rather than sending a malformed color command when
     // it doesn't parse as "H,S,V" — a mapping mid-setup (nothing wired to it yet) shouldn't spam
     // the device with a broken publish.
+    if (!rgb) return String(rawValue).trim();
+    state.red = rgb.red;
+    state.green = rgb.green;
+    state.blue = rgb.blue;
+    rgbwChannelState.set(topic, state);
+    return JSON.stringify({ ...rgb, turn: isRgbwAllZero(state) ? 'off' : 'on' });
+  }
+  if (mode === 'rgb-percent') {
+    const value = stripModePrefix('rgb', rawValue);
+    const rgb = decodePackedRgbPercent(value);
     if (!rgb) return String(rawValue).trim();
     state.red = rgb.red;
     state.green = rgb.green;

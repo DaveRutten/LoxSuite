@@ -229,7 +229,7 @@ router.get('/loxone-to-mqtt', (req, res) => {
 // "shelly_rgb&w" UDP transformer — see applyShellyRgbwTransform in loxone.js), whose transform_arg
 // picks which of the three independent Loxone outputs this one mapping carries.
 const LOXONE_TO_MQTT_TRANSFORMS = ['passthrough', 'translation_table', 'shelly_rgbw'];
-const SHELLY_RGBW_MODES = ['white', 'rgb', 'tunablew'];
+const SHELLY_RGBW_MODES = ['white', 'rgb', 'rgb-percent', 'tunablew'];
 function normalizeLoxoneToMqttTransform(body) {
   const transform = LOXONE_TO_MQTT_TRANSFORMS.includes(body.value_transform) ? body.value_transform : 'passthrough';
   const transformArg = transform === 'shelly_rgbw' && SHELLY_RGBW_MODES.includes(body.transform_arg) ? body.transform_arg : null;

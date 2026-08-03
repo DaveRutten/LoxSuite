@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.3-alpha.1] - 2026-08-03
+
+### Added
+- A second Shelly RGBW/White mode, **"RGB (Loxone's Analog input RGB)"**, for Loxone's own
+  "Analoge ingang RGB" virtual output — it packs all three channels into one number
+  (`red% + green%×1000 + blue%×1000000`), a completely different convention from the H,S,V-based
+  RGB mode already there. Both modes coexist; pick whichever matches the actual Loxone output
+  you're wiring up. Verified end-to-end against a real RGBW2: three real Loxone-generated values
+  (representing ~100% red / ~100% blue / ~100% green) all decoded to the correct dominant channel,
+  confirmed via the device's own status topic.
+
 ## [0.7.2-alpha.1] - 2026-08-03
 
 ### Fixed
