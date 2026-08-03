@@ -2,10 +2,11 @@
   "key": "shelly-rgbw2",
   "label": "Shelly RGBW2",
   "topicPrefixPattern": "^shellies/(shellyrgbw2-[^/]+)/",
+  "_comment": "RGBW2 runs in one of two mutually exclusive device-side modes: color mode (one unified RGBW output, /color/0/...) or white mode (four independent dimmable channels, /white/0-3/...). This template targets a color-mode device only -- there's no meaningful 'toggle just white' via the simple on/off command endpoint in that mode (the whole-light on/off below controls all four channels together). The 'Set color'/'Set white %' entries below are reference only (this page never publishes anything itself, see mappings-commands.ejs) -- showing the exact topic+value shape a real Loxone RGB/White output sends. To actually make either one work, the mapping itself needs the Shelly RGBW/White transform (mode rgb/white) selected on its Loxone -> MQTT form, not a plain passthrough -- verified end-to-end against a real device.",
   "commands": [
     {
       "key": "color",
-      "label": "Color",
+      "label": "On/Off/Toggle",
       "topicTemplate": "shellies/{device}/color/{channel}/command",
       "actions": [
         "on",
@@ -14,13 +15,20 @@
       ]
     },
     {
-      "key": "white",
-      "label": "White channel",
-      "topicTemplate": "shellies/{device}/white/{channel}/command",
+      "key": "color-set",
+      "label": "Set color (needs Shelly RGBW/White transform, mode rgb)",
+      "topicTemplate": "shellies/{device}/color/{channel}/set",
       "actions": [
-        "on",
-        "off",
-        "toggle"
+        "rgb <hue 0-360>",
+        "rgb <hue>,<saturation>,<value>"
+      ]
+    },
+    {
+      "key": "white-set",
+      "label": "Set white % (needs Shelly RGBW/White transform, mode white)",
+      "topicTemplate": "shellies/{device}/color/{channel}/set",
+      "actions": [
+        "white <0-100>"
       ]
     }
   ]

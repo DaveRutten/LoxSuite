@@ -31,7 +31,7 @@ router.get('/*', (req, res) => {
       logRejected({ transport: 'HTTP', address: req.ip, topic: mapping.mqtt_topic, attemptedValue: value, reason: `failed to publish: ${err.message}` });
       return res.status(502).send('Failed to publish to MQTT');
     }
-    logAccepted({ transport: 'HTTP', address: req.ip, topic: mapping.mqtt_topic, value: String(value) });
+    logAccepted({ transport: 'HTTP', address: req.ip, topic: mapping.mqtt_topic, value: String(value), mappingId: mapping.id });
     // A plain "OK" is all Loxone itself looks at, but the mapping page's Test feature calls this
     // same endpoint to exercise the real path end-to-end (see routes/mappings.js) and wants to
     // show what actually got published — JSON body costs Loxone nothing since it never reads it.

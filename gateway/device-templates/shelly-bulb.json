@@ -2,10 +2,11 @@
   "key": "shelly-bulb",
   "label": "Shelly Bulb (RGBW, color mode)",
   "topicPrefixPattern": "^shellies/(shellybulb-[^/]+)/",
+  "_comment": "Same shape as shelly-rgbw2.json, and for the same reason -- see that file's own comment. Not verified against a real Shelly Bulb device (unlike RGBW2, which was tested end-to-end), only against the documented API shape being identical to RGBW2's own color-mode one.",
   "commands": [
     {
       "key": "color",
-      "label": "Color",
+      "label": "On/Off/Toggle",
       "topicTemplate": "shellies/{device}/color/{channel}/command",
       "actions": [
         "on",
@@ -14,13 +15,20 @@
       ]
     },
     {
-      "key": "white",
-      "label": "White channel",
-      "topicTemplate": "shellies/{device}/white/{channel}/command",
+      "key": "color-set",
+      "label": "Set color (needs Shelly RGBW/White transform, mode rgb)",
+      "topicTemplate": "shellies/{device}/color/{channel}/set",
       "actions": [
-        "on",
-        "off",
-        "toggle"
+        "rgb <hue 0-360>",
+        "rgb <hue>,<saturation>,<value>"
+      ]
+    },
+    {
+      "key": "white-set",
+      "label": "Set white % (needs Shelly RGBW/White transform, mode white)",
+      "topicTemplate": "shellies/{device}/color/{channel}/set",
+      "actions": [
+        "white <0-100>"
       ]
     }
   ]

@@ -44,7 +44,7 @@ function handleMessage(buffer, rinfo) {
       logRejected({ transport: 'UDP', address, port, topic: mapping.mqtt_topic, attemptedValue: value, reason: `failed to publish: ${err.message}` });
     } else {
       console.log(`Loxone UDP: published "${value}" to "${mapping.mqtt_topic}" OK`);
-      logAccepted({ transport: 'UDP', address, port, topic: mapping.mqtt_topic, value });
+      logAccepted({ transport: 'UDP', address, port, topic: mapping.mqtt_topic, value, mappingId: mapping.id });
     }
   });
 }

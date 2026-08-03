@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.1-alpha.1] - 2026-08-03
+
+### Fixed
+- The Shelly RGBW/White transform's RGB mode forced the light **on** with every single color
+  update — harmless on its own, but a real problem once a Loxone Lighting Controller resends the
+  RGB output alongside any brightness/white change on the same light circuit: turning the light off
+  through the White mapping got silently undone the instant the next color refresh arrived. RGB
+  updates no longer touch on/off at all; only the White mapping does now. Verified against a real
+  RGBW2 — sent off via White, then a new color via RGB, and it stayed off with the new color applied.
+- Logs → Loxone commands' "from/to" value history was keyed by MQTT topic alone — for a device
+  like an RGBW2 in color mode, its separate RGB and White mappings both legitimately publish to the
+  *same* topic (Shelly merges the partial JSON bodies itself), so each one's own history was
+  actually showing whichever OTHER mapping had fired most recently, not its own. Now keyed by the
+  mapping itself.
+- The Shelly RGBW2/Bulb Common Commands templates' "White channel" preset pointed at
+  `/white/{channel}/command` — the topic for the device's *other*, mutually exclusive operating
+  mode (four independent white channels), not the color-mode device these templates are actually
+  for. Removed (there's no real "toggle just white" in color mode — that's the whole-light on/off
+  below), and replaced with reference-only "Set color"/"Set white %" entries showing the real
+  `/color/0/set` topic and value shape a Loxone RGB/White output actually needs (this page never
+  publishes anything itself — it's suggestions to copy into a mapping's own Shelly RGBW/White
+  transform). RGBW2 verified against a real device; Shelly Bulb updated the same way by inference
+  (identical documented API), not separately tested.
+
 ## [0.7.0-alpha.1] - 2026-08-03
 
 ### Added

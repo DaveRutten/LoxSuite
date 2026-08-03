@@ -14,9 +14,14 @@ const insertLogEntry = db.prepare(
 const findMiniserverByHost = db.prepare('SELECT id, name FROM miniservers WHERE host = ?');
 
 // In-memory only: the last value actually published through a Loxone-originated command, per
-// MQTT topic — this is what lets a row show "Off" -> "On" instead of just "On" on its own.
-// Resets on restart (same tradeoff loxoneLog.js's own diff-state already accepts) — a command
-// right after a restart just shows no "From" until the next one for that topic.
+// MAPPING — this is what lets a row show "Off" -> "On" instead of just "On" on its own. Keyed by
+// mapping id, not topic: a device like a Shelly RGBW2 in color mode has separate RGB and White
+// mappings that both legitimately publish to the SAME topic (Shelly itself merges the partial
+// JSON bodies) — keying by topic alone made each one's "from" reflect whichever OTHER mapping had
+// fired most recently instead of its own actual history, turning the log into a nonsensical
+// shuffle between two unrelated values. Resets on restart (same tradeoff loxoneLog.js's own
+// diff-state already accepts) — a command right after a restart just shows no "From" until the
+// next one for that mapping.
 const lastPublishedValue = new Map();
 
 // The only things that ever send these commands are configured Loxone Miniservers, so showing
@@ -34,10 +39,14 @@ function describeClient(transport, address, port) {
   return { label, miniserverId: miniserver ? miniserver.id : null };
 }
 
-function logAccepted({ transport, address, port, topic, value }) {
+function logAccepted({ transport, address, port, topic, value, mappingId }) {
   const { label, miniserverId } = describeClient(transport, address, port);
-  const from = lastPublishedValue.has(topic) ? lastPublishedValue.get(topic) : null;
-  lastPublishedValue.set(topic, value);
+  // Falls back to topic when no mappingId is given (defensive only — both real call sites always
+  // have a mapping in hand by the time they log success) rather than making this required and
+  // risking an uncaught throw on a code path Loxone itself depends on.
+  const historyKey = mappingId != null ? `mapping:${mappingId}` : topic;
+  const from = lastPublishedValue.has(historyKey) ? lastPublishedValue.get(historyKey) : null;
+  lastPublishedValue.set(historyKey, value);
   insertLogEntry.run(label, 'OK', topic, from, value, miniserverId, transport, new Date().toISOString());
 }
 

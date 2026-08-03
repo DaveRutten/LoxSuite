@@ -171,7 +171,13 @@ function applyShellyRgbwTransform(mode, rawValue) {
     // it doesn't parse as "H,S,V" — a mapping mid-setup (nothing wired to it yet) shouldn't spam
     // the device with a broken publish.
     if (!rgb) return String(rawValue).trim();
-    return JSON.stringify({ ...rgb, turn: 'on' });
+    // No "turn" here (unlike white mode below) — Loxone's Lighting Controller commonly resends
+    // the RGB output alongside any brightness/white change on the same light circuit, and forcing
+    // "on" here would silently undo an off command sent moments earlier through the white mapping
+    // the instant the next color refresh arrives. Shelly leaves on/off untouched when the key is
+    // just absent from the JSON body, same partial-merge behavior already relied on for red/green/
+    // blue/white themselves — on/off stays exclusively the white mapping's job.
+    return JSON.stringify(rgb);
   }
   if (mode === 'tunablew') {
     // Loxone's Lumitech output sends "brightness,kelvin" (brightness 0-100, kelvin 2700-6500).
