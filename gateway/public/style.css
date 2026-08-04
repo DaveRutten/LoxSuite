@@ -34,7 +34,11 @@
     --surface-alt: #20232b;
     --border: #2c2f38;
     --text: #e7e9ee;
-    --text-muted: #9aa0ab;
+    /* A bit brighter than a strict "muted" gray would otherwise be — against the accent-tinted
+       glow behind the topbar (body/.topbar's shared radial-gradient, see below) the original
+       #9aa0ab dropped to a borderline ~5.7:1 contrast right where every page's own intro hint
+       text sits (just under the h1), reading as noticeably dimmer than the rest of the page. */
+    --text-muted: #aab0ba;
     --accent: #74C365;
     --accent-hover: #8ED17E;
     --accent-soft: #1c2a1c;
@@ -62,7 +66,7 @@
   --surface-alt: #20232b;
   --border: #2c2f38;
   --text: #e7e9ee;
-  --text-muted: #9aa0ab;
+  --text-muted: #aab0ba;
   --accent: #74C365;
   --accent-hover: #8ED17E;
   --accent-soft: #1c2a1c;
@@ -304,19 +308,27 @@ button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-bt
 .theme-toggle:active { transform: scale(0.98); }
 
 /* Sits right under .theme-toggle (see versionCheck.js) — its own margin-top:auto already pushes
-   both of them to the bottom of the sidebar together, so no extra positioning needed here. */
+   both of them to the bottom of the sidebar together, so no extra positioning needed here.
+   Both the plain version and the "update available" link live on one flex-wrapped row instead of
+   two stacked lines — there's nothing else in this corner competing for the space, and reading
+   them as one compact line ("v1.2.3 · v1.3.0 available") is clearer than two separate ones. */
 .sidebar-version {
   margin-top: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
   text-align: center;
   font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.35);
 }
+.sidebar-version-current { color: inherit; text-decoration: none; }
+.sidebar-version-current:hover { color: rgba(255, 255, 255, 0.6); text-decoration: underline; }
 .sidebar-version-update {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 0.3rem;
-  margin-top: 0.3rem;
   color: var(--accent);
   text-decoration: none;
   font-weight: 500;
@@ -848,9 +860,21 @@ h2 {
    pins this to the far right instead of bunching it up hard against Next with an inconsistent
    double gap (the flex gap plus this element's own margin) — Prev/numbers/Next then read as one
    tight, centered cluster, with the row count clearly its own separate thing on the opposite side. */
-.table-pager-label { white-space: nowrap; margin-left: auto; }
+/* Reset all four sides, not just margin-left: this also carries .hint for its color/font-size,
+   whose own margin (-0.4rem 0 1.25rem, meant for block-level paragraph spacing) otherwise survives
+   and skews the flex item's margin box enough that align-items:center no longer lines its text up
+   with the Prev/Next buttons' own centered text. !important because .hint's own rule (elsewhere in
+   this file) declares the same margin property at equal (single-class) specificity — plain source
+   order would let whichever of the two happens to be declared later win, which is exactly what was
+   still happening here even after the reset above was added. */
+.table-pager-label { white-space: nowrap; margin: 0 0 0 auto !important; }
 .table-pager-numbers { display: flex; align-items: center; gap: 0.3rem; }
-.table-pager-page { min-width: 2.2rem; padding: 0.3rem 0.5rem; }
+/* justify-content:center (the shared button rule itself never sets this, so it defaults to
+   flex-start) — without it, a page number whose own text+padding is narrower than this min-width
+   floor (any single digit) has its text hugging the left edge with all the min-width's extra space
+   left dangling on the right, instead of being centered in the wider box like a two-digit number
+   (whose own natural width already meets or exceeds the floor, so it never shows the bug). */
+.table-pager-page { min-width: 2.2rem; padding: 0.3rem 0.5rem; justify-content: center; }
 .table-pager-page-current, .table-pager-page-current:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 .table-pager-ellipsis { color: var(--text-muted); padding: 0 0.15rem; }
 
@@ -1546,6 +1570,10 @@ input[type="file"]::file-selector-button:hover { background: var(--text-muted); 
   grid-column: 1 / -1;
 }
 .panel-settings-form label { margin-bottom: 0.1rem; font-size: 0.72rem; }
+/* Toggled by the "?" button next to the drawer's own star icon (see foot.ejs) — a sitewide display
+   preference, not per-drawer, so every settings drawer respects it immediately without its own
+   separate toggle state. */
+body.panel-hints-hidden .panel-settings-form .hint { display: none; }
 
 /* Shared on/off switch (see toggleSwitch() in src/toggleSwitch.js) — every plain boolean setting
    in the app (SSO/rclone/backup-schedule Enabled, MQTT TLS, Retain, Miniserver HTTPS, ...) used to
@@ -2018,13 +2046,16 @@ code {
    it instead glues the hint to whatever it just submitted. Give it room there specifically. */
 form + .hint { margin-top: 0.75rem; }
 
-/* When .hint is the very first thing in <main> (most pages — Dashboard, Monitor, Live Data, My
+/* When .hint is the first VISIBLE line in <main> (most pages — Dashboard, Monitor, Live Data, My
    Dashboards, ...), that same negative margin pulls it up into .topbar's own box instead of just
    closing the gap under the H1 — .topbar is `position: sticky`, so it paints above .hint
-   regardless of DOM order, clipping/blurring the top ~6px of the hint's first line. Zeroing the
-   margin here only for the first-child case leaves the "pull up under a heading" behavior intact
-   everywhere else. */
-main > .hint:first-child { margin-top: 0; }
+   regardless of DOM order, clipping/blurring the top ~6px of the hint's first line. :first-of-type
+   (not :first-child) so this still applies when a page renders an invisible/overlay element before
+   it in the markup (e.g. monitor-detail.ejs's own #monitor-chart-backdrop div, present only for
+   users who can edit the chart) — a <div> there doesn't count against a <p>'s own type-ordinal, so
+   the hint paragraph is still correctly matched as "the first one." Zeroing the margin only for
+   that case leaves the "pull up under a heading" behavior intact everywhere else. */
+main > p.hint:first-of-type { margin-top: 0; }
 
 .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
 
@@ -2147,10 +2178,14 @@ main > .hint:first-child { margin-top: 0; }
 /* Toggles a dashboard's own pin into the sidebar (see "Favorite Dashboards" under Monitor in
    partials/head.ejs; the forms this button belongs to live in dashboards.ejs and
    dashboard-detail.ejs). The star icon itself (see icons.js) is a plain outline like every other
-   icon here; filling it in is purely this class, not a second icon definition. */
-.favorite-toggle-btn.is-favorited { color: var(--warning); }
+   icon here; filling it in is purely this class, not a second icon definition.
+   !important here (as with .table-toolbar's margin above): the dashboards.ejs list puts this
+   button inside a <td>, where the generic td button:not(...) skin rule's four :not() classes
+   out-specificity this two-class selector and silently reset it back to grey — easier to just
+   win outright than to out-specificity a catch-all rule meant for plain buttons. */
+.favorite-toggle-btn.is-favorited { color: var(--warning) !important; background: var(--warning-soft) !important; border-color: var(--warning) !important; }
 .favorite-toggle-btn.is-favorited .icon { fill: currentColor; }
-.favorite-toggle-btn.is-favorited:hover { color: var(--warning); }
+.favorite-toggle-btn.is-favorited:hover { color: var(--warning) !important; background: var(--warning-soft) !important; border-color: var(--warning) !important; }
 
 /* Colored at rest (not just on hover) so an icon-only edit/delete action is recognizable by
    color + icon alone, matching the colored .btn-edit/.danger pill buttons elsewhere. */
@@ -2160,6 +2195,10 @@ main > .hint:first-child { margin-top: 0; }
 .icon-btn-danger:hover { color: #fff; background: var(--danger); }
 .icon-btn-add { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
 .icon-btn-add:hover { color: #fff; background: var(--accent); }
+
+/* The "?" hints-toggle button (see foot.ejs) — same accent treatment as .icon-btn-add above, so
+   "hints are currently hidden" reads as a clear on/off state instead of a plain hover-only button. */
+.hints-toggle-btn.active { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
 
 /* Reset-to-default (panel-grid.ejs) sits alongside Edit/Duplicate/Delete, which all have an
    always-visible bordered box (not the base .icon-btn's transparent one) — neutral/gray rather
@@ -2534,6 +2573,13 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
    partly behind the drawer itself, or squeezed into a thin sliver at the edge of the remaining
    visible area. */
 .dash-panel.editing { z-index: 95; box-shadow: 0 0 0 2px var(--accent), var(--shadow-lg); transition: left 0.2s var(--ease), top 0.2s var(--ease); }
+
+/* Monitor detail page's own equivalent of .dash-panel.editing above (see the syncBackdrop JS in
+   monitor-detail.ejs, which also re-centers it exactly the way centerEditingPanel() does for a
+   dashboard panel) — same treatment, just on the one chart card this page actually has, so it
+   stays sharp and highlighted next to the drawer while the title/tabs/history table behind it
+   stay blurred like everything not currently being edited. */
+#monitor-chart-wrap.editing { z-index: 95; box-shadow: 0 0 0 2px var(--accent), var(--shadow-lg); }
 
 .dash-panel-resize-handle {
   position: absolute;

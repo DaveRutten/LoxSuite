@@ -27,16 +27,16 @@
       <% dashboards.forEach(d => { %>
         <tr>
           <td>
-            <form class="inline" method="post" action="/dashboards/<%= d.id %>/<%= d.isFavorited ? 'unfavorite' : 'favorite' %>">
-              <input type="hidden" name="redirect_to" value="/dashboards">
-              <button type="submit" class="icon-btn favorite-toggle-btn <%= d.isFavorited ? 'is-favorited' : '' %>" title="<%= d.isFavorited ? 'Remove from sidebar' : 'Add to sidebar (Monitor → Favorite Dashboards)' %>" aria-label="<%= d.isFavorited ? 'Remove from sidebar' : 'Add to sidebar' %>"><%- icon('star') %></button>
-            </form>
             <a href="/dashboards/<%= d.id %>"><%= d.name %></a>
           </td>
           <td><%= d.panelCount %></td>
           <td>
             <div class="row-actions">
               <a class="inline" href="/dashboards/<%= d.id %>"><button type="button"><%- icon('list') %> Open</button></a>
+              <form class="inline" method="post" action="/dashboards/<%= d.id %>/<%= d.isFavorited ? 'unfavorite' : 'favorite' %>">
+                <input type="hidden" name="redirect_to" value="/dashboards">
+                <button type="submit" class="btn-soft favorite-toggle-btn <%= d.isFavorited ? 'is-favorited' : '' %>" title="<%= d.isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>"><%- icon('star') %> <%= d.isFavorited ? 'Remove from favorite' : 'Add to favorite' %></button>
+              </form>
               <button type="button" class="btn-edit" data-toggle-row="dash-rename-<%= d.id %>"><%- icon('edit') %> Rename</button>
               <button type="button" class="btn-edit" data-toggle-row="dash-share-<%= d.id %>"><%- icon('share') %> Share<%= d.shareCount > 0 ? ` (${d.shareCount})` : '' %></button>
               <form class="inline" method="post" action="/dashboards/<%= d.id %>/delete" data-confirm="Delete this dashboard and all of its panels? Monitors themselves are not affected.">
@@ -151,16 +151,20 @@
         <% sharedWithMe.forEach(d => { %>
           <tr>
             <td>
-              <form class="inline" method="post" action="/dashboards/<%= d.id %>/<%= d.isFavorited ? 'unfavorite' : 'favorite' %>">
-                <input type="hidden" name="redirect_to" value="/dashboards">
-                <button type="submit" class="icon-btn favorite-toggle-btn <%= d.isFavorited ? 'is-favorited' : '' %>" title="<%= d.isFavorited ? 'Remove from sidebar' : 'Add to sidebar (Monitor → Favorite Dashboards)' %>" aria-label="<%= d.isFavorited ? 'Remove from sidebar' : 'Add to sidebar' %>"><%- icon('star') %></button>
-              </form>
               <a href="/dashboards/<%= d.id %>"><%= d.name %></a>
             </td>
             <td><%= d.ownerName %></td>
             <td><%= d.panelCount %></td>
             <td><span class="badge badge-live <%= d.canEdit ? 'badge-ok' : 'badge-neutral' %>"><%= d.canEdit ? 'Editor' : 'Viewer' %></span></td>
-            <td><a class="inline" href="/dashboards/<%= d.id %>"><button type="button"><%- icon('list') %> Open</button></a></td>
+            <td>
+              <div class="row-actions">
+                <a class="inline" href="/dashboards/<%= d.id %>"><button type="button"><%- icon('list') %> Open</button></a>
+                <form class="inline" method="post" action="/dashboards/<%= d.id %>/<%= d.isFavorited ? 'unfavorite' : 'favorite' %>">
+                  <input type="hidden" name="redirect_to" value="/dashboards">
+                  <button type="submit" class="btn-soft favorite-toggle-btn <%= d.isFavorited ? 'is-favorited' : '' %>" title="<%= d.isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>"><%- icon('star') %> <%= d.isFavorited ? 'Remove from favorite' : 'Add to favorite' %></button>
+                </form>
+              </div>
+            </td>
           </tr>
         <% }) %>
       </tbody>

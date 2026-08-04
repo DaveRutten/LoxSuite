@@ -78,12 +78,18 @@ module.exports = function loadUserContext(req, res, next) {
   // Computed fresh per-request like everything else here (no session caching) — correct on first
   // paint with zero extra round-trip; the topbar's own periodic poll (see foot.ejs) only has to
   // catch events that land while the user sits on one page without navigating.
-  res.locals.unreadNotificationCount = db.prepare('SELECT COUNT(*) AS n FROM notification_events WHERE id > ?').get(user.last_seen_notification_id).n;
-  // Dismissed (see routes/notificationCenter.js's own /:id/dismiss) is purely about what shows up
-  // in THIS user's own popover list — unrelated to the unread count above, which stays keyed off
-  // last_seen_notification_id regardless of anything dismissed here. Shared query (not repeated
-  // here) with that same file's own /recent endpoint, which foot.ejs polls to keep this list from
-  // going stale between full page loads — see that endpoint's own comment for why that's needed.
+  // Unread = past the bulk watermark AND not individually dismissed — see
+  // routes/notificationCenter.js's own /unread-count for why both conditions matter (a per-item
+  // acknowledgement — clicking through to one event's source, or its own "x" — must not also
+  // silently mark every OTHER older, never-looked-at event as read the way a watermark-only check
+  // used to).
+  res.locals.unreadNotificationCount = db.prepare(`
+    SELECT COUNT(*) AS n FROM notification_events
+    WHERE id > ? AND id NOT IN (SELECT notification_event_id FROM notification_dismissals WHERE user_id = ?)
+  `).get(user.last_seen_notification_id, user.id).n;
+  // Shared query (not repeated here) with that same file's own /recent endpoint, which foot.ejs
+  // polls to keep this list from going stale between full page loads — see that endpoint's own
+  // comment for why that's needed.
   res.locals.recentNotifications = loadRecentNotifications(user.id);
   res.locals.tablePageSize = user.table_page_size || 25;
 

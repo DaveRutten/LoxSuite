@@ -1,13 +1,5 @@
 <%- include('partials/head', { pageTitle: 'Logs', active: 'logs-loxone-commands', refresh: 5, liveSwap: true }) %>
 
-<div class="tabs">
-  <% if (canView('logs_mqtt')) { %><a href="/logs/mqtt">MQTT broker</a><% } %>
-  <% if (canView('logs_loxone')) { %><a href="/logs/loxone">Loxone Miniservers</a><% } %>
-  <a class="active" href="/logs/loxone-commands">Loxone commands</a>
-  <% if (canView('logs_system')) { %><a href="/logs/system">System</a><% } %>
-  <% if (canView('logs_notifications')) { %><a href="/logs/notifications">Notifications</a><% } %>
-</div>
-
 <p class="hint">
   Every Virtual Output command Loxone sends this gateway (UDP or HTTP), accepted or rejected —
   who sent it (the configured Miniserver's name when its Host matches the sender's IP, otherwise

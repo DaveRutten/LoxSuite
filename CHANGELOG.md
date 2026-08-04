@@ -2,6 +2,78 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.1-alpha.1] - 2026-08-04
+
+### Added
+- A "?" button next to a chart/panel settings drawer's own star icon (Monitor detail page, Dashboard
+  panels) toggles every help-text paragraph in that drawer on/off, sitewide — hidden by default
+  (someone configuring their hundredth panel doesn't need to be told what Stepped line does), one
+  click away for whoever wants it. Highlights in the app's accent color while active, and stays in
+  sync across every panel's own drawer on a dashboard, not just the one it was clicked in.
+- The threshold builder's own help text now explains what **Style** (Line/Band) actually does —
+  previously only a hover tooltip, easy to miss entirely.
+- The favorite-star button on My Dashboards now lives in the row's own Actions group, with an
+  "Add to favorite"/"Remove from favorite" text label, matching the button already on a single
+  dashboard's own page.
+- The sidebar's version number is now a link to this project's GitHub releases, combined onto one
+  line with the "update available" badge instead of two stacked lines. Administration > General's
+  own version card shows Installed/Available on separate lines and adds a GitHub page button
+  alongside Check for updates/View changelog.
+- Logs now has its own expandable sidebar section (System, Notifications, Loxone Miniservers,
+  Loxone Commands, MQTT Broker) instead of one flat link — the in-page tab strip repeated at the
+  top of each of the five Logs pages was removed since the sidebar now covers that navigation.
+- Live Data (Loxone) now has its own row in Access Roles instead of silently piggybacking on the
+  Miniservers permission — existing roles keep whatever access to it they already had via
+  Miniservers, this just makes the two independently grantable going forward.
+
+### Fixed
+- **Notifications**: clicking through to one unread notification's source (or dismissing it) no
+  longer incorrectly marks every OTHER, never-looked-at notification as read too — confirmed as a
+  real bug (2 unread events, clicking the newer one's link cleared the badge to 0 instead of 1). The
+  unread count and the initial page-load badge now both check genuine per-item acknowledgement
+  instead of a single shared watermark that any one item's id could jump ahead of the others on.
+- A monitor/dashboard chart's y-axis now leaves ~10% headroom above/below the actual data range —
+  a line no longer runs flush along the very top/bottom edge of the chart area.
+- The "?" hints-toggle button's own color was backwards — green ("active") lit up the moment hints
+  were HIDDEN, the default state, instead of when they're shown. Green now means "help text is
+  currently on," matching the same convention the Hardware page's own Alert buttons already use.
+- A threshold line's value label flips to below the line instead of above it when there isn't
+  enough room to the chart's own top edge — previously it could get clipped clean off by the
+  canvas's own edge for a threshold sitting near the top of a tight range.
+- The Monitor detail page's own chart settings drawer no longer blurs the chart underneath it while
+  open — the chart now lifts above the backdrop, gets the same accent-colored highlight border, and
+  re-centers next to the drawer, exactly matching how a dashboard's own panel-being-edited already
+  behaves (only the title/range tabs/history table stay blurred, same as everything NOT currently
+  being edited on a dashboard). Its width now also always shrinks to actually fit next to the
+  drawer instead of just centering within room that might not be there, with a guaranteed gap on
+  both sides of the highlighted card rather than however much (or little) centering happened to
+  leave over.
+- The pagination bar's row count ("N rows") is no longer bunched up hard against the Next button
+  with an inconsistent double gap — it's now pinned to the opposite side, clearly separated from
+  the Prev/page-numbers/Next cluster.
+- A dashboard panel's "Edit panel" drawer's own Close (×) button rendered narrower than the star/"?"
+  buttons beside it — it was a plain `&times;` character instead of the same SVG icon the other two
+  use, so its box shrank to fit a smaller glyph. All three are the same width now.
+- A dashboard's My Dashboards list rendered its favorite star grey even when a dashboard genuinely
+  was favorited (a generic table-button style rule was winning a same-specificity CSS tie against
+  the favorited-state color) — now consistently amber/filled everywhere, list and detail page alike.
+- The pagination row count still wasn't vertically centered with the Prev/page-number/Next buttons
+  in every case (a leftover margin from the shared `.hint` class was itself winning a further
+  same-specificity cascade fight) — and single-digit page buttons (1, 2, 3…) had their number
+  sitting visibly left of center within the button's own minimum width.
+- Dark theme: the small "Loxone (direct, polled): ..." subtitle line under a page's title had
+  noticeably lower contrast against the accent-colored glow behind the header — brightened.
+- The very same subtitle line had its own top ~6px clipped off on any page that renders an
+  invisible overlay element before it in the markup — e.g. the Monitor detail page's own edit
+  backdrop, present only when you can edit the chart — because the existing anti-clipping CSS only
+  matched a hint that's the literal first child of `<main>`, not the first *visible* one.
+- style.css/tables.js/monitor-chart.js are now served with a cache-busting version query tied to
+  this run's own boot time, so a browser that cached an older copy always picks up the actual
+  current files after a restart instead of needing a manual hard refresh.
+- Radar/spiderweb charts: the web/spoke lines and axis value labels used Chart.js's fixed default
+  styling, nearly invisible on dark theme; both are now theme-aware, and the little backdrop box
+  behind each axis number is gone.
+
 ## [0.9.0-alpha.1] - 2026-08-04
 
 ### Added

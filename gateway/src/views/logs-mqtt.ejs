@@ -1,13 +1,5 @@
 <%- include('partials/head', { pageTitle: 'Logs', active: 'logs-mqtt', refresh: 5, liveSwap: true }) %>
 
-<div class="tabs">
-  <a class="active" href="/logs/mqtt">MQTT broker</a>
-  <% if (canView('logs_loxone')) { %><a href="/logs/loxone">Loxone Miniservers</a><% } %>
-  <% if (canView('logs_loxone_commands')) { %><a href="/logs/loxone-commands">Loxone commands</a><% } %>
-  <% if (canView('logs_system')) { %><a href="/logs/system">System</a><% } %>
-  <% if (canView('logs_notifications')) { %><a href="/logs/notifications">Notifications</a><% } %>
-</div>
-
 <p class="hint">
   Raw lines from the Mosquitto broker's own log file, newest first, refreshing every 5 seconds.
   Persisted in SQLite and kept for <strong><%= retentionDays %></strong> days &mdash;

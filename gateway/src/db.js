@@ -686,6 +686,24 @@ function migrateLogsAreaSplit() {
   }
 }
 
+// Live Data (Loxone) used to just piggyback on the 'miniservers' permission (see server.js's
+// requirePermission on /live-data) — split into its own area so a role can be trusted with the
+// Miniservers list/settings without also getting live value/command access, or vice versa. Unlike
+// the logs split below, 'miniservers' itself stays a real, separate area afterward — this only
+// seeds the new 'live_data' area from whatever a role already had under 'miniservers', so nobody
+// silently loses access they already had. Runs before backfillNewAreaPermissions() for the same
+// reason as migrateLogsAreaSplit().
+function migrateLiveDataAreaSplit() {
+  const oldRows = db.prepare("SELECT role_id, can_view, can_edit FROM access_role_permissions WHERE area = 'miniservers'").all();
+  const hasPerm = db.prepare('SELECT 1 FROM access_role_permissions WHERE role_id = ? AND area = ?');
+  const insertPerm = db.prepare('INSERT INTO access_role_permissions (role_id, area, can_view, can_edit) VALUES (?, ?, ?, ?)');
+  for (const { role_id: roleId, can_view: canView, can_edit: canEdit } of oldRows) {
+    if (hasPerm.get(roleId, 'live_data')) continue;
+    insertPerm.run(roleId, 'live_data', canView, canEdit);
+  }
+}
+
+migrateLiveDataAreaSplit();
 migrateLogsAreaSplit();
 backfillNewAreaPermissions();
 

@@ -99,6 +99,12 @@ const app = express();
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+// Cache-busting query string for /style.css, /tables.js, /monitor-chart.js (see head.ejs,
+// foot.ejs, monitor-detail.ejs, panel-grid.ejs) — set once at boot rather than per-request, so a
+// browser that cached last version's assets picks up this restart's actual files immediately
+// instead of needing a manual hard-refresh, while every request within the same run still shares
+// one cache-friendly value.
+app.locals.assetVersion = Date.now();
 app.locals.icon = icon;
 app.locals.toggleSwitch = toggleSwitch;
 app.locals.formatDateTime = formatDateTime;
@@ -186,7 +192,7 @@ app.get('/', requireAuth, requirePermission('dashboard', 'view'), (req, res) => 
 });
 
 app.use('/miniservers', requireAuth, requirePermission('miniservers', 'view'), miniserverRoutes);
-app.use('/live-data', requireAuth, requirePermission('miniservers', 'view'), liveDataRoutes);
+app.use('/live-data', requireAuth, requirePermission('live_data', 'view'), liveDataRoutes);
 // mappings.js serves three distinct areas (mqtt_to_loxone/loxone_to_mqtt/commands) under one
 // router, so it's gated per-route inside that file instead of once here.
 app.use('/mappings', requireAuth, mappingRoutes);

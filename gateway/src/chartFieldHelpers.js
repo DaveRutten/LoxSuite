@@ -46,7 +46,7 @@ function thresholdField(fieldName, ladder, allowNotify) {
       <div class="threshold-builder-rows"></div>
       <button type="button" class="btn-soft threshold-add-row">${icon('plus')} Add threshold</button>
       <textarea name="${fieldName}" class="threshold-builder-hidden" hidden>${escAttr(serializeThresholdLadder(ladder))}</textarea>
-      <p class="hint" style="margin:0.4rem 0 0;">A reading is colored using the highest threshold it meets or exceeds.${allowNotify ? ' Check "Notify" on a rung to also send it to the Notification Center when a reading enters it — evaluated from this page\'s own ladder only, not any dashboard panel\'s.' : ''}</p>
+      <p class="hint" style="margin:0.4rem 0 0;">A reading is colored using the highest threshold it meets or exceeds. <strong>Style</strong> only visibly changes anything on a Chart panel: <strong>Line</strong> draws a dashed horizontal line at that value; <strong>Band</strong> fills the zone from that value up to the next threshold above it (or to the top of the chart, for the highest one) — everything else (Table, Gauge, Stat, Threshold indicator) only ever uses the color.${allowNotify ? ' Check "Notify" on a rung to also send it to the Notification Center when a reading enters it — evaluated from this page\'s own ladder only, not any dashboard panel\'s.' : ''}</p>
     </div>
   </details>`;
 }

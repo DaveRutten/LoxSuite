@@ -20,7 +20,7 @@
 </aside>
 <span class="help-drawer-resize-handle" title="Drag to resize"></span>
 
-<script src="/tables.js" defer></script>
+<script src="/tables.js?v=<%= assetVersion %>" defer></script>
 <script>
   // Stamps the CSRF token (see middleware/csrf.js) onto every plain-HTML form on the page,
   // instead of hand-adding a hidden field to each of the ~40 view files that have one. Exposed on
@@ -445,6 +445,52 @@
       var next = current === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('theme', next);
+    });
+  })();
+</script>
+<script>
+  // The "?" button next to a panel/chart settings drawer's own star (save-as-default) icon
+  // (monitor-detail.ejs, panel-grid.ejs) — hides every .hint paragraph inside a settings drawer,
+  // a display preference (not app data, hence localStorage not a DB setting) that applies to every
+  // drawer on every page at once, same as the theme toggle above. A brand-new user benefits from
+  // the hints; someone who's configured a hundred panels already knows what Stepped line does and
+  // would rather the form read shorter.
+  (function () {
+    var STORAGE_KEY = 'loxsuite-panel-hints-hidden';
+    // One shared state, every button on the page reflects it — a dashboard can have many panels,
+    // each with its own drawer and its own "?" button; toggling one toggles them all, including
+    // ones added later (a new panel's own button gets this class the next time applyState runs,
+    // e.g. right after the click that added it re-renders the toolbar).
+    function applyState(hidden) {
+      document.body.classList.toggle('panel-hints-hidden', hidden);
+      document.querySelectorAll('.hints-toggle-btn').forEach(function (btn) {
+        // Green/"active" means "help text is currently ON" (same convention as the Hardware page's
+        // own Alert buttons — green = the thing is currently doing something) — NOT "hiding is
+        // active", which read backwards (green right after hiding them, the default state).
+        btn.classList.toggle('active', !hidden);
+        btn.title = hidden ? 'Show the help text under each field' : 'Hide the help text under each field';
+      });
+    }
+    // Hidden by default (no stored preference yet) — an unset key reads back as null, not '0', so
+    // this has to check for the explicit "shown" value rather than the more obvious-looking
+    // `=== '1'` (which would default to shown).
+    applyState(localStorage.getItem(STORAGE_KEY) !== '0');
+
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('.hints-toggle-btn')) {
+        var hidden = !document.body.classList.contains('panel-hints-hidden');
+        applyState(hidden);
+        localStorage.setItem(STORAGE_KEY, hidden ? '1' : '0');
+        return;
+      }
+      // Opening a DIFFERENT drawer (a dashboard has one settings-form + one "?" button per panel,
+      // all already in the DOM, just individually toggled — see [data-toggle-row] elsewhere in
+      // this file) doesn't run this IIFE again, so that button's own .active class would otherwise
+      // only ever get set by the one-time call above, before this specific button existed to find —
+      // re-applying the CURRENT (unchanged) state on every click is cheap and catches it regardless.
+      if (e.target.closest('[data-toggle-row]')) {
+        applyState(document.body.classList.contains('panel-hints-hidden'));
+      }
     });
   })();
 </script>

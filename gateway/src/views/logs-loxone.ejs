@@ -1,13 +1,5 @@
 <%- include('partials/head', { pageTitle: 'Logs', active: 'logs-loxone', refresh: 5, liveSwap: true }) %>
 
-<div class="tabs">
-  <% if (canView('logs_mqtt')) { %><a href="/logs/mqtt">MQTT broker</a><% } %>
-  <a class="active" href="/logs/loxone">Loxone Miniservers</a>
-  <% if (canView('logs_loxone_commands')) { %><a href="/logs/loxone-commands">Loxone commands</a><% } %>
-  <% if (canView('logs_system')) { %><a href="/logs/system">System</a><% } %>
-  <% if (canView('logs_notifications')) { %><a href="/logs/notifications">Notifications</a><% } %>
-</div>
-
 <p class="hint">
   Real log lines fetched from each Miniserver's own <code>def.log</code>, newest first, refreshing
   every 5 seconds. The gateway polls each Miniserver every minute (there's no push channel for this on

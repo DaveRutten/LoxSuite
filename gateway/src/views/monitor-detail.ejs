@@ -1,5 +1,9 @@
 <%- include('partials/head', { pageTitle: monitor.label, active: 'monitor' }) %>
 
+<% if (hasNumeric && canEdit('monitor')) { %>
+<div id="monitor-chart-backdrop" class="panel-edit-backdrop"></div>
+<% } %>
+
 <p class="hint">
   <%= monitor.source_type === 'mqtt' ? 'MQTT topic' : monitor.source_type === 'miniserver_diag' ? 'Miniserver diagnostic' : 'Loxone (direct, polled)' %>:
   <% if (monitor.source_type === 'mqtt') { %>
@@ -48,10 +52,6 @@
   </div>
 </div>
 
-<% if (hasNumeric && canEdit('monitor')) { %>
-<div id="monitor-chart-backdrop" class="panel-edit-backdrop"></div>
-<% } %>
-
 <div id="monitor-meta" data-monitor-id="<%= monitor.id %>" data-range="<%= range %>" data-group-mode="<%= groupMode %>" hidden></div>
 
 <% if (hasNumeric) { %>
@@ -84,6 +84,7 @@
               // on every save already (see the main Save button below).
             %>
             <button type="submit" formaction="/monitor/<%= monitor.id %>/chart-settings/save-as-default" class="icon-btn icon-btn-neutral" title="Save these settings as the shared default for every monitor's chart"><%- icon('star') %></button>
+            <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('help') %></button>
             <% if (chartDefaultExists) { %>
             <button type="submit" formaction="/monitor/<%= monitor.id %>/chart-settings/reset-to-default" class="icon-btn icon-btn-neutral" title="Apply the shared default chart style to this monitor"><%- icon('refresh') %></button>
             <% } %>
@@ -144,7 +145,7 @@
   <%
     var canvasStepped = config.stepped === true ? 'before' : (config.stepped || '');
   %>
-  <div class="card chart-wrap">
+  <div class="card chart-wrap" id="monitor-chart-wrap">
     <canvas data-monitor-ids="<%= monitor.id %>" data-range="<%= range %>" data-range-until="<%= rangeUntilMs || '' %>" height="90"
       data-legend="<%= config.legendPosition || 'auto' %>" data-unit="<%= config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>"
       data-fill="<%= config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= config.curveTension != null ? config.curveTension : 0.15 %>"
@@ -202,23 +203,92 @@
   <script>
     // Same fixed-drawer pattern as a dashboard chart panel's own Edit form (see .panel-settings-form
     // in style.css and its backdrop script in panel-grid.ejs) — reuses the same CSS/classes so it
-    // looks and behaves identically, just without that script's panel-grid-specific re-centering
-    // (there's no multi-panel grid on this page to make room in). The open/close toggle itself is
-    // already handled by the generic [data-toggle-row] delegated handler in foot.ejs; this only
-    // syncs the backdrop to match and adds click/Escape-to-close.
+    // looks and behaves identically, INCLUDING that script's own re-centering of the one thing
+    // being edited (here: the chart card, #monitor-chart-wrap — there's no multi-panel grid on this
+    // page, just the one chart to lift and reposition next to the drawer while everything else
+    // behind it stays blurred). The open/close toggle itself is already handled by the generic
+    // [data-toggle-row] delegated handler in foot.ejs; this only syncs the backdrop/chart to match
+    // and adds click/Escape-to-close.
     (function () {
       var backdrop = document.getElementById('monitor-chart-backdrop');
       var form = document.getElementById('monitor-chart-settings');
+      var chartWrap = document.getElementById('monitor-chart-wrap');
       if (!backdrop || !form) return;
 
-      function syncBackdrop() { backdrop.classList.toggle('open', form.classList.contains('open')); }
-      function closeAll() { form.classList.remove('open'); backdrop.classList.remove('open'); }
+      // Adapted from centerEditingPanel() in panel-grid.ejs — that version can afford to just bail
+      // out and leave a panel at its natural grid position when it doesn't fit next to the drawer,
+      // because a dashboard panel is already one narrow cell in a grid, well short of the full
+      // content width. This page has no grid — the chart's natural width is close to the ENTIRE
+      // main content column — so "doesn't fit, leave it alone" would leave it exactly as wide as
+      // before, still overlapping the drawer. Always clamps width to the available space instead
+      // (a real reflow/shrink, not just centering within room that may not exist), and re-measures
+      // the natural width from a clean slate every time — reading getBoundingClientRect() while a
+      // PREVIOUS call's own inline width is still applied would just measure that stale value back.
+      function centerChart() {
+        if (!chartWrap) return;
+        var drawerWidth = form.classList.contains('open') ? form.getBoundingClientRect().width : 0;
+        // `left` below is relative to the VIEWPORT (position:fixed), not to .content — has to
+        // start past the sidebar's own right edge, or a chart on a wide-enough viewport ends up
+        // (mostly) hidden under the sidebar instead of merely close to it. panel-grid.ejs's own
+        // centerEditingPanel() doesn't need this: a dashboard panel is already narrow enough
+        // (one grid cell) that this never came up there, but this page's chart is close to the
+        // full content width, so it actually reaches that boundary.
+        var sidebar = document.querySelector('.sidebar');
+        var contentLeft = sidebar ? sidebar.getBoundingClientRect().right : 0;
+        var availableWidth = window.innerWidth - drawerWidth - contentLeft;
+
+        chartWrap.style.position = '';
+        chartWrap.style.left = '';
+        chartWrap.style.top = '';
+        chartWrap.style.width = '';
+        chartWrap.style.margin = '';
+        var rect = chartWrap.getBoundingClientRect();
+
+        // Guaranteed breathing room OUTSIDE the highlighted card on both sides — not just whatever
+        // slack centering happens to leave, which can be ~0 on a wide viewport where the chart's
+        // natural width already nearly fills availableWidth.
+        var outerPad = 24;
+        var width = Math.max(200, Math.min(rect.width, availableWidth - outerPad * 2));
+        var left = contentLeft + Math.max(outerPad, Math.round((availableWidth - width) / 2));
+        var top = Math.max(outerPad, Math.round((window.innerHeight - rect.height) / 2));
+        chartWrap.style.position = 'fixed';
+        chartWrap.style.left = left + 'px';
+        chartWrap.style.top = top + 'px';
+        chartWrap.style.width = Math.round(width) + 'px';
+        chartWrap.style.margin = '0';
+      }
+      function resetChartPosition() {
+        if (!chartWrap) return;
+        chartWrap.style.position = '';
+        chartWrap.style.left = '';
+        chartWrap.style.top = '';
+        chartWrap.style.width = '';
+        chartWrap.style.margin = '';
+      }
+
+      function syncBackdrop() {
+        var open = form.classList.contains('open');
+        backdrop.classList.toggle('open', open);
+        if (chartWrap) {
+          chartWrap.classList.toggle('editing', open);
+          if (open) centerChart(); else resetChartPosition();
+        }
+      }
+      function closeAll() {
+        form.classList.remove('open');
+        backdrop.classList.remove('open');
+        if (chartWrap) { chartWrap.classList.remove('editing'); resetChartPosition(); }
+      }
 
       document.addEventListener('click', function (e) {
         if (e.target.closest('[data-toggle-row="monitor-chart-settings"]')) setTimeout(syncBackdrop, 0);
       });
       backdrop.addEventListener('click', closeAll);
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+      // The drawer's own drag-to-resize (panel-drawer-resize.js) changes drawerWidth mid-drag, same
+      // reason panel-grid.ejs recomputes on resize — both change how much space is left to center in.
+      window.addEventListener('resize', function () { if (chartWrap && chartWrap.classList.contains('editing')) centerChart(); });
+      window.recenterEditingPanel = function () { if (chartWrap && chartWrap.classList.contains('editing')) centerChart(); };
     })();
   </script>
   <script>
@@ -313,7 +383,7 @@
 %>
 <script src="/vendor/hammer.min.js"></script>
 <script src="/vendor/chartjs-plugin-zoom.min.js"></script>
-<script src="/monitor-chart.js" defer></script>
+<script src="/monitor-chart.js?v=<%= assetVersion %>" defer></script>
 <script>
   // "?open=settings" (see notificationLinks.js) — a threshold-ladder notification lands here
   // with this set, so it opens straight into the same Chart settings drawer the "edit" icon

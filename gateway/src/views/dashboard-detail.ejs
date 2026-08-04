@@ -9,8 +9,8 @@
   </span>
   <form method="post" action="/dashboards/<%= dashboard.id %>/<%= isFavorited ? 'unfavorite' : 'favorite' %>" style="margin-left:auto;">
     <input type="hidden" name="redirect_to" value="/dashboards/<%= dashboard.id %>">
-    <button type="submit" class="btn-soft favorite-toggle-btn <%= isFavorited ? 'is-favorited' : '' %>" title="<%= isFavorited ? 'Remove from the sidebar (Monitor → Favorite Dashboards)' : 'Add to the sidebar (Monitor → Favorite Dashboards)' %>">
-      <%- icon('star') %> <%= isFavorited ? 'In sidebar' : 'Add to sidebar' %>
+    <button type="submit" class="btn-soft favorite-toggle-btn <%= isFavorited ? 'is-favorited' : '' %>" title="<%= isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>">
+      <%- icon('star') %> <%= isFavorited ? 'Remove from favorite' : 'Add to favorite' %>
     </button>
   </form>
 </p>

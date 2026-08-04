@@ -7,7 +7,7 @@
   <meta name="display-timezone" content="<%= displayTimezone %>">
   <title><%= pageTitle %> · LoxSuite</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=<%= assetVersion %>">
   <script>
     // Applied before first paint to avoid a flash of the wrong theme.
     (function () {
@@ -59,7 +59,7 @@
       const brokerHref = (brokerAreas.find((a) => canView(a.key)) || {}).href;
       const brokerActive = ['mqtt-users', 'mqtt-roles', 'broker-settings'].includes(active);
 
-      const loxoneSectionVisible = canView('miniservers') || canView('hardware') || !!mappingsHref;
+      const loxoneSectionVisible = canView('miniservers') || canView('live_data') || canView('hardware') || !!mappingsHref;
       const mqttSectionVisible = canView('incoming') || !!brokerHref;
 
       // A section stays expanded regardless of the user's saved preference while they're actually
@@ -107,7 +107,7 @@
         </button>
         <div class="nav-group" <%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'hidden' : '' %>>
           <% if (canView('miniservers')) { %><a href="/miniservers" class="<%= active === 'miniservers' ? 'active' : '' %>">Miniservers</a><% } %>
-          <% if (canView('miniservers')) { %><a href="/live-data" class="<%= active === 'live-data' ? 'active' : '' %>">Live Data</a><% } %>
+          <% if (canView('live_data')) { %><a href="/live-data" class="<%= active === 'live-data' ? 'active' : '' %>">Live Data</a><% } %>
           <% if (canView('hardware')) { %><a href="/hardware" class="<%= active === 'hardware' ? 'active' : '' %>">Hardware</a><% } %>
           <% if (mappingsHref) { %><a href="<%= mappingsHref %>" class="<%= mappingsActive ? 'active' : '' %>">Mappings</a><% } %>
         </div>
@@ -125,7 +125,23 @@
         </div>
       <% } %>
 
-      <% if (canView('logs_mqtt') || canView('logs_loxone') || canView('logs_loxone_commands') || canView('logs_system')) { %><a href="/logs" class="<%= (active === 'logs-mqtt' || active === 'logs-loxone' || active === 'logs-loxone-commands' || active === 'logs-system') ? 'active' : '' %>">Logs</a><% } %>
+      <%
+        const logActiveKeys = ['logs-system', 'logs-notifications', 'logs-loxone', 'logs-loxone-commands', 'logs-mqtt'];
+        const logsSectionVisible = canView('logs_system') || canView('logs_notifications') || canView('logs_loxone') || canView('logs_loxone_commands') || canView('logs_mqtt');
+      %>
+      <% if (logsSectionVisible) { %>
+        <% const logsExpanded = logActiveKeys.includes(active); %>
+        <button type="button" class="nav-section-label" data-nav-section="logs" aria-expanded="<%= isCollapsed('logs', logsExpanded) ? 'false' : 'true' %>">
+          <span>Logs</span><%- icon('chevron') %>
+        </button>
+        <div class="nav-group" <%= isCollapsed('logs', logsExpanded) ? 'hidden' : '' %>>
+          <% if (canView('logs_system')) { %><a href="/logs/system" class="<%= active === 'logs-system' ? 'active' : '' %>">System</a><% } %>
+          <% if (canView('logs_notifications')) { %><a href="/logs/notifications" class="<%= active === 'logs-notifications' ? 'active' : '' %>">Notifications</a><% } %>
+          <% if (canView('logs_loxone')) { %><a href="/logs/loxone" class="<%= active === 'logs-loxone' ? 'active' : '' %>">Loxone Miniservers</a><% } %>
+          <% if (canView('logs_loxone_commands')) { %><a href="/logs/loxone-commands" class="<%= active === 'logs-loxone-commands' ? 'active' : '' %>">Loxone Commands</a><% } %>
+          <% if (canView('logs_mqtt')) { %><a href="/logs/mqtt" class="<%= active === 'logs-mqtt' ? 'active' : '' %>">MQTT Broker</a><% } %>
+        </div>
+      <% } %>
     </nav>
     <button type="button" id="theme-toggle" class="theme-toggle"><%- icon('theme') %> Toggle theme</button>
     <%
@@ -135,11 +151,11 @@
       const versionStatus = getVersionStatus();
     %>
     <div class="sidebar-version">
-      <span>v<%= versionStatus.currentVersion %></span>
+      <a href="https://github.com/DaveRutten/LoxSuite/releases" target="_blank" rel="noopener" class="sidebar-version-current" title="View releases on GitHub">v<%= versionStatus.currentVersion %></a>
       <% if (versionStatus.updateAvailable) { %>
         <a href="https://github.com/DaveRutten/LoxSuite/releases" target="_blank" rel="noopener"
            class="sidebar-version-update" title="Running v<%= versionStatus.currentVersion %> — v<%= versionStatus.latestVersion %> is available on GitHub">
-          <%- icon('refresh') %> Update available
+          <%- icon('refresh') %> v<%= versionStatus.latestVersion %> available
         </a>
       <% } %>
     </div>

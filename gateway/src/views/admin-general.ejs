@@ -22,19 +22,21 @@
 <div class="card">
   <h2>LoxSuite version</h2>
   <p class="hint">
-    Running v<%= versionStatus.currentVersion %>.
-    <% if (versionStatus.updateAvailable) { %>
-      v<%= versionStatus.latestVersion %> is available on
-      <a href="https://github.com/DaveRutten/LoxSuite/releases" target="_blank" rel="noopener">GitHub</a>.
-    <% } else if (versionStatus.latestVersion) { %>
-      Up to date.
-    <% } else if (versionStatus.lastCheckReached === false) { %>
-      Could not reach GitHub (offline, timeout, or rate-limited).
-    <% } else if (versionStatus.lastCheckReached === true) { %>
-      No release tags found on GitHub yet.
-    <% } else { %>
-      Not checked yet.
-    <% } %>
+    <span style="display:block;">Installed: <strong style="color:var(--text);">v<%= versionStatus.currentVersion %></strong></span>
+    <span style="display:block;">
+      Available:
+      <% if (versionStatus.updateAvailable) { %>
+        <strong style="color:var(--text);">v<%= versionStatus.latestVersion %></strong>
+      <% } else if (versionStatus.latestVersion) { %>
+        <strong style="color:var(--text);">v<%= versionStatus.latestVersion %></strong> (up to date)
+      <% } else if (versionStatus.lastCheckReached === false) { %>
+        unknown &mdash; could not reach GitHub (offline, timeout, or rate-limited)
+      <% } else if (versionStatus.lastCheckReached === true) { %>
+        unknown &mdash; no release tags found on GitHub yet
+      <% } else { %>
+        unknown &mdash; not checked yet
+      <% } %>
+    </span>
     <% if (versionStatus.checkedAt) { %>
       <span style="display:block; margin-top:0.2rem;">Last checked: <%= formatDateTime(versionStatus.checkedAt) %><% if (justChecked) { %> &mdash; just now<% } %></span>
     <% } %>
@@ -46,6 +48,7 @@
     <% if (versionStatus.updateAvailable && versionStatus.changelog) { %>
       <button type="button" class="btn-soft" id="view-changelog-btn"><%- icon('list') %> View changelog</button>
     <% } %>
+    <a class="inline" href="https://github.com/DaveRutten/LoxSuite" target="_blank" rel="noopener"><button type="button" class="btn-soft"><%- icon('link') %> GitHub page</button></a>
   </div>
 </div>
 

@@ -20,6 +20,7 @@ const AREAS = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'monitor', label: 'Monitor' },
   { key: 'miniservers', label: 'Miniservers' },
+  { key: 'live_data', label: 'Live Data (Loxone)' },
   { key: 'hardware', label: 'Hardware' },
   { key: 'mqtt_to_loxone', label: 'MQTT → Loxone' },
   { key: 'loxone_to_mqtt', label: 'Loxone → MQTT' },

@@ -120,8 +120,17 @@
           ctx.setLineDash([]);
           ctx.fillStyle = t.color;
           ctx.font = '11px sans-serif';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(String(t.value), area.left + 4, y - 2);
+          // Flips the label to below the line instead of above it whenever there isn't enough
+          // headroom to the chart area's own top edge to fit it — a threshold sitting near the top
+          // (a tight y-range, or a value close to the axis max) would otherwise get its label
+          // clipped clean off by the canvas's own edge.
+          if (y - 12 < area.top) {
+            ctx.textBaseline = 'top';
+            ctx.fillText(String(t.value), area.left + 4, y + 2);
+          } else {
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(String(t.value), area.left + 4, y - 2);
+          }
         });
         ctx.restore();
       },
@@ -356,6 +365,11 @@
           // forced beginAtZero) rather than false specifically for that case, since Chart.js's own
           // 'logarithmic' scale already ignores beginAtZero and picks a sensible positive floor.
           beginAtZero: yScaleType === 'linear' ? false : undefined,
+          // 10% of headroom above/below the data's own min/max, so a line doesn't visually run
+          // flush along the very top/bottom edge of the chart area — a no-op whenever min/max
+          // below are explicitly set (a user-fixed axis range), since grace only ever pads an
+          // auto-computed range, never overrides a forced one.
+          grace: '10%',
           min: yMin,
           max: yMax,
           ticks: { callback: function (value) { return formatAxisValue(value, decimals) + (axisUnit.y ? ' ' + axisUnit.y : ''); } },
@@ -367,6 +381,7 @@
       if (usesRightAxis) {
         scales.y1 = {
           beginAtZero: false,
+          grace: '10%',
           position: 'right',
           grid: { drawOnChartArea: false },
           ticks: { callback: function (value) { return formatAxisValue(value, decimals) + (axisUnit.y1 ? ' ' + axisUnit.y1 : ''); } },
@@ -483,7 +498,28 @@
           y: { type: 'linear', beginAtZero: true, ticks: { callback: function (v) { return formatAxisValue(v, decimals) + (unit ? ' ' + unit : ''); } } },
         };
       } else if (chartType === 'polar_area' || chartType === 'radar') {
-        scales = { r: { beginAtZero: true, ticks: { callback: function (v) { return formatAxisValue(v, decimals); } } } };
+        // Chart.js's own radial-scale defaults (web/spoke lines, tick text) are a fixed dark gray
+        // that reads fine on the light theme but all but disappears against a dark --surface — the
+        // rest of this file never needed an explicit color here because a plain Cartesian x/y grid
+        // happens to still read OK either way, but the radar/polar web really doesn't. Ticks also
+        // get their own translucent "backdrop" box by default (meant to keep a tick number legible
+        // over a busy filled shape it might sit on top of) — dropped in favor of just using the
+        // same muted text color as everything else, same reasoning as the tooltip/legend text below.
+        var radialMutedColor = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#888';
+        var radialGridColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || 'rgba(128,128,128,0.3)';
+        scales = {
+          r: {
+            beginAtZero: true,
+            angleLines: { color: radialGridColor },
+            grid: { color: radialGridColor },
+            pointLabels: { color: radialMutedColor },
+            ticks: {
+              color: radialMutedColor,
+              backdropColor: 'transparent',
+              callback: function (v) { return formatAxisValue(v, decimals); },
+            },
+          },
+        };
       } // doughnut/pie: no scales object at all — Chart.js doesn't use one for either.
 
       chart = new Chart(canvas, {

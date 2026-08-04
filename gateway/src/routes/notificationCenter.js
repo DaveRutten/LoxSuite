@@ -21,11 +21,21 @@ function loadRecentNotifications(userId) {
   `).all(userId);
 }
 
+// Unread = arrived after the bulk "seen up to here" watermark (mark-read/View all — see
+// /mark-read below) AND not individually dismissed (the "x" button, or clicking through to an
+// item's own source — see /:id/dismiss and /:id/mark-read below). Both conditions matter: without
+// the dismissal check, clicking through to just ONE of several unread items would have no way to
+// mark just that one without the watermark bump also sweeping in every other item at or below its
+// id — confirmed as a real bug (two unread events, clicking the newer one's source cleared the
+// badge to 0 even though the older one had never been looked at).
 router.get('/unread-count', (req, res) => {
   // req.user (loadUserContext.js) doesn't carry last_seen_notification_id — re-read it directly
   // rather than widening that object for a value nothing else currently needs.
   const user = db.prepare('SELECT last_seen_notification_id FROM users WHERE id = ?').get(req.user.id);
-  const row = db.prepare('SELECT COUNT(*) AS n FROM notification_events WHERE id > ?').get(user.last_seen_notification_id);
+  const row = db.prepare(`
+    SELECT COUNT(*) AS n FROM notification_events
+    WHERE id > ? AND id NOT IN (SELECT notification_event_id FROM notification_dismissals WHERE user_id = ?)
+  `).get(user.last_seen_notification_id, req.user.id);
   res.json({ count: row.n });
 });
 
@@ -43,38 +53,28 @@ router.post('/mark-read', (req, res) => {
   res.json({ ok: true });
 });
 
-// Advances the watermark to (at least) this one event, not to whatever's newest overall (that's
-// /mark-read above), so an unread event that arrived after this one and hasn't been looked at yet
-// still counts. MAX(..., ...) here is SQLite's 2+-argument scalar max, not the single-argument
-// aggregate — never lets a stale/out-of-order request move the watermark backwards. Shared by
-// both routes below it: clicking through to an item's source and dismissing it are two different
-// gestures, but both are an explicit "I've dealt with this one" — same effect on the badge.
-function markReadUpTo(userId, id) {
-  db.prepare('UPDATE users SET last_seen_notification_id = MAX(last_seen_notification_id, ?) WHERE id = ?').run(id, userId);
-}
-
 // Fired when the popover's own item link is clicked (see foot.ejs), i.e. the user actually
-// navigated to that event's source rather than just glancing at the popover.
+// navigated to that event's source rather than just glancing at the popover — an explicit
+// per-item acknowledgement, same INSERT OR IGNORE into notification_dismissals as the "x" button
+// below (NOT a watermark bump — see unread-count's own comment for why that used to incorrectly
+// also mark OTHER, never-looked-at items as read).
 router.post('/:id/mark-read', (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid notification id.' });
-  markReadUpTo(req.user.id, id);
+  db.prepare('INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at) VALUES (?, ?, ?)')
+    .run(req.user.id, id, new Date().toISOString());
   res.json({ ok: true });
 });
 
 // Removes one event from THIS user's own popover list (see loadUserContext.js's own dismissed
 // filter) — not a delete, so Logs > Notifications and every other user's popover are unaffected.
 // INSERT OR IGNORE: clicking "x" twice on the same item (a slow connection, a double click before
-// the DOM removal below finishes) is a no-op the second time, not an error. Also advances the
-// watermark the same way /:id/mark-read does — dismissing is at least as explicit an
-// acknowledgement as clicking through, so leaving the badge counting a just-dismissed item would
-// be inconsistent.
+// the DOM removal below finishes) is a no-op the second time, not an error.
 router.post('/:id/dismiss', (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid notification id.' });
   db.prepare('INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at) VALUES (?, ?, ?)')
     .run(req.user.id, id, new Date().toISOString());
-  markReadUpTo(req.user.id, id);
   res.json({ ok: true });
 });
 
