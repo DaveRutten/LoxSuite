@@ -265,6 +265,11 @@
       // axis's fallback-of-last-resort is still the panel-wide unit, exactly as before this
       // per-series override existed.
       var axisUnit = { y: unit, y1: null };
+      // Same reasoning/tie-break as axisUnit above, for decimals — an axis's own tick labels are
+      // one shared format, so on a multi-series dashboard chart whichever series was first assigned
+      // to it decides for the whole axis. The Monitor detail page never has this ambiguity at all
+      // (always exactly one series), so its own Decimals field always wins outright here.
+      var axisDecimals = { y: decimals, y1: null };
       var usesRightAxis = false;
       series.forEach(function (s) {
         var override = seriesConfig[s.monitorId] || {};
@@ -272,6 +277,8 @@
         if (axisId === 'y1') usesRightAxis = true;
         var stillDefault = axisId === 'y' ? axisUnit.y === unit : !axisUnit.y1;
         if (override.unit && stillDefault) axisUnit[axisId] = override.unit;
+        var decimalsStillDefault = axisId === 'y' ? axisDecimals.y === decimals : axisDecimals.y1 === null;
+        if (override.decimals != null && decimalsStillDefault) axisDecimals[axisId] = override.decimals;
       });
 
       var nowMs = Date.now();
@@ -368,11 +375,16 @@
           // 10% of headroom above/below the data's own min/max, so a line doesn't visually run
           // flush along the very top/bottom edge of the chart area — a no-op whenever min/max
           // below are explicitly set (a user-fixed axis range), since grace only ever pads an
-          // auto-computed range, never overrides a forced one.
-          grace: '10%',
+          // auto-computed range, never overrides a forced one. Skipped entirely when the area under
+          // the line is filled: 'fill: origin' below fills down to whichever axis edge is nearest
+          // zero, so this same headroom would leave a visible gap between the filled area and BOTH
+          // the top edge (above the line, never filled) and, once the range's auto min no longer
+          // sits exactly at the axis's own edge, the bottom edge too — a filled chart already reads
+          // as "full" flush against the edges without needing the padding a bare line benefits from.
+          grace: fillArea ? undefined : '10%',
           min: yMin,
           max: yMax,
-          ticks: { callback: function (value) { return formatAxisValue(value, decimals) + (axisUnit.y ? ' ' + axisUnit.y : ''); } },
+          ticks: { callback: function (value) { return formatAxisValue(value, axisDecimals.y) + (axisUnit.y ? ' ' + axisUnit.y : ''); } },
         },
       };
       // The right axis is only ever added when at least one series actually uses it — defining
@@ -381,10 +393,12 @@
       if (usesRightAxis) {
         scales.y1 = {
           beginAtZero: false,
-          grace: '10%',
+          // Same reasoning as the left axis's own grace above — skipped when filled, since fillArea
+          // (canvas.dataset.fill) applies panel-wide to every series regardless of which axis it's on.
+          grace: fillArea ? undefined : '10%',
           position: 'right',
           grid: { drawOnChartArea: false },
-          ticks: { callback: function (value) { return formatAxisValue(value, decimals) + (axisUnit.y1 ? ' ' + axisUnit.y1 : ''); } },
+          ticks: { callback: function (value) { return formatAxisValue(value, axisDecimals.y1 != null ? axisDecimals.y1 : decimals) + (axisUnit.y1 ? ' ' + axisUnit.y1 : ''); } },
         };
       }
 

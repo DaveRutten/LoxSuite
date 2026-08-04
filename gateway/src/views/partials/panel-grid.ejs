@@ -716,37 +716,8 @@
 </script>
 
 <script>
-  // Every unit field (Chart/Gauge/Stat/Threshold, in both the Add-panel form and each panel's own
-  // Edit form) is a <select class="unit-select"> of common presets plus "Custom...", paired with
-  // a hidden text input that appears when "Custom..." is picked. Only one of the two ever carries
-  // the real field name at a time, so exactly one value — never both, never neither — submits.
-  (function () {
-    document.querySelectorAll('.unit-select').forEach(function (select) {
-      var input = select.nextElementSibling;
-      var name = select.dataset.unitName;
-
-      function sync() {
-        if (select.value === '__custom__') {
-          select.removeAttribute('name');
-          input.name = name;
-          input.style.display = '';
-        } else {
-          select.name = name;
-          input.removeAttribute('name');
-          input.style.display = 'none';
-        }
-      }
-      select.addEventListener('change', function () {
-        sync();
-        if (select.value === '__custom__') input.focus();
-      });
-      sync();
-    });
-  })();
-</script>
-
-<script>
-  // Same "select of presets + hidden custom text input" pattern as .unit-select above, for the
+  // Same "select of presets + hidden custom text input" pattern as .unit-select (its own sync
+  // script now lives in partials/foot.ejs, shared with the Monitor detail page) above, for the
   // panel Range field — a duration like "3h" stands in for a preset, and (a third state) a fixed
   // From/To pair stands in for both — only ONE of the select/custom-input/absolute-hidden-input
   // ever has a `name` at a time, so the field submits exactly one "range" value regardless of

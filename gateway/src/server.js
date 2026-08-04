@@ -120,6 +120,7 @@ app.locals.serializeValueMappings = dashboardsRoutes.serializeValueMappings;
 app.locals.serializeAnnotations = dashboardsRoutes.serializeAnnotations;
 app.locals.escAttr = chartFieldHelpers.escAttr;
 app.locals.unitField = chartFieldHelpers.unitField;
+app.locals.scaleField = chartFieldHelpers.scaleField;
 app.locals.thresholdField = chartFieldHelpers.thresholdField;
 app.locals.annotationField = chartFieldHelpers.annotationField;
 // Exposed as a global for the client-side chart (public/monitor-chart.js) — everything

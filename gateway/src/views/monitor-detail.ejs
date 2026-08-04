@@ -68,6 +68,15 @@
       var steppedVal = config.stepped === true ? 'before' : (config.stepped || '');
       var curveTension = config.curveTension != null ? config.curveTension : 0.15;
       var yScaleType = config.yScaleType || 'linear';
+      // This page has no per-series builder (it's always exactly one monitor), so its own Y-axis
+      // unit/Value scale/Decimals fields below synthesize the one entry buildConfig's per-series
+      // chart_series mechanism expects (see routes/monitor.js's chart-settings handler) — unit lives
+      // here (not config.unit, which stays unused for this page) since it's this monitor's own
+      // reading, not a shared style like legend/fill/stepped that genuinely applies the same to
+      // every monitor — see parseSeriesConfig in routes/dashboards.js.
+      var ownSeries = (config.series && config.series[String(monitor.id)]) || {};
+      var monitorScale = ownSeries.scale != null ? ownSeries.scale : 1;
+      var monitorDecimals = ownSeries.decimals != null ? ownSeries.decimals : '';
     %>
     <form id="monitor-chart-settings" method="post" action="/monitor/<%= monitor.id %>/chart-settings" class="form-grid panel-settings-form">
         <div class="panel-settings-form-head" style="grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; margin-bottom:0.3rem;">
@@ -102,7 +111,17 @@
             <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
           </select>
         </div>
-        <div><label>Y-axis unit (optional)</label><%- unitField('unit_chart', config.unit || '') %></div>
+        <%
+          // Falls back to the old panel-wide config.unit for a monitor whose unit was set before
+          // this page moved it into the per-series entry above (config.unit itself is never written
+          // again going forward, see routes/monitor.js's chart-settings handler) — without this, a
+          // monitor configured on a previous version would appear to have silently lost its unit the
+          // moment this page loads, purely because of where it happens to be stored on disk.
+          var displayUnit = ownSeries.unit || config.unit || '';
+        %>
+        <div><label>Y-axis unit (optional)</label><%- unitField('unit_chart', displayUnit) %></div>
+        <div><label>Value scale (optional)</label><%- scaleField('monitor_scale', monitorScale) %></div>
+        <div><label>Decimals (optional)</label><input type="number" name="monitor_decimals" min="0" max="6" placeholder="Default" value="<%= monitorDecimals %>"></div>
         <div><label>Stepped line</label>
           <select name="stepped_line">
             <option value="" <%= steppedVal === '' ? 'selected' : '' %>>Off</option>
@@ -151,7 +170,8 @@
       data-fill="<%= config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= config.curveTension != null ? config.curveTension : 0.15 %>"
       data-points="<%= config.points ? '1' : '' %>" data-animation="<%= config.animation ? '1' : '' %>" data-y-scale-type="<%= config.yScaleType || 'linear' %>"
       data-y-min="<%= config.yMin != null ? config.yMin : '' %>" data-y-max="<%= config.yMax != null ? config.yMax : '' %>" data-zoom="<%= config.zoom ? '1' : '' %>"
-      data-thresholds="<%= JSON.stringify(config.thresholds || []) %>" data-annotations="<%= JSON.stringify(config.annotations || []) %>"></canvas>
+      data-thresholds="<%= JSON.stringify(config.thresholds || []) %>" data-annotations="<%= JSON.stringify(config.annotations || []) %>"
+      data-series="<%= JSON.stringify(config.series || {}) %>"></canvas>
   </div>
 <% } else { %>
   <p class="hint">This monitor hasn't recorded any numeric values yet, so there's nothing to chart &mdash; the raw values are listed below instead.</p>
@@ -168,7 +188,7 @@
 <div class="history-groups-wrap" id="monitor-history-groups">
   <% if (rows.length === 0) { %>
     <table>
-      <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
+      <thead><tr><th>Timestamp</th><th>Raw value</th></tr></thead>
       <tbody><tr><td colspan="2" class="empty">No readings in this range yet.</td></tr></tbody>
     </table>
   <% } else { %>
@@ -176,7 +196,7 @@
       <details class="history-group" data-group-key="<%= g.key %>" <%= gi === 0 ? 'open' : '' %>>
         <summary><%= g.label %> <span class="hint">(<%= g.rows.length %> reading<%= g.rows.length === 1 ? '' : 's' %>)</span></summary>
         <table>
-          <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
+          <thead><tr><th>Timestamp</th><th>Raw value</th></tr></thead>
           <tbody>
             <% g.rows.forEach(r => { %>
               <tr><td><%= formatDateTime(r.recordedAt) %></td><td><span class="truncate" title="<%= r.value %>"><%= r.value %></span></td></tr>

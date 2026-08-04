@@ -26,6 +26,27 @@ function unitField(fieldName, currentValue) {
   return html;
 }
 
+// Same select-or-custom-input shape as unitField above, for a multiplier — a bare number input
+// made "×0.001 for Wh -> kWh" something you had to already know to type correctly, where a preset
+// list gets you there by picking the unit conversion you actually want. Mirrors the dashboard chart
+// panel's own per-series scale picker (see panel-grid.ejs's buildScalePicker), which only exists as
+// dynamically-created JS (built per comparison-series row, added/removed as monitors are checked) —
+// this is the same preset list and behavior for a page (Monitor detail) that always has exactly one
+// value and can render it as a plain static field instead.
+const SCALE_PRESETS = [0.001, 0.01, 0.1, 1, 10, 100, 1000];
+function scaleField(fieldName, currentValue) {
+  const value = currentValue === null || currentValue === undefined || currentValue === '' ? 1 : Number(currentValue);
+  const isCustom = !SCALE_PRESETS.includes(value);
+  let html = `<select class="scale-select" data-scale-name="${fieldName}">`;
+  SCALE_PRESETS.forEach((s) => {
+    html += `<option value="${s}" ${!isCustom && value === s ? 'selected' : ''}>${s === 1 ? '&times;1 (none)' : '&times;' + s}</option>`;
+  });
+  html += `<option value="__custom__" ${isCustom ? 'selected' : ''}>Custom&hellip;</option></select>`;
+  html += `<input type="number" step="any" class="scale-custom-input" placeholder="Scale"
+    value="${isCustom ? escAttr(value) : ''}" style="margin-top:0.3rem; width:100%; ${isCustom ? '' : 'display:none;'}">`;
+  return html;
+}
+
 // Grafana-style threshold ladder (see dashboards.js's parseThresholdLadder/colorForThresholdLadder)
 // — a dynamic add/remove-row builder (value + color picker + line/band style per row), not a
 // hand-typed "value=color" textarea; that hidden textarea still exists underneath and is what
@@ -66,4 +87,4 @@ function annotationField(fieldName, list) {
   </details>`;
 }
 
-module.exports = { escAttr, unitField, thresholdField, annotationField };
+module.exports = { escAttr, unitField, scaleField, thresholdField, annotationField };

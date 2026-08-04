@@ -893,5 +893,67 @@
     });
   });
 </script>
+<script>
+  // Every unit field (Chart/Gauge/Stat/Threshold, in both a dashboard panel's Add/Edit form and
+  // the Monitor detail page's own chart settings — see chartFieldHelpers.js's unitField) is a
+  // <select class="unit-select"> of common presets plus "Custom...", paired with a hidden text
+  // input that appears when "Custom..." is picked. Only one of the two ever carries the real field
+  // name at a time, so exactly one value — never both, never neither — submits. Lives here (not in
+  // panel-grid.ejs, its original home) since foot.ejs is the one partial every page that uses
+  // unitField() actually includes — a page-specific script would silently no-op wherever unitField
+  // renders without its matching sync logic loaded alongside it.
+  (function () {
+    document.querySelectorAll('.unit-select').forEach(function (select) {
+      var input = select.nextElementSibling;
+      var name = select.dataset.unitName;
+
+      function sync() {
+        if (select.value === '__custom__') {
+          select.removeAttribute('name');
+          input.name = name;
+          input.style.display = '';
+        } else {
+          select.name = name;
+          input.removeAttribute('name');
+          input.style.display = 'none';
+        }
+      }
+      select.addEventListener('change', function () {
+        sync();
+        if (select.value === '__custom__') input.focus();
+      });
+      sync();
+    });
+  })();
+</script>
+<script>
+  // Same select-or-custom-input submit shape as .unit-select above, for a preset scale multiplier
+  // (see chartFieldHelpers.js's scaleField) — currently only the Monitor detail page's own chart
+  // settings, since a dashboard chart panel's per-series scale picker is built dynamically in
+  // JS (panel-grid.ejs's buildScalePicker) with its own local wiring already, not this static field.
+  (function () {
+    document.querySelectorAll('.scale-select').forEach(function (select) {
+      var input = select.nextElementSibling;
+      var name = select.dataset.scaleName;
+
+      function sync() {
+        if (select.value === '__custom__') {
+          select.removeAttribute('name');
+          input.name = name;
+          input.style.display = '';
+        } else {
+          select.name = name;
+          input.removeAttribute('name');
+          input.style.display = 'none';
+        }
+      }
+      select.addEventListener('change', function () {
+        sync();
+        if (select.value === '__custom__') input.focus();
+      });
+      sync();
+    });
+  })();
+</script>
 </body>
 </html>

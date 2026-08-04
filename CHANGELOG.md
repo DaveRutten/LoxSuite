@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.10.1-alpha.1] - 2026-08-04
+
+### Added
+- The Monitor detail page's own chart settings gained a **Y-axis unit**, **Value scale**, and
+  **Decimals** — the unit field already existed but silently did nothing (see Fixed below); scale
+  and decimals didn't exist on this page at all before. All three are independent per monitor, the
+  same way a dashboard chart panel's per-series settings are — Value scale reuses the exact same
+  `×0.001`–`×1000` preset dropdown (plus Custom…) a dashboard chart panel's own per-series scale
+  picker already offers.
+
+### Fixed
+- The Monitor detail page's own "Y-axis unit" field silently did nothing when changed — its
+  supporting JS (converting the preset dropdown into an actual submittable value) only ever loaded
+  on a dashboard's panel-editor page, never on this one. Moved into the shared footer script so
+  both pages get it.
+  - Once wired up, the unit was still shared across every monitor's chart (bundled with
+    legend/fill/stepped-line, which genuinely are one shared style) rather than specific to the one
+    monitor it was set on — moved alongside the new Value scale/Decimals so each monitor's own unit
+    is independent, with a fallback so a monitor already using the old shared field doesn't lose it
+    until its next save.
+  - A per-monitor Decimals setting was accepted but never actually applied to the chart's own
+    Y-axis tick labels, which always fell back to the global default regardless — only the
+    tooltip honored it. The axis now uses whichever monitor's own Decimals is assigned to it,
+    same tie-break logic already used for a shared axis's unit.
+- Filling the area under a chart's line no longer reaches the very top/bottom edge of the chart,
+  now that the axis leaves ~10% headroom above/below the data (see 0.9.1-alpha.1) — that headroom
+  is now skipped whenever Fill area is on, since a filled area already reads as "full" flush against
+  the edges without needing it (unlike a bare line, which is what the headroom was added for).
+- The Hardware page's MAC column now strips the `:` separators and lowercases the result, so a MAC
+  and Serial that are the same underlying identifier (common on Loxone Tree/Air devices) read
+  identically instead of only an attentive reader noticing "0F:9B:6D:66" and "0f9b6d66" match.
+- The Monitor detail page's raw-readings table header now reads "Raw value" instead of "Value" —
+  it intentionally still shows the literal unscaled reading regardless of any unit/scale set above.
+
 ## [0.10.0-alpha.1] - 2026-08-04
 
 ### Changed

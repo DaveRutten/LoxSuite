@@ -58,7 +58,18 @@ router.get('/', (req, res) => {
     ORDER BY (m.gateway_client_of IS NOT NULL), m.sort_order, m.id
   `;
   const hwRows = miniserverId ? db.prepare(hwQuery).all(miniserverId) : db.prepare(hwQuery).all();
-  const hardwareRowsRaw = hwRows.map((r) => ({ ...r, categoryLabel: CATEGORY_LABELS[r.category] || r.category }));
+  // A device's MAC and Serial are often the exact same underlying identifier in Loxone's own data
+  // (a Tree/Air device's Serial is frequently its MAC), just formatted differently — colon-separated
+  // hex for MAC, plain hex for Serial. Stripped/lowercased here so the two columns visually match
+  // when they are the same value, instead of only an attentive reader noticing "0F:9B:6D:66" and
+  // "0f9b6d66" are identical. Normalizing before the dedup pass below also makes it match a Serial
+  // reported for the same physical device elsewhere, regardless of the MAC's original casing.
+  const normalizeMac = (mac) => (mac ? mac.replace(/[^0-9a-fA-F]/g, '').toLowerCase() : mac);
+  const hardwareRowsRaw = hwRows.map((r) => ({
+    ...r,
+    mac: normalizeMac(r.mac),
+    categoryLabel: CATEGORY_LABELS[r.category] || r.category,
+  }));
 
   // A Loxone "Gateway Client" setup (loxone.com/enen/kb/gateway-client) merges every Client
   // Miniserver's own project into its Gateway's — confirmed against a real installation that the

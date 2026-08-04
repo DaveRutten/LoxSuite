@@ -545,6 +545,29 @@ router.post('/:id/chart-settings', requirePermission('monitor', 'edit'), (req, r
   const monitor = db.prepare('SELECT id FROM monitors WHERE id = ?').get(req.params.id);
   if (!monitor) return res.redirect('/monitor');
 
+  // This page has no per-series builder of its own (see monitor-detail.ejs) — its Y-axis unit,
+  // Value scale, and Decimals fields synthesize the one chart_series entry buildConfig('chart', ...)
+  // already knows how to parse (see parseSeriesConfig in routes/dashboards.js), keyed by this
+  // monitor's own id, rather than reintroducing a parallel panel-wide concept dashboards.js removed
+  // in favor of per-series for scale/decimals. Unit joins them here too (unlike legendPosition/fill/
+  // stepped/etc, which stay genuinely panel-wide) — a Monitor's own reading is a specific physical
+  // quantity, so unlike a shared line style, one unit is never meaningfully "the same for every
+  // monitor" the way "Save as default" below assumes for the rest of this config. body.unit_chart
+  // is cleared after reading it so buildConfig's own panel-wide config.unit stays null for this
+  // page — the per-series entry is the only place it's stored going forward. Deliberately NOT done
+  // in save-as-default below: that config is shared across every monitor, and a chart_series entry
+  // keyed by THIS monitor's id would silently never match any other monitor's id once applied via
+  // "Reset to default" there.
+  const scale = Number(req.body.monitor_scale);
+  const decimals = Number(req.body.monitor_decimals);
+  const unit = typeof req.body.unit_chart === 'string' ? req.body.unit_chart.trim() : '';
+  const seriesEntry = {};
+  if (unit) seriesEntry.unit = unit;
+  if (Number.isFinite(scale) && scale !== 0 && scale !== 1) seriesEntry.scale = scale;
+  if (req.body.monitor_decimals !== '' && Number.isFinite(decimals)) seriesEntry.decimals = decimals;
+  req.body.chart_series = Object.keys(seriesEntry).length ? JSON.stringify({ [monitor.id]: seriesEntry }) : '{}';
+  req.body.unit_chart = '';
+
   const { buildConfig } = require('./dashboards');
   const config = buildConfig('chart', req.body);
   db.prepare('UPDATE monitors SET config = ? WHERE id = ?').run(JSON.stringify(config), monitor.id);
