@@ -146,9 +146,10 @@ glancing at the list. **View all** links to a full history under **Logs → Noti
 permission area, separate from the other Logs tabs). Every event logged here also went through the
 existing
 [Apprise](https://github.com/caronc/apprise) rule engine for delivery — Monitor threshold,
-Miniserver/MQTT client status, backup failure, Miniserver firmware changed, and LoxSuite update
-available are all real, admin-creatable rule types, sendable to any channel exactly like the
-others — except one:
+Miniserver/MQTT client status, backup failure, Miniserver firmware changed, LoxSuite update
+available, and (see Hardware above) Loxone device battery weak/firmware changed/online-offline are
+all real, admin-creatable rule types, sendable to any channel exactly like the others — the three
+hardware ones also carry their own configurable severity — except one:
 
 - **Threshold ladder** — any threshold row on a Monitor or Dashboard chart can be flagged
   **Notify** (alongside its existing color); crossing into a flagged rung logs an event here
@@ -277,6 +278,9 @@ password — leave the field blank to keep it, or type a new one to change it.
 
 Sparse or rarely-needed columns (Generation, UDP port, External URL) start hidden and can be
 switched back on from the same **Columns** button every table has (see Other UI features below).
+Drag a row by its handle to reorder Miniservers — this order isn't just cosmetic here: it's the one
+shared, authoritative order every other page that lists Miniservers (Logs, Mappings, Monitor,
+Notifications, Hardware, Live Data, ...) now queries by too, instead of each picking its own.
 
 Click the arrow on any row to expand a **diagnostics** panel: PLC run state (Loxone's own
 documented 0–8 values, e.g. "Running"), CPU load, heap usage, task count, firmware date, and
@@ -330,6 +334,34 @@ override which panel type or which bucket any individual item ends up in.
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/live-data-dark.png">
   <img src="docs/screenshots/live-data-light.png" alt="The Live Data page showing a room's categories and live control values">
 </picture>
+
+### Hardware
+
+Every piece of hardware a Miniserver's own `/data/status` endpoint reports — the Miniserver
+itself, Extensions, Audioserver zones, and the Air/Tree/1-Wire/Plugin devices attached to it — all
+in one flat, filterable, sortable table (category dropdown, free-text search, and every column's
+usual click-to-sort/drag-to-reorder/resize/hide). Polled every 5 minutes in the background, so this
+can lag Loxone Config by a few minutes; entirely skipped for a Miniserver that's currently offline
+(or rebooting), so a reboot never floods the table — or an alert rule — with every attached device
+briefly looking "offline" at once. A **battery** reading of 127 means mains-powered (AC/DC adapter),
+not a real percentage, and is shown as **External power** instead; weak-battery flags
+(`BattWeak`/`BatTooWeakForUpdate`) come straight from the Miniserver's own judgment, not a threshold
+this app invented.
+
+One rule already covers every device of a given kind automatically — current and any added
+later — there's no per-device setup. The 3 buttons next to the search bar create (first click) or
+toggle (every click after) a default "Any Miniserver" alert rule for a weak battery, a device
+firmware change, or a device going offline, each with its own configurable severity (fine-tune
+scoping, severity, or channels on Notifications). Every transition is also written to the Logs
+&rarr; Loxone Miniservers log unconditionally, whether or not an alert rule exists for it — logging
+and alerting are independent.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/hardware-dark.png">
+  <img src="docs/screenshots/hardware-light.png" alt="The Hardware page listing a Miniserver, its Extensions, Audioserver zones, and attached devices, with three Alert quick-toggle buttons next to the search bar">
+</picture>
+
+*(Real data from a live installation.)*
 
 ### MQTT &rarr; Loxone
 

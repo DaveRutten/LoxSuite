@@ -11,21 +11,25 @@ const { encrypt } = require('../secretCrypto');
 const router = express.Router();
 
 router.get('/', (req, res) => {
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY id').all();
+  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   res.render('miniservers', { miniservers, error: null });
 });
 
 router.post('/', requirePermission('miniservers', 'edit'), async (req, res) => {
   const { name, host, http_port, udp_port, username, password, use_https, external_url } = req.body;
   if (!name || !host || !username || !password) {
-    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY id').all();
+    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
     return res.render('miniservers', { miniservers, error: 'Name, host, username and password are required.' });
   }
 
+  // Appended to the end of the shared display order (see db.js's migrateMiniserverStatusColumns)
+  // rather than defaulting to 0, which would otherwise jump a newly-added Miniserver to the front
+  // of every page that lists them.
+  const nextSortOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM miniservers').get().next;
   const result = db.prepare(
-    `INSERT INTO miniservers (name, host, http_port, udp_port, username, password, use_https, external_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, encrypt(password), use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null);
+    `INSERT INTO miniservers (name, host, http_port, udp_port, username, password, use_https, external_url, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, encrypt(password), use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null, nextSortOrder);
 
   logSystemEvent(`"${req.user.username}" added Miniserver "${name}" (${host}).`);
 
@@ -82,6 +86,20 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), (req, res) 
 
   logSystemEvent(`"${req.user.username}" updated Miniserver "${name}" (${host}).`);
   res.redirect('/miniservers');
+});
+
+// Persists the Miniservers page's own drag-and-drop row reorder in one shot — every other page
+// that lists Miniservers queries by this same sort_order column (see db.js's
+// migrateMiniserverStatusColumns), so this is authoritative everywhere at once, not just here. JSON
+// body (not a form post) so this is exempt from the CSRF token check (see middleware/csrf.js) and
+// can fire straight from a drop handler without a full page reload/redirect.
+router.post('/reorder', requirePermission('miniservers', 'edit'), (req, res) => {
+  const ids = [].concat(req.body.ids || []).map(Number).filter((n) => Number.isInteger(n));
+  const update = db.prepare('UPDATE miniservers SET sort_order = ? WHERE id = ?');
+  db.transaction(() => {
+    ids.forEach((id, index) => update.run(index, id));
+  })();
+  res.json({ ok: true });
 });
 
 router.post('/:id/delete', requirePermission('miniservers', 'edit'), (req, res) => {

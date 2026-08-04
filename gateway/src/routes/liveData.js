@@ -41,7 +41,7 @@ function pickMiniserver(miniservers, requestedId) {
 }
 
 router.get('/', async (req, res) => {
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   const requestedId = req.query.miniserver_id ? Number(req.query.miniserver_id) : null;
   const miniserver = pickMiniserver(miniservers, requestedId);
 

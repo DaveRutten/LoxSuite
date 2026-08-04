@@ -2,6 +2,43 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.0-alpha.1] - 2026-08-04
+
+### Added
+- A new **Hardware** page (Loxone section) listing every piece of hardware a Miniserver's own
+  `/data/status` endpoint reports: the Miniserver itself, Extensions, Audioserver zones, and the
+  Air/Tree/1-Wire/Plugin devices attached to it — one flat, filterable (category dropdown +
+  free-text search), sortable table. Polled every 5 minutes in the background; entirely skipped for
+  a Miniserver currently offline or rebooting, so a reboot never floods the table (or an alert)
+  with every attached device briefly reporting offline at once. Battery 127 (mains-powered, not a
+  real percentage) shows as "External power" instead.
+- Three new notification rule types, each with its own configurable severity: **Loxone device
+  battery weak**, **Loxone device firmware changed**, and **Loxone device online/offline** — a
+  single rule (optionally scoped to one Miniserver) covers every device of that kind automatically,
+  current and any added later, no per-device setup. The Hardware page's own toolbar has one-click
+  "Alert ..." buttons per type (green = enabled, gray = disabled/not yet set up) as a shortcut to
+  the common "Any Miniserver, default severity" case.
+- Every hardware battery/firmware/online-offline transition is now also written to the existing
+  Logs → Loxone Miniservers log unconditionally, whether or not a notification rule exists for
+  it — logging and alerting are independent.
+- Miniservers can now be reordered by dragging a row's own handle — this is no longer just cosmetic:
+  it's the one shared, authoritative order every other page that lists Miniservers (Logs, Mappings,
+  Monitor, Notifications, Hardware, Live Data, the dashboard, ...) now queries by, instead of each
+  picking its own (previously an inconsistent mix of alphabetical-by-name and by-id).
+
+### Fixed
+- A table's pagination no longer jumps back to page 1 on every periodic background refresh
+  (Logs, Client Activity, Hardware, ...) — it only resets to page 1 on an actual filter/sort change,
+  not merely because the page silently refreshed itself while you were reading page 3.
+- `notification_rules.trigger_type`'s CHECK constraint never actually included
+  `loxsuite_update_available`, despite it being offered as a creatable rule type since it was added —
+  every attempt to create one was silently rejected by SQLite. Caught and fixed while widening this
+  same constraint for the three new hardware trigger types above.
+- The `monitor_history` retention cleanup (`DELETE ... WHERE recorded_at < ?`) had no usable index —
+  its only index led with `monitor_id`, useless for a query with no `monitor_id` filter — forcing a
+  full table scan that got slower as history grew. Added a dedicated index, the same fix
+  `notification_events` already had.
+
 ## [0.8.0-alpha.1] - 2026-08-03
 
 ### Added

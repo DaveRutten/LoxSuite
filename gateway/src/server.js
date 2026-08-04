@@ -50,6 +50,7 @@ const { startTailing, getClients } = require('./mosquittoLog');
 const { startUdpServer } = require('./loxoneUdpServer');
 const { startMonitorCollector } = require('./monitorCollector');
 const { startLogCollector } = require('./logCollector');
+const { startHardwarePolling } = require('./loxoneHardware');
 const { startLiveConnections } = require('./loxoneWebSocket');
 const requireAuth = require('./middleware/requireAuth');
 const loadUserContext = require('./middleware/loadUserContext');
@@ -69,6 +70,7 @@ const transformationsRoutes = require('./routes/transformations');
 const tablePrefsRoutes = require('./routes/tablePrefs');
 const navPrefsRoutes = require('./routes/navPrefs');
 const monitorRoutes = require('./routes/monitor');
+const hardwareRoutes = require('./routes/hardware');
 const logsRoutes = require('./routes/logs');
 const dashboardsRoutes = require('./routes/dashboards');
 // Requires routes/dashboards itself (for serializeThresholdLadder/serializeAnnotations) — kept
@@ -88,7 +90,7 @@ const { icon } = require('./icons');
 const { toggleSwitch } = require('./toggleSwitch');
 const backup = require('./backup');
 const { formatDateTime, getDisplayTimezone } = require('./dateFormat');
-const { formatCount, formatHeapStatus, miniserverGenerationLabel } = require('./format');
+const { formatCount, formatHeapStatus, miniserverGenerationLabel, formatDuration } = require('./format');
 const panelTypeDefaults = require('./panelTypeDefaults');
 const { getVersionStatus, startVersionCheck } = require('./versionCheck');
 const { notificationSourceLink } = require('./notificationLinks');
@@ -103,6 +105,7 @@ app.locals.formatDateTime = formatDateTime;
 app.locals.formatCount = formatCount;
 app.locals.formatHeapStatus = formatHeapStatus;
 app.locals.miniserverGenerationLabel = miniserverGenerationLabel;
+app.locals.formatDuration = formatDuration;
 app.locals.getVersionStatus = getVersionStatus;
 app.locals.notificationSourceLink = notificationSourceLink;
 app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
@@ -148,7 +151,7 @@ app.use(loadUserContext);
 app.use(authRoutes);
 
 app.get('/', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   const mqttToLoxoneCount = db.prepare('SELECT COUNT(*) AS c FROM mappings_mqtt_to_loxone WHERE enabled = 1').get().c;
   const loxoneToMqttCount = db.prepare('SELECT COUNT(*) AS c FROM mappings_loxone_to_mqtt WHERE enabled = 1').get().c;
   const connectedClientCount = getClients().filter((c) => c.status === 'connected').length;
@@ -193,6 +196,7 @@ app.use('/mqtt-users', requireAuth, requirePermission('mqtt_users', 'view'), mqt
 app.use('/mqtt-roles', requireAuth, requirePermission('mqtt_roles', 'view'), mqttRolesRoutes);
 app.use('/transformations', requireAuth, requirePermission('transformations', 'view'), transformationsRoutes);
 app.use('/monitor', requireAuth, requirePermission('monitor', 'view'), monitorRoutes);
+app.use('/hardware', requireAuth, requirePermission('hardware', 'view'), hardwareRoutes);
 // logs.js serves four distinct areas (one per tab: logs_mqtt/logs_loxone/logs_loxone_commands/
 // logs_system), so it's gated per-route inside that file instead of once here — same reasoning as
 // mappings.js above.
@@ -227,6 +231,7 @@ startTailing();
 startUdpServer();
 startMonitorCollector();
 startLogCollector();
+startHardwarePolling();
 startLiveConnections();
 backup.startScheduler();
 startVersionCheck();

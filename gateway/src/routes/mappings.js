@@ -59,7 +59,7 @@ function loadLoxoneToMqttView(baseUrl) {
 
 router.get('/mqtt-to-loxone', (req, res) => {
   const mappings = loadMqttToLoxoneView();
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   const targetSuggestions = loadTargetSuggestions();
   res.render('mappings-mqtt-to-loxone', { mappings, miniservers, targetSuggestions, error: null, prefillTopic: req.query.topic || '' });
 });
@@ -77,7 +77,7 @@ router.post('/mqtt-to-loxone', requirePermission('mqtt_to_loxone', 'edit'), (req
 router.get('/mqtt-to-loxone/:id/edit', (req, res) => {
   const mapping = db.prepare('SELECT * FROM mappings_mqtt_to_loxone WHERE id = ?').get(req.params.id);
   if (!mapping) return res.status(404).send('Mapping not found');
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   const targetSuggestions = loadTargetSuggestions();
   res.render('mapping-mqtt-to-loxone-edit', { mapping, miniservers, targetSuggestions, error: null });
 });
@@ -241,7 +241,7 @@ router.post('/commands/create-rgbw', requirePermission('loxone_to_mqtt', 'edit')
 router.get('/loxone-to-mqtt', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const mappings = loadLoxoneToMqttView(baseUrl);
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   // transport/miniserver_id: only ever sent by the Loxone commands log's own "+ Mapping" button
   // (see logs-loxone-commands.ejs), which knows exactly what this specific rejected command
   // actually arrived as — pre-selects both instead of leaving them at their plain defaults.
@@ -292,7 +292,7 @@ router.post('/loxone-to-mqtt', requirePermission('loxone_to_mqtt', 'edit'), (req
 router.get('/loxone-to-mqtt/:id/edit', (req, res) => {
   const mapping = db.prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE id = ?').get(req.params.id);
   if (!mapping) return res.status(404).send('Mapping not found');
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   res.render('mapping-loxone-to-mqtt-edit', { mapping, miniservers, error: null });
 });
 
@@ -303,7 +303,7 @@ router.post('/loxone-to-mqtt/:id/update', requirePermission('loxone_to_mqtt', 'e
 
   if (!token) {
     const mapping = db.prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE id = ?').get(req.params.id);
-    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
     return res.render('mapping-loxone-to-mqtt-edit', { mapping, miniservers, error: 'Token is required.' });
   }
 
@@ -326,7 +326,7 @@ router.post('/loxone-to-mqtt/:id/update', requirePermission('loxone_to_mqtt', 'e
   } catch (err) {
     // token has a UNIQUE constraint — the only realistic way this UPDATE fails.
     const mapping = db.prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE id = ?').get(req.params.id);
-    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
     return res.render('mapping-loxone-to-mqtt-edit', { mapping, miniservers, error: `"${token}" is already used by another mapping — tokens must be unique.` });
   }
 

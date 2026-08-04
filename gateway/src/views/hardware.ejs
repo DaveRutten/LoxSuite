@@ -1,0 +1,171 @@
+<%- include('partials/head', { pageTitle: 'Hardware', active: 'hardware', refresh: 60, liveSwap: true }) %>
+
+<p class="hint">
+  Every piece of hardware each Miniserver's own <code>/data/status</code> reports &mdash; the
+  Miniserver itself, Extensions, Audioserver zones, and the Air/Tree/1-Wire/Plugin devices attached
+  to it. Polled every 5 minutes (this changes far less often than a log), so what you see here can
+  lag behind Loxone Config by a few minutes. A <strong>battery</strong> reading of <strong>127</strong>
+  means mains-powered (AC/DC adapter) &mdash; not a real percentage, so it's shown as
+  <strong>External power</strong> instead. Skipped entirely while a Miniserver itself is offline, to avoid a
+  flood of false "device offline" readings during a reboot.
+</p>
+
+<p class="hint">
+  One rule already covers <strong>every</strong> device automatically &mdash; current and any
+  added later &mdash; there's no per-device setup. The 3 buttons below the search bar create (first
+  click) or toggle (after that) a default "Any Miniserver" rule for each; fine-tune severity,
+  scoping, or channels on <a href="/admin/notifications">Notifications</a>.
+</p>
+
+<% if (miniservers.length > 1) { %>
+<form method="get" action="/hardware" class="form-grid" style="margin-bottom:1rem; align-items:end;">
+  <div>
+    <label>Miniserver</label>
+    <select name="miniserver_id" onchange="this.form.submit()">
+      <option value="">All Miniservers</option>
+      <% miniservers.forEach(ms => { %>
+        <option value="<%= ms.id %>" <%= miniserverId === ms.id ? 'selected' : '' %>><%= ms.name %></option>
+      <% }) %>
+    </select>
+  </div>
+</form>
+<% } %>
+
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <div class="search-combo">
+      <select id="hardware-category-filter">
+        <option value="">All categories</option>
+        <% categories.forEach(c => { %><option value="<%= c.key %>"><%= c.label %></option><% }) %>
+      </select>
+      <div class="clearable-input-wrap">
+        <input type="text" id="hardware-filter-query" placeholder="Filter by name, place, type, serial…">
+        <button type="button" id="hardware-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+      </div>
+    </div>
+    <%
+      // First click ever creates a default "Any Miniserver" rule of that type (routes/
+      // notifications.js's POST /rules/toggle-hardware); every click after that flips it on/off.
+      // One rule already covers every device automatically, so there's nothing per-device to set
+      // up here — this is just the fastest path to "on" for the common case.
+      const hardwareRuleInfo = [
+        { key: 'battery_weak', label: 'Battery weak' },
+        { key: 'device_firmware_changed', label: 'Firmware changed' },
+        { key: 'device_offline', label: 'Device online/offline' },
+      ];
+    %>
+    <% hardwareRuleInfo.forEach(r => { %>
+      <% const enabled = hardwareRuleStates.get(r.key) === true; %>
+      <form method="post" action="/admin/notifications/rules/toggle-hardware" style="margin:0;">
+        <input type="hidden" name="trigger_type" value="<%= r.key %>">
+        <input type="hidden" name="return_to" value="hardware">
+        <button
+          type="submit"
+          class="btn-soft"
+          style="background:<%= enabled ? 'var(--success-soft)' : 'var(--surface-alt)' %>; color:<%= enabled ? 'var(--success)' : 'var(--text-muted)' %>; border-color:<%= enabled ? 'var(--success)' : 'var(--text-muted)' %>;"
+          title="<%= enabled ? 'Enabled — click to disable' : 'Disabled — click to enable' %>"
+        ><%- icon(enabled ? 'check' : 'x') %> Alert <%= r.label %></button>
+      </form>
+    <% }) %>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Place</th>
+        <% if (miniservers.length > 1) { %><th>Miniserver</th><% } %>
+        <th style="max-width:8rem;">Firmware</th>
+        <th>Online</th>
+        <th style="min-width:7.5rem;">Battery</th>
+        <th>Signal</th>
+        <th>Hops</th>
+        <th>Last seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% devices.forEach(d => { %>
+        <tr data-category="<%= d.category %>">
+          <td><%= d.categoryLabel %></td>
+          <td><%= d.type || '-' %></td>
+          <td><%= d.name || '-' %></td>
+          <td><%= d.place || '-' %></td>
+          <% if (miniservers.length > 1) { %><td><%= d.miniserver_name %></td><% } %>
+          <td>
+            <% if (d.version) { %>
+              <span class="truncate" style="max-width:120px;" title="<%= d.version %>"><%= d.version %></span>
+            <% } else { %>-<% } %>
+          </td>
+          <td>
+            <% if (d.online === null) { %>
+              -
+            <% } else { %>
+              <span class="badge badge-live <%= d.online ? 'badge-ok' : 'badge-neutral' %>"><%= d.online ? 'Online' : 'Offline' %></span>
+            <% } %>
+          </td>
+          <td>
+            <% if (d.battery === null) { %>
+              -
+            <% } else if (d.battery === 127) { %>
+              <span class="badge badge-neutral">External power</span>
+            <% } else { %>
+              <span class="badge <%= (d.batt_weak || d.bat_too_weak_for_update) ? 'badge-warning' : 'badge-neutral' %>">
+                <%= d.battery %>%<% if (d.batt_weak || d.bat_too_weak_for_update) { %> weak<% } %>
+              </span>
+            <% } %>
+          </td>
+          <td><%= (d.quality_ext !== null && d.quality_dev !== null) ? `${d.quality_ext}/${d.quality_dev}` : '-' %></td>
+          <td><%= d.hops !== null ? d.hops : '-' %></td>
+          <td><%= d.time_diff !== null ? `${formatDuration(d.time_diff)} ago` : '-' %></td>
+        </tr>
+      <% }) %>
+      <% if (devices.length === 0) { %>
+        <tr><td colspan="<%= miniservers.length > 1 ? 11 : 10 %>" class="empty">No hardware seen yet &mdash; make sure a Miniserver is configured and its <code>/data/status</code> is reachable.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var categorySelect = document.getElementById('hardware-category-filter');
+    var queryInput = document.getElementById('hardware-filter-query');
+    var clearBtn = document.getElementById('hardware-filter-clear');
+    var tbody = document.querySelector('.table-wrap tbody');
+    if (!queryInput || !tbody) return;
+
+    function applyFilter() {
+      var category = categorySelect.value;
+      var q = queryInput.value.trim().toLowerCase();
+      if (clearBtn) clearBtn.hidden = !q;
+      tbody.querySelectorAll('tr').forEach(function (row) {
+        var categoryMatch = !category || row.dataset.category === category;
+        var textMatch = !q || row.textContent.toLowerCase().indexOf(q) !== -1;
+        row.style.display = (categoryMatch && textMatch) ? '' : 'none';
+      });
+    }
+
+    categorySelect.addEventListener('change', applyFilter);
+    queryInput.addEventListener('input', applyFilter);
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        queryInput.value = '';
+        applyFilter();
+        queryInput.focus();
+      });
+    }
+    queryInput.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !queryInput.value) return;
+      e.stopPropagation();
+      queryInput.value = '';
+      applyFilter();
+    });
+    new MutationObserver(applyFilter).observe(tbody, { childList: true });
+  })();
+</script>
+
+<%- include('partials/foot') %>

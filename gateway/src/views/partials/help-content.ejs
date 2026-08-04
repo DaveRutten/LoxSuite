@@ -203,6 +203,34 @@
   </div>
 </details>
 
+<details class="add-panel" id="help-hardware">
+  <summary>Hardware &mdash; where does this data come from?</summary>
+  <div class="add-panel-body">
+    <p>
+      Every Air/Tree/1-Wire device, Extension, third-party Plugin device, and Audioserver zone each
+      Miniserver's own <code>/data/status</code> endpoint reports &mdash; the same inventory Loxone
+      Config itself shows you. Polled every 5 minutes in the background (hardware status changes far
+      less often than a log), so this can lag a few minutes behind Loxone Config.
+    </p>
+    <p>
+      <strong>Battery</strong> and <strong>weak</strong> come straight from the Miniserver's own
+      judgment (<code>BattWeak</code>/<code>BatTooWeakForUpdate</code>), not a threshold this app
+      invented. An unpopulated Extension/Tree slot (a spare relay port never wired to anything) is
+      left out entirely rather than shown as permanently "offline."
+    </p>
+    <p>
+      Every battery-weak, firmware-changed, and online/offline transition is written to the
+      <a href="/logs/loxone">Loxone Miniservers log</a> automatically, whether or not you've set up
+      an alert for it — logging and alerting are separate here. Set up <strong>Loxone device battery
+      weak</strong>, <strong>Loxone device firmware changed</strong>, and <strong>Loxone device
+      online/offline</strong> rules on <a href="/admin/notifications">Notifications</a> to also be
+      actively notified (each with its own configurable severity) instead of having to check either
+      page yourself.
+    </p>
+    <p><a href="/hardware">Open Hardware &rarr;</a></p>
+  </div>
+</details>
+
 <details class="add-panel" id="help-live-data">
   <summary>Live Data (Loxone) &mdash; why did values used to show "(unreadable)"?</summary>
   <div class="add-panel-body">

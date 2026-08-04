@@ -178,6 +178,11 @@ db.exec(`
     numeric_value REAL
   );
   CREATE INDEX IF NOT EXISTS idx_monitor_history_monitor_time ON monitor_history(monitor_id, recorded_at);
+  -- logCollector-style retention (see monitorCollector.js's purgeOldHistory) deletes by
+  -- recorded_at alone, with no monitor_id filter — the composite index above is useless for that
+  -- (monitor_id is its leading column), forcing a full table scan that gets slower as history
+  -- grows. Same fix already applied to notification_events (idx_notification_events_created).
+  CREATE INDEX IF NOT EXISTS idx_monitor_history_recorded_at ON monitor_history(recorded_at);
 
   CREATE TABLE IF NOT EXISTS custom_dashboards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -350,6 +355,18 @@ function migrateMiniserverStatusColumns() {
     // generation never changes, so healthcheck.js only ever fetches this once (while it's still
     // NULL here) rather than on every sweep.
     db.exec('ALTER TABLE miniservers ADD COLUMN miniserver_type INTEGER');
+  }
+  if (!columns.includes('sort_order')) {
+    // User-controlled display order (Miniservers page's own Up/Down buttons, routes/miniservers.js
+    // POST /:id/move) — every OTHER page that lists Miniservers (Logs, Mappings, Monitor, Live
+    // Data, Notifications, Profile, Hardware, the dashboard) used to independently pick its own
+    // ORDER BY (mostly by name, miniservers.js itself by id), so the same set of Miniservers showed
+    // up in a different order on every page. This is the one shared, authoritative order all of
+    // them now query by instead. Backfilled to the existing id order below so upgrading installs
+    // keep their current order rather than every row starting at the same default and needing a
+    // tiebreaker everywhere.
+    db.exec('ALTER TABLE miniservers ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0');
+    db.exec('UPDATE miniservers SET sort_order = id');
   }
 }
 
@@ -1453,5 +1470,84 @@ function ensureNotificationDismissalsTable() {
 }
 
 ensureNotificationDismissalsTable();
+
+// Widens notification_rules.trigger_type's CHECK again, this time for 'battery_weak',
+// 'device_firmware_changed' and 'device_offline' (see notifications.js's TRIGGER_TYPES and
+// loxoneHardware.js) — same rebuild-the-table pattern as migrateNotificationRulesFirmwareChanged
+// above, carrying every existing column including owner_user_id. Also folds in
+// 'loxsuite_update_available', which notifications.js has offered as a creatable rule type since it
+// was added but which was never actually added to this CHECK — every attempt to create one has been
+// silently rejected by SQLite ever since; caught while touching this same CHECK for the genuinely
+// new types below.
+function ensureNotificationRulesTriggerTypesV3() {
+  const tableSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notification_rules'"
+  ).get();
+  if (!tableSql || tableSql.sql.includes("'battery_weak'")) return;
+
+  db.exec(`
+    CREATE TABLE notification_rules_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trigger_type TEXT NOT NULL CHECK (trigger_type IN ('monitor_threshold','miniserver_status','mqtt_client_status','backup_failed','firmware_changed','loxsuite_update_available','battery_weak','device_firmware_changed','device_offline')),
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      config TEXT NOT NULL DEFAULT '{}',
+      last_state TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    INSERT INTO notification_rules_new (id, trigger_type, name, enabled, config, last_state, created_at, owner_user_id)
+    SELECT id, trigger_type, name, enabled, config, last_state, created_at, owner_user_id FROM notification_rules;
+
+    DROP TABLE notification_rules;
+    ALTER TABLE notification_rules_new RENAME TO notification_rules;
+  `);
+  console.log("Migrated notification_rules: widened trigger_type CHECK to add 'battery_weak', 'device_firmware_changed', 'device_offline', 'loxsuite_update_available'.");
+}
+
+ensureNotificationRulesTriggerTypesV3();
+
+// Snapshot of every piece of Loxone hardware reported by a Miniserver's own /data/status endpoint
+// (Air/Tree/1-Wire devices, Extensions, third-party Plugin devices, Audioserver zones) — see
+// loxoneHardware.js. Deliberately a CURRENT-STATE table, not an append-only log like log_entries:
+// every poll replaces a Miniserver's whole row set in one transaction (loxoneHardware.js reads the
+// old rows first to detect transitions, then deletes+reinserts), so a device that's since been
+// removed/replaced in Loxone Config just disappears from here too, rather than lingering forever
+// as stale "last known" clutter the way an unbounded log would. device_key is the best available
+// stable identity per item — a real Serial when the device has one, else its GenericID (Plugin/
+// GenDev) or MAC (Audioserver/zone), else a `category:name` fallback — NOT always a literal
+// hardware serial number despite the separate `serial` column existing for display purposes only.
+function ensureLoxoneHardwareDevicesTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS loxone_hardware_devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      miniserver_id INTEGER NOT NULL REFERENCES miniservers(id) ON DELETE CASCADE,
+      device_key TEXT NOT NULL,
+      category TEXT NOT NULL,
+      type TEXT,
+      name TEXT,
+      place TEXT,
+      serial TEXT,
+      version TEXT,
+      min_version TEXT,
+      hw_version TEXT,
+      online INTEGER,
+      battery INTEGER,
+      batt_weak INTEGER NOT NULL DEFAULT 0,
+      bat_too_weak_for_update INTEGER NOT NULL DEFAULT 0,
+      quality_ext INTEGER,
+      quality_dev INTEGER,
+      hops INTEGER,
+      time_diff INTEGER,
+      mac TEXT,
+      updated_at TEXT NOT NULL,
+      UNIQUE(miniserver_id, device_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_loxone_hardware_devices_miniserver ON loxone_hardware_devices(miniserver_id);
+  `);
+}
+
+ensureLoxoneHardwareDevicesTable();
 
 module.exports = db;

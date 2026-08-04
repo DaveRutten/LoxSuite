@@ -844,7 +844,11 @@ h2 {
    overriding "hidden" entirely. The extra [hidden] attribute selector here is specific enough to
    win back over it. */
 .table-pager[hidden] { display: none; }
-.table-pager-label { white-space: nowrap; margin: 0 0 0 0.5rem; }
+/* margin-left:auto (not the container's own gap, which already spaces every OTHER child evenly)
+   pins this to the far right instead of bunching it up hard against Next with an inconsistent
+   double gap (the flex gap plus this element's own margin) — Prev/numbers/Next then read as one
+   tight, centered cluster, with the row count clearly its own separate thing on the opposite side. */
+.table-pager-label { white-space: nowrap; margin-left: auto; }
 .table-pager-numbers { display: flex; align-items: center; gap: 0.3rem; }
 .table-pager-page { min-width: 2.2rem; padding: 0.3rem 0.5rem; }
 .table-pager-page-current, .table-pager-page-current:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -1370,6 +1374,11 @@ code.recognition-string {
   font-size: 0.76rem;
   font-weight: 600;
   letter-spacing: 0.01em;
+  /* inline-flex lays out its own children as flex items but doesn't stop a text node from
+     wrapping on its own — a two-word badge (e.g. Hardware's own "External power") could still
+     break onto two lines the moment its column narrows even slightly, which reads as broken
+     rather than just tight. Badges are never meant to wrap. */
+  white-space: nowrap;
 }
 
 /* The dot (and the pulse) mean "this is live/real-time right now" — connected/disconnected,

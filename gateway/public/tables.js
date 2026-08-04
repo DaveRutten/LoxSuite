@@ -717,6 +717,14 @@
     var wrap = table.closest('.table-wrap');
     if (!wrap) return;
 
+    // Only the very first call (no pager built yet) should default to page 1 — every later call
+    // is refreshTables() re-running this after a liveSwap tbody replace (see foot.ejs), and a
+    // periodic background refresh silently yanking you back to page 1 every few seconds is exactly
+    // the surprising behavior this avoids. A filter/sort change still resets to page 1 of its own
+    // accord (the MutationObserver below, and the sort/reset-columns click handlers above) — this
+    // only preserves the page across a refresh that didn't change what you were looking at.
+    var isFirstInit = !state.pager;
+
     if (!state.pager) {
       var pager = document.createElement('div');
       pager.className = 'table-pager';
@@ -749,7 +757,7 @@
     observer.observe(table.querySelector('tbody'), { attributes: true, attributeFilter: ['style'], subtree: true });
     state.pager.observer = observer;
 
-    renderPage(table, 1);
+    renderPage(table, isFirstInit ? 1 : state.pager.page);
   }
 
   document.querySelectorAll('.table-wrap table').forEach(function (table, index) {

@@ -137,7 +137,7 @@ router.get('/mqtt/export.txt', requirePermission('logs_mqtt', 'edit'), (req, res
 const LOXONE_LINE_TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3});/;
 
 router.get('/loxone', requirePermission('logs_loxone', 'view'), (req, res) => {
-  const miniservers = db.prepare('SELECT id, name FROM miniservers ORDER BY name').all();
+  const miniservers = db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all();
   const miniserverId = req.query.miniserver_id ? Number(req.query.miniserver_id) : null;
   const filters = parseFilters(req.query);
 

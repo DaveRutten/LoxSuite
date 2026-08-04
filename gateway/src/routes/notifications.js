@@ -33,14 +33,21 @@ async function renderPage(res, extra = {}) {
     rules: listRules(),
     triggerTypes: TRIGGER_TYPES,
     monitors: db.prepare('SELECT id, label FROM monitors ORDER BY label').all(),
-    miniservers: db.prepare('SELECT id, name FROM miniservers ORDER BY name').all(),
+    miniservers: db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all(),
     error: null,
     testResult: null,
+    presetTrigger: '',
     ...extra,
   });
 }
 
-router.get('/', (req, res) => renderPage(res));
+// ?trigger_type=battery_weak (see hardware.ejs's own link) pre-selects that trigger and opens the
+// "Add rule" panel straight away — otherwise landing here means guessing which of the trigger
+// dropdown's many options is the right one before you can even see its fields.
+router.get('/', (req, res) => {
+  const presetTrigger = TRIGGER_TYPES.some((t) => t.key === req.query.trigger_type) ? req.query.trigger_type : '';
+  renderPage(res, { presetTrigger });
+});
 
 // ---- Channels ----
 
@@ -84,6 +91,12 @@ router.post('/channels/:id/test', async (req, res) => {
 
 // ---- Rules ----
 
+// Only the three device/hardware-level trigger types (battery_weak, device_firmware_changed,
+// device_offline) expose a configurable severity — the older trigger types each already had their
+// own fixed, previously-uncontested severity baked into notifications.js, and retrofitting a
+// selector onto all of them wasn't asked for.
+const SEVERITIES = ['info', 'warning', 'critical'];
+
 // Builds the trigger-specific config blob from whatever subset of fields that trigger type
 // actually uses — the form sends all of them at once (see admin-notifications.ejs's per-type field
 // groups, toggled client-side), so only the relevant ones are picked out here per trigger_type.
@@ -106,11 +119,58 @@ function buildRuleConfig(triggerType, body) {
       return { miniserver_id: body.firmware_miniserver_id ? Number(body.firmware_miniserver_id) : null };
     case 'mqtt_client_status':
       return { username: (body.mqtt_username || '').trim() || null };
+    case 'battery_weak':
+      return {
+        miniserver_id: body.battery_miniserver_id ? Number(body.battery_miniserver_id) : null,
+        severity: SEVERITIES.includes(body.battery_severity) ? body.battery_severity : 'warning',
+      };
+    case 'device_firmware_changed':
+      return {
+        miniserver_id: body.device_firmware_miniserver_id ? Number(body.device_firmware_miniserver_id) : null,
+        severity: SEVERITIES.includes(body.device_firmware_severity) ? body.device_firmware_severity : 'info',
+      };
+    case 'device_offline':
+      return {
+        miniserver_id: body.device_offline_miniserver_id ? Number(body.device_offline_miniserver_id) : null,
+        severity: SEVERITIES.includes(body.device_offline_severity) ? body.device_offline_severity : 'warning',
+      };
     case 'backup_failed':
     default:
       return {};
   }
 }
+
+// Backs the Hardware page's own compact enable/disable toggle buttons (hardware.ejs, in its table
+// toolbar) for the 3 device-level hardware rule types. First click ever creates the rule (enabled,
+// "Any Miniserver", an established default severity — channels/severity/scoping are still one edit
+// away on this page); every click after that just flips enabled on/off, same as the toggle switch
+// in the full rule editor's own "Enabled" field. Operates on whichever rule of that trigger_type
+// has the lowest id if more than one somehow exists (e.g. a second one hand-created and re-scoped
+// to a specific Miniserver) — this button is a convenience for the common single-rule case, not a
+// replacement for the full editor.
+const HARDWARE_QUICK_RULES = [
+  { triggerType: 'battery_weak', name: 'Battery weak', severity: 'warning' },
+  { triggerType: 'device_firmware_changed', name: 'Device firmware changed', severity: 'info' },
+  { triggerType: 'device_offline', name: 'Device online/offline', severity: 'warning' },
+];
+
+router.post('/rules/toggle-hardware', (req, res) => {
+  const info = HARDWARE_QUICK_RULES.find((r) => r.triggerType === req.body.trigger_type);
+  if (!info) return res.redirect(req.body.return_to === 'hardware' ? '/hardware' : '/admin/notifications');
+
+  const existing = db.prepare('SELECT id, enabled FROM notification_rules WHERE trigger_type = ? ORDER BY id LIMIT 1').get(info.triggerType);
+  if (!existing) {
+    db.prepare('INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at) VALUES (?, ?, 1, ?, \'{}\', ?)')
+      .run(info.triggerType, info.name, JSON.stringify({ miniserver_id: null, severity: info.severity }), new Date().toISOString());
+    logSystemEvent(`"${req.user.username}" quick-enabled notification rule "${info.name}".`);
+  } else {
+    const newEnabled = existing.enabled ? 0 : 1;
+    db.prepare('UPDATE notification_rules SET enabled = ? WHERE id = ?').run(newEnabled, existing.id);
+    logSystemEvent(`"${req.user.username}" ${newEnabled ? 're-enabled' : 'disabled'} notification rule "${info.name}".`);
+  }
+
+  res.redirect(req.body.return_to === 'hardware' ? '/hardware' : '/admin/notifications');
+});
 
 router.post('/rules', (req, res) => {
   const { name, trigger_type: triggerType, channel_ids: channelIds } = req.body;

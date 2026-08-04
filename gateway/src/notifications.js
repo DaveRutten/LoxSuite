@@ -12,6 +12,9 @@ const TRIGGER_TYPES = [
   { key: 'backup_failed', label: 'Backup failed' },
   { key: 'firmware_changed', label: 'Miniserver firmware changed' },
   { key: 'loxsuite_update_available', label: 'LoxSuite update available' },
+  { key: 'battery_weak', label: 'Loxone device battery weak' },
+  { key: 'device_firmware_changed', label: 'Loxone device firmware changed' },
+  { key: 'device_offline', label: 'Loxone device online/offline' },
 ];
 
 // Sending goes through Apprise (https://github.com/caronc/apprise, installed as a CLI in the
@@ -355,6 +358,94 @@ function checkLoxSuiteUpdate(currentVersion, latestVersion) {
   }
 }
 
+// Called by loxoneHardware.js's poller the moment a device's own BattWeak/BatTooWeakForUpdate flag
+// — as reported by the Miniserver itself, not a threshold this app invented — flips from not-weak
+// to weak. No last_state/transition bookkeeping needed here the way the other check* functions
+// need it: the loxone_hardware_devices table itself already IS the "last known state" the poller
+// diffs against before calling this, so this only ever fires once per genuine transition.
+// cfg.severity is user-configurable per rule (see admin-notifications.ejs's "Severity" field for
+// this trigger type) — defaults to 'warning' rather than forcing one on every install, since how
+// urgent a weak battery is depends entirely on the device (a hallway motion sensor vs. a smoke
+// detector aren't the same emergency).
+function checkBatteryWeak(miniserver, item) {
+  for (const rule of getRulesByTrigger('battery_weak')) {
+    const cfg = JSON.parse(rule.config || '{}');
+    if (cfg.miniserver_id && Number(cfg.miniserver_id) !== miniserver.id) continue;
+
+    const label = item.name || item.type || item.deviceKey;
+    fireRule(rule, {
+      title: `${label}: battery weak`,
+      message: `"${label}" on "${miniserver.name}" reports a weak battery${item.battery != null ? ` (${item.battery}%)` : ''}.`,
+      severity: cfg.severity || 'warning',
+      fields: [
+        { label: 'Device', value: label },
+        { label: 'Miniserver', value: miniserver.name },
+        { label: 'Battery', value: item.battery != null ? `${item.battery}%` : 'unknown' },
+        { label: 'Too weak to update', value: item.batTooWeakForUpdate ? 'Yes' : 'No' },
+      ],
+      sourceId: miniserver.id,
+      sourceLabel: label,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+// Called by loxoneHardware.js's poller whenever a device's own reported firmware Version differs
+// from what was stored for it on the previous poll — the per-device equivalent of
+// checkFirmwareChanged above (which only ever compares the Miniserver's OWN firmware string), same
+// "detects CHANGED, not that a newer one is available" honesty. cfg.severity defaults to 'info' —
+// a firmware bump is usually just informational, but configurable since not every install agrees.
+function checkDeviceFirmwareChanged(miniserver, item, previousVersion) {
+  for (const rule of getRulesByTrigger('device_firmware_changed')) {
+    const cfg = JSON.parse(rule.config || '{}');
+    if (cfg.miniserver_id && Number(cfg.miniserver_id) !== miniserver.id) continue;
+
+    const label = item.name || item.type || item.deviceKey;
+    fireRule(rule, {
+      title: `${label}: firmware changed`,
+      message: `"${label}" on "${miniserver.name}" firmware changed from ${previousVersion} to ${item.version}.`,
+      severity: cfg.severity || 'info',
+      fields: [
+        { label: 'Device', value: label },
+        { label: 'Miniserver', value: miniserver.name },
+        { label: 'Previous version', value: previousVersion },
+        { label: 'New version', value: item.version },
+      ],
+      sourceId: miniserver.id,
+      sourceLabel: label,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+// Called by loxoneHardware.js's poller whenever a device's own Online flag flips, either
+// direction — the per-device equivalent of checkMiniserverStatus above, for the hardware attached
+// TO a Miniserver rather than the Miniserver itself. cfg.severity configures the OFFLINE
+// direction's severity only (defaults to 'warning'); coming back online is always reported as
+// 'info' regardless — an unconfigurable second severity for the recovery half would be one control
+// nobody's asked for, mirroring monitor_threshold's own asymmetric treatment of breach vs. recover.
+function checkDeviceOffline(miniserver, item, isOnline) {
+  for (const rule of getRulesByTrigger('device_offline')) {
+    const cfg = JSON.parse(rule.config || '{}');
+    if (cfg.miniserver_id && Number(cfg.miniserver_id) !== miniserver.id) continue;
+
+    const label = item.name || item.type || item.deviceKey;
+    fireRule(rule, {
+      title: `${label}: ${isOnline ? 'online' : 'offline'}`,
+      message: `"${label}" on "${miniserver.name}" is now ${isOnline ? 'online' : 'offline'}.`,
+      severity: isOnline ? 'info' : (cfg.severity || 'warning'),
+      fields: [
+        { label: 'Device', value: label },
+        { label: 'Miniserver', value: miniserver.name },
+        { label: 'Status', value: isOnline ? 'online' : 'offline' },
+      ],
+      sourceId: miniserver.id,
+      sourceLabel: label,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
 // Subscribed to mosquittoLog.js's client-status events (see server.js wiring it up at boot).
 // Anonymous connections (no username — shouldn't normally happen, the broker requires auth, but a
 // malformed/edge-case log line could still parse one out) aren't meaningful to alert on by
@@ -405,6 +496,9 @@ module.exports = {
   checkFirmwareChanged,
   checkLoxSuiteUpdate,
   checkMqttClientStatus,
+  checkBatteryWeak,
+  checkDeviceFirmwareChanged,
+  checkDeviceOffline,
   notifyBackupFailed,
   // Pure helpers, exported mainly so test/notifications.test.js can exercise them directly rather
   // than only indirectly through the DB-driven check*/fireRule functions above.

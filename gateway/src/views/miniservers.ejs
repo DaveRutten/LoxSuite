@@ -76,11 +76,14 @@
 <div class="table-wrap">
   <table class="table-compact">
     <thead>
-      <tr><th data-no-controls></th><th>Status</th><th>Name</th><th>Host</th><th>HTTP port</th><th>HTTPS</th><th data-default-hidden>UDP port</th><th data-default-hidden>External URL</th><th>User</th><th>Last checked</th><th>Actions</th></tr>
+      <tr><% if (canEdit('miniservers')) { %><th data-no-controls></th><% } %><th data-no-controls></th><th>Status</th><th>Name</th><th>Host</th><th>HTTP port</th><th>HTTPS</th><th data-default-hidden>UDP port</th><th data-default-hidden>External URL</th><th>User</th><th>Last checked</th><th>Actions</th></tr>
     </thead>
-    <tbody>
-      <% miniservers.forEach(ms => { %>
-        <tr>
+    <tbody id="miniservers-tbody">
+      <% miniservers.forEach((ms, msIndex) => { %>
+        <tr data-ms-id="<%= ms.id %>">
+          <% if (canEdit('miniservers')) { %>
+          <td class="ms-drag-handle" style="cursor:grab; text-align:center; color:var(--text-muted);" title="Drag to reorder — this order is used everywhere Miniservers are listed"><%- icon('gripVertical') %></td>
+          <% } %>
           <td>
             <button type="button" class="icon-btn icon-btn-neutral" data-toggle-row="ms-diag-<%= ms.id %>" title="Show diagnostics"><%- icon('chevron') %></button>
           </td>
@@ -415,6 +418,76 @@
     if (!row) return;
     row.classList.add('open');
     row.scrollIntoView({ block: 'center' });
+  })();
+</script>
+
+<script>
+  // Drag-and-drop row reordering — persists via POST /miniservers/reorder (JSON body, so it's
+  // exempt from the CSRF token check, see middleware/csrf.js) the instant a drag ends, updating
+  // every OTHER page that lists Miniservers too, since they all now query by this same sort_order
+  // column (see db.js). Native HTML5 drag-and-drop, not a library. Dragging only starts from the
+  // .ms-drag-handle cell (a mousedown flag consumed by dragstart) so grabbing Edit/Test/Delete
+  // elsewhere in the row doesn't accidentally start a drag.
+  (function () {
+    var tbody = document.getElementById('miniservers-tbody');
+    if (!tbody) return;
+
+    var dragging = null; // the summary <tr> currently being dragged
+    var armed = false; // true only right after mousedown on a .ms-drag-handle
+
+    tbody.querySelectorAll('.ms-drag-handle').forEach(function (handle) {
+      handle.closest('tr').setAttribute('draggable', 'true');
+      handle.addEventListener('mousedown', function () { armed = true; });
+    });
+
+    // A row's own diagnostics panel (the very next sibling <tr class="expand-row">) has to move
+    // together with it — same "keep a row and its expand-row as one unit" rule tables.js's own
+    // pagination follows (see public/tables.js's rowGroup).
+    function rowGroup(row) {
+      var group = [row];
+      if (row.nextElementSibling && row.nextElementSibling.classList.contains('expand-row')) {
+        group.push(row.nextElementSibling);
+      }
+      return group;
+    }
+
+    tbody.addEventListener('dragstart', function (e) {
+      var row = e.target.closest('tr[data-ms-id]');
+      if (!row || !armed) { e.preventDefault(); return; }
+      dragging = row;
+      e.dataTransfer.effectAllowed = 'move';
+      row.style.opacity = '0.4';
+    });
+
+    tbody.addEventListener('dragover', function (e) {
+      if (!dragging) return;
+      e.preventDefault();
+      var target = e.target.closest('tr[data-ms-id]');
+      if (!target || target === dragging) return;
+      var rect = target.getBoundingClientRect();
+      var before = (e.clientY - rect.top) < rect.height / 2;
+      var group = rowGroup(dragging);
+      var anchor = before ? target : rowGroup(target).slice(-1)[0].nextElementSibling;
+      group.forEach(function (el) { tbody.insertBefore(el, anchor); });
+    });
+
+    tbody.addEventListener('drop', function (e) { e.preventDefault(); });
+
+    tbody.addEventListener('dragend', function () {
+      armed = false;
+      if (!dragging) return;
+      dragging.style.opacity = '';
+      dragging = null;
+
+      var ids = Array.prototype.map.call(tbody.querySelectorAll('tr[data-ms-id]'), function (row) {
+        return Number(row.dataset.msId);
+      });
+      fetch('/miniservers/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: ids }),
+      }).catch(function () {});
+    });
   })();
 </script>
 

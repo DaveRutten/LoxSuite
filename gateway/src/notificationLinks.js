@@ -11,6 +11,9 @@ function notificationSourceLink(eventType, sourceId, canView) {
   if ((eventType === 'miniserver_status' || eventType === 'firmware_changed') && canView('miniservers')) {
     return `/miniservers?open=${sourceId}`;
   }
+  if ((eventType === 'battery_weak' || eventType === 'device_firmware_changed' || eventType === 'device_offline') && canView('hardware')) {
+    return `/hardware?miniserver_id=${sourceId}`;
+  }
   return null;
 }
 

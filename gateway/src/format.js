@@ -60,4 +60,19 @@ function miniserverGenerationLabel(type) {
   return MINISERVER_TYPE_LABELS[type] || `Unknown (type ${type})`;
 }
 
-module.exports = { formatCount, formatHeapStatus, parseHeapStatus, miniserverGenerationLabel };
+// Loxone's /data/status (see loxoneHardware.js) reports a device's own TimeDiff as whole seconds
+// since it was last heard from, rather than a timestamp — converting that back to a wall-clock
+// time and re-diffing against "now" on every page render would just reintroduce clock-skew issues
+// Loxone's own number already avoids, so this formats the seconds directly instead.
+function formatDuration(seconds) {
+  if (seconds == null || !Number.isFinite(seconds)) return null;
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
+
+module.exports = { formatCount, formatHeapStatus, parseHeapStatus, miniserverGenerationLabel, formatDuration };

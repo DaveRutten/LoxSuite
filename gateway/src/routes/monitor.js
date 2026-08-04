@@ -237,7 +237,7 @@ router.get('/', (req, res) => {
       return { ...m, current: getCurrentValue(m.id), hasNotifyThreshold };
     });
 
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   const retention = db.prepare('SELECT monitor_retention_days FROM gateway_settings WHERE id = 1').get();
   const unusedCount = monitors.filter((m) => m.panelCount === 0).length;
 
@@ -309,7 +309,7 @@ router.post('/', requirePermission('monitor', 'edit'), async (req, res) => {
       )
       .all()
       .map((m) => ({ ...m, current: getCurrentValue(m.id) }));
-    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+    const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
     const retention = db.prepare('SELECT monitor_retention_days FROM gateway_settings WHERE id = 1').get();
     const unusedCount = monitors.filter((m) => m.panelCount === 0).length;
     res.render('monitor', {

@@ -59,7 +59,7 @@
       const brokerHref = (brokerAreas.find((a) => canView(a.key)) || {}).href;
       const brokerActive = ['mqtt-users', 'mqtt-roles', 'broker-settings'].includes(active);
 
-      const loxoneSectionVisible = canView('miniservers') || !!mappingsHref;
+      const loxoneSectionVisible = canView('miniservers') || canView('hardware') || !!mappingsHref;
       const mqttSectionVisible = canView('incoming') || !!brokerHref;
 
       // A section stays expanded regardless of the user's saved preference while they're actually
@@ -101,13 +101,14 @@
       </div>
 
       <% if (loxoneSectionVisible) { %>
-        <% const loxoneExpanded = active === 'miniservers' || active === 'live-data' || mappingsActive; %>
+        <% const loxoneExpanded = active === 'miniservers' || active === 'live-data' || active === 'hardware' || mappingsActive; %>
         <button type="button" class="nav-section-label" data-nav-section="loxone-mappings" aria-expanded="<%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'false' : 'true' %>">
           <span>Loxone</span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'hidden' : '' %>>
           <% if (canView('miniservers')) { %><a href="/miniservers" class="<%= active === 'miniservers' ? 'active' : '' %>">Miniservers</a><% } %>
           <% if (canView('miniservers')) { %><a href="/live-data" class="<%= active === 'live-data' ? 'active' : '' %>">Live Data</a><% } %>
+          <% if (canView('hardware')) { %><a href="/hardware" class="<%= active === 'hardware' ? 'active' : '' %>">Hardware</a><% } %>
           <% if (mappingsHref) { %><a href="<%= mappingsHref %>" class="<%= mappingsActive ? 'active' : '' %>">Mappings</a><% } %>
         </div>
       <% } %>
@@ -149,7 +150,7 @@
       <h1><%= pageTitle %></h1>
       <%
         const helpAnchors = {
-          dashboard: 'dashboard', monitor: 'monitor', dashboards: 'dashboards', miniservers: 'miniservers', 'live-data': 'live-data', 'mqtt-to-loxone': 'mqtt-to-loxone',
+          dashboard: 'dashboard', monitor: 'monitor', dashboards: 'dashboards', miniservers: 'miniservers', hardware: 'hardware', 'live-data': 'live-data', 'mqtt-to-loxone': 'mqtt-to-loxone',
           'loxone-to-mqtt': 'loxone-to-mqtt', commands: 'commands', transformations: 'transformations',
           incoming: 'incoming', 'incoming-clients': 'incoming', 'logs-mqtt': 'logs', 'logs-loxone': 'logs', 'logs-loxone-commands': 'logs', 'logs-system': 'logs', 'mqtt-users': 'mqtt-users', 'mqtt-roles': 'mqtt-roles', 'broker-settings': 'settings',
           admin: 'admin', profile: 'profile', settings: 'settings-general',

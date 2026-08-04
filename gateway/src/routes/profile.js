@@ -46,7 +46,7 @@ function loadMyRules(userId) {
 function loadRuleFormOptions(res) {
   return {
     monitors: res.locals.canView('monitor') ? db.prepare('SELECT id, label FROM monitors ORDER BY label').all() : [],
-    miniservers: res.locals.canView('miniservers') ? db.prepare('SELECT id, name FROM miniservers ORDER BY name').all() : [],
+    miniservers: res.locals.canView('miniservers') ? db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all() : [],
   };
 }
 
