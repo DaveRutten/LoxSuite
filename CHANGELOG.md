@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.2-alpha.1] - 2026-08-04
+
+### Added
+- The Hardware page now shows each device's **Serial** and **MAC** address as their own columns
+  (the data was already being collected, just never surfaced).
+
+### Fixed
+- A Loxone **Gateway Client** setup (one Miniserver sharing its Audioserver with another) no
+  longer lists the same physical Audioserver and its Stereo Extension zones twice, once per
+  Miniserver that can see them — deduplicated by MAC address, since it's the same hardware either
+  way.
+- The Hardware page's category filter had two identically-labeled "Plugin device" options with no
+  way to tell them apart — the Plugin's own GenDev children (the individual devices it exposes,
+  e.g. each Home Connect appliance) are now labeled "Plugin sub-device" to distinguish them from
+  the plugin/bridge itself (e.g. an MCP Server plugin).
+- Client Activity's device-name resolution only ever recognized Shelly's own "brandname-XXXXXX"
+  client ID convention — a device whose client ID is "<product>_<name>" while its actual MQTT
+  topic prefix is just "<name>" (e.g. a HeatMeister module: client ID "heatbooster_radiator-gang",
+  topic prefix "radiator-gang") now also resolves to its friendly name, which in turn also makes
+  "Suggest commands" appear for it (the family lookup uses that same resolved name).
+
 ## [0.9.1-alpha.1] - 2026-08-04
 
 ### Added

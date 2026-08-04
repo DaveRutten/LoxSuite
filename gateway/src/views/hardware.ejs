@@ -77,6 +77,8 @@
         <th>Type</th>
         <th>Name</th>
         <th>Place</th>
+        <th>Serial</th>
+        <th>MAC</th>
         <% if (miniservers.length > 1) { %><th>Miniserver</th><% } %>
         <th style="max-width:8rem;">Firmware</th>
         <th>Online</th>
@@ -93,6 +95,8 @@
           <td><%= d.type || '-' %></td>
           <td><%= d.name || '-' %></td>
           <td><%= d.place || '-' %></td>
+          <td><span class="truncate" style="max-width:110px;" title="<%= d.serial || '' %>"><%= d.serial || '-' %></span></td>
+          <td><span class="truncate" style="max-width:110px;" title="<%= d.mac || '' %>"><%= d.mac || '-' %></span></td>
           <% if (miniservers.length > 1) { %><td><%= d.miniserver_name %></td><% } %>
           <td>
             <% if (d.version) { %>
@@ -123,7 +127,7 @@
         </tr>
       <% }) %>
       <% if (devices.length === 0) { %>
-        <tr><td colspan="<%= miniservers.length > 1 ? 11 : 10 %>" class="empty">No hardware seen yet &mdash; make sure a Miniserver is configured and its <code>/data/status</code> is reachable.</td></tr>
+        <tr><td colspan="<%= miniservers.length > 1 ? 13 : 12 %>" class="empty">No hardware seen yet &mdash; make sure a Miniserver is configured and its <code>/data/status</code> is reachable.</td></tr>
       <% } %>
     </tbody>
   </table>

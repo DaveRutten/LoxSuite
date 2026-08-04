@@ -30,15 +30,28 @@ function discoverDevices() {
 
 // Best-effort match between a raw MQTT client ID and a known topic prefix:
 // exact match first (the common case — a device's client ID and topic prefix
-// are usually the same string), then a brand-prefix-insensitive match. There
-// is no protocol-level way to reliably link the two when they genuinely
-// differ — the broker never tells subscribers which client published a
-// message — so anything beyond this heuristic would be a guess.
+// are usually the same string), then a brand-prefix-insensitive match (Shelly:
+// clientId "shellyplug-s-A1B2C3" vs. topic prefix "A1B2C3"). There is no
+// protocol-level way to reliably link the two when they genuinely differ —
+// the broker never tells subscribers which client published a message — so
+// anything beyond this heuristic would be a guess.
 function resolveTopicPrefix(clientId, knownPrefixes) {
   if (knownPrefixes.includes(clientId)) return clientId;
   const stripped = clientId.replace(BRAND_PREFIX_RE, '').toLowerCase();
   const match = knownPrefixes.find((p) => p.replace(BRAND_PREFIX_RE, '').toLowerCase() === stripped);
-  return match || null;
+  if (match) return match;
+  // Some other families' client IDs are "<product>_<name>" while their topic prefix is just
+  // "<name>" (e.g. a HeatMeister module: client ID "heatbooster_radiator-gang", topic prefix
+  // "radiator-gang") — a suffix match, bounded by a separator so "gang" alone can't spuriously
+  // match inside "radiator-gang", covers that without being specific to any one brand.
+  const lowerClientId = clientId.toLowerCase();
+  const suffixMatch = knownPrefixes.find((p) => {
+    const lowerPrefix = p.toLowerCase();
+    if (!lowerClientId.endsWith(lowerPrefix) || lowerClientId.length === lowerPrefix.length) return false;
+    const boundaryChar = lowerClientId.charAt(lowerClientId.length - lowerPrefix.length - 1);
+    return boundaryChar === '_' || boundaryChar === '-' || boundaryChar === '/';
+  });
+  return suffixMatch || null;
 }
 
 module.exports = { discoverDevices, resolveTopicPrefix };

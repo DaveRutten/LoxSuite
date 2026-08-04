@@ -17,7 +17,11 @@ const CATEGORY_LABELS = {
   air: 'Air device',
   onewire: '1-Wire device',
   plugin: 'Plugin device',
-  gendev: 'Plugin device',
+  // A Plugin's own GenDev children are the individual devices IT exposes (e.g. each Home Connect
+  // appliance under a Home Connect plugin, or whatever a generic MCP-server plugin reports) — a
+  // distinct label from the plugin/bridge itself, otherwise the category filter dropdown shows two
+  // identically-labeled "Plugin device" options with no way to tell which is which.
+  gendev: 'Plugin sub-device',
 };
 const CATEGORY_ORDER = ['miniserver', 'extension', 'audio_server', 'audio_zone', 'tree', 'air', 'onewire', 'plugin', 'gendev'];
 
@@ -51,9 +55,25 @@ router.get('/', (req, res) => {
     SELECT h.*, m.name AS miniserver_name FROM loxone_hardware_devices h
     JOIN miniservers m ON m.id = h.miniserver_id
     ${miniserverId ? 'WHERE h.miniserver_id = ?' : ''}
+    ORDER BY m.sort_order, m.id
   `;
   const hwRows = miniserverId ? db.prepare(hwQuery).all(miniserverId) : db.prepare(hwQuery).all();
-  const hardwareRows = hwRows.map((r) => ({ ...r, categoryLabel: CATEGORY_LABELS[r.category] || r.category }));
+  const hardwareRowsRaw = hwRows.map((r) => ({ ...r, categoryLabel: CATEGORY_LABELS[r.category] || r.category }));
+
+  // A Loxone "Gateway Client" setup (loxone.com/enen/kb/gateway-client) lets one Miniserver share
+  // its Audioserver with another — the shared Audioserver, and every one of its Stereo Extension
+  // zones, then shows up in BOTH Miniservers' own /data/status with the exact same MAC each time,
+  // since it's the same physical hardware either way. Keeping every miniserver's own copy would
+  // otherwise list the same speakers once per Miniserver that can see them. hwRows is already
+  // ordered by miniserver sort_order above, so this keeps whichever Miniserver is listed first and
+  // drops the rest — MAC alone is enough since it already only exists on this exact hardware.
+  const seenAudioMacs = new Set();
+  const hardwareRows = hardwareRowsRaw.filter((r) => {
+    if ((r.category !== 'audio_server' && r.category !== 'audio_zone') || !r.mac) return true;
+    if (seenAudioMacs.has(r.mac)) return false;
+    seenAudioMacs.add(r.mac);
+    return true;
+  });
 
   // Sorted here (not in SQL) since the Miniserver rows above come from a separate query — category
   // in CATEGORY_ORDER's own priority order, then place, then name within a category. Miniserver
