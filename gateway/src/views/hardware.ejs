@@ -1,22 +1,5 @@
 <%- include('partials/head', { pageTitle: 'Hardware', active: 'hardware', refresh: 60, liveSwap: true }) %>
 
-<p class="hint">
-  Every piece of hardware each Miniserver's own <code>/data/status</code> reports &mdash; the
-  Miniserver itself, Extensions, Audioserver zones, and the Air/Tree/1-Wire/Plugin devices attached
-  to it. Polled every 5 minutes (this changes far less often than a log), so what you see here can
-  lag behind Loxone Config by a few minutes. A <strong>battery</strong> reading of <strong>127</strong>
-  means mains-powered (AC/DC adapter) &mdash; not a real percentage, so it's shown as
-  <strong>External power</strong> instead. Skipped entirely while a Miniserver itself is offline, to avoid a
-  flood of false "device offline" readings during a reboot.
-</p>
-
-<p class="hint">
-  One rule already covers <strong>every</strong> device automatically &mdash; current and any
-  added later &mdash; there's no per-device setup. The 3 buttons below the search bar create (first
-  click) or toggle (after that) a default "Any Miniserver" rule for each; fine-tune severity,
-  scoping, or channels on <a href="/admin/notifications">Notifications</a>.
-</p>
-
 <% if (miniservers.length > 1) { %>
 <form method="get" action="/hardware" class="form-grid" style="margin-bottom:1rem; align-items:end;">
   <div>

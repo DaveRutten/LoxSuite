@@ -67,7 +67,7 @@ Logged in as <strong><%= username %></strong>
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Status</th><th>Name</th><th>Host</th><th>Last successful call</th><th>Last error</th></tr>
+        <tr><th>Status</th><th>Name</th><th>Gateway Client</th><th>Host</th><th>Last successful call</th><th>Last error</th></tr>
       </thead>
       <tbody>
         <% miniservers.forEach(ms => { %>
@@ -78,13 +78,22 @@ Logged in as <strong><%= username %></strong>
               <span class="badge badge-live <%= badgeClass %>"><%= badgeText %></span>
             </td>
             <td><%= ms.name %></td>
+            <td>
+              <% if (ms.gatewayClientCount > 0) { %>
+                <span class="badge badge-purple" title="Manages <%= ms.gatewayClientCount %> Client Miniserver<%= ms.gatewayClientCount === 1 ? '' : 's' %> that share its merged Loxone Config project">Gateway &middot; <%= ms.gatewayClientCount %> client<%= ms.gatewayClientCount === 1 ? '' : 's' %></span>
+              <% } else if (ms.gatewayClientOfName) { %>
+                <span class="badge badge-purple" title="Shares <%= ms.gatewayClientOfName %>'s own merged Loxone Config project rather than running a separate one of its own">Client &ndash; <%= ms.gatewayClientOfName %></span>
+              <% } else { %>
+                <span class="badge badge-neutral" title="Not part of a Gateway Client group — runs its own separate Loxone Config project">Standalone</span>
+              <% } %>
+            </td>
             <td><%= ms.host %>:<%= ms.http_port %></td>
             <td><%= ms.last_success_at ? formatDateTime(ms.last_success_at) : '-' %></td>
             <td><% if (ms.last_error) { %><span class="truncate" title="<%= ms.last_error %>"><%= ms.last_error %></span><% } else { %>-<% } %></td>
           </tr>
         <% }) %>
         <% if (miniservers.length === 0) { %>
-          <tr><td colspan="5" class="empty">No miniservers added yet. Go to <a href="/miniservers">Miniservers</a>.</td></tr>
+          <tr><td colspan="6" class="empty">No miniservers added yet. Go to <a href="/miniservers">Miniservers</a>.</td></tr>
         <% } %>
       </tbody>
     </table>

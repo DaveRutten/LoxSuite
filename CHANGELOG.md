@@ -2,6 +2,45 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.10.0-alpha.1] - 2026-08-04
+
+### Changed
+- **License changed from MIT to AGPL-3.0-or-later.** Every release up to and including
+  0.9.2-alpha.1 stays available to anyone who already has it under MIT terms — this only applies
+  going forward.
+- The Hardware page's dedup (see 0.9.2-alpha.1) is now generalized beyond Audioservers/Stereo
+  Extensions: any hardware row with a real Serial or MAC is deduplicated across Miniservers that
+  both report it, not just audio devices — matches how a Loxone Gateway Client setup actually
+  behaves (a Gateway's own `/data/status` already includes its Clients' hardware, on top of each
+  Client separately reporting that same hardware from its own).
+- Live Data's Miniserver dropdown now only lists Miniservers that are currently online (except
+  whichever one is already selected) — an offline one has no live connection to switch to, so it's
+  no longer offered as a choice that just won't work.
+- The hints-toggle button (Monitor/Dashboard panel settings, and now also the Add/Edit Miniserver
+  forms, MQTT Broker, and Settings pages) uses a lightbulb icon instead of a question mark.
+- Any `[data-toggle-row]` button, sitewide, now fills in with the accent color while its target is
+  open — previously just the Miniservers page's own diagnostics/Client-group buttons.
+- The Hardware page's two introductory paragraphs were removed — they didn't add anything a
+  first-time visitor needed.
+
+### Added
+- **Loxone Gateway Client support**: a Miniserver can now be explicitly flagged as a Gateway with
+  its own inline-managed Client Miniservers — the Add Miniserver form, Edit Miniserver form, and
+  the Setup Wizard's Miniserver step all share the same UI (name/host/port/HTTPS per Client, shared
+  credentials, batch Test).
+  - The Miniservers list, and the home dashboard's own Miniservers table, show each row's
+    relationship: Standalone, "Gateway · N clients", or `Client – <Gateway name>` — Clients
+    render as real sibling rows directly under their Gateway, toggled open/closed with a dedicated
+    share-icon button (or the page's own "Expand/Collapse all clients" button), independent of that
+    row's own diagnostics panel.
+  - Updating a Gateway's firmware also updates every one of its Clients.
+  - Drag-and-drop reordering keeps a Gateway's Clients grouped under it, and keeps each row's own
+    diagnostics panel attached to it through a reorder.
+
+### Fixed
+- A stray `docker-compose.yml` edit had `MQTT_URL` pointing at `128.0.0.1` instead of `127.0.0.1`,
+  which would have broken the bundled Mosquitto connection on a fresh install.
+
 ## [0.9.2-alpha.1] - 2026-08-04
 
 ### Added

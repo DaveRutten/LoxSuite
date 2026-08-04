@@ -55,23 +55,32 @@ router.get('/', (req, res) => {
     SELECT h.*, m.name AS miniserver_name FROM loxone_hardware_devices h
     JOIN miniservers m ON m.id = h.miniserver_id
     ${miniserverId ? 'WHERE h.miniserver_id = ?' : ''}
-    ORDER BY m.sort_order, m.id
+    ORDER BY (m.gateway_client_of IS NOT NULL), m.sort_order, m.id
   `;
   const hwRows = miniserverId ? db.prepare(hwQuery).all(miniserverId) : db.prepare(hwQuery).all();
   const hardwareRowsRaw = hwRows.map((r) => ({ ...r, categoryLabel: CATEGORY_LABELS[r.category] || r.category }));
 
-  // A Loxone "Gateway Client" setup (loxone.com/enen/kb/gateway-client) lets one Miniserver share
-  // its Audioserver with another — the shared Audioserver, and every one of its Stereo Extension
-  // zones, then shows up in BOTH Miniservers' own /data/status with the exact same MAC each time,
-  // since it's the same physical hardware either way. Keeping every miniserver's own copy would
-  // otherwise list the same speakers once per Miniserver that can see them. hwRows is already
-  // ordered by miniserver sort_order above, so this keeps whichever Miniserver is listed first and
-  // drops the rest — MAC alone is enough since it already only exists on this exact hardware.
-  const seenAudioMacs = new Set();
+  // A Loxone "Gateway Client" setup (loxone.com/enen/kb/gateway-client) merges every Client
+  // Miniserver's own project into its Gateway's — confirmed against a real installation that the
+  // Gateway's own /data/status already reports its Clients' hardware too, not just its own, on top
+  // of each Client separately reporting that same hardware from its own /data/status. Not just
+  // Audioservers/zones, potentially anything with a real Serial or MAC (Extensions, Tree/Air/1-Wire
+  // devices, ...) — so this dedups on whichever of those two a row actually has, not one specific
+  // category. hwRows is ordered with any explicit Gateway Client (see the Miniserver edit page)
+  // sorted after its own Gateway first, then by the shared miniserver sort_order — so this keeps
+  // whichever Miniserver is the real Gateway when that relationship is known, and otherwise
+  // whichever sorts first. Serial/MAC alone are enough to tell two rows are the same hardware,
+  // since either one only ever exists on this one physical device — a category:name fallback key
+  // (see loxoneHardware.js's own deviceKeyFor) is deliberately NOT used here: two distinct devices
+  // on two distinct Miniservers can plausibly share a generic name, and wrongly dropping one of
+  // them would be far worse than occasionally leaving a genuine duplicate in the list.
+  const seenIdentities = new Set();
   const hardwareRows = hardwareRowsRaw.filter((r) => {
-    if ((r.category !== 'audio_server' && r.category !== 'audio_zone') || !r.mac) return true;
-    if (seenAudioMacs.has(r.mac)) return false;
-    seenAudioMacs.add(r.mac);
+    const identity = r.serial || r.mac;
+    if (!identity) return true;
+    const key = `${identity}`;
+    if (seenIdentities.has(key)) return false;
+    seenIdentities.add(key);
     return true;
   });
 

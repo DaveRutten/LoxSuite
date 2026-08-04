@@ -3,6 +3,14 @@
   <img src="docs/logo-light.svg" alt="LoxSuite" width="360">
 </picture>
 
+<!-- Commits-since badge points at a fixed tag (shields has no releases-based "latest" to track
+     since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
+     and package.json on every version release. -->
+[![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.9.2-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
+[![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
+
 A self-hosted Docker stack for Loxone Miniservers: an MQTT gateway, log viewing, value monitoring,
 scheduled backups, and a web UI to manage all of it.
 
@@ -45,11 +53,11 @@ It provides:
 <tr>
 <td width="50%">
 
-**Miniservers** — status, firmware version, and connection details at a glance.
+**Miniservers** — status, firmware, and Gateway/Client relationships at a glance.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/miniservers-dark.png">
-  <img src="docs/screenshots/miniservers-light.png" alt="The Miniservers page listing two online Miniservers">
+  <img src="docs/screenshots/miniservers-light.png" alt="The Miniservers page listing standalone Miniservers alongside two Gateway/Client groups, each Client indented under its Gateway">
 </picture>
 
 </td>
@@ -420,8 +428,8 @@ of the format, not placeholders.
 
 A Loxone &rarr; MQTT mapping also has a **Shelly RGBW/White/Tunable-white** value transform, which
 converts Loxone's own RGB ("H,S,V") or Lumitech tunable-white ("brightness,kelvin") output format
-into the JSON payload a Shelly RGBW2/Bulb/Duo actually expects — built in, no separate LoxBerry-style
-UDP transformer needed.
+into the JSON payload a Shelly RGBW2/Bulb/Duo actually expects — built in, no separate UDP
+transformer plugin needed.
 
 Also covers [SDR Innovation's HeatMeister](https://www.sdr-engineering.nl) (radiator/fan-coil
 controller) — confirmed against its own protocol spec (firmware v2.8.2) and a real installation, all

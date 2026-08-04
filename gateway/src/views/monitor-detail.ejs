@@ -84,7 +84,7 @@
               // on every save already (see the main Save button below).
             %>
             <button type="submit" formaction="/monitor/<%= monitor.id %>/chart-settings/save-as-default" class="icon-btn icon-btn-neutral" title="Save these settings as the shared default for every monitor's chart"><%- icon('star') %></button>
-            <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('help') %></button>
+            <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('lightbulb') %></button>
             <% if (chartDefaultExists) { %>
             <button type="submit" formaction="/monitor/<%= monitor.id %>/chart-settings/reset-to-default" class="icon-btn icon-btn-neutral" title="Apply the shared default chart style to this monitor"><%- icon('refresh') %></button>
             <% } %>

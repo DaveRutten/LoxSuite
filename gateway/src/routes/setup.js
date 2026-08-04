@@ -96,8 +96,21 @@ router.post('/timezone', (req, res) => {
   res.redirect('/setup?step=miniserver');
 });
 
+// Same clients_json shape/parsing as the regular Add Miniserver form (routes/miniservers.js's own
+// parseClientsJson) — kept as its own copy rather than requiring that file, since setup.js is a
+// standalone first-run flow that shouldn't gain a dependency on the day-to-day Miniservers route.
+function parseClientsJson(raw) {
+  if (!raw) return [];
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (err) { return []; }
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((c) => c && typeof c.name === 'string' && c.name.trim() && typeof c.host === 'string' && c.host.trim())
+    .map((c) => ({ name: c.name.trim(), host: c.host.trim(), http_port: Number(c.http_port) || 80, use_https: !!c.use_https }));
+}
+
 router.post('/miniserver', async (req, res) => {
-  const { name, host, http_port: httpPort, udp_port: udpPort, username, password, use_https: useHttps, external_url: externalUrl } = req.body;
+  const { name, host, http_port: httpPort, udp_port: udpPort, username, password, use_https: useHttps, external_url: externalUrl, clients_json: clientsJson } = req.body;
   if (!name && !host && !username && !password) {
     markVisited('miniserver');
     return res.redirect('/setup?step=mqtt');
@@ -109,15 +122,36 @@ router.post('/miniserver', async (req, res) => {
   // Same field set as the regular Add Miniserver form (routes/miniservers.js) — UDP port and
   // External URL were missing here even though the wizard's own form already collected them,
   // silently dropping whatever was typed into those two fields.
-  const result = db.prepare(
-    `INSERT INTO miniservers (name, host, http_port, udp_port, username, password, use_https, external_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(name, host, Number(httpPort) || 80, udpPort ? Number(udpPort) : null, username, encrypt(password), useHttps ? 1 : 0, externalUrl ? externalUrl.trim().replace(/\/+$/, '') : null);
+  const encryptedPassword = encrypt(password);
+  const insertMiniserver = db.prepare(
+    `INSERT INTO miniservers (name, host, http_port, udp_port, username, password, use_https, external_url, sort_order, gateway_client_of)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const nextSortOrder0 = db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM miniservers').get().next;
+  const result = insertMiniserver.run(
+    name, host, Number(httpPort) || 80, udpPort ? Number(udpPort) : null, username, encryptedPassword,
+    useHttps ? 1 : 0, externalUrl ? externalUrl.trim().replace(/\/+$/, '') : null, nextSortOrder0, null
+  );
+  const gatewayId = result.lastInsertRowid;
   logSystemEvent(`"${req.user.username}" added Miniserver "${name}" (${host}) via the setup wizard.`);
 
+  // Client Miniservers added inline alongside this one — same "shares the Gateway's own
+  // credentials" reasoning as the regular Add Miniserver form (Loxone requires identical
+  // credentials across a Gateway/Client group).
+  const clients = parseClientsJson(clientsJson);
+  const insertedIds = [gatewayId];
+  clients.forEach((client, index) => {
+    const clientResult = insertMiniserver.run(
+      client.name, client.host, client.http_port, null, username, encryptedPassword,
+      client.use_https ? 1 : 0, null, nextSortOrder0 + index + 1, gatewayId
+    );
+    insertedIds.push(clientResult.lastInsertRowid);
+    logSystemEvent(`"${req.user.username}" added Miniserver "${client.name}" (${client.host}) as a Gateway Client of "${name}" via the setup wizard.`);
+  });
+
   // Same "don't leave it on Unknown" reasoning as the regular Add Miniserver form (routes/miniservers.js).
-  const inserted = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(result.lastInsertRowid);
-  await checkMiniserver(inserted);
+  const insertedRows = insertedIds.map((id) => db.prepare('SELECT * FROM miniservers WHERE id = ?').get(id));
+  await Promise.all(insertedRows.map((ms) => checkMiniserver(ms)));
 
   markVisited('miniserver');
   res.redirect('/setup?step=mqtt');

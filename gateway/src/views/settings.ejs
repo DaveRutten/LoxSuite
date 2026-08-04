@@ -9,7 +9,10 @@
   <p class="hint" style="color: var(--success);">Saved.</p>
 <% } %>
 
-<div class="card">
+<div class="card" id="mqtt-broker-card">
+  <div style="display:flex; justify-content:flex-end; margin-bottom:0.5rem;">
+    <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('lightbulb') %></button>
+  </div>
   <h2>
     MQTT Broker
     <span class="badge badge-live <%= mqttConnected ? 'badge-ok' : 'badge-off' %>" style="vertical-align:middle; margin-left:0.5rem;">

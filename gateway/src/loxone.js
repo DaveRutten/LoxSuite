@@ -85,9 +85,9 @@ async function sendHttpVirtualInput(miniserver, target, value) {
   }
 }
 
-// Matches LoxBerry's convention: send "MQTT:<topic>=<value>" over UDP, and configure
-// the Loxone Virtual Input's "Command Recognition" field with commandRecognitionString(topic)
-// below so Loxone extracts the value itself — no separate token/name needed.
+// Sends "MQTT:<topic>=<value>" over UDP, and configure the Loxone Virtual Input's "Command
+// Recognition" field with commandRecognitionString(topic) below so Loxone extracts the value
+// itself — no separate token/name needed.
 function sendUdpVirtualInput(miniserver, topic, value) {
   return new Promise((resolve, reject) => {
     if (!miniserver.udp_port) {
@@ -136,12 +136,11 @@ function loxoneHsvToRgb(raw) {
   };
 }
 
-// Shelly RGBW-family devices (RGBW2/Bulb in color mode) — same conversion LoxBerry's own
-// "shelly_rgb&w" UDP transformer does, built natively here instead of needing that separate
-// plugin. transform_arg picks which of the three independent Loxone outputs this mapping carries
-// (white/rgb/tunablew); each publishes its own partial JSON body to the SAME color/N/set topic,
-// same as LoxBerry's own transformer does — Shelly itself is what merges partial updates onto
-// whatever it's already showing, this doesn't need to send a complete state every time.
+// Shelly RGBW-family devices (RGBW2/Bulb in color mode) — built in natively rather than needing
+// a separate plugin. transform_arg picks which of the three independent Loxone outputs this
+// mapping carries (white/rgb/tunablew); each publishes its own partial JSON body to the SAME
+// color/N/set topic — Shelly itself is what merges partial updates onto whatever it's already
+// showing, this doesn't need to send a complete state every time.
 //
 // Confirmed against a real RGBW2's own status payload (color/0/status reports red/green/blue/
 // white/gain/turn — see loxone.js's own commit history for the captured example) — the JSON shape

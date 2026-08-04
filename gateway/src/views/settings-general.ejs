@@ -8,7 +8,10 @@
 <% } %>
 
 <% if (canEdit('settings')) { %>
-<form method="post" action="/settings">
+<div style="display:flex; justify-content:flex-end; margin-bottom:0.5rem;">
+  <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('lightbulb') %></button>
+</div>
+<form method="post" action="/settings" id="settings-form">
   <div class="card">
     <h2>Display</h2>
     <div class="settings-field">

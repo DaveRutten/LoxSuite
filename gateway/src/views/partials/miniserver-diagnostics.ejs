@@ -1,0 +1,109 @@
+<%
+  // Shared by miniservers.ejs for both a top-level Miniserver's own diagnostics expand-row AND
+  // each Client Miniserver's own row inside its Gateway's "ms-clients-<id>" sub-table — same data
+  // shape (a full miniservers-table row), same actions, so no reason for a Client to get a lesser
+  // detail view than a standalone/Gateway Miniserver gets. Expects `ms` and `PLC_STATE_LABELS`
+  // (the caller's own category→[label,badgeClass] map) as locals; everything else (canEdit, icon,
+  // formatHeapStatus, miniserverGenerationLabel) comes from the app-wide EJS locals every view
+  // already has.
+
+  // Everything here comes from the healthcheck cycle (healthcheck.js's
+  // checkMiniserver/fetchSystemStats/fetchPlcState/fetchFirmwareVersion), not fetched fresh on
+  // expand — nothing here needs an extra round trip just because the panel was just opened.
+  // /jdev/sys/cpu|heap|numtasks|state|.. are real, working commands verified directly against a
+  // live Miniserver, but undocumented by Loxone — shown as their raw values rather than a guessed
+  // interpretation wherever the meaning isn't certain (see format.js's formatHeapStatus), except
+  // PLC/Miniserver state, which Loxone does fully document (see PLC_STATE_LABELS above).
+  const plc = PLC_STATE_LABELS[ms.plc_state];
+  // Every action below either talks to this Miniserver directly (Check/Update) or pins its
+  // last-known reading elsewhere (Add to Dashboard/Monitor) — neither is useful, and the update
+  // ones are actively risky to fire blind, while it's not confirmed reachable. Visible either way
+  // (not hidden) so it's clear the feature exists, just not right now.
+  const msOffline = ms.status !== 'online';
+%>
+<div class="ms-diagnostics-card">
+  <div class="ms-diagnostics" data-ms-diagnostics-id="<%= ms.id %>">
+    <div>
+      <span class="hint" style="margin:0;">Miniserver state</span>
+      <div>
+        <% if (plc) { %>
+          <span class="badge <%= plc[1] %>" title="Miniserver's own PLC run state (jdev/sps/state), code <%= ms.plc_state %>."><%= plc[0] %></span>
+        <% } else { %>
+          -
+        <% } %>
+      </div>
+    </div>
+    <div>
+      <span class="hint" style="margin:0;">Firmware</span>
+      <div data-ms-firmware-id="<%= ms.id %>"><%= ms.firmware_version || '-' %></div>
+    </div>
+    <div>
+      <span class="hint" style="margin:0;">Generation</span>
+      <div data-ms-generation-id="<%= ms.id %>" <% if (ms.miniserver_type !== null && ms.miniserver_type !== undefined) { %>title="Reported by this Miniserver itself (msInfo.miniserverType)."<% } %>><%= miniserverGenerationLabel(ms.miniserver_type) || '-' %></div>
+    </div>
+    <div>
+      <span class="hint" style="margin:0;">CPU load</span>
+      <div><%= ms.cpu_load || '-' %></div>
+    </div>
+    <div>
+      <span class="hint" style="margin:0;">Heap</span>
+      <div title="<%= ms.heap_status || '' %>"><%= formatHeapStatus(ms.heap_status) || '-' %></div>
+    </div>
+    <div>
+      <span class="hint" style="margin:0;">Tasks</span>
+      <div><%= ms.num_tasks || '-' %></div>
+    </div>
+    <div>
+      <span class="hint" style="margin:0;">Firmware date</span>
+      <div><%= ms.firmware_date || '-' %></div>
+    </div>
+    <div>
+      <span class="hint" style="margin:0;">Update channel</span>
+      <div data-ms-update-level-id="<%= ms.id %>"><%= ms.update_level || '-' %></div>
+    </div>
+  </div>
+  <% if (canEdit('miniservers') || canEdit('dashboard') || canEdit('monitor')) { %>
+  <%
+    // Update starts disabled — Loxone doesn't expose a plain yes/no "update available" flag over
+    // HTTP (confirmed against a real Miniserver, several different ways), so there's no real
+    // signal to gate it on. Requiring "Check for update" to be run at least once first, THEN
+    // enabling it, is the most honest stand-in available: not a true availability gate, just "you
+    // looked at the current state before triggering a real update" — see the JS below and the
+    // hint text underneath.
+  %>
+  <%
+    // NOT .row-actions — tables.js's collapseRowActions() scans every `td .row-actions` with more
+    // than one child and sweeps it into its own auto-generated "..." kebab menu, which is exactly
+    // the effect that class name has here too (this div also sits inside a <td>, with several
+    // buttons). .ms-update-actions gets the same plain flex/gap layout without tripping that scan.
+  %>
+  <div class="ms-update-actions">
+    <% if (canEdit('miniservers')) { %>
+    <button type="button" class="btn-test ms-check-update-btn" data-ms-id="<%= ms.id %>" <%= msOffline ? 'disabled' : '' %> title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : '' %>"><%- icon('refresh') %> Check for update</button>
+    <button type="button" class="btn-edit ms-update-firmware-btn" data-ms-id="<%= ms.id %>" data-ms-name="<%= ms.name %>" disabled title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : 'Run "Check for update" first — Loxone doesn\'t expose a plain update-available flag over HTTP, so this only unlocks once you\'ve looked at the current release channel yourself' %>"><%- icon('upload') %> Update to latest release</button>
+    <% } %>
+    <% if (canEdit('dashboard')) { %>
+    <form class="inline" method="post" action="/dashboards/quick-add-diag">
+      <input type="hidden" name="miniserver_id" value="<%= ms.id %>">
+      <button type="submit" class="primary" <%= msOffline ? 'disabled' : '' %> title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : 'Pin CPU load, Heap value and Task count on the Dashboard, each as its own widget' %>"><%- icon('plus') %> Add to Dashboard</button>
+    </form>
+    <% } %>
+    <% if (canEdit('monitor')) { %>
+    <form class="inline" method="post" action="/monitor/quick-add-diag">
+      <input type="hidden" name="miniserver_id" value="<%= ms.id %>">
+      <button type="submit" class="primary" <%= msOffline ? 'disabled' : '' %> title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : 'Start recording CPU load, Heap value and Task count on the Monitor page, without pinning them to the Dashboard' %>"><%- icon('plus') %> Add to Monitor</button>
+    </form>
+    <% } %>
+  </div>
+  <div class="ms-update-result" data-ms-update-result-for="<%= ms.id %>"></div>
+  <% if (canEdit('miniservers')) { %>
+  <p class="hint" style="margin-top:0.4rem; margin-bottom:0;">
+    "Check for update" reads this Miniserver's own release channel (Loxone doesn't expose a plain
+    yes/no "update available" flag over HTTP, so this is a best-effort read, not a guarantee —
+    it's also what unlocks the button below). "Update to latest release" sends the actual update
+    command — a <strong>real firmware update and reboot</strong> on this Miniserver right now,
+    every device it controls briefly stops responding while it restarts.
+  </p>
+  <% } %>
+  <% } %>
+</div>

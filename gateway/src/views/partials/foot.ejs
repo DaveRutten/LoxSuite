@@ -804,6 +804,11 @@
     if (!row) return;
     var opening = !row.classList.contains('open');
     row.classList.toggle('open');
+    // Harmless on any button (only .icon-btn actually renders it — see style.css), toggled here
+    // regardless of button type so a page-specific icon-only trigger (Miniservers' own diagnostics
+    // chevron, a table's collapsed-actions kebab, ...) always reads as "currently open" without
+    // each one needing its own copy of this same one-liner.
+    btn.classList.toggle('active', opening);
     if (opening) {
       var firstInput = row.querySelector('input, select, textarea');
       // preventScroll: a wide table (e.g. Mappings) scrolls horizontally, and this input usually

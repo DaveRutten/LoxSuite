@@ -294,7 +294,7 @@
               const panelDefaultsKey = p.panel_type === 'chart' ? 'chart:' + (p.config.chartType || 'line') : p.panel_type;
             %>
             <button type="button" class="icon-btn icon-btn-neutral" data-panel-default-kind="save" data-panel-default-url="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/save-as-default" title="Save this panel's appearance as the default for every &quot;<%= p.panel_type %>&quot; panel on THIS dashboard"><%- icon('star') %></button>
-            <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('help') %></button>
+            <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('lightbulb') %></button>
             <% if (panelTypeDefaultsExist[panelDefaultsKey]) { %>
             <button type="button" class="icon-btn icon-btn-neutral" data-panel-default-kind="reset" data-panel-default-url="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/reset-to-default" title="Apply the saved &quot;<%= p.panel_type %>&quot; default (this dashboard) to THIS panel"><%- icon('refresh') %></button>
             <% } %>

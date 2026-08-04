@@ -256,9 +256,9 @@ router.get('/loxone-to-mqtt', (req, res) => {
 });
 
 // value_transform for this (Loxone -> MQTT) direction: 'passthrough' (default), 'translation_table'
-// (managed separately, see its own routes), or 'shelly_rgbw' (native equivalent of LoxBerry's own
-// "shelly_rgb&w" UDP transformer — see applyShellyRgbwTransform in loxone.js), whose transform_arg
-// picks which of the three independent Loxone outputs this one mapping carries.
+// (managed separately, see its own routes), or 'shelly_rgbw' (see applyShellyRgbwTransform in
+// loxone.js), whose transform_arg picks which of the three independent Loxone outputs this one
+// mapping carries.
 const LOXONE_TO_MQTT_TRANSFORMS = ['passthrough', 'translation_table', 'shelly_rgbw'];
 const SHELLY_RGBW_MODES = ['white', 'rgb', 'rgb-percent', 'tunablew'];
 function normalizeLoxoneToMqttTransform(body) {

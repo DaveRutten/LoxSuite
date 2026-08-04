@@ -149,6 +149,28 @@
             fallback whenever the local Host/IP can't be reached &mdash; Monitor polling, Common
             commands, log fetching and testing all try it automatically if the local address fails.
           </p>
+
+          <h3 style="margin-top:1.25rem;">Gateway Client setup (optional)</h3>
+          <div class="form-grid">
+            <div>
+              <label>This Miniserver is a Gateway</label>
+              <%- toggleSwitch('is_gateway', false, { id: 'ms-is-gateway' }) %>
+            </div>
+          </div>
+          <p class="hint" style="margin-top:0.5rem;">
+            Turn this on if this Miniserver is a
+            <a href="https://www.loxone.com/enen/kb/gateway-client/" target="_blank" rel="noopener">Gateway</a>
+            managing one or more Client Miniservers that share its merged Loxone Config project.
+            Each Client below is added as its own Miniserver too, reusing this Gateway's own
+            Username/Password (Loxone requires identical credentials across the whole group) —
+            just give each one its own Name and Host/IP.
+          </p>
+          <div id="ms-clients-header" class="client-rows-header" hidden>
+            <div>Client Name</div><div>Host / IP</div><div>HTTP port</div><div>HTTPS</div><div></div>
+          </div>
+          <div id="ms-clients-list"></div>
+          <button type="button" id="ms-client-row-btn" class="btn-soft" hidden><%- icon('plus') %> Add Client Miniserver</button>
+          <input type="hidden" name="clients_json" id="ms-clients-json">
         </form>
         <% } %>
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
@@ -165,6 +187,121 @@
           </div>
         </div>
         <div id="ms-test-result" style="margin-top:0.6rem;"></div>
+        <script>
+          // Same Test-button feedback style, and the same clients_json/Gateway-toggle pattern, as
+          // the regular Add Miniserver form (routes/miniservers.js's own miniservers.ejs) — see
+          // that file's own comments for the fuller reasoning. Reuses that same generic
+          // /miniservers/test endpoint (not a wizard-specific one) since testing connectivity
+          // to a Miniserver doesn't need anything wizard-specific.
+          (function () {
+            var form = document.getElementById('miniserver-form');
+            var testBtn = document.getElementById('ms-test-btn');
+            var testResult = document.getElementById('ms-test-result');
+            if (!form) return;
+
+            function renderLine(label, result) {
+              if (!result) return '';
+              var color = result.ok ? 'var(--accent)' : 'var(--danger)';
+              var detail = result.ok ? (result.ms + ' ms') : (result.error || 'failed');
+              return '<div style="display:flex; align-items:center; gap:0.4rem; color:' + color + ';">'
+                + '<strong style="color:var(--text);">' + label + ':</strong><span>' + detail + '</span></div>';
+            }
+
+            function runTest(host, http_port, username, password, use_https, resultEl) {
+              if (!host || !username || !password) {
+                resultEl.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Fill in Host, Username and Password first.</p>';
+                return;
+              }
+              resultEl.innerHTML = '<p class="hint" style="margin:0;">Testing&hellip;</p>';
+              fetch('/miniservers/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: host, http_port: http_port, username: username, password: password, use_https: use_https }) })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                  if (data.error) {
+                    resultEl.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">' + data.error + '</p>';
+                    return;
+                  }
+                  var html = '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">';
+                  html += renderLine('Local', data.local);
+                  html += renderLine('Loxone API', data.api);
+                  html += renderLine('Logbook reachable', data.logbook);
+                  html += '</div>';
+                  resultEl.innerHTML = html;
+                })
+                .catch(function () {
+                  resultEl.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
+                });
+            }
+
+            // Gateway Client setup — one or more Client Miniservers added inline, same
+            // clients_json handling as the regular Add Miniserver form.
+            var isGatewayToggle = document.getElementById('ms-is-gateway');
+            var clientsHeader = document.getElementById('ms-clients-header');
+            var clientsList = document.getElementById('ms-clients-list');
+            var addClientRowBtn = document.getElementById('ms-client-row-btn');
+            var clientsJsonInput = document.getElementById('ms-clients-json');
+            var removeIconSvg = '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+            function makeClientRow() {
+              var wrap = document.createElement('div');
+              wrap.className = 'ms-client-row-wiz';
+              wrap.innerHTML =
+                '<div class="client-row">' +
+                  '<input type="text" class="client-name" placeholder="e.g. Upstairs">' +
+                  '<input type="text" class="client-host">' +
+                  '<input type="number" class="client-port" value="80">' +
+                  '<label class="switch"><input type="checkbox" class="client-https"><span class="switch-track"><span class="switch-thumb"></span></span></label>' +
+                  '<button type="button" class="icon-btn icon-btn-danger remove-client-row-btn" title="Remove this Client">' + removeIconSvg + '</button>' +
+                '</div>' +
+                '<div class="ms-client-test-result" style="margin:0.3rem 0 0.5rem;"></div>';
+              wrap.querySelector('.remove-client-row-btn').addEventListener('click', function () { wrap.remove(); });
+              return wrap;
+            }
+
+            if (isGatewayToggle && clientsList && addClientRowBtn) {
+              isGatewayToggle.addEventListener('change', function () {
+                addClientRowBtn.hidden = !isGatewayToggle.checked;
+                clientsHeader.hidden = !isGatewayToggle.checked;
+                if (isGatewayToggle.checked && !clientsList.children.length) clientsList.appendChild(makeClientRow());
+                if (!isGatewayToggle.checked) clientsList.innerHTML = '';
+              });
+              addClientRowBtn.addEventListener('click', function () { clientsList.appendChild(makeClientRow()); });
+            }
+
+            if (testBtn) {
+              testBtn.addEventListener('click', function () {
+                var data = new FormData(form);
+                runTest(data.get('host'), data.get('http_port'), data.get('username'), data.get('password'), data.get('use_https'), testResult);
+                if (isGatewayToggle && isGatewayToggle.checked) {
+                  var username = data.get('username');
+                  var password = data.get('password');
+                  clientsList.querySelectorAll('.ms-client-row-wiz').forEach(function (row) {
+                    var host = row.querySelector('.client-host').value;
+                    var port = row.querySelector('.client-port').value;
+                    var https = row.querySelector('.client-https').checked;
+                    runTest(host, port, username, password, https, row.querySelector('.ms-client-test-result'));
+                  });
+                }
+              });
+            }
+
+            form.addEventListener('submit', function () {
+              if (!isGatewayToggle || !isGatewayToggle.checked) { clientsJsonInput.value = ''; return; }
+              var clients = [];
+              clientsList.querySelectorAll('.ms-client-row-wiz').forEach(function (row) {
+                var name = row.querySelector('.client-name').value.trim();
+                var host = row.querySelector('.client-host').value.trim();
+                if (!name || !host) return;
+                clients.push({
+                  name: name,
+                  host: host,
+                  http_port: Number(row.querySelector('.client-port').value) || 80,
+                  use_https: row.querySelector('.client-https').checked,
+                });
+              });
+              clientsJsonInput.value = JSON.stringify(clients);
+            });
+          })();
+        </script>
       <% } %>
 
       <% if (step === 'mqtt') { %>

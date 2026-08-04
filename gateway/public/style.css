@@ -1427,6 +1427,19 @@ code.recognition-string {
 .badge-off { background: var(--danger-soft); color: var(--danger); }
 .badge-neutral { background: var(--surface-alt); color: var(--text-muted); }
 .badge-warning { background: var(--warning-soft); color: var(--warning); }
+/* A Gateway/Client relationship (Miniservers page) is neither an online-status nor a warning —
+   purple keeps it visually distinct from every status badge already on that same row, reusing the
+   same accent .icon-btn-star-saved already established for "a special designation, not a state." */
+.badge-purple { background: var(--purple-soft); color: var(--purple); }
+
+/* A Client Miniserver's own row (Miniservers page — see partials/miniserver-row.ejs) is a real
+   sibling <tr> in the same table as every other row, for perfect column alignment — just hidden
+   until its Gateway's own "Gateway · N clients" badge is clicked. Deliberately a SEPARATE class
+   from .open: a Client's own diagnostics row (tr.expand-row.ms-client-row) needs its GROUP
+   visibility (shown/hidden as a set, this rule) to stay independent of its OWN diagnostics
+   open/closed state (tr.expand-row's own .open, toggled per-row exactly like every other
+   Miniserver's) — reusing .open for both would make one toggle affect the other. */
+.ms-client-row:not(.group-visible) { display: none; }
 
 /* ---- Forms ---- */
 .form-grid {
@@ -1570,10 +1583,14 @@ input[type="file"]::file-selector-button:hover { background: var(--text-muted); 
   grid-column: 1 / -1;
 }
 .panel-settings-form label { margin-bottom: 0.1rem; font-size: 0.72rem; }
-/* Toggled by the "?" button next to the drawer's own star icon (see foot.ejs) — a sitewide display
-   preference, not per-drawer, so every settings drawer respects it immediately without its own
-   separate toggle state. */
-body.panel-hints-hidden .panel-settings-form .hint { display: none; }
+/* Toggled by the "?" button next to a drawer's own star icon, or the Add/Edit Miniserver forms'
+   own copy of it (see foot.ejs) — a sitewide display preference, not per-form, so every one of
+   these respects it immediately without its own separate toggle state. */
+body.panel-hints-hidden .panel-settings-form .hint,
+body.panel-hints-hidden #add-ms-form .hint,
+body.panel-hints-hidden #edit-ms-form .hint,
+body.panel-hints-hidden #mqtt-broker-card .hint,
+body.panel-hints-hidden #settings-form .hint { display: none; }
 
 /* Shared on/off switch (see toggleSwitch() in src/toggleSwitch.js) — every plain boolean setting
    in the app (SSO/rclone/backup-schedule Enabled, MQTT TLS, Retain, Miniserver HTTPS, ...) used to
@@ -2207,6 +2224,21 @@ main > p.hint:first-of-type { margin-top: 0; }
 .icon-btn-neutral { border-color: var(--border); }
 .icon-btn-neutral:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
 
+/* Any icon-only toggle button (a table row's diagnostics chevron, an auto-collapsed Actions
+   column's "..." kebab, Miniservers' own "show its Clients" share icon, ...) reads as "currently
+   open" the same way — filled in with the accent color — rather than only being distinguishable
+   by whatever's now visible below it. Set generically on click by the shared [data-toggle-row]
+   handler (see partials/foot.ejs), so a new icon-only trigger gets this for free just by using
+   that same attribute. Scoped to .icon-btn specifically: a colored action button (Rename/Edit,
+   already yellow via .btn-edit) uses this same attribute too, but forcing it to ALSO turn accent
+   green while open would clash with its own resting color rather than read as "active."
+   !important on all three: a chevron inside a <td> (every one of these is) also matches the
+   generic `.btn-soft, td button:not(.danger):not(.primary):not(.btn-edit):not(.btn-test)` skin
+   rule, whose four :not() classes out-specificity this two-class selector and would otherwise
+   silently win color/background/border back to plain neutral regardless of .active — same
+   fight, same fix, as .favorite-toggle-btn.is-favorited above. */
+.icon-btn.active { color: var(--accent) !important; background: var(--accent-soft) !important; border-color: var(--accent) !important; }
+
 /* A panel's "Save as default" star (panel-grid.ejs), once a default is actually saved for its
    type — same bordered-box treatment as Edit/Duplicate/Delete, and the same filled-icon-means-
    active convention as .favorite-toggle-btn.is-favorited above (reused, not reinvented). Purple
@@ -2225,6 +2257,34 @@ main > p.hint:first-of-type { margin-top: 0; }
   box-shadow: var(--shadow);
   transition: box-shadow 0.15s var(--ease);
 }
+
+/* Client Miniserver rows (Add/Edit Miniserver's own Gateway Client section) — one shared header
+   row's labels instead of repeating Client Name/Host/Port/HTTPS above every single row, the same
+   "label the column once" convention every other table in this app already follows. */
+.client-rows-header, .client-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 6rem 4.5rem 2.4rem;
+  gap: 0.75rem;
+  align-items: center;
+}
+.client-rows-header {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.5rem;
+}
+.client-row { padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+.client-row:last-child { border-bottom: none; }
+.client-row .remove-client-row-btn { justify-self: start; }
+/* Same [hidden]-vs-author-display specificity clash as .table-pager/.dash-range-custom above —
+   .btn-soft's own display:inline-flex and .form-grid's own display:grid both tie the browser's
+   `[hidden] { display: none }` UA rule on specificity and win on source order, so the [hidden]
+   attribute set on these three elements (miniservers.ejs/miniserver-edit.ejs's own Gateway
+   Client toggles) otherwise does nothing at all. */
+#add-ms-client-row-btn[hidden], #add-ms-clients-header[hidden], #edit-ms-gateway-of-wrap[hidden],
+#ms-client-row-btn[hidden], #ms-clients-header[hidden] { display: none; }
 
 .add-panel summary {
   list-style: none;

@@ -368,6 +368,15 @@ function migrateMiniserverStatusColumns() {
     db.exec('ALTER TABLE miniservers ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0');
     db.exec('UPDATE miniservers SET sort_order = id');
   }
+  if (!columns.includes('gateway_client_of')) {
+    // A Loxone "Gateway Client" setup (loxone.com/enen/kb/gateway-client) merges several
+    // Miniservers' own Loxone Config projects into one, managed by a single "Gateway" Miniserver —
+    // this column, when set, names that Gateway. One practical effect: a shared Audioserver and its
+    // Stereo Extensions can end up reported in more than one Miniserver's own /data/status (see
+    // routes/hardware.js's own dedup). ON DELETE SET NULL rather than CASCADE: deleting the Gateway
+    // Miniserver shouldn't also delete every Miniserver that merely points at it as a Client.
+    db.exec('ALTER TABLE miniservers ADD COLUMN gateway_client_of INTEGER REFERENCES miniservers(id) ON DELETE SET NULL');
+  }
 }
 
 migrateMiniserverStatusColumns();

@@ -157,7 +157,21 @@ app.use(loadUserContext);
 app.use(authRoutes);
 
 app.get('/', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
+  const miniserverRows = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
+  // Same Gateway/Client labeling as the Miniservers page itself (routes/miniservers.js) — shown
+  // as its own column here too, so this summary table doesn't look out of sync with the one on
+  // the actual Miniservers page for the exact same Miniservers.
+  const msNameById = new Map(miniserverRows.map((ms) => [ms.id, ms.name]));
+  const msClientCountByGatewayId = new Map();
+  miniserverRows.forEach((ms) => {
+    if (!ms.gateway_client_of) return;
+    msClientCountByGatewayId.set(ms.gateway_client_of, (msClientCountByGatewayId.get(ms.gateway_client_of) || 0) + 1);
+  });
+  const miniservers = miniserverRows.map((ms) => ({
+    ...ms,
+    gatewayClientOfName: ms.gateway_client_of ? msNameById.get(ms.gateway_client_of) || null : null,
+    gatewayClientCount: msClientCountByGatewayId.get(ms.id) || 0,
+  }));
   const mqttToLoxoneCount = db.prepare('SELECT COUNT(*) AS c FROM mappings_mqtt_to_loxone WHERE enabled = 1').get().c;
   const loxoneToMqttCount = db.prepare('SELECT COUNT(*) AS c FROM mappings_loxone_to_mqtt WHERE enabled = 1').get().c;
   const connectedClientCount = getClients().filter((c) => c.status === 'connected').length;

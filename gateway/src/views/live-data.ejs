@@ -28,12 +28,20 @@
 <% } %>
 
 
-<% if (miniserverId && miniservers.length > 1) { %>
+<%
+  // Live Data needs an actual live connection to the Miniserver — one that's currently offline
+  // has nothing to switch to here, so it's left out of the choice entirely rather than offered as
+  // a selectable option that just won't work. Still included if it's the one CURRENTLY selected
+  // (e.g. it just went offline after this page loaded) so the dropdown doesn't silently lose track
+  // of what's actually being shown.
+  const onlineMiniservers = miniservers.filter((ms) => ms.status === 'online' || ms.id === miniserverId);
+%>
+<% if (miniserverId && onlineMiniservers.length > 1) { %>
 <form method="get" action="/live-data" class="form-grid" style="max-width:20rem; margin-bottom:1.25rem;">
   <div>
     <label>Miniserver</label>
     <select name="miniserver_id" onchange="this.form.submit()">
-      <% miniservers.forEach(ms => { %>
+      <% onlineMiniservers.forEach(ms => { %>
         <option value="<%= ms.id %>" <%= ms.id === miniserverId ? 'selected' : '' %>><%= ms.name %></option>
       <% }) %>
     </select>

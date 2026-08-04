@@ -6,7 +6,10 @@
 
 <% if (canEdit('miniservers')) { %>
 <div class="card">
-  <form method="post" action="/miniservers/<%= miniserver.id %>/update">
+  <div style="display:flex; justify-content:flex-end; margin-bottom:0.5rem;">
+    <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('lightbulb') %></button>
+  </div>
+  <form method="post" action="/miniservers/<%= miniserver.id %>/update" id="edit-ms-form">
     <div class="form-grid">
       <div><label>Name</label><input type="text" name="name" value="<%= miniserver.name %>" required></div>
     </div>
@@ -43,6 +46,57 @@
       automatically whenever the local Host/IP can't be reached, so this Miniserver stays usable
       both at home and remotely.
     </p>
+
+    <h2 style="margin-top:1.5rem;">Gateway Client setup (optional)</h2>
+    <div class="form-grid">
+      <div>
+        <label>This Miniserver is a Client of another Gateway</label>
+        <%- toggleSwitch('is_client', !!miniserver.gateway_client_of, { id: 'edit-ms-is-client' }) %>
+      </div>
+    </div>
+    <div class="form-grid" style="margin-top:0.6rem;" id="edit-ms-gateway-of-wrap" <%= miniserver.gateway_client_of ? '' : 'hidden' %>>
+      <div>
+        <label>Gateway</label>
+        <select name="gateway_client_of">
+          <% otherMiniservers.forEach(ms => { %>
+            <option value="<%= ms.id %>" <%= miniserver.gateway_client_of === ms.id ? 'selected' : '' %>><%= ms.name %></option>
+          <% }) %>
+        </select>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:0.5rem;">
+      Turn this on when this Miniserver is a
+      <a href="https://www.loxone.com/enen/kb/gateway-client/" target="_blank" rel="noopener">Gateway Client</a>
+      of another one &mdash; a Client shares its Gateway's own merged Loxone Config project rather
+      than running a fully separate one of its own. One practical effect: a shared Audioserver and
+      its Stereo Extensions can show up in both Miniservers' own hardware status. The
+      <a href="/hardware">Hardware page</a> already drops that duplicate listing automatically
+      (matched by Serial/MAC); turning this on just makes the Gateway/Client relationship itself
+      explicit, and prefers keeping the Gateway's own copy over the Client's.
+    </p>
+
+    <% if (!miniserver.gateway_client_of) { %>
+    <%
+      // A Client can't itself be a Gateway managing its own sub-Clients (see GET /:id/edit's own
+      // otherMiniservers query — Loxone's own Gateway Client setup is a single Gateway managing its
+      // Clients directly, never a chain) — so once the toggle above is on, this whole section has
+      // nothing to manage and would just be a confusing, permanently-empty "add a Client" offer.
+    %>
+    <h2 style="margin-top:1.5rem;">Client Miniservers</h2>
+    <p class="hint">
+      Client Miniservers that share <strong><%= miniserver.name %></strong>'s own merged Loxone
+      Config project (see the Gateway Client link above) &mdash; each reuses this Miniserver's own
+      Username/Password, since Loxone requires identical credentials across the whole group.
+      Removing a row here just unlinks it (it goes back to being a standalone Miniserver, still
+      listed on the Miniservers page) rather than deleting it.
+    </p>
+    <div class="client-rows-header" <%= existingClients.length ? '' : 'hidden' %> id="edit-ms-clients-header">
+      <div>Client Name</div><div>Host / IP</div><div>HTTP port</div><div>HTTPS</div><div></div>
+    </div>
+    <div id="edit-ms-clients-list"></div>
+    <button type="button" id="edit-ms-client-row-btn" class="btn-soft"><%- icon('plus') %> Add Client Miniserver</button>
+    <input type="hidden" name="clients_json" id="edit-ms-clients-json">
+    <% } %>
 
     <div style="margin-top:0.9rem; display:flex; align-items:center; gap:0.5rem;">
       <button type="button" id="edit-ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
@@ -96,6 +150,87 @@
         .catch(function () {
           wrap.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
         });
+    });
+  })();
+</script>
+
+<script>
+  // Client Miniservers list — same clients_json approach as the Add-Miniserver form (see
+  // miniservers.ejs's own copy of this pattern for the fuller comment on why), except rows here
+  // can start out already carrying a real Miniserver id (an existing Client, pre-filled from the
+  // server) instead of always starting blank.
+  (function () {
+    var form = document.querySelector('form[action="/miniservers/<%= miniserver.id %>/update"]');
+    var clientsHeader = document.getElementById('edit-ms-clients-header');
+    var clientsList = document.getElementById('edit-ms-clients-list');
+    var addClientRowBtn = document.getElementById('edit-ms-client-row-btn');
+    var clientsJsonInput = document.getElementById('edit-ms-clients-json');
+    if (!form || !clientsList) return;
+    var removeIconSvg = '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+    function makeClientRow(client) {
+      client = client || {};
+      var wrap = document.createElement('div');
+      wrap.className = 'edit-ms-client-row';
+      if (client.id) wrap.dataset.clientId = client.id;
+      wrap.innerHTML =
+        '<div class="client-row">' +
+          '<input type="text" class="client-name" value="' + (client.name || '').replace(/"/g, '&quot;') + '" placeholder="e.g. Upstairs">' +
+          '<input type="text" class="client-host" value="' + (client.host || '').replace(/"/g, '&quot;') + '">' +
+          '<input type="number" class="client-port" value="' + (client.http_port || 80) + '">' +
+          '<label class="switch"><input type="checkbox" class="client-https"' + (client.use_https ? ' checked' : '') + '><span class="switch-track"><span class="switch-thumb"></span></span></label>' +
+          '<button type="button" class="icon-btn icon-btn-danger remove-client-row-btn" title="Remove this Client">' + removeIconSvg + '</button>' +
+        '</div>';
+      wrap.querySelector('.remove-client-row-btn').addEventListener('click', function () { wrap.remove(); });
+      return wrap;
+    }
+
+    <% existingClients.forEach(c => { %>
+      clientsList.appendChild(makeClientRow(<%- JSON.stringify(c) %>));
+    <% }) %>
+
+    if (addClientRowBtn) {
+      addClientRowBtn.addEventListener('click', function () {
+        clientsHeader.hidden = false;
+        clientsList.appendChild(makeClientRow());
+      });
+    }
+
+    form.addEventListener('submit', function () {
+      var clients = [];
+      clientsList.querySelectorAll('.edit-ms-client-row').forEach(function (row) {
+        var name = row.querySelector('.client-name').value.trim();
+        var host = row.querySelector('.client-host').value.trim();
+        if (!name || !host) return; // an empty/half-filled row is just skipped, not an error
+        var entry = {
+          name: name,
+          host: host,
+          http_port: Number(row.querySelector('.client-port').value) || 80,
+          use_https: row.querySelector('.client-https').checked,
+        };
+        if (row.dataset.clientId) entry.id = Number(row.dataset.clientId);
+        clients.push(entry);
+      });
+      clientsJsonInput.value = JSON.stringify(clients);
+    });
+  })();
+</script>
+
+<script>
+  // "This Miniserver is a Client of another Gateway" toggle — reveals/hides the Gateway picker
+  // below it, same progressive-disclosure pattern as the Add-Miniserver form's own "is a Gateway"
+  // toggle. The select is disabled (not just hidden) while off, so an unchanged, still-hidden
+  // selection can't get submitted by accident — a disabled field is left out of the POST body
+  // entirely, which the server already treats the same as "not a Client of anything."
+  (function () {
+    var toggle = document.getElementById('edit-ms-is-client');
+    var wrap = document.getElementById('edit-ms-gateway-of-wrap');
+    var select = wrap ? wrap.querySelector('select[name="gateway_client_of"]') : null;
+    if (!toggle || !wrap || !select) return;
+    select.disabled = !toggle.checked;
+    toggle.addEventListener('change', function () {
+      wrap.hidden = !toggle.checked;
+      select.disabled = !toggle.checked;
     });
   })();
 </script>

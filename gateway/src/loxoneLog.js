@@ -3,8 +3,7 @@ const { fetchMiniserver } = require('./loxone');
 
 // Loxone has no push/subscribe channel for its own log, so this polls and diffs against what was
 // last seen — same tradeoff already accepted and documented for Loxone-direct Monitors. Confirmed
-// real, documented endpoint (not guessed): GET /dev/fsget/log/def.log, Basic Auth, the same one
-// LoxBerry's own Miniserver log widget uses.
+// real, documented endpoint (not guessed): GET /dev/fsget/log/def.log, Basic Auth.
 const BACKFILL_LINES = 500;
 
 const insertLogEntry = db.prepare('INSERT INTO log_entries (source, source_id, source_label, line, recorded_at) VALUES (?, ?, ?, ?, ?)');

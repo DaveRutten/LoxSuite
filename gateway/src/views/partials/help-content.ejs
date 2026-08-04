@@ -351,7 +351,7 @@
     <ul>
       <li><strong>Live Messages</strong> &mdash; one row per topic seen, showing its actual and previous value,
         a message count, and a ready-to-copy <strong>Command Recognition</strong> string
-        (<code>MQTT:\i&lt;topic&gt;=\i\v</code>, the same format LoxBerry uses) for a Loxone Virtual UDP Input's
+        (<code>MQTT:\i&lt;topic&gt;=\i\v</code>) for a Loxone Virtual UDP Input's
         "Command Recognition" field. <strong>Map</strong> jumps to a pre-filled MQTT &rarr; Loxone mapping for
         that topic, <strong>Widget</strong> pins its value on the Dashboard.</li>
       <li><strong>Client Activity</strong> &mdash; which MQTT clients are connected or have been, with a
@@ -775,9 +775,6 @@
       <li>MQTT device accounts all share one <code>client</code> role with access to every topic; there's no
         per-device topic restriction out of the box (you can build one yourself under
         <a href="/mqtt-roles">Roles</a> if you need it).</li>
-      <li>Device-specific value transforms beyond a plain translation table (e.g. LoxBerry's RGBW colour
-        conversion) aren't built &mdash; the translation table covers most simple on/off- and enum-style
-        cases.</li>
       <li>Loxone-direct monitors (see the Monitor answer above) are polling-based, not a websocket push
         subscription &mdash; readings only land on the configured interval, not the instant Loxone's own value
         changes.</li>

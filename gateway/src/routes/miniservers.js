@@ -11,33 +11,114 @@ const { encrypt } = require('../secretCrypto');
 const router = express.Router();
 
 router.get('/', (req, res) => {
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
+  const rows = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
+  const nameById = new Map(rows.map((ms) => [ms.id, ms.name]));
+  // Client count per Gateway — every OTHER row whose own gateway_client_of points here — so a
+  // Gateway's own row can show "Gateway · N clients" without a second query per row.
+  const clientCountByGatewayId = new Map();
+  rows.forEach((ms) => {
+    if (!ms.gateway_client_of) return;
+    clientCountByGatewayId.set(ms.gateway_client_of, (clientCountByGatewayId.get(ms.gateway_client_of) || 0) + 1);
+  });
+  const decoratedRows = rows.map((ms) => ({
+    ...ms,
+    gatewayClientOfName: ms.gateway_client_of ? nameById.get(ms.gateway_client_of) || null : null,
+    gatewayClientCount: clientCountByGatewayId.get(ms.id) || 0,
+  }));
+
+  // Every Client immediately follows its own Gateway in the rendered list, regardless of what its
+  // own raw sort_order number happens to be — a plain ORDER BY sort_order alone can't guarantee
+  // that (a Client's sort_order can drift relative to its Gateway's own after enough drag
+  // reordering, e.g. an unrelated Miniserver getting moved in between them), and the page's own
+  // <tr> structure (see partials/miniserver-row.ejs) assumes a Client's row — and its diagnostics
+  // row right after it — always sits directly under its Gateway's own. Built from the already
+  // sort_order-ordered rows above, so both the top-level rows and each Gateway's own Clients stay
+  // in their existing relative order — this only fixes which GROUP a Client renders inside, never
+  // reshuffles anyone within one.
+  const clientsByGatewayId = new Map();
+  decoratedRows.forEach((ms) => {
+    if (!ms.gateway_client_of) return;
+    if (!clientsByGatewayId.has(ms.gateway_client_of)) clientsByGatewayId.set(ms.gateway_client_of, []);
+    clientsByGatewayId.get(ms.gateway_client_of).push(ms);
+  });
+  const miniservers = [];
+  decoratedRows.forEach((ms) => {
+    if (ms.gateway_client_of) return; // placed via its own Gateway's own entry below, not here
+    miniservers.push(ms);
+    (clientsByGatewayId.get(ms.id) || []).forEach((client) => miniservers.push(client));
+  });
+
   res.render('miniservers', { miniservers, error: null });
 });
 
+// Parses the Add-Miniserver form's own clients_json (see miniservers.ejs) — an array of
+// {name, host, http_port, use_https} for a Gateway's Client Miniservers, added inline in the same
+// form instead of one at a time via separate Add-Miniserver round-trips. Malformed/absent JSON
+// (is_gateway off, or no clients actually filled in) just means "no clients," not an error — this
+// whole feature is optional on every Miniserver.
+function parseClientsJson(raw) {
+  if (!raw) return [];
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (err) { return []; }
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((c) => c && typeof c.name === 'string' && c.name.trim() && typeof c.host === 'string' && c.host.trim())
+    .map((c) => ({
+      // Only present on the Edit page's own version of this form (an existing Client being
+      // edited in place, not a brand new one) — Number.isInteger guards against a stray/forged
+      // non-numeric id doing anything other than falling through to "treat as new."
+      id: Number.isInteger(c.id) ? c.id : null,
+      name: c.name.trim(),
+      host: c.host.trim(),
+      http_port: Number(c.http_port) || 80,
+      use_https: !!c.use_https,
+    }));
+}
+
 router.post('/', requirePermission('miniservers', 'edit'), async (req, res) => {
-  const { name, host, http_port, udp_port, username, password, use_https, external_url } = req.body;
+  const { name, host, http_port, udp_port, username, password, use_https, external_url, clients_json } = req.body;
   if (!name || !host || !username || !password) {
     const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
     return res.render('miniservers', { miniservers, error: 'Name, host, username and password are required.' });
   }
+  const clients = parseClientsJson(clients_json);
 
   // Appended to the end of the shared display order (see db.js's migrateMiniserverStatusColumns)
   // rather than defaulting to 0, which would otherwise jump a newly-added Miniserver to the front
   // of every page that lists them.
   const nextSortOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM miniservers').get().next;
-  const result = db.prepare(
-    `INSERT INTO miniservers (name, host, http_port, udp_port, username, password, use_https, external_url, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, encrypt(password), use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null, nextSortOrder);
+  const encryptedPassword = encrypt(password);
+  const insertMiniserver = db.prepare(
+    `INSERT INTO miniservers (name, host, http_port, udp_port, username, password, use_https, external_url, sort_order, gateway_client_of)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const result = insertMiniserver.run(
+    name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, encryptedPassword,
+    use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null, nextSortOrder, null
+  );
+  const gatewayId = result.lastInsertRowid;
 
   logSystemEvent(`"${req.user.username}" added Miniserver "${name}" (${host}).`);
 
+  // Each Client Miniserver reuses the Gateway's own credentials — Loxone requires them to be
+  // identical across the whole Gateway/Client group (see the Add form's own hint text) — and gets
+  // appended to the shared sort order right after the Gateway itself.
+  const insertedIds = [gatewayId];
+  clients.forEach((client, index) => {
+    const clientResult = insertMiniserver.run(
+      client.name, client.host, client.http_port, null, username, encryptedPassword,
+      client.use_https ? 1 : 0, null, nextSortOrder + index + 1, gatewayId
+    );
+    insertedIds.push(clientResult.lastInsertRowid);
+    logSystemEvent(`"${req.user.username}" added Miniserver "${client.name}" (${client.host}) as a Gateway Client of "${name}".`);
+  });
+
   // Otherwise this sits on "Unknown" (badge-neutral) until the next periodic healthcheck sweep
   // (up to 60s later, see startHealthchecks) — awaited here so the very next page load already
-  // shows Online/Offline instead of a status that reads as broken right after adding one.
-  const inserted = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(result.lastInsertRowid);
-  await checkMiniserver(inserted);
+  // shows Online/Offline instead of a status that reads as broken right after adding one. All of
+  // them, Gateway and Clients alike, not just the Gateway — same reasoning applies to every one.
+  const insertedRows = insertedIds.map((id) => db.prepare('SELECT * FROM miniservers WHERE id = ?').get(id));
+  await Promise.all(insertedRows.map((ms) => checkMiniserver(ms)));
 
   res.redirect('/miniservers');
 });
@@ -67,24 +148,77 @@ router.post('/test', requirePermission('miniservers', 'edit'), async (req, res) 
 router.get('/:id/edit', (req, res) => {
   const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
   if (!miniserver) return res.status(404).send('Miniserver not found');
-  res.render('miniserver-edit', { miniserver, error: null });
+  // Candidates for "Gateway Client of" below — every other Miniserver, excluding this one (a
+  // Miniserver can't be a Gateway Client of itself) and excluding any Miniserver that's already a
+  // Gateway Client of THIS one (a two-hop chain would just be confusing — Loxone's own Gateway
+  // Client setup is a single Gateway managing its Clients directly, not a chain of them).
+  const otherMiniservers = db
+    .prepare('SELECT id, name FROM miniservers WHERE id != ? AND (gateway_client_of IS NULL OR gateway_client_of != ?) ORDER BY sort_order, id')
+    .all(miniserver.id, miniserver.id);
+  const existingClients = db
+    .prepare('SELECT id, name, host, http_port, use_https FROM miniservers WHERE gateway_client_of = ? ORDER BY sort_order, id')
+    .all(miniserver.id);
+  res.render('miniserver-edit', { miniserver, otherMiniservers, existingClients, error: null });
 });
 
-router.post('/:id/update', requirePermission('miniservers', 'edit'), (req, res) => {
-  const { name, host, http_port, udp_port, username, password, use_https, external_url } = req.body;
+router.post('/:id/update', requirePermission('miniservers', 'edit'), async (req, res) => {
+  const { name, host, http_port, udp_port, username, password, use_https, external_url, gateway_client_of, clients_json } = req.body;
+  const msId = Number(req.params.id);
 
   // Blank password field = keep the existing one; the current value is never
   // shown back to the browser, so re-typing is only needed to actually change it.
-  const existing = db.prepare('SELECT password FROM miniservers WHERE id = ?').get(req.params.id);
+  const existing = db.prepare('SELECT password FROM miniservers WHERE id = ?').get(msId);
   const newPassword = password ? encrypt(password) : existing?.password;
 
-  db.prepare(
-    `UPDATE miniservers SET name = ?, host = ?, http_port = ?, udp_port = ?, username = ?, password = ?, use_https = ?, external_url = ?
-     WHERE id = ?`
-  ).run(name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, newPassword, use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null, req.params.id);
-  resetLiveConnection(Number(req.params.id));
+  // Empty string ("None") or a self-reference both mean "not a Gateway Client of anything" — the
+  // dropdown itself already excludes this Miniserver's own id (see GET /:id/edit above), but a
+  // stray manual POST shouldn't be able to create a self-referencing loop either.
+  const gatewayId = Number(gateway_client_of);
+  const gatewayClientOf = gateway_client_of && Number.isInteger(gatewayId) && gatewayId !== msId ? gatewayId : null;
 
+  db.prepare(
+    `UPDATE miniservers SET name = ?, host = ?, http_port = ?, udp_port = ?, username = ?, password = ?, use_https = ?, external_url = ?, gateway_client_of = ?
+     WHERE id = ?`
+  ).run(name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, newPassword, use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null, gatewayClientOf, msId);
+  resetLiveConnection(msId);
   logSystemEvent(`"${req.user.username}" updated Miniserver "${name}" (${host}).`);
+
+  // This Miniserver's own Client Miniservers (see miniserver-edit.ejs) — same shared-credentials
+  // reasoning as the Add form. An existing Client (has an id) is updated in place; a new row (no
+  // id) is inserted fresh; any Client that HAD this Miniserver as its Gateway but wasn't resubmitted
+  // is unlinked (gateway_client_of cleared), not deleted — removing a row here means "no longer a
+  // Client of this one," not "delete this Miniserver and everything tied to its id."
+  const clients = parseClientsJson(clients_json);
+  const existingClientRows = db.prepare('SELECT id FROM miniservers WHERE gateway_client_of = ?').all(msId);
+  const existingClientIds = new Set(existingClientRows.map((r) => r.id));
+  const submittedIds = new Set();
+  const newClientIds = [];
+
+  clients.forEach((client) => {
+    if (client.id && existingClientIds.has(client.id)) {
+      submittedIds.add(client.id);
+      db.prepare('UPDATE miniservers SET name = ?, host = ?, http_port = ?, username = ?, password = ?, use_https = ? WHERE id = ?')
+        .run(client.name, client.host, client.http_port, username, newPassword, client.use_https ? 1 : 0, client.id);
+      resetLiveConnection(client.id);
+    } else {
+      const nextSortOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM miniservers').get().next;
+      const result = db.prepare(
+        `INSERT INTO miniservers (name, host, http_port, username, password, use_https, sort_order, gateway_client_of)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(client.name, client.host, client.http_port, username, newPassword, client.use_https ? 1 : 0, nextSortOrder, msId);
+      newClientIds.push(result.lastInsertRowid);
+      logSystemEvent(`"${req.user.username}" added Miniserver "${client.name}" (${client.host}) as a Gateway Client of "${name}".`);
+    }
+  });
+  [...existingClientIds].filter((id) => !submittedIds.has(id)).forEach((id) => {
+    db.prepare('UPDATE miniservers SET gateway_client_of = NULL WHERE id = ?').run(id);
+  });
+
+  // Same "don't leave it on Unknown" reasoning as the Add form — only the newly-created Clients
+  // need this; an existing (already-checked) Client's status is unaffected by this save.
+  const newClients = newClientIds.map((id) => db.prepare('SELECT * FROM miniservers WHERE id = ?').get(id));
+  await Promise.all(newClients.map((ms) => checkMiniserver(ms)));
+
   res.redirect('/miniservers');
 });
 
@@ -156,6 +290,20 @@ router.post('/:id/check-update', requirePermission('miniservers', 'edit'), async
 
 // /dev/sys/updatetolatestrelease — undocumented, found the same way as the above. Triggers a REAL
 // firmware update + reboot on this specific Miniserver; nothing about this route is a dry run.
+async function triggerFirmwareUpdate(miniserver, username) {
+  try {
+    const result = await fetchMiniserver(miniserver, '/jdev/sys/updatetolatestrelease', { timeoutMs: 15000 });
+    const body = result.ok ? await result.json() : null;
+    logSystemEvent(`"${username}" triggered a firmware update on Miniserver "${miniserver.name}" (${miniserver.host}).`);
+    return { miniserverId: miniserver.id, name: miniserver.name, triggered: true, response: body?.LL?.value ?? null };
+  } catch (err) {
+    // A timeout/connection-drop here is expected once the Miniserver actually reboots into the
+    // update — not necessarily a failure, just the point where it stops answering HTTP requests.
+    logSystemEvent(`"${username}" triggered a firmware update on Miniserver "${miniserver.name}" (${miniserver.host}) — connection ended before a response came back (expected if it's now rebooting): ${err.message}`);
+    return { miniserverId: miniserver.id, name: miniserver.name, triggered: true, response: null, note: 'Connection ended before a response came back — expected if the Miniserver is now rebooting into the update.' };
+  }
+}
+
 // Gated on the same edit permission as delete/update above, and every call is logged via
 // logSystemEvent regardless of outcome — this is exactly the kind of action that needs an audit
 // trail. The confirm dialog lives client-side (data-confirm, miniservers.ejs) since this route has
@@ -164,17 +312,18 @@ router.post('/:id/update-firmware', requirePermission('miniservers', 'edit'), as
   const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
   if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
 
-  try {
-    const result = await fetchMiniserver(miniserver, '/jdev/sys/updatetolatestrelease', { timeoutMs: 15000 });
-    const body = result.ok ? await result.json() : null;
-    logSystemEvent(`"${req.user.username}" triggered a firmware update on Miniserver "${miniserver.name}" (${miniserver.host}).`);
-    res.json({ triggered: true, response: body?.LL?.value ?? null });
-  } catch (err) {
-    // A timeout/connection-drop here is expected once the Miniserver actually reboots into the
-    // update — not necessarily a failure, just the point where it stops answering HTTP requests.
-    logSystemEvent(`"${req.user.username}" triggered a firmware update on Miniserver "${miniserver.name}" (${miniserver.host}) — connection ended before a response came back (expected if it's now rebooting): ${err.message}`);
-    res.json({ triggered: true, response: null, note: 'Connection ended before a response came back — expected if the Miniserver is now rebooting into the update.' });
-  }
+  // Updating a Gateway also updates every Client pointed at it (see the Miniserver edit page) —
+  // each is still its own physical box running its own firmware (unlike structure/Live Data, an
+  // update is never "shared" the way the merged Loxone Config project is), so it needs its own
+  // update command too, not just the Gateway's. Run in parallel, not one-by-one: a Client that's
+  // slow to respond (or already rebooting) shouldn't hold up the others.
+  const clients = db.prepare('SELECT * FROM miniservers WHERE gateway_client_of = ?').all(miniserver.id);
+  const [primaryResult, ...clientResults] = await Promise.all([
+    triggerFirmwareUpdate(miniserver, req.user.username),
+    ...clients.map((client) => triggerFirmwareUpdate(client, req.user.username)),
+  ]);
+
+  res.json({ ...primaryResult, clients: clientResults });
 });
 
 module.exports = router;
