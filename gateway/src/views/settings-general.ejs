@@ -8,15 +8,12 @@
 <% } %>
 
 <% if (canEdit('settings')) { %>
-<div style="display:flex; justify-content:flex-end; margin-bottom:0.5rem;">
-  <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('lightbulb') %></button>
-</div>
 <form method="post" action="/settings" id="settings-form">
   <div class="card">
     <h2>Display</h2>
     <div class="settings-field">
       <label>Timezone</label>
-      <select name="display_timezone" style="max-width:16rem;">
+      <select name="display_timezone">
         <% timezones.forEach(tz => { %>
           <option value="<%= tz %>" <%= tz === gatewaySettings.display_timezone ? 'selected' : '' %>><%= tz %></option>
         <% }) %>
@@ -90,10 +87,31 @@
   </div>
 
   <div class="card">
+    <h2>Loxone Live Data</h2>
+    <div class="settings-field">
+      <label>Hidden state names</label>
+      <div style="display:flex; gap:0.4rem; align-items:center; max-width:48rem; margin-bottom:0.5rem;">
+        <input type="text" id="live-data-hidden-state-add" list="live-data-state-name-options" placeholder="Search a state name…" style="flex:1;">
+        <button type="button" class="btn-soft" id="live-data-hidden-state-add-btn">Add</button>
+      </div>
+      <datalist id="live-data-state-name-options"></datalist>
+      <textarea name="live_data_hidden_states" id="live-data-hidden-states-textarea" rows="4" style="font-family:monospace;" placeholder="jLocked"><%= (JSON.parse(gatewaySettings.live_data_hidden_states || '[]')).join('\n') %></textarea>
+      <p class="hint">
+        One state name per line, exact match (case-insensitive) &mdash; e.g. <code>jLocked</code>.
+        Hides that state from every control that has it, on both
+        <a href="/live-data">Live Data</a> and Monitor's "pick a state" list. Useful for a state
+        that's repeated across dozens of otherwise-unrelated controls and reads as noise rather
+        than something you'd actually want to look at. The field above suggests real state names
+        seen across your configured Miniservers &mdash; type to search, then Add.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Dashboards</h2>
     <div class="settings-field">
       <label>Default decimals for "Current value" panels</label>
-      <input type="number" name="default_panel_decimals" min="0" max="6" value="<%= gatewaySettings.default_panel_decimals %>" style="max-width:8rem;">
+      <input type="number" name="default_panel_decimals" min="0" max="6" value="<%= gatewaySettings.default_panel_decimals %>">
       <p class="hint">
         Used whenever a "Current value" panel doesn't set its own — override it per panel from
         that panel's own Edit settings.
@@ -119,7 +137,7 @@
     <h2>Table preferences</h2>
     <div class="settings-field">
       <label>Rows per page</label>
-      <input type="number" name="table_page_size" value="<%= tablePageSize %>" min="5" max="500" style="max-width:8rem;">
+      <input type="number" name="table_page_size" value="<%= tablePageSize %>" min="5" max="500">
       <p class="hint">
         Applies to every table with more rows than this, across the whole app. Your own
         preference, not shared with other users — saved per-account even though every other
@@ -133,5 +151,41 @@
   </div>
 </form>
 <% } %>
+
+<script>
+  (function () {
+    var input = document.getElementById('live-data-hidden-state-add');
+    var addBtn = document.getElementById('live-data-hidden-state-add-btn');
+    var datalist = document.getElementById('live-data-state-name-options');
+    var textarea = document.getElementById('live-data-hidden-states-textarea');
+    if (!input || !textarea) return;
+
+    fetch('/settings/live-data-state-names')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        (data.names || []).forEach(function (name) {
+          var opt = document.createElement('option');
+          opt.value = name;
+          datalist.appendChild(opt);
+        });
+      })
+      .catch(function () { /* best-effort — the field still works as plain free text without it */ });
+
+    function addName() {
+      var name = input.value.trim();
+      if (!name) return;
+      var existing = textarea.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (existing.some(function (s) { return s.toLowerCase() === name.toLowerCase(); })) { input.value = ''; return; }
+      existing.push(name);
+      textarea.value = existing.join('\n');
+      input.value = '';
+      input.focus();
+    }
+    addBtn.addEventListener('click', addName);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); addName(); }
+    });
+  })();
+</script>
 
 <%- include('partials/foot') %>

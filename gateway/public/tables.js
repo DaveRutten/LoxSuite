@@ -398,17 +398,18 @@
   // capabilities — View/Edit/Reset password/Delete/Test, etc. — which either forces the column
   // wide (crowding out the rest of the table) or wraps into a cramped multi-line stack. Collapses
   // everything but a single "more actions" toggle into a dropdown, the same trigger-plus-popover
-  // shape as .columns-menu above. Scoped to `td .row-actions` specifically (not every .row-actions
-  // on the page — a card's own action row, Export/Clear above a chart, etc. stay as plain inline
-  // buttons; those aren't a growing table column the same way).
-  // A floating dropdown was tried here first, but .table-wrap needs overflow-x:auto for wide
-  // tables, and per the CSS overflow spec that silently clips the vertical axis too — a floating
-  // panel got cut off for any row near the bottom instead of overlapping the content below it.
-  // Pushing the actual table row taller instead (the same [data-toggle-row]/tr.expand-row pattern
-  // already used for Test/Rename/Reset-password elsewhere in this app) sidesteps that clipping
-  // entirely, and reads as one consistent expand-in-place convention instead of two different ones.
-  var rowActionsExpandCounter = 0;
-
+  // shape as .columns-menu above (and the .confirm-bar-popover in foot.ejs). Scoped to
+  // `td .row-actions` specifically (not every .row-actions on the page — a card's own action row,
+  // Export/Clear above a chart, etc. stay as plain inline buttons; those aren't a growing table
+  // column the same way).
+  //
+  // A floating dropdown was tried here first and abandoned — .table-wrap needs overflow-x:auto
+  // for wide tables, and per the CSS overflow spec that silently clips the vertical axis too, so a
+  // position:absolute panel got cut off for any row near the bottom instead of overlapping the
+  // content below it. position:fixed (the exact technique buildColumnsMenu's own panel and
+  // foot.ejs's own confirm-bar-popover already rely on) escapes that same clipping entirely, so
+  // the floating-popover approach is back — this earlier growing-the-row-taller design read as
+  // one more distinct interaction pattern next to those two rather than the same one.
   function collapseRowActions(root) {
     (root || document).querySelectorAll('td .row-actions').forEach(function (bar) {
       if (bar.classList.contains('row-actions-collapsed')) return;
@@ -417,37 +418,115 @@
 
       bar.classList.add('row-actions-collapsed');
 
-      var dataRow = bar.closest('tr');
-      var table = bar.closest('table');
-      var headerRow = table && table.querySelector('thead tr');
-      var columnCount = headerRow ? headerRow.children.length : (dataRow ? dataRow.children.length : 1);
-      var expandId = 'row-actions-expand-' + (++rowActionsExpandCounter);
-
       var toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'btn-soft row-actions-toggle';
       toggle.setAttribute('aria-label', 'More actions');
-      toggle.setAttribute('data-toggle-row', expandId);
       toggle.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
       bar.appendChild(toggle);
 
-      var expandRow = document.createElement('tr');
-      expandRow.className = 'expand-row';
-      expandRow.id = expandId;
-      var cell = document.createElement('td');
-      cell.colSpan = columnCount;
+      var panel = document.createElement('div');
+      panel.className = 'row-actions-popover';
+      panel.hidden = true;
       var expandedActions = document.createElement('div');
       // Both classes: .row-actions for its existing color/spacing rules and so the data-confirm
-      // handler (foot.ejs) still anchors its "are you sure?" bar the same way as before; the
-      // .row-actions-expanded modifier undoes the nowrap+flex-end an Actions-column .row-actions
-      // gets (see style.css) — this one has the whole table's width to work with, and wrapping is
-      // exactly what a row this size is meant to do.
+      // handler (foot.ejs) still anchors its "are you sure?" popover to THIS button the same way
+      // as before (it looks for a .row-actions ancestor); .row-actions-expanded undoes the
+      // nowrap+flex-end an Actions-column .row-actions gets (see style.css) — this one has the
+      // whole popover's own width to work with, and wrapping is exactly what it's meant to do.
       expandedActions.className = 'row-actions row-actions-expanded';
       actions.forEach(function (action) { expandedActions.appendChild(action); }); // moves, doesn't clone — every existing listener/attribute survives
-      cell.appendChild(expandedActions);
-      expandRow.appendChild(cell);
+      panel.appendChild(expandedActions);
 
-      if (dataRow && dataRow.parentNode) dataRow.parentNode.insertBefore(expandRow, dataRow.nextSibling);
+      // A moved action's own [data-toggle-row] (e.g. Loxone -> MQTT's own "Test" -> a separate
+      // "Value to send" + Send row elsewhere in the table, see mappings-loxone-to-mqtt.ejs) folds
+      // that row's own content into THIS SAME popover too, rather than leaving it revealed far
+      // away in the table where opening it from inside a floating popover read as "nothing
+      // happened". Only for a plain sibling tr.expand-row this collapse itself didn't generate —
+      // Miniservers' own diagnostics row (a real page feature, not a leftover Actions column)
+      // stays exactly as it was, expanding in place.
+      Array.prototype.slice.call(expandedActions.querySelectorAll('[data-toggle-row]')).forEach(function (toggleBtn) {
+        var targetId = toggleBtn.getAttribute('data-toggle-row');
+        var targetRow = document.getElementById(targetId);
+        if (!targetRow || targetRow.tagName !== 'TR' || !targetRow.classList.contains('expand-row')) return;
+        var targetCell = targetRow.querySelector('td');
+        if (!targetCell) return;
+        var merged = document.createElement('div');
+        merged.className = 'row-actions-popover-extra';
+        merged.hidden = true;
+        while (targetCell.firstChild) merged.appendChild(targetCell.firstChild);
+        panel.appendChild(merged);
+        targetRow.parentNode.removeChild(targetRow);
+        toggleBtn.removeAttribute('data-toggle-row'); // the generic handler (foot.ejs) now has nothing left there to find
+        // Only one sub-panel (this merged content, or a Delete confirm-bar — see foot.ejs) open at
+        // a time inside the same popover, same "one thing open at once" convention the popover's
+        // own outer toggle already follows — a 'subpanelopen' event on the shared panel element is
+        // how the two otherwise-unrelated files coordinate this without either needing to know the
+        // other's internals, just this one shared name/convention.
+        panel.addEventListener('subpanelopen', function (e) {
+          if (e.detail !== merged && !merged.hidden) merged.hidden = true;
+        });
+        toggleBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          merged.hidden = !merged.hidden;
+          if (!merged.hidden) {
+            panel.dispatchEvent(new CustomEvent('subpanelopen', { detail: merged }));
+            var firstInput = merged.querySelector('input, select, textarea');
+            if (firstInput) firstInput.focus({ preventScroll: true });
+            // The popover's own max-height was computed once at open time, before this content
+            // existed to measure (merged.hidden was still true) — without regrowing it here, a
+            // dropdown living inside this newly-revealed content (e.g. the value-suggest-list
+            // below "Value to send") got clipped by the popover's own overflow-y:auto scroll
+            // instead of just being visible, same "make the first one bigger if needed" fix
+            // already applied for a merged confirm-bar (see growRowActionsPopover in foot.ejs).
+            panel.style.maxHeight = Math.min(panel.scrollHeight, window.innerHeight * 0.85) + 'px';
+          }
+        });
+      });
+
+      document.body.appendChild(panel);
+
+      toggle.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var wasHidden = panel.hidden;
+        // Only one of these open at a time, same as a native context menu.
+        document.querySelectorAll('.row-actions-popover').forEach(function (p) { if (p !== panel) p.hidden = true; });
+        panel.hidden = !wasHidden;
+        if (panel.hidden) return;
+        panel.style.maxHeight = '';
+        var rect = toggle.getBoundingClientRect();
+        var panelHeight = panel.getBoundingClientRect().height;
+        var spaceBelow = window.innerHeight - rect.bottom;
+        var spaceAbove = rect.top;
+        var flipUp = panelHeight > spaceBelow && spaceAbove > spaceBelow;
+        panel.style.left = 'auto';
+        panel.style.right = (window.innerWidth - rect.right) + 'px';
+        if (flipUp) {
+          panel.style.top = 'auto';
+          panel.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+        } else {
+          panel.style.top = (rect.bottom + 6) + 'px';
+          panel.style.bottom = 'auto';
+        }
+        var available = (flipUp ? spaceAbove : spaceBelow) - 12;
+        panel.style.maxHeight = Math.max(120, Math.min(available, window.innerHeight * 0.7)) + 'px';
+      });
+      // NOT a blanket panel.addEventListener('click', stopPropagation) — that would also stop the
+      // click from ever reaching OTHER document-level delegated handlers a moved action button
+      // might depend on (e.g. a page's own [data-toggle-row] Test-value expand-row, see foot.ejs),
+      // silently breaking them for any button that happens to live inside this popover. Checking
+      // the click's own target against the panel here instead only skips the CLOSE, leaving every
+      // other listener's own bubble untouched.
+      document.addEventListener('click', function (e) {
+        if (panel.contains(e.target)) return;
+        panel.hidden = true;
+      });
+      // Same "don't close on the panel's own scroll" exclusion as buildColumnsMenu's own panel —
+      // wrapping (multiple buttons on a narrow popover) can make this one tall enough to scroll.
+      window.addEventListener('scroll', function (e) {
+        if (e.target === panel || panel.contains(e.target)) return;
+        panel.hidden = true;
+      }, true);
     });
   }
 

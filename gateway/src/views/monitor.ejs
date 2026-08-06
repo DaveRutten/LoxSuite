@@ -111,11 +111,11 @@
     <div class="search-combo">
       <select id="monitor-filter-field">
         <option value="0">Status</option>
-        <option value="1">Label</option>
+        <option value="1" selected>Label</option>
         <option value="2">Source</option>
         <option value="3">Dashboard</option>
         <option value="4">Notification</option>
-        <option value="5">Current value</option>
+        <option value="5">Raw value</option>
         <option value="6">Last updated</option>
       </select>
       <div class="clearable-input-wrap">
@@ -142,7 +142,7 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Status</th><th>Label</th><th>Source</th><th>Dashboard</th><th>Notification</th><th>Current value</th><th>Last updated</th><th>Actions</th></tr>
+      <tr><th>Status</th><th>Label</th><th>Source</th><th>Dashboard</th><th>Notification</th><th>Raw value</th><th>Scaled value</th><th>Last updated</th><th>Actions</th></tr>
     </thead>
     <tbody>
       <% monitors.forEach(m => { %>
@@ -178,10 +178,34 @@
             <% } %>
           </td>
           <td><% if (m.current) { %><span class="truncate" title="<%= m.current.value %>"><%= m.current.value %></span><% } else { %>-<% } %></td>
+          <td>
+            <%
+              // Only this monitor's own chart config, never a shared default — see routes/monitor.js's
+              // chart-settings handler for why unit/scale/decimals all live per-monitor here (the
+              // legacy config.unit fallback covers a monitor whose unit was set before it moved there).
+              var mConfig = {}; try { mConfig = JSON.parse(m.config || '{}'); } catch (e) { /* malformed — no scaling */ }
+              var mSeries = (mConfig.series && mConfig.series[String(m.id)]) || {};
+              var mUnit = mSeries.unit || mConfig.unit || '';
+              var mScale = mSeries.scale != null ? mSeries.scale : 1;
+              var mDecimals = mSeries.decimals != null ? mSeries.decimals : defaultPanelDecimals;
+              var mValueLabels = mSeries.valueLabels || [];
+              // A reading is sometimes a Loxone/MQTT enum (1 = Active, 50 = Resetting), not a
+              // continuous quantity a scale/decimals pair can meaningfully round — checked first,
+              // against the RAW value, same precedence the dashboard's own 'value' panel type gives
+              // its identical mapping (see loadPanelsWithMonitors in routes/dashboards.js).
+              var mMapping = m.current ? mValueLabels.find((vm) => vm.value === String(m.current.value)) : null;
+              var hasScaling = !!(mValueLabels.length || mSeries.unit || mConfig.unit || (mSeries.scale != null) || (mSeries.decimals != null));
+            %>
+            <% if (mMapping) { %>
+              <%= mMapping.label %>
+            <% } else if (hasScaling && m.current && m.current.numericValue != null) { %>
+              <%= (Number(m.current.numericValue) * mScale).toFixed(mDecimals) %><%= mUnit ? ' ' + mUnit : '' %>
+            <% } else { %>-<% } %>
+          </td>
           <td><%= m.current ? formatDateTime(m.current.recordedAt) : '-' %></td>
           <td>
             <div class="row-actions">
-              <a class="inline" href="/monitor/<%= m.id %>"><button type="button"><%- icon('list') %> View</button></a>
+              <a class="inline" href="/monitor/<%= m.id %>"><button type="button" class="btn-soft"><%- icon('list') %> View</button></a>
               <% if (canEdit('monitor')) { %>
               <button type="button" class="btn-edit" data-toggle-row="monitor-edit-<%= m.id %>"><%- icon('edit') %> Edit</button>
               <form class="inline" method="post" action="/monitor/<%= m.id %>/toggle">

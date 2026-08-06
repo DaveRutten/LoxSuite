@@ -7,10 +7,16 @@ const panelTypeDefaults = require('../panelTypeDefaults');
 
 const router = express.Router();
 
-const PANEL_TYPES = ['chart', 'table', 'value', 'gauge', 'stat_delta', 'threshold'];
-const SINGLE_MONITOR_TYPES = ['table', 'gauge', 'stat_delta', 'threshold'];
+// group_header is a monitor-less, full-width divider panel (see panel-grid.ejs's own rendering) —
+// deliberately NOT in SINGLE_MONITOR_TYPES below (that list means "exactly one", not "zero").
+const PANEL_TYPES = ['chart', 'table', 'value', 'gauge', 'stat_delta', 'threshold', 'state_bar', 'group_header'];
+// gauge is deliberately NOT here (any more) — a gauge panel can hold several monitors, each drawn
+// as its own gauge side by side (see loadPanelsWithMonitors/panel-grid.ejs), sharing the panel's
+// one min/max/unit/thresholds/style rather than each getting its own independent range.
+const SINGLE_MONITOR_TYPES = ['table', 'stat_delta', 'threshold'];
 const THRESHOLD_OPERATORS = ['gt', 'gte', 'lt', 'lte'];
 const LEGEND_POSITIONS = ['auto', 'top', 'bottom', 'left', 'right', 'off'];
+const LEGEND_ALIGNS = ['start', 'center', 'end'];
 const CURVE_TENSIONS = [0, 0.15, 0.4];
 const STEPPED_VALUES = ['before', 'after', 'middle'];
 const POINT_STYLES = ['circle', 'cross', 'rect', 'rectRot', 'star', 'triangle'];
@@ -57,6 +63,24 @@ function fieldStr(value) {
 function clampScale(value) {
   const n = Number(value);
   return Number.isFinite(n) && n !== 0 ? n : 1;
+}
+
+// 'dashboard' (rangeField()'s own "Dashboard default" option) is meaningless outside a dashboard
+// panel's own range — monitor.js's shared resolveRange() has no notion of it and would otherwise
+// just coerce it away to '24h' like any other unrecognized value, silently losing the choice the
+// very next time this panel is saved. Passed through as-is here instead; loadPanelsWithMonitors is
+// the one place that actually turns it into a concrete range at render time.
+function resolvePanelRange(value) {
+  return value === 'dashboard' ? 'dashboard' : resolveRange(value);
+}
+
+// null (blank field) means "use the Settings-page global default" (see getDefaultPanelDecimals) —
+// distinct from 0, a real, validly-entered "round to whole numbers" — same convention already used
+// by the 'value'/'chart' panel types' own per-monitor decimals override.
+function clampDecimals(value) {
+  if (value === '' || value === undefined || value === null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(6, Math.max(0, Math.round(n))) : null;
 }
 
 // Applied once, right after a raw reading leaves the database — everything downstream (rounding
@@ -188,7 +212,19 @@ function parseSeriesConfig(text) {
     const color = typeof entry.color === 'string' && entry.color.trim() ? sanitizeColor(entry.color) : null;
     const style = ['solid-thick', 'dashed', 'dotted'].includes(entry.style) ? entry.style : null;
     const pointStyle = POINT_STYLES.includes(entry.pointStyle) ? entry.pointStyle : null;
-    if (name || unit || hasScale || hasDecimals || axis === 'right' || color || style || pointStyle) {
+    // Same "exact value -> label/color" mapping the 'value' panel type already has (see
+    // parseValueMappings) — a reading is sometimes a Loxone/MQTT enum (1 = Active, 50 = Resetting),
+    // not a continuous quantity a scale/decimals pair can meaningfully round, so this needs to be
+    // checked before any numeric formatting is even attempted, same precedence loadPanelsWithMonitors
+    // already gives it for a value panel's own mapping. Client-built rows (a dashboard chart panel's
+    // own per-series builder) submit this as an already-parsed array; validated fresh here regardless
+    // of which caller built it, same as every other field on this entry.
+    const valueLabels = Array.isArray(entry.valueLabels)
+      ? entry.valueLabels
+        .filter((m) => m && typeof m.value !== 'undefined' && typeof m.label === 'string' && m.label.trim())
+        .map((m) => ({ value: String(m.value), label: m.label.trim(), color: typeof m.color === 'string' && m.color.trim() ? sanitizeColor(m.color) : null }))
+      : [];
+    if (name || unit || hasScale || hasDecimals || axis === 'right' || color || style || pointStyle || valueLabels.length) {
       result[id] = {
         name: name || null,
         unit: unit || null,
@@ -198,6 +234,7 @@ function parseSeriesConfig(text) {
         color,
         style,
         pointStyle,
+        valueLabels,
       };
     }
   }
@@ -261,6 +298,11 @@ function buildConfig(panelType, body) {
     return {
       chartType: CHART_TYPES.includes(body.chart_type) ? body.chart_type : 'line',
       legendPosition: LEGEND_POSITIONS.includes(body.legend_position) ? body.legend_position : 'auto',
+      legendAlign: LEGEND_ALIGNS.includes(body.legend_align) ? body.legend_align : 'start',
+      legendShowMin: !!body.legend_show_min,
+      legendShowMax: !!body.legend_show_max,
+      legendShowAvg: !!body.legend_show_avg,
+      legendShowCurrent: !!body.legend_show_current,
       unit: fieldStr(body.unit_chart),
       fill: !!body.fill_area,
       stepped,
@@ -285,6 +327,25 @@ function buildConfig(panelType, body) {
       series: parseValueSeriesConfig(body.value_series),
     };
   }
+  if (panelType === 'state_bar') {
+    return {
+      // Same {value, label, color} shape as the 'value' panel type's own mapping — a state bar's
+      // segments ARE that same discrete "raw reading -> name/color" idea, just laid out along a
+      // timeline instead of shown as the single current one.
+      // NOT body.value_labels — both the Add and Edit forms render every panel type's fields into
+      // the same <form> (CSS-hidden, not removed), so a 'value'-type panel's own (always-empty,
+      // for a state_bar panel) value_labels field would sit right alongside this one under the
+      // identical name. fieldStr() takes array[0] for a repeated field name, and the 'value'
+      // block's field comes first in the DOM — so body.value_labels here would always resolve to
+      // that other, empty field rather than the one actually filled in below. A distinct name
+      // sidesteps the collision entirely.
+      valueLabels: parseValueMappings(fieldStr(body.state_bar_value_labels)),
+      // Anything that doesn't match one of the rows above still needs a segment color, or an
+      // unmapped stretch of the timeline would render invisible rather than "some raw value with
+      // no name given to it yet".
+      defaultColor: sanitizeColor(fieldStr(body.state_bar_default_color)) || '#8a93a6',
+    };
+  }
   if (panelType === 'gauge') {
     const min = Number(body.gauge_min);
     const max = Number(body.gauge_max);
@@ -293,6 +354,16 @@ function buildConfig(panelType, body) {
       max: Number.isFinite(max) ? max : 100,
       unit: fieldStr(body.unit_gauge),
       scale: clampScale(body.scale_gauge),
+      decimals: clampDecimals(body.decimals_gauge),
+      style: body.gauge_style === 'radial' ? 'radial' : 'bar',
+      // The three below only ever show anything for style:'radial' — bar has no ring to shape
+      // into an arc, band into sections, or point a needle around (see panel-grid.ejs).
+      shape: body.gauge_shape === 'circle' ? 'circle' : 'arc',
+      sections: !!body.gauge_sections,
+      sectionsGradient: !!body.gauge_sections_gradient,
+      needle: !!body.gauge_needle,
+      sparkline: !!body.gauge_sparkline,
+      sparklineColor: body.gauge_sparkline_neutral ? 'default' : 'threshold',
       thresholds: parseThresholdLadder(fieldStr(body.gauge_thresholds)),
     };
   }
@@ -302,6 +373,7 @@ function buildConfig(panelType, body) {
       unit: fieldStr(body.unit_stat_delta),
       direction,
       scale: clampScale(body.scale_stat_delta),
+      decimals: clampDecimals(body.decimals_stat_delta),
       thresholds: parseThresholdLadder(fieldStr(body.stat_delta_thresholds)),
     };
   }
@@ -311,13 +383,21 @@ function buildConfig(panelType, body) {
       operator: THRESHOLD_OPERATORS.includes(body.threshold_operator) ? body.threshold_operator : 'gt',
       value: Number.isFinite(value) ? value : 0,
       unit: fieldStr(body.unit_threshold),
+      decimals: clampDecimals(body.decimals_threshold),
       scale: clampScale(body.scale_threshold),
       labelOk: fieldStr(body.label_ok) || 'Normal',
       labelAlert: fieldStr(body.label_alert) || 'Alert',
     };
   }
+  if (panelType === 'group_header') {
+    return { description: fieldStr(body.description) };
+  }
   if (panelType === 'table') {
-    return { scale: clampScale(body.scale_table), thresholds: parseThresholdLadder(fieldStr(body.table_thresholds)) };
+    return {
+      scale: clampScale(body.scale_table),
+      decimals: clampDecimals(body.decimals_table),
+      thresholds: parseThresholdLadder(fieldStr(body.table_thresholds)),
+    };
   }
   return {};
 }
@@ -488,12 +568,19 @@ router.post('/quick-add-diag', (req, res) => {
 });
 
 // rangeOverride (from the dashboard-wide time filter next to the auto-refresh control — see
-// partials/foot.ejs) stands in for every time-series panel's own *display* window without
-// touching what's actually stored in dashboard_panels.range: the Edit form still needs to show
-// and edit each panel's own real saved range regardless of whatever filter happens to be active
-// while looking at it, so the override only ever feeds into the `range` local computed per panel
-// below (and the `displayRange` field attached to it for panel-grid.ejs's chart canvas / stat_delta
-// label), never into `panel.range`/`base.range` itself.
+// partials/foot.ejs) never touches what's actually stored in dashboard_panels.range: the Edit
+// form still needs to show and edit each panel's own real saved range regardless of whatever
+// filter happens to be active while looking at it, so the override only ever feeds into the
+// `range` local computed per panel below (and the `displayRange` field attached to it for
+// panel-grid.ejs's chart canvas / stat_delta label), never into `panel.range`/`base.range` itself.
+//
+// A panel whose own saved range is the literal 'dashboard' sentinel (rangeField()'s own
+// "Dashboard default" option, and every new panel's own default going forward) is the ONE case
+// that actually follows the dashboard-wide filter above — any panel with a real preset/custom/
+// absolute range of its own keeps that regardless of what the dashboard-wide filter says, so one
+// specific panel can deliberately stay pinned to its own range while the filter drives everything
+// still left on "Dashboard default". Falls back to '24h' for a 'dashboard' panel on a dashboard
+// whose own filter is itself at rest ("Default range", no override active at all).
 function loadPanelsWithMonitors(dashboardId, rangeOverride) {
   const effectiveRange = rangeOverride ? resolveRange(rangeOverride) : null;
   const panels = db.prepare('SELECT * FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboardId);
@@ -521,7 +608,7 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
     }
     // Only 'value' ignores this entirely — it shows the current live reading, not a history
     // window, so there's nothing for a time filter to apply to.
-    const range = effectiveRange || panel.range;
+    const range = panel.range === 'dashboard' ? (effectiveRange || '24h') : panel.range;
     // Only the chart panel type's canvas actually reads this (see monitor-chart.js's
     // rangeUntilMs) — computed here regardless of panel_type anyway since it's cheap and keeps
     // every panel's `range` handling in this one place. Only ever non-null for an absolute (fixed
@@ -587,6 +674,7 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
     if (panel.panel_type === 'table') {
       const monitor = monitors[0] || null;
       const scale = config.scale || 1;
+      const decimals = config.decimals != null ? config.decimals : getDefaultPanelDecimals();
       const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
       const rawRows = monitor
         ? db.prepare(`SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS)
@@ -595,34 +683,126 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
         const scaledNumeric = applyScale(r.value, scale);
         return {
           ...r,
-          displayValue: scaledNumeric === null ? r.value : scaledNumeric,
+          displayValue: scaledNumeric === null ? r.value : formatPanelValue(scaledNumeric, decimals),
           thresholdColor: colorForThresholdLadder(scaledNumeric, config.thresholds),
         };
       });
       return { ...base, rows };
     }
 
-    if (panel.panel_type === 'gauge' || panel.panel_type === 'threshold') {
+    if (panel.panel_type === 'gauge') {
+      // Every monitor shares this ONE panel's min/max/unit/scale/decimals/thresholds (see
+      // buildConfig) — unlike the 'value' panel type, a gauge's range/coloring is a property of
+      // the ring/bar being drawn, not of any one reading, so there's no per-monitor override here.
+      const scale = config.scale || 1;
+      const decimals = config.decimals != null ? config.decimals : getDefaultPanelDecimals();
+      const { min, max } = config;
+      const gauges = monitors.map((monitor) => {
+        const current = getCurrentValue(monitor.id);
+        const scaledNumeric = current ? applyScale(current.value, scale) : null;
+        const hasNumeric = Number.isFinite(scaledNumeric);
+        const displayCurrent = current ? { ...current, displayValue: hasNumeric ? formatPanelValue(scaledNumeric, decimals) : current.value } : null;
+        const percent = hasNumeric && max > min ? Math.min(100, Math.max(0, ((scaledNumeric - min) / (max - min)) * 100)) : null;
+        const thresholdColor = hasNumeric ? colorForThresholdLadder(scaledNumeric, config.thresholds) : null;
+        // A small recent-history trend line under the value (Style: Round only, see
+        // panel-grid.ejs) — optional since it costs one extra query per monitor in the panel.
+        // Normalized against ITS OWN sampled min/max (not the gauge's configured min/max), same as
+        // any sparkline: the point is to show the recent shape of the reading, not restate the
+        // gauge's own scale a second time.
+        let sparkline = null;
+        if (config.sparkline) {
+          const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
+          const rows = db.prepare(`SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS);
+          const values = rows.map((r) => r.numericValue).filter((v) => Number.isFinite(v));
+          if (values.length >= 2) {
+            const sparkMin = Math.min(...values);
+            const sparkMax = Math.max(...values);
+            const sparkRange = sparkMax - sparkMin;
+            sparkline = values.map((v) => (sparkRange > 0 ? (v - sparkMin) / sparkRange : 0.5));
+          }
+        }
+        return { monitor, current: displayCurrent, percent, thresholdColor, sparkline };
+      });
+      return { ...base, gauges };
+    }
+
+    if (panel.panel_type === 'threshold') {
       const monitor = monitors[0] || null;
       const current = monitor ? getCurrentValue(monitor.id) : null;
       const scale = config.scale || 1;
+      const decimals = config.decimals != null ? config.decimals : getDefaultPanelDecimals();
       const scaledNumeric = current ? applyScale(current.value, scale) : null;
       const hasNumeric = Number.isFinite(scaledNumeric);
-      const displayCurrent = current ? { ...current, displayValue: hasNumeric ? scaledNumeric : current.value } : null;
-
-      if (panel.panel_type === 'gauge') {
-        const { min, max } = config;
-        const percent = hasNumeric && max > min ? Math.min(100, Math.max(0, ((scaledNumeric - min) / (max - min)) * 100)) : null;
-        const thresholdColor = hasNumeric ? colorForThresholdLadder(scaledNumeric, config.thresholds) : null;
-        return { ...base, monitor, current: displayCurrent, percent, thresholdColor };
-      }
+      const displayCurrent = current ? { ...current, displayValue: hasNumeric ? formatPanelValue(scaledNumeric, decimals) : current.value } : null;
       return { ...base, monitor, current: displayCurrent, isAlert: evaluateThreshold(hasNumeric ? scaledNumeric : null, config) };
+    }
+
+    if (panel.panel_type === 'state_bar') {
+      const valueLabels = config.valueLabels || [];
+      const defaultColor = config.defaultColor || '#8a93a6';
+      const { since, until } = rangeToWindow(range);
+      const rangeStartMs = since ? new Date(since).getTime() : null;
+      const rangeEndMs = until ? new Date(until).getTime() : Date.now();
+      const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
+      const bars = monitors.map((monitor) => {
+        // DESC + LIMIT, then reversed back to ascending — NOT a plain ASC + LIMIT. A busy monitor
+        // (polled every few seconds) can easily have more rows in a 24h/7d window than MAX_ROWS;
+        // ASC+LIMIT would silently keep only the OLDEST slice of the range and cut off everything
+        // recent, which is exactly backwards for a "what's it doing lately" panel — the segment
+        // list would just stop partway through and the whole tail of the bar would read as one
+        // giant unbroken (wrong) block. DESC+LIMIT keeps the most recent MAX_ROWS instead, same
+        // direction table/series.json's own history queries already truncate in (see monitor.js).
+        // Any truncation this still causes lands at the OLD end, which the "gap before the first
+        // reading" logic below already renders as an explicit No data stretch.
+        const rows = db.prepare(
+          `SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`
+        ).all(monitor.id, ...rangeParams, MAX_ROWS).reverse();
+        // One segment per RUN of consecutive readings sharing the same mapped label+color — not
+        // one per raw row, which would draw an invisible-thin, unclickable sliver for every single
+        // poll even while the underlying state hadn't actually changed at all.
+        const segments = [];
+        rows.forEach((r) => {
+          const mapping = valueLabels.find((vm) => vm.value === String(r.value));
+          const label = mapping ? mapping.label : String(r.value);
+          const color = (mapping && mapping.color) || defaultColor;
+          const startMs = new Date(r.recordedAt).getTime();
+          const last = segments[segments.length - 1];
+          if (!last || last.label !== label || last.color !== color) segments.push({ label, color, startMs, endMs: null });
+        });
+        // A segment's own end is the NEXT segment's start — it was in effect right up until the
+        // reading that changed it — and the last one runs to the range's own end (still in effect
+        // right now), not to its own last-seen timestamp.
+        segments.forEach((seg, i) => { seg.endMs = i + 1 < segments.length ? segments[i + 1].startMs : rangeEndMs; });
+        // A gap before the very first reading (or the whole range, if there's no history at all
+        // yet) reads as an explicit "no data" stretch instead of silently starting the bar
+        // part-way with nothing to its left. Meaningless for an unbounded "All" range — there's no
+        // fixed start to measure the gap from.
+        if (rangeStartMs != null) {
+          const firstStart = segments.length ? segments[0].startMs : rangeEndMs;
+          if (firstStart > rangeStartMs) segments.unshift({ label: 'No data', color: 'var(--border)', startMs: rangeStartMs, endMs: firstStart, noData: true });
+        }
+        return { monitor, segments };
+      });
+      // For an unbounded "All" range there's no fixed clock start to anchor every bar to (unlike
+      // a real range, where rangeStartMs above already came from the clock, not the data, and so
+      // was already the same for every bar) — falls back to the EARLIEST first-segment start
+      // across ALL bars, not just the first one, so a panel mixing an old and a recently-added
+      // monitor still lines every bar up against the same left edge instead of each drifting to
+      // wherever ITS OWN oldest reading happens to be.
+      const effectiveRangeStartMs = rangeStartMs != null
+        ? rangeStartMs
+        : bars.reduce((earliest, bar) => {
+            const firstMs = bar.segments[0] ? bar.segments[0].startMs : null;
+            return firstMs != null && (earliest == null || firstMs < earliest) ? firstMs : earliest;
+          }, null) ?? rangeEndMs;
+      return { ...base, bars, rangeStartMs: effectiveRangeStartMs, rangeEndMs };
     }
 
     if (panel.panel_type === 'stat_delta') {
       const monitor = monitors[0] || null;
       const current = monitor ? getCurrentValue(monitor.id) : null;
       const scale = config.scale || 1;
+      const decimals = config.decimals != null ? config.decimals : getDefaultPanelDecimals();
       let comparison = null;
       if (monitor) {
         const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
@@ -632,8 +812,9 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
       const comparisonNumeric = comparison ? applyScale(comparison.numericValue, scale) : null;
       const delta = Number.isFinite(currentNumeric) && Number.isFinite(comparisonNumeric) ? currentNumeric - comparisonNumeric : null;
       const thresholdColor = Number.isFinite(currentNumeric) ? colorForThresholdLadder(currentNumeric, config.thresholds) : null;
-      const displayCurrent = current ? { ...current, displayValue: Number.isFinite(currentNumeric) ? currentNumeric : current.value } : null;
-      return { ...base, monitor, current: displayCurrent, delta, thresholdColor };
+      const displayCurrent = current ? { ...current, displayValue: Number.isFinite(currentNumeric) ? formatPanelValue(currentNumeric, decimals) : current.value } : null;
+      const displayDelta = delta !== null ? formatPanelValue(Math.abs(delta), decimals) : null;
+      return { ...base, monitor, current: displayCurrent, delta, displayDelta, thresholdColor };
     }
 
     return base; // chart: rendered client-side via /monitor/series.json
@@ -678,6 +859,20 @@ function listSharedWithMe(userId, roleId) {
        GROUP BY d.id ORDER BY d.name`
     )
     .all(userId, roleId || 0);
+}
+
+// Every dashboard id this user could actually open — own + shared-with-them/their-role + the one
+// shared home Dashboard (user_id IS NULL, open to anyone with the `dashboard` Access Role's own
+// view permission, same rule loadAccessibleDashboard applies). Used by the Monitor list page to
+// only show a "Dashboard" badge the viewer can actually click through to — the badge itself has no
+// ownership filter of its own (a monitor can be used on ANY dashboard, not just this viewer's), so
+// without this a monitor's badge could point at another user's un-shared personal dashboard,
+// something "My Dashboards" would never list and clicking through would just 403 on.
+function listAccessibleDashboardIds(userId, roleId) {
+  const ids = new Set(listOwnedDashboards(userId).map((d) => d.id));
+  listSharedWithMe(userId, roleId).forEach((d) => ids.add(d.id));
+  db.prepare('SELECT id FROM custom_dashboards WHERE user_id IS NULL').all().forEach((d) => ids.add(d.id));
+  return ids;
 }
 
 // Everyone but the current user — the pool a dashboard's "Add" share form picks from. Small
@@ -761,7 +956,7 @@ router.post('/:id/rename', (req, res) => {
 
   const name = (req.body.name || '').trim();
   if (name) db.prepare('UPDATE custom_dashboards SET name = ? WHERE id = ?').run(name, dashboard.id);
-  res.redirect(isShared(dashboard) ? '/' : '/dashboards');
+  res.redirect(req.body.redirect_to ? safeDashboardRedirect(dashboard, req.body.redirect_to) : (isShared(dashboard) ? '/' : '/dashboards'));
 });
 
 // Only ever '/dashboards' (the list, where a row's own star button lives) or '/dashboards/<id>'
@@ -898,6 +1093,7 @@ router.get('/:id', (req, res) => {
     panelTypeDefaultsExist: panelTypeDefaults.listDefaultTypes(dashboard.id),
     sharedByOwner,
     isFavorited,
+    currentRange: req.query.range || '',
   });
 });
 
@@ -907,12 +1103,13 @@ router.post('/:id/panels', (req, res) => {
   if (!canMutate(dashboard, req)) return forbidden(res);
 
   const panelType = PANEL_TYPES.includes(req.body.panel_type) ? req.body.panel_type : null;
-  const range = resolveRange(req.body.range);
+  const range = resolvePanelRange(req.body.range);
   let monitorIds = Array.isArray(req.body.monitor_ids) ? req.body.monitor_ids : (req.body.monitor_ids ? [req.body.monitor_ids] : []);
   monitorIds = monitorIds.map(Number).filter(Number.isInteger);
   if (SINGLE_MONITOR_TYPES.includes(panelType)) monitorIds = monitorIds.slice(0, 1); // one number in, one number out
+  if (panelType === 'group_header') monitorIds = []; // a divider has none of its own, whatever the (hidden) checklist happened to submit
 
-  if (!panelType || monitorIds.length === 0) {
+  if (!panelType || (monitorIds.length === 0 && panelType !== 'group_header')) {
     // Shared (home) and personal dashboards render through different pages (dashboard.ejs needs a
     // lot of home-page-only context this route doesn't have), so a validation failure here just
     // redirects back rather than trying to re-render the right one inline with an error message.
@@ -922,10 +1119,17 @@ router.post('/:id/panels', (req, res) => {
   const config = JSON.stringify(buildConfig(panelType, req.body));
   const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(dashboard.id).m;
 
+  // A fresh group_header always starts full-width/one row tall (a divider, not a card) — the
+  // render loop in panel-grid.ejs re-enforces this on every load regardless, but starting the
+  // stored value right keeps col_span/row_span truthful for anything else that reads them
+  // directly (Auto-order's own area sort, say) before the panel's ever been touched again.
+  const initialColSpan = panelType === 'group_header' ? 12 : 4;
+  const initialRowSpan = panelType === 'group_header' ? 1 : 3;
+
   const insertPanel = db.transaction(() => {
     const result = db
-      .prepare('INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(dashboard.id, panelType, req.body.title || null, range, config, maxPos + 1);
+      .prepare('INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position, col_span, row_span) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(dashboard.id, panelType, req.body.title || null, range, config, maxPos + 1, initialColSpan, initialRowSpan);
     const panelId = result.lastInsertRowid;
     const insertMonitor = db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)');
     monitorIds.forEach((monitorId, index) => insertMonitor.run(panelId, monitorId, index));
@@ -945,12 +1149,13 @@ router.post('/:id/panels/:panelId/settings', (req, res) => {
 
   // Switching type is optional here (the field defaults to the panel's own current type when absent).
   const panelType = PANEL_TYPES.includes(req.body.panel_type) ? req.body.panel_type : panel.panel_type;
-  const range = resolveRange(req.body.range);
+  const range = resolvePanelRange(req.body.range);
   const config = JSON.stringify(buildConfig(panelType, req.body));
 
   let monitorIds = Array.isArray(req.body.monitor_ids) ? req.body.monitor_ids : (req.body.monitor_ids ? [req.body.monitor_ids] : []);
   monitorIds = monitorIds.map(Number).filter(Number.isInteger);
   if (SINGLE_MONITOR_TYPES.includes(panelType)) monitorIds = monitorIds.slice(0, 1);
+  if (panelType === 'group_header') monitorIds = []; // a divider has none of its own, whatever the (hidden) checklist happened to submit
 
   const updatePanel = db.transaction(() => {
     db.prepare('UPDATE dashboard_panels SET panel_type = ?, title = ?, range = ?, config = ? WHERE id = ? AND dashboard_id = ?')
@@ -1017,20 +1222,126 @@ router.post('/:id/panels/:panelId/reset-to-default', (req, res) => {
   res.redirect(dashboardUrl(dashboard));
 });
 
-// Fired on resize-drag mouseup (see dashboard-detail.ejs) — sizing is otherwise entirely
-// drag-driven, no form for it.
-router.post('/:id/panels/:panelId/resize', (req, res) => {
+// GridStack's own drag/resize 'change' event fires with every affected node's new x/y/w/h in one
+// batch (see panel-grid.ejs's grid-init script) — this single endpoint updates every affected
+// panel row in one request, replacing the role the old separate /panels/:panelId/resize and
+// /panels/reorder routes used to serve (neither is referenced anywhere else in the app — the old
+// pointer-based drag-reorder and corner-resize-drag scripts that posted to them are both deleted
+// along with the hand-rolled skyline packer). x/y are GridStack's own explicit grid coordinates
+// (see db.js's grid_x/grid_y columns); w/h reuse the same col_span/row_span columns/bounds the old
+// resize route already validated against.
+const MIN_GRID_XY = 0;
+const MAX_GRID_XY = 1000; // sanity bound against a broken/malicious client value, not a design limit
+// Cross-zone drag (see panel-grid.ejs's grid-init script: acceptWidgets:true lets a panel be
+// dragged from one zone's GridStack instance into another) doesn't change WHICH group a panel
+// belongs to on its own — group membership is still purely `position`-order-based (a panel
+// between one group_header and the next), exactly as it was before this migration, and GridStack
+// has no idea that concept exists. This is what actually moves it: renumbers every panel's
+// `position` so the dragged one now falls right after whichever group it was dropped into (its
+// LAST member, i.e. right before that group's own next boundary) — or, for a drop into zone 0
+// (afterGroupId null), right before the first group_header, same "ungrouped" spot zone 0 always
+// occupies. Fired from the target grid's own 'added' event, once per panel that actually crossed
+// zones (a same-zone drag/resize only fires 'change', handled by /panels/layout below instead).
+router.post('/:id/panels/:panelId/move-to-zone', (req, res) => {
   const dashboard = loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).json({ error: 'Dashboard not found' });
   if (!canMutate(dashboard, req)) return res.status(403).json({ error: 'Not authorized' });
 
-  const colSpan = clamp(req.body.colSpan, MIN_COL_SPAN, MAX_COL_SPAN, 4);
-  const rowSpan = clamp(req.body.rowSpan, MIN_ROW_SPAN, MAX_ROW_SPAN, 3);
+  const panelId = Number(req.params.panelId);
+  const afterGroupId = req.body.afterGroupId != null ? Number(req.body.afterGroupId) : null;
 
-  db.prepare('UPDATE dashboard_panels SET col_span = ?, row_span = ? WHERE id = ? AND dashboard_id = ?')
-    .run(colSpan, rowSpan, req.params.panelId, dashboard.id);
+  const rows = db.prepare('SELECT id, panel_type FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboard.id);
+  const moved = rows.find((r) => r.id === panelId);
+  if (!moved) return res.status(404).json({ error: 'Panel not found' });
+  const withoutMoved = rows.filter((r) => r.id !== panelId);
 
-  res.json({ ok: true, colSpan, rowSpan });
+  let insertAt;
+  if (afterGroupId === null) {
+    insertAt = withoutMoved.findIndex((r) => r.panel_type === 'group_header');
+    if (insertAt === -1) insertAt = withoutMoved.length;
+  } else {
+    const headerIdx = withoutMoved.findIndex((r) => r.id === afterGroupId);
+    if (headerIdx === -1) return res.status(400).json({ error: 'Group not found' });
+    let end = headerIdx + 1;
+    while (end < withoutMoved.length && withoutMoved[end].panel_type !== 'group_header') end += 1;
+    insertAt = end;
+  }
+  withoutMoved.splice(insertAt, 0, moved);
+
+  const setPosition = db.prepare('UPDATE dashboard_panels SET position = ? WHERE id = ?');
+  const renumber = db.transaction((list) => { list.forEach((r, i) => setPosition.run(i, r.id)); });
+  renumber(withoutMoved);
+
+  res.json({ ok: true });
+});
+
+// Reorders whole GROUPS (a group_header plus every panel that currently follows it, up to the
+// next group_header or the end — see the render loop's own zone-splitting logic in panel-grid.ejs
+// for the exact same grouping rule) — dragging a group's own header (LoxRowReorder, panel-grid.ejs)
+// sends the new header-id order here. Ungrouped panels (before the first header) always stay
+// first regardless of what order is sent — they're not part of that sort list at all.
+router.post('/:id/panels/reorder-groups', (req, res) => {
+  const dashboard = loadAccessibleDashboard(req.params.id, req);
+  if (!dashboard) return res.status(404).json({ error: 'Dashboard not found' });
+  if (!canMutate(dashboard, req)) return res.status(403).json({ error: 'Not authorized' });
+
+  const groupOrder = Array.isArray(req.body.groupOrder) ? req.body.groupOrder.map(Number) : [];
+  const rows = db.prepare('SELECT id, panel_type FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboard.id);
+
+  const ungrouped = [];
+  const segments = new Map(); // header id -> [header row, ...member rows]
+  let current = null;
+  rows.forEach((r) => {
+    if (r.panel_type === 'group_header') {
+      current = [r];
+      segments.set(r.id, current);
+    } else if (current) {
+      current.push(r);
+    } else {
+      ungrouped.push(r);
+    }
+  });
+
+  // The set of ids actually sent must match the set of real groups exactly — a stale or malformed
+  // order (a group that no longer exists, or one silently missing) would otherwise drop panels
+  // from the renumbered list entirely, which the transaction below has no way to catch after the
+  // fact since it only ever writes whatever it was given.
+  const realIds = new Set(segments.keys());
+  const sentIds = new Set(groupOrder);
+  if (realIds.size !== sentIds.size || groupOrder.some((id) => !realIds.has(id))) {
+    return res.status(400).json({ error: 'groupOrder must contain exactly the dashboard\'s current group ids' });
+  }
+
+  const reordered = ungrouped.concat(...groupOrder.map((id) => segments.get(id)));
+
+  const setPosition = db.prepare('UPDATE dashboard_panels SET position = ? WHERE id = ?');
+  const renumber = db.transaction((list) => { list.forEach((r, i) => setPosition.run(i, r.id)); });
+  renumber(reordered);
+
+  res.json({ ok: true });
+});
+
+router.post('/:id/panels/layout', (req, res) => {
+  const dashboard = loadAccessibleDashboard(req.params.id, req);
+  if (!dashboard) return res.status(404).json({ error: 'Dashboard not found' });
+  if (!canMutate(dashboard, req)) return res.status(403).json({ error: 'Not authorized' });
+
+  const updates = Array.isArray(req.body.updates) ? req.body.updates : [];
+  const stmt = db.prepare('UPDATE dashboard_panels SET grid_x = ?, grid_y = ?, col_span = ?, row_span = ? WHERE id = ? AND dashboard_id = ?');
+  const applyLayout = db.transaction((rows) => {
+    rows.forEach((row) => {
+      const id = Number(row && row.id);
+      if (!Number.isInteger(id)) return;
+      const x = clamp(row.x, MIN_GRID_XY, MAX_GRID_XY, 0);
+      const y = clamp(row.y, MIN_GRID_XY, MAX_GRID_XY, 0);
+      const colSpan = clamp(row.w, MIN_COL_SPAN, MAX_COL_SPAN, 4);
+      const rowSpan = clamp(row.h, MIN_ROW_SPAN, MAX_ROW_SPAN, 3);
+      stmt.run(x, y, colSpan, rowSpan, id, dashboard.id);
+    });
+  });
+  applyLayout(updates);
+
+  res.json({ ok: true });
 });
 
 router.post('/:id/panels/:panelId/delete', (req, res) => {
@@ -1042,26 +1353,13 @@ router.post('/:id/panels/:panelId/delete', (req, res) => {
   res.redirect(dashboardUrl(dashboard));
 });
 
-router.post('/:id/panels/reorder', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
-  if (!dashboard) return res.status(404).json({ error: 'Dashboard not found' });
-  if (!canMutate(dashboard, req)) return res.status(403).json({ error: 'Not authorized' });
-
-  const order = Array.isArray(req.body.order) ? req.body.order : [];
-  const stmt = db.prepare('UPDATE dashboard_panels SET position = ? WHERE id = ? AND dashboard_id = ?');
-  const applyOrder = db.transaction((ids) => {
-    ids.forEach((id, index) => stmt.run(index, id, dashboard.id));
-  });
-  applyOrder(order);
-  res.json({ ok: true });
-});
-
 module.exports = router;
 module.exports.loadPanelsWithMonitors = loadPanelsWithMonitors;
 module.exports.getDefaultPanelDecimals = getDefaultPanelDecimals;
 module.exports.serializeKeyValueLines = serializeKeyValueLines;
 module.exports.serializeThresholdLadder = serializeThresholdLadder;
 module.exports.serializeValueMappings = serializeValueMappings;
+module.exports.parseValueMappings = parseValueMappings;
 module.exports.serializeAnnotations = serializeAnnotations;
 // Reused by routes/liveData.js's "Suggest dashboard" flow, which lets a bucket's panel type be
 // overridden away from its own server-side default (see BUCKET_BY_KEY in dashboardSuggestions.js)
@@ -1071,3 +1369,4 @@ module.exports.serializeAnnotations = serializeAnnotations;
 module.exports.PANEL_TYPES = PANEL_TYPES;
 module.exports.SINGLE_MONITOR_TYPES = SINGLE_MONITOR_TYPES;
 module.exports.buildConfig = buildConfig;
+module.exports.listAccessibleDashboardIds = listAccessibleDashboardIds;

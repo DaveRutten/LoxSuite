@@ -175,7 +175,7 @@
         <% } %>
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
           <%- skipForm('miniserver', 'mqtt') %>
-          <div style="display:flex; align-items:center; gap:0.5rem;">
+          <div class="btn-row">
             <% if (miniserverCount === 0) { %>
               <button type="button" id="ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
             <% } %>
@@ -325,7 +325,7 @@
         </form>
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
           <%- skipForm('mqtt', 'sso') %>
-          <div style="display:flex; align-items:center; gap:0.5rem;">
+          <div class="btn-row">
             <button type="button" id="mqtt-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
             <button type="submit" form="mqtt-form" class="primary" style="width:auto; margin-top:0;">Save &amp; continue</button>
           </div>
@@ -563,7 +563,7 @@
         </script>
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
           <%- skipForm('notifications', 'done') %>
-          <div style="display:flex; align-items:center; gap:0.5rem;">
+          <div class="btn-row">
             <button type="button" id="notif-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
             <button type="submit" form="notifications-form" class="primary" style="width:auto; margin-top:0;">Add &amp; continue</button>
           </div>

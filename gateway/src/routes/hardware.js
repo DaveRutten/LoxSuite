@@ -64,10 +64,11 @@ router.get('/', (req, res) => {
   // when they are the same value, instead of only an attentive reader noticing "0F:9B:6D:66" and
   // "0f9b6d66" are identical. Normalizing before the dedup pass below also makes it match a Serial
   // reported for the same physical device elsewhere, regardless of the MAC's original casing.
-  const normalizeMac = (mac) => (mac ? mac.replace(/[^0-9a-fA-F]/g, '').toLowerCase() : mac);
+  const normalizeHex = (value) => (value ? value.replace(/[^0-9a-fA-F]/g, '').toLowerCase() : value);
   const hardwareRowsRaw = hwRows.map((r) => ({
     ...r,
-    mac: normalizeMac(r.mac),
+    mac: normalizeHex(r.mac),
+    serial: normalizeHex(r.serial),
     categoryLabel: CATEGORY_LABELS[r.category] || r.category,
   }));
 

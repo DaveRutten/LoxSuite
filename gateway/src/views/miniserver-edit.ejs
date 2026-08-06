@@ -6,9 +6,6 @@
 
 <% if (canEdit('miniservers')) { %>
 <div class="card">
-  <div style="display:flex; justify-content:flex-end; margin-bottom:0.5rem;">
-    <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('lightbulb') %></button>
-  </div>
   <form method="post" action="/miniservers/<%= miniserver.id %>/update" id="edit-ms-form">
     <div class="form-grid">
       <div><label>Name</label><input type="text" name="name" value="<%= miniserver.name %>" required></div>
@@ -75,34 +72,43 @@
       explicit, and prefers keeping the Gateway's own copy over the Client's.
     </p>
 
-    <% if (!miniserver.gateway_client_of) { %>
     <%
-      // A Client can't itself be a Gateway managing its own sub-Clients (see GET /:id/edit's own
-      // otherMiniservers query — Loxone's own Gateway Client setup is a single Gateway managing its
-      // Clients directly, never a chain) — so once the toggle above is on, this whole section has
-      // nothing to manage and would just be a confusing, permanently-empty "add a Client" offer.
+      // This lists Miniservers that are CLIENTS OF this one (this one acting as their Gateway) —
+      // the mirror image of the "This Miniserver is a Client of another Gateway" toggle above, not
+      // the same thing: a Client can't itself be a Gateway managing its own sub-Clients (Loxone's
+      // own Gateway Client setup is a single Gateway managing its Clients directly, never a chain),
+      // so this only ever makes sense while that toggle is OFF. Tied to the toggle's own live state
+      // (see the JS below), not just the page's initial gateway_client_of value, so switching it on
+      // mid-edit hides this immediately instead of leaving a client-of-another-gateway Miniserver
+      // still offering to manage clients of its own.
     %>
-    <h2 style="margin-top:1.5rem;">Client Miniservers</h2>
-    <p class="hint">
-      Client Miniservers that share <strong><%= miniserver.name %></strong>'s own merged Loxone
-      Config project (see the Gateway Client link above) &mdash; each reuses this Miniserver's own
-      Username/Password, since Loxone requires identical credentials across the whole group.
-      Removing a row here just unlinks it (it goes back to being a standalone Miniserver, still
-      listed on the Miniservers page) rather than deleting it.
-    </p>
-    <div class="client-rows-header" <%= existingClients.length ? '' : 'hidden' %> id="edit-ms-clients-header">
-      <div>Client Name</div><div>Host / IP</div><div>HTTP port</div><div>HTTPS</div><div></div>
+    <div id="edit-ms-clients-section" <%= miniserver.gateway_client_of ? 'hidden' : '' %>>
+      <h2 style="margin-top:1.5rem;">Client Miniservers</h2>
+      <p class="hint">
+        Client Miniservers that share <strong><%= miniserver.name %></strong>'s own merged Loxone
+        Config project (see the Gateway Client link above) &mdash; each reuses this Miniserver's own
+        Username/Password, since Loxone requires identical credentials across the whole group.
+        Removing a row here just unlinks it (it goes back to being a standalone Miniserver, still
+        listed on the Miniservers page) rather than deleting it.
+      </p>
+      <div class="client-rows-header" <%= existingClients.length ? '' : 'hidden' %> id="edit-ms-clients-header">
+        <div>Client Name</div><div>Host / IP</div><div>HTTP port</div><div>HTTPS</div><div></div>
+      </div>
+      <div id="edit-ms-clients-list"></div>
+      <button type="button" id="edit-ms-client-row-btn" class="btn-soft"><%- icon('plus') %> Add Client Miniserver</button>
+      <input type="hidden" name="clients_json" id="edit-ms-clients-json">
     </div>
-    <div id="edit-ms-clients-list"></div>
-    <button type="button" id="edit-ms-client-row-btn" class="btn-soft"><%- icon('plus') %> Add Client Miniserver</button>
-    <input type="hidden" name="clients_json" id="edit-ms-clients-json">
-    <% } %>
 
-    <div style="margin-top:0.9rem; display:flex; align-items:center; gap:0.5rem;">
+    <%
+      // Result sits IN this same row as Test/Save (flex:1, filling the leftover space to their
+      // left) rather than on its own line below — same "left-aligned, level with the buttons that
+      // produced it" placement the row-actions popover's own merged Test result already uses.
+    %>
+    <div class="btn-row" style="margin-top:0.9rem;">
+      <div id="edit-ms-test-result" style="flex:1; min-width:0;"></div>
       <button type="button" id="edit-ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
       <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
     </div>
-    <div id="edit-ms-test-result" style="margin-top:0.6rem;"></div>
   </form>
 </div>
 <% } else { %>
@@ -131,6 +137,11 @@
     }
 
     btn.addEventListener('click', function () {
+      // Disabling the button itself (not just swapping the result text below) is the feedback
+      // that's actually noticed the instant you click — a local Miniserver often answers in well
+      // under a second, so the "Testing…" hint further down could already be replaced by the real
+      // result before your eye has even moved there.
+      btn.disabled = true;
       wrap.innerHTML = '<p class="hint" style="margin:0;">Testing&hellip;</p>';
       // Tests the currently-SAVED credentials (not whatever's unsaved in the form fields above) —
       // save first if you just changed the host/port/etc. and want to test those new values.
@@ -139,9 +150,10 @@
       fetch('/miniservers/<%= miniserver.id %>/check', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
         .then(function (r) { return r.json(); })
         .then(function (data) {
-          var html = '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">';
+          var html = '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center; font-size:0.85rem;">';
           html += renderLine('Local', data.local);
           html += data.external ? renderLine('External', data.external) : '<div class="hint" style="margin:0;">External: not configured</div>';
+          html += renderLine('Loxone API', data.api);
           html += renderLine('Logbook reachable', data.logbook);
           html += renderLine('Live data (websocket)', data.live);
           html += '</div>';
@@ -149,7 +161,8 @@
         })
         .catch(function () {
           wrap.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
-        });
+        })
+        .then(function () { btn.disabled = false; });
     });
   })();
 </script>
@@ -221,16 +234,24 @@
   // below it, same progressive-disclosure pattern as the Add-Miniserver form's own "is a Gateway"
   // toggle. The select is disabled (not just hidden) while off, so an unchanged, still-hidden
   // selection can't get submitted by accident — a disabled field is left out of the POST body
-  // entirely, which the server already treats the same as "not a Client of anything."
+  // entirely, which the server already treats the same as "not a Client of anything." The Client
+  // Miniservers section further down goes the OPPOSITE way on this same toggle — it lists Clients
+  // OF this one (this one as their Gateway), which only makes sense while this one ISN'T itself a
+  // Client (a Client can't also be a Gateway managing its own sub-Clients) — was previously tied to
+  // the same on/off direction as the Gateway picker, which meant turning "I'm a Client" ON left the
+  // "manage my own Clients" section visible right alongside the picker for the Gateway you're a
+  // Client of, backwards from what either toggle state actually means.
   (function () {
     var toggle = document.getElementById('edit-ms-is-client');
     var wrap = document.getElementById('edit-ms-gateway-of-wrap');
     var select = wrap ? wrap.querySelector('select[name="gateway_client_of"]') : null;
+    var clientsSection = document.getElementById('edit-ms-clients-section');
     if (!toggle || !wrap || !select) return;
     select.disabled = !toggle.checked;
     toggle.addEventListener('change', function () {
       wrap.hidden = !toggle.checked;
       select.disabled = !toggle.checked;
+      if (clientsSection) clientsSection.hidden = toggle.checked;
     });
   })();
 </script>

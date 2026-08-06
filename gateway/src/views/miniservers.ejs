@@ -8,9 +8,6 @@
 <details class="add-panel">
   <summary>Add Miniserver</summary>
   <div class="add-panel-body">
-    <div style="display:flex; justify-content:flex-end; margin-bottom:0.5rem;">
-      <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('lightbulb') %></button>
-    </div>
     <form method="post" action="/miniservers" id="add-ms-form">
       <div class="form-grid">
         <div><label>Name</label><input type="text" name="name" required></div>
@@ -47,7 +44,7 @@
         once (see the Loxone &rarr; MQTT mappings page), not per Miniserver here.
         <strong>External URL</strong> is used as a fallback whenever the local Host/IP can't be
         reached (e.g. from outside the home network) &mdash; Monitor polling, Common commands, log
-        fetching and "Test"/"Test now" all try it automatically if the local address fails.
+        fetching and "Test" all try it automatically if the local address fails.
       </p>
 
       <h2 style="margin-top:1.5rem;">Gateway Client setup (optional)</h2>
@@ -72,7 +69,7 @@
       <div id="add-ms-clients-list"></div>
       <button type="button" id="add-ms-client-row-btn" class="btn-soft" hidden><%- icon('plus') %> Add Client Miniserver</button>
 
-      <div style="margin-top:0.9rem; display:flex; align-items:center; gap:0.5rem;">
+      <div class="btn-row" style="margin-top:0.9rem;">
         <button type="button" id="add-ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
         <button type="submit" class="primary"><%- icon('plus') %> Add</button>
       </div>
@@ -107,7 +104,7 @@
   // put Columns next to their own toolbar buttons.
 %>
 <div class="table-toolbar">
-  <button type="button" id="ms-collapse-all-btn" class="btn-soft" data-expanded="false" title="Show/hide every Gateway's Client Miniservers at once"><%- icon('share') %> Expand all clients</button>
+  <button type="button" id="ms-collapse-all-btn" class="btn-soft" data-expanded="false" title="Show/hide every Gateway's Client Miniservers at once"><%- icon('sitemap') %> Expand all clients</button>
 </div>
 <div class="table-wrap">
   <table class="table-compact">
@@ -156,7 +153,7 @@
       var expanding = btn.dataset.expanded !== 'true';
       tbody.querySelectorAll('.ms-client-row').forEach(function (row) { row.classList.toggle('group-visible', expanding); });
       btn.dataset.expanded = expanding ? 'true' : 'false';
-      btn.innerHTML = '<%- icon('share') %> ' + (expanding ? 'Collapse all clients' : 'Expand all clients');
+      btn.innerHTML = '<%- icon('sitemap') %> ' + (expanding ? 'Collapse all clients' : 'Expand all clients');
     });
   })();
 </script>
@@ -176,56 +173,11 @@
         + '<strong style="color:var(--text);">' + label + '</strong><span>' + detail + '</span></div>';
     }
 
-    function runTest(msId) {
-      var wrap = document.querySelector('.ms-test-result[data-ms-result-for="' + msId + '"]');
-      wrap.innerHTML = '<p class="hint" style="margin:0;">Testing&hellip;</p>';
-
-      // Content-Type: application/json (even with an empty body) is what exempts this from the
-      // CSRF form-token check server-side — see middleware/csrf.js.
-      fetch('/miniservers/' + msId + '/check', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          var html = '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">';
-          html += renderLine('Local', data.local);
-          html += data.external ? renderLine('External', data.external) : '<div class="hint" style="margin:0;">External: not configured</div>';
-          html += renderLine('Loxone API', data.api);
-          html += renderLine('Logbook reachable', data.logbook);
-          html += renderLine('Live data (websocket)', data.live);
-          html += '</div>';
-          wrap.innerHTML = html;
-
-          var statusCell = document.querySelector('[data-ms-status-id="' + msId + '"]');
-          if (statusCell) {
-            var badgeClass = data.status === 'online' ? 'badge-ok' : data.status === 'offline' ? 'badge-off' : 'badge-neutral';
-            var badgeText = data.status === 'online' ? 'Online' : data.status === 'offline' ? 'Offline' : 'Unknown';
-            statusCell.innerHTML = '<span class="badge badge-live ' + badgeClass + '">' + badgeText + '</span>';
-          }
-          var firmwareCell = document.querySelector('[data-ms-firmware-id="' + msId + '"]');
-          if (firmwareCell) firmwareCell.textContent = data.firmwareVersion || '-';
-          var generationCell = document.querySelector('[data-ms-generation-id="' + msId + '"]');
-          if (generationCell) generationCell.textContent = data.generationLabel || '-';
-          var deviceMonitorCell = document.querySelector('[data-ms-device-monitor-id="' + msId + '"]');
-          if (deviceMonitorCell) {
-            if (data.deviceMonitorStatus === null || data.deviceMonitorStatus === undefined) {
-              deviceMonitorCell.textContent = '-';
-            } else if (data.deviceMonitorStatus === '0') {
-              deviceMonitorCell.innerHTML = '<span class="badge badge-ok" title="Miniserver\'s own self-reported health status (deviceMonitor) is 0 — no issue reported.">OK</span>';
-            } else {
-              deviceMonitorCell.innerHTML = '<span class="badge badge-off" title="Miniserver\'s own self-reported health status (deviceMonitor) — code meaning undocumented, check Loxone Config\'s own status messages for details.">Code ' + data.deviceMonitorStatus + '</span>';
-            }
-          }
-        })
-        .catch(function () {
-          wrap.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';
-        });
-    }
-
-    // "Test now" now lives inside the same already-open row-actions expand-row as Edit/Delete
-    // (see the template above) rather than toggling its own separate row, so there's no
-    // open/closing state to gate on any more — every click just (re-)runs the test.
-    document.querySelectorAll('.ms-test-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () { runTest(btn.dataset.msId); });
-    });
+    // Per-row "Test now" (with its own live status/firmware/generation/device-monitor cell
+    // updates) used to live here, inside the row-actions popover — removed in favor of the
+    // Miniserver's own Edit page, which already has a complete Test of its own. Those cells now
+    // only refresh via the page's normal auto-refresh (backed by the background healthcheck
+    // poller), same as everywhere else on this page.
 
     // Tests whatever's currently typed into the Add-Miniserver form itself, before it's been
     // saved — same renderLine feedback style as the per-row "Test now" above, just against

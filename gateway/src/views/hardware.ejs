@@ -78,12 +78,12 @@
           <td><%= d.type || '-' %></td>
           <td><%= d.name || '-' %></td>
           <td><%= d.place || '-' %></td>
-          <td><span class="truncate" style="max-width:110px;" title="<%= d.serial || '' %>"><%= d.serial || '-' %></span></td>
-          <td><span class="truncate" style="max-width:110px;" title="<%= d.mac || '' %>"><%= d.mac || '-' %></span></td>
+          <td><span class="truncate" title="<%= d.serial || '' %>"><%= d.serial || '-' %></span></td>
+          <td><span class="truncate" title="<%= d.mac || '' %>"><%= d.mac || '-' %></span></td>
           <% if (miniservers.length > 1) { %><td><%= d.miniserver_name %></td><% } %>
           <td>
             <% if (d.version) { %>
-              <span class="truncate" style="max-width:120px;" title="<%= d.version %>"><%= d.version %></span>
+              <span class="truncate" title="<%= d.version %>"><%= d.version %></span>
             <% } else { %>-<% } %>
           </td>
           <td>

@@ -1,6 +1,8 @@
 const express = require('express');
 const db = require('../db');
-const { TRIGGER_TYPES, sendTestMessage } = require('../notifications');
+const {
+  TRIGGER_TYPES, sendTestMessage, sendTemplateTestMessage, getNotificationTemplates, saveNotificationTemplates, TEMPLATE_PREVIEW_SAMPLES,
+} = require('../notifications');
 const { logSystemEvent } = require('../auditLog');
 
 const router = express.Router();
@@ -34,8 +36,11 @@ async function renderPage(res, extra = {}) {
     triggerTypes: TRIGGER_TYPES,
     monitors: db.prepare('SELECT id, label FROM monitors ORDER BY label').all(),
     miniservers: db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all(),
+    templates: getNotificationTemplates(),
+    templatePreviewSamples: TEMPLATE_PREVIEW_SAMPLES,
     error: null,
     testResult: null,
+    templateTestResult: null,
     presetTrigger: '',
     ...extra,
   });
@@ -226,6 +231,42 @@ router.post('/rules/:id/delete', (req, res) => {
   db.prepare('DELETE FROM notification_rules WHERE id = ?').run(req.params.id);
   if (rule) logSystemEvent(`"${req.user.username}" deleted notification rule "${rule.name}".`);
   res.redirect('/admin/notifications');
+});
+
+// ---- Message templates ----
+
+// One shared form covering every trigger type at once (template_title_<key>/template_body_<key>)
+// rather than a save button per type — simpler than 9 separate forms/routes for what's still one
+// conceptual "Message templates" setting. A blank pair for a given type clears its override, back
+// to that type's own hardcoded default (see notifications.js's applyTemplate).
+router.post('/templates', (req, res) => {
+  const templates = {};
+  TRIGGER_TYPES.forEach((t) => {
+    const title = (req.body[`template_title_${t.key}`] || '').trim();
+    const body = (req.body[`template_body_${t.key}`] || '').trim();
+    if (title || body) templates[t.key] = { title: title || null, body: body || null };
+  });
+  saveNotificationTemplates(templates);
+  logSystemEvent(`"${req.user.username}" updated notification message templates.`);
+  res.redirect('/admin/notifications');
+});
+
+// JSON in, JSON out — the "Send test" control below each template lives inside the templates
+// card's own big <form> (Save templates), so it can't be a real nested <form> of its own (invalid
+// HTML, unreliable which one actually submits). A plain fetch() from admin-notifications.ejs's own
+// script instead, updating just that one template's own result line in place rather than a full
+// page reload/re-render.
+router.post('/templates/:key/test', async (req, res) => {
+  const triggerType = req.params.key;
+  if (!TRIGGER_TYPES.some((t) => t.key === triggerType)) return res.status(400).json({ ok: false, error: 'Unknown trigger type.' });
+  const channel = db.prepare('SELECT * FROM notification_channels WHERE id = ?').get(req.body.channel_id);
+  if (!channel) return res.status(400).json({ ok: false, error: 'Choose a channel to send the test to.' });
+  try {
+    await sendTemplateTestMessage(channel, triggerType);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 module.exports = router;

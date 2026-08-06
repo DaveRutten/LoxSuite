@@ -75,6 +75,24 @@ router.get('/status', (req, res) => {
   res.json(getStatus(miniserverId));
 });
 
+// Polled client-side every so often (see live-data.ejs's background refresh) to pick up rooms/
+// controls added in Loxone Config without a full page reload — a plain re-fetch of getRoomSummaries
+// against the ALREADY-cached structure (forceRefresh here would defeat the whole point of caching
+// LoxAPP3.json indefinitely; the explicit "Refresh" button still exists for that). Room/category
+// counts staying current this way is cheap; the actual per-room control/state lists are still only
+// fetched on demand when a room is opened, same as ever.
+router.get('/rooms', async (req, res) => {
+  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
+  if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
+
+  try {
+    const rooms = await getRoomSummaries(miniserver);
+    res.json({ rooms });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // A room's categories/controls are only fetched once it's actually expanded — same reasoning as
 // /values below, one level up: rendering every room's full detail up front is what made the
 // initial page load enormous (900KB+/2000+ DOM nodes on a real installation, enough to crash a

@@ -17,20 +17,35 @@
   &mdash; <a href="/monitor">&larr; back to Monitor</a>
 </p>
 
-<% const presetRanges = ['1h', '24h', '7d', '30d', 'all']; %>
-<% const isCustomRange = !presetRanges.includes(range); %>
+<%
+  // This monitor's own unit/scale/decimals/value-labels (see routes/monitor.js's chart-settings
+  // handler) — computed here, above any canEdit gate, since the current-value line below shows for
+  // every viewer, not just whoever can also edit the chart's own settings. A value-label match (an
+  // enum reading like 1 = Active) takes priority over scaling, same precedence the Monitor list
+  // page's own Scaled value column and a dashboard 'value' panel both already give theirs.
+  var currentOwnSeries = (config.series && config.series[String(monitor.id)]) || {};
+  var currentUnit = currentOwnSeries.unit || config.unit || '';
+  var currentScale = currentOwnSeries.scale != null ? currentOwnSeries.scale : 1;
+  var currentDecimals = currentOwnSeries.decimals != null ? currentOwnSeries.decimals : defaultPanelDecimals;
+  var currentValueLabels = currentOwnSeries.valueLabels || [];
+  var currentMapping = current ? currentValueLabels.find((vm) => vm.value === String(current.value)) : null;
+
+  // Shared between the chart's own header bar below and the no-chart-yet fallback further down —
+  // one computation either renders attached to the chart (the common case) or as a plain line when
+  // there's no chart to attach it to.
+  var currentMainText = !current ? '—'
+    : currentMapping ? currentMapping.label
+    : current.numericValue != null ? (Number(current.numericValue) * currentScale).toFixed(currentDecimals) + (currentUnit ? ' ' + currentUnit : '')
+    : current.value;
+  var currentMainColor = (currentMapping && currentMapping.color) || null;
+  var currentSubText = (current ? '(raw: ' + current.value + ') · ' : '') + 'as of ' + (formatDateTime(current ? current.recordedAt : null) || '-');
+%>
+
 <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem; margin-bottom:1.25rem;">
-  <div class="tabs" style="margin-bottom:0;">
-    <a class="<%= range === '1h' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=1h">Last hour</a>
-    <a class="<%= range === '24h' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=24h">Last 24 hours</a>
-    <a class="<%= range === '7d' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=7d">Last 7 days</a>
-    <a class="<%= range === '30d' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=30d">Last 30 days</a>
-    <a class="<%= range === 'all' ? 'active' : '' %>" href="/monitor/<%= monitor.id %>?range=all">All</a>
-    <form method="get" action="/monitor/<%= monitor.id %>" class="range-custom-form">
-      <input type="text" name="range" placeholder="e.g. 3h, 10m, or 1-8-2026 / now" title="A duration (3h, 10m, 45s) or an absolute date — D-M-YYYY, optionally with a time and a second endpoint: &quot;1-8-2026&quot; (that date until now), &quot;1-8-2026 / now&quot;, &quot;1-8-2026 to 2-8-2026 14:30&quot;" value="<%= isCustomRange ? customRangeDisplay : '' %>">
-      <button type="submit" class="<%= isCustomRange ? 'active' : '' %>">Go</button>
-    </form>
-  </div>
+  <form method="get" action="/monitor/<%= monitor.id %>" class="range-picker-form" style="display:flex; align-items:flex-start; gap:0.5rem;">
+    <%- rangeField(range, { autoSubmit: true }) %>
+    <button type="submit" class="btn-soft range-go-btn">Go</button>
+  </form>
 
   <%
     // margin-left:auto (not justify-content:space-between on the shared parent) so this stays
@@ -100,16 +115,34 @@
             <button type="button" class="icon-btn icon-btn-danger" data-toggle-row="monitor-chart-settings" title="Close" aria-label="Close"><%- icon('x') %></button>
           </div>
         </div>
-        <div>
-          <label>Legend</label>
-          <select name="legend_position">
-            <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto</option>
-            <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
-            <option value="bottom" <%= legendPos === 'bottom' ? 'selected' : '' %>>Bottom</option>
-            <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
-            <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
-            <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
-          </select>
+        <div class="threshold-builder-details-wrap" style="grid-column:1/-1;">
+          <details class="threshold-builder-details" open>
+            <summary>Legend</summary>
+            <div class="form-grid">
+              <div>
+                <label>Legend</label>
+                <select name="legend_position" id="monitor-legend-position-select">
+                  <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto</option>
+                  <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
+                  <option value="bottom" <%= legendPos === 'bottom' ? 'selected' : '' %>>Bottom</option>
+                  <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
+                  <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
+                  <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
+                </select>
+              </div>
+              <div data-legend-for="on"><label>Legend alignment</label>
+                <select name="legend_align">
+                  <option value="start" <%= (config.legendAlign || 'start') === 'start' ? 'selected' : '' %>>Left</option>
+                  <option value="center" <%= config.legendAlign === 'center' ? 'selected' : '' %>>Center</option>
+                  <option value="end" <%= config.legendAlign === 'end' ? 'selected' : '' %>>Right</option>
+                </select>
+              </div>
+              <div data-legend-for="on"><label>Show min in legend</label><%- toggleSwitch('legend_show_min', !!config.legendShowMin) %></div>
+              <div data-legend-for="on"><label>Show max in legend</label><%- toggleSwitch('legend_show_max', !!config.legendShowMax) %></div>
+              <div data-legend-for="on"><label>Show average in legend</label><%- toggleSwitch('legend_show_avg', !!config.legendShowAvg) %></div>
+              <div data-legend-for="on"><label>Show current value in legend</label><%- toggleSwitch('legend_show_current', !!config.legendShowCurrent) %></div>
+            </div>
+          </details>
         </div>
         <%
           // Falls back to the old panel-wide config.unit for a monitor whose unit was set before
@@ -149,6 +182,7 @@
         <div><label>Y-axis min (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto" value="<%= config.yMin != null ? config.yMin : '' %>"></div>
         <div><label>Y-axis max (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto" value="<%= config.yMax != null ? config.yMax : '' %>"></div>
         <div><label>Zoom &amp; pan (scroll to zoom, drag to pan)</label><%- toggleSwitch('enable_zoom', !!config.zoom) %></div>
+        <div style="grid-column:1/-1;"><%- valueMappingField('monitor_value_labels', ownSeries.valueLabels || []) %></div>
         <div style="grid-column:1/-1;"><%- thresholdField('chart_thresholds', config.thresholds || [], true) %></div>
         <div style="grid-column:1/-1;"><%- annotationField('chart_annotations', config.annotations || []) %></div>
         <%
@@ -163,17 +197,33 @@
   <% } %>
   <%
     var canvasStepped = config.stepped === true ? 'before' : (config.stepped || '');
+    var legendStats = [];
+    if (config.legendShowMin) legendStats.push('min');
+    if (config.legendShowMax) legendStats.push('max');
+    if (config.legendShowAvg) legendStats.push('avg');
+    if (config.legendShowCurrent) legendStats.push('current');
   %>
   <div class="card chart-wrap" id="monitor-chart-wrap">
-    <canvas data-monitor-ids="<%= monitor.id %>" data-range="<%= range %>" data-range-until="<%= rangeUntilMs || '' %>" height="90"
-      data-legend="<%= config.legendPosition || 'auto' %>" data-unit="<%= config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>"
-      data-fill="<%= config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= config.curveTension != null ? config.curveTension : 0.15 %>"
-      data-points="<%= config.points ? '1' : '' %>" data-animation="<%= config.animation ? '1' : '' %>" data-y-scale-type="<%= config.yScaleType || 'linear' %>"
-      data-y-min="<%= config.yMin != null ? config.yMin : '' %>" data-y-max="<%= config.yMax != null ? config.yMax : '' %>" data-zoom="<%= config.zoom ? '1' : '' %>"
-      data-thresholds="<%= JSON.stringify(config.thresholds || []) %>" data-annotations="<%= JSON.stringify(config.annotations || []) %>"
-      data-series="<%= JSON.stringify(config.series || {}) %>"></canvas>
+    <div class="monitor-current-value-bar">
+      <span class="monitor-current-value-label">Current value</span>
+      <span class="monitor-current-value-main" <% if (currentMainColor) { %>style="color: <%= currentMainColor %>;"<% } %>><%= currentMainText %></span>
+      <span class="hint" style="margin:0;"><%= currentSubText %></span>
+    </div>
+    <div class="monitor-chart-canvas-wrap">
+      <canvas data-monitor-ids="<%= monitor.id %>" data-range="<%= range %>" data-range-until="<%= rangeUntilMs || '' %>" height="90"
+        data-legend="<%= config.legendPosition || 'auto' %>" data-legend-align="<%= config.legendAlign || 'start' %>" data-legend-stats="<%= legendStats.join(',') %>" data-unit="<%= config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>"
+        data-fill="<%= config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= config.curveTension != null ? config.curveTension : 0.15 %>"
+        data-points="<%= config.points ? '1' : '' %>" data-animation="<%= config.animation ? '1' : '' %>" data-y-scale-type="<%= config.yScaleType || 'linear' %>"
+        data-y-min="<%= config.yMin != null ? config.yMin : '' %>" data-y-max="<%= config.yMax != null ? config.yMax : '' %>" data-zoom="<%= config.zoom ? '1' : '' %>"
+        data-thresholds="<%= JSON.stringify(config.thresholds || []) %>" data-annotations="<%= JSON.stringify(config.annotations || []) %>"
+        data-series="<%= JSON.stringify(config.series || {}) %>"></canvas>
+    </div>
   </div>
 <% } else { %>
+  <p class="hint" style="font-size:1rem;">
+    Current value: <strong <% if (currentMainColor) { %>style="color: <%= currentMainColor %>;"<% } %>><%= currentMainText %></strong>
+    <span class="hint" style="margin:0;"><%= currentSubText %></span>
+  </p>
   <p class="hint">This monitor hasn't recorded any numeric values yet, so there's nothing to chart &mdash; the raw values are listed below instead.</p>
   <% if (truncated) { %>
     <p class="hint">Showing the most recent <%= rows.length %> readings in this range. Export CSV for the full history.</p>
@@ -212,14 +262,35 @@
   <%
     // Loaded before threshold-annotation-builder.js — that script's own querySelectorAll('.threshold-
     // builder')/('.annotation-builder') IIFEs run immediately at parse time (not deferred) and call
-    // LoxColorPicker.buildPickerHtml() synchronously while building each existing row, so the module
-    // has to already exist by the time that tag is reached, not just by the time the page finishes
-    // loading. Only needed when the settings form (and its threshold/annotation builders) actually
-    // rendered above — a view-only visitor gets neither.
+    // LoxColorPicker.buildPickerHtml() synchronously while building each existing row, so both
+    // modules have to already exist by the time that tag is reached, not just by the time the page
+    // finishes loading. GridStack is new here specifically for LoxRowReorder's own drag-to-reorder
+    // (see threshold-annotation-builder.js) — this page has no panel grid of its own to otherwise
+    // need it for. Only needed when the settings form (and its threshold/annotation builders)
+    // actually rendered above — a view-only visitor gets neither.
   %>
+  <link rel="stylesheet" href="/vendor/gridstack.min.css">
+  <script src="/vendor/gridstack-all.min.js"></script>
   <script src="/color-picker.js"></script>
   <script src="/threshold-annotation-builder.js"></script>
   <script src="/panel-drawer-resize.js"></script>
+  <script>
+    // The min/max/avg/current legend toggles are meaningless with no legend to show them in — this
+    // page has no chart-type switcher to piggyback this on (see panel-grid.ejs's own sync(), which
+    // folds the same check into its existing data-chart-type-for/data-fields-for machinery), so it
+    // gets this tiny standalone version instead.
+    (function () {
+      var legendSelect = document.getElementById('monitor-legend-position-select');
+      var toggles = document.querySelectorAll('[data-legend-for]');
+      if (!legendSelect || !toggles.length) return;
+      function sync() {
+        var visible = legendSelect.value !== 'off';
+        toggles.forEach(function (el) { el.style.display = visible ? '' : 'none'; });
+      }
+      legendSelect.addEventListener('change', sync);
+      sync();
+    })();
+  </script>
   <script>
     // Same fixed-drawer pattern as a dashboard chart panel's own Edit form (see .panel-settings-form
     // in style.css and its backdrop script in panel-grid.ejs) — reuses the same CSS/classes so it
@@ -354,6 +425,14 @@
               oldCanvas.replaceWith(freshCanvas);
               if (window.initChartCanvas) window.initChartCanvas(freshCanvas);
             }
+            // Unit/scale/decimals/value-labels below live in the SAME saved config as the chart's
+            // own appearance (see routes/monitor.js's chart-settings handler) — this bar has no
+            // canvas dataset of its own to read those from, so it's re-rendered from the fresh
+            // server HTML same as the canvas above, or a color/label edit would otherwise only ever
+            // show up after a full page reload instead of right away like everything else here.
+            var freshBar = freshDoc.querySelector('.monitor-current-value-bar');
+            var oldBar = document.querySelector('.monitor-current-value-bar');
+            if (oldBar && freshBar) oldBar.replaceWith(freshBar);
             setStatus('Saved');
             setTimeout(function () { setStatus(''); }, 1500);
           })

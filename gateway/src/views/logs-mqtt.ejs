@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-mqtt', refresh: 5, liveSwap: true }) %>
+<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-mqtt', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/mqtt', topbarRangeValue: range, topbarRangeExtra: { q: query.q, level: query.level } }) %>
 
 <p class="hint">
   Raw lines from the Mosquitto broker's own log file, newest first, refreshing every 5 seconds.
@@ -9,35 +9,52 @@
 </p>
 
 <form method="get" action="/logs/mqtt" class="form-grid" style="margin-bottom:1rem; align-items:end;">
-  <div>
-    <label>From</label>
-    <input type="datetime-local" name="from" value="<%= query.from || '' %>">
-  </div>
-  <div>
-    <label>To</label>
-    <input type="datetime-local" name="to" value="<%= query.to || '' %>">
-  </div>
+  <%
+    // Range itself now lives in the topbar (next to auto-refresh, see partials/head.ejs) as its
+    // own separate auto-submitting mini-form — carried forward here as a hidden field so
+    // submitting THIS form (Level) doesn't silently drop whatever range was active. Level
+    // auto-submits on its own change (data-auto-submit-form, see public/auto-submit-select.js) —
+    // no separate Apply button, and no Contains field either: the table's own "Filter…" search
+    // bar right below already covers that, client-side, with no page reload needed.
+  %>
+  <input type="hidden" name="range" value="<%= range %>">
   <div>
     <label>Level</label>
-    <select name="level">
+    <select name="level" data-auto-submit-form>
       <option value="" <%= !query.level ? 'selected' : '' %>>All</option>
       <option value="error" <%= query.level === 'error' ? 'selected' : '' %>>Error</option>
       <option value="warning" <%= query.level === 'warning' ? 'selected' : '' %>>Warning</option>
       <option value="info" <%= query.level === 'info' ? 'selected' : '' %>>Info</option>
     </select>
   </div>
-  <div>
-    <label>Contains</label>
-    <input type="text" name="q" value="<%= query.q || '' %>" placeholder="Search log text">
-  </div>
-  <div style="display:flex; gap:0.5rem;">
-    <button type="submit" class="btn-soft"><%- icon('filter') %> Apply</button>
-    <a href="/logs/mqtt"><button type="button" class="btn-soft">Clear</button></a>
-  </div>
 </form>
 
-<div class="filterable-table-card">
+<div class="filterable-table-card <%= brokerOffline ? 'log-source-unavailable-blurred' : '' %>">
+  <% if (brokerOffline) { %>
+  <div class="log-source-unavailable-notice">
+    <div class="log-source-unavailable-notice-box">
+      <p style="margin:0 0 0.4rem; font-weight:600;">The MQTT broker isn't connected right now</p>
+      <p class="hint" style="margin:0;">
+        LoxSuite's own connection to the broker is currently down, so no new log lines are coming
+        in &mdash; what's shown below is whatever was already recorded before that happened, not a
+        sign that nothing's going on. Check <a href="/settings/broker">Broker settings</a> or the
+        Mosquitto container itself.
+      </p>
+    </div>
+  </div>
+  <% } %>
   <div class="table-toolbar">
+    <div class="search-combo log-search-combo">
+      <select class="log-search-field">
+        <option value="time">Time</option>
+        <option value="level">Level</option>
+        <option value="message" selected>Message</option>
+      </select>
+      <div class="clearable-input-wrap">
+        <input type="text" class="log-search-query" placeholder="Filter…">
+        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+      </div>
+    </div>
     <span class="log-selection-count hint" style="margin:0;"></span>
     <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label">Copy selection</span></button>
     <% if (canEdit('logs_mqtt')) { %>
@@ -48,7 +65,7 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th>Time</th><th>Level</th><th>Line</th></tr>
+      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th data-filter-key="time">Time</th><th data-filter-key="level">Level</th><th data-filter-key="message">Message</th></tr>
     </thead>
     <tbody>
       <% rows.forEach(r => { %>

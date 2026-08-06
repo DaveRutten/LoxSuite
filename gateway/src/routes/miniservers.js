@@ -170,11 +170,15 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), async (req,
   const existing = db.prepare('SELECT password FROM miniservers WHERE id = ?').get(msId);
   const newPassword = password ? encrypt(password) : existing?.password;
 
-  // Empty string ("None") or a self-reference both mean "not a Gateway Client of anything" — the
-  // dropdown itself already excludes this Miniserver's own id (see GET /:id/edit above), but a
-  // stray manual POST shouldn't be able to create a self-referencing loop either.
+  // Empty string ("None"), a self-reference, or the "This miniserver is a client" toggle itself
+  // being off all mean "not a Gateway Client of anything" — the dropdown itself already excludes
+  // this Miniserver's own id (see GET /:id/edit above), but a stray manual POST shouldn't be able
+  // to create a self-referencing loop either. is_client matters here because the <select> it
+  // reveals/hides is only ever CSS-hidden while off (see #edit-ms-gateway-of-wrap), never disabled
+  // or removed — an unchecked checkbox submits nothing at all, so without this check, turning the
+  // toggle off and saving silently kept whichever Gateway the hidden select was still holding.
   const gatewayId = Number(gateway_client_of);
-  const gatewayClientOf = gateway_client_of && Number.isInteger(gatewayId) && gatewayId !== msId ? gatewayId : null;
+  const gatewayClientOf = req.body.is_client && gateway_client_of && Number.isInteger(gatewayId) && gatewayId !== msId ? gatewayId : null;
 
   db.prepare(
     `UPDATE miniservers SET name = ?, host = ?, http_port = ?, udp_port = ?, username = ?, password = ?, use_https = ?, external_url = ?, gateway_client_of = ?
@@ -253,6 +257,11 @@ router.post('/:id/check', requirePermission('miniservers', 'edit'), async (req, 
     runDetailedCheck(miniserver),
     testLiveConnection(miniserver),
   ]);
+  // Also persisted here, not just from loxoneLog.js's own periodic poll (up to a minute behind) —
+  // this is the same /dev/fsget/log/def.log probe, so a "Test now" click confirming the Logbook
+  // is broken should make /logs/loxone's own blur+notice (see routes/logs.js) reflect that right
+  // away rather than waiting for the next background cycle to catch up.
+  db.prepare('UPDATE miniservers SET logbook_error = ? WHERE id = ?').run(detail.logbook.ok ? null : detail.logbook.error, miniserver.id);
   const updated = db.prepare('SELECT status, last_checked_at, firmware_version, device_monitor_status, miniserver_type FROM miniservers WHERE id = ?').get(miniserver.id);
   res.json({
     ...detail,

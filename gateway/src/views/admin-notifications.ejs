@@ -73,12 +73,12 @@
                 <form class="inline" method="post" action="/admin/notifications/channels/<%= c.id %>/delete" data-confirm="Delete this channel? Any rule using it will just stop sending through it.">
                   <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
                 </form>
+                <% if (testResult && testResult.channelId === c.id) { %>
+                  <span class="hint" style="margin:0; <%= testResult.ok ? 'color: var(--success);' : 'color: var(--danger);' %>">
+                    <% if (testResult.ok) { %>Test message sent.<% } else { %>Test failed: <%= testResult.error %><% } %>
+                  </span>
+                <% } %>
               </div>
-              <% if (testResult && testResult.channelId === c.id) { %>
-                <div class="hint" style="margin:0.4rem 0 0; <%= testResult.ok ? 'color: var(--success);' : 'color: var(--danger);' %>">
-                  <% if (testResult.ok) { %>Test message sent.<% } else { %>Test failed: <%= testResult.error %><% } %>
-                </div>
-              <% } %>
             </td>
           </tr>
           <tr class="expand-row" id="channel-edit-<%= c.id %>">
@@ -424,6 +424,547 @@
   </div>
 </div>
 
+<div class="card">
+  <h2>Message templates</h2>
+  <p class="hint">
+    Override the title/body a trigger type sends — otherwise every one keeps its own built-in
+    wording. <code>{{title}}</code>/<code>{{message}}</code>/<code>{{severity}}</code> plus each
+    trigger's own fields (listed under it below) are available as placeholders in either field. A
+    custom body fully replaces the auto-listed fields below the message — reference whichever ones
+    you want by name instead. Leave both blank to reset a trigger back to its default.
+  </p>
+  <form method="post" action="/admin/notifications/templates">
+    <% triggerTypes.forEach(t => { %>
+      <% var sample = templatePreviewSamples[t.key]; var saved = templates[t.key] || {}; %>
+      <details class="add-panel" <%= (saved.title || saved.body) ? 'open' : '' %>>
+        <summary><%= t.label %></summary>
+        <div class="add-panel-body">
+          <div class="form-grid">
+            <div style="grid-column:1/-1;">
+              <label>Title template</label>
+              <input type="text" name="template_title_<%= t.key %>" class="template-title-input" data-trigger="<%= t.key %>"
+                placeholder="<%= sample.title %>" value="<%= saved.title || '' %>">
+            </div>
+            <div style="grid-column:1/-1;">
+              <label>Body template</label>
+              <textarea name="template_body_<%= t.key %>" class="template-body-input" data-trigger="<%= t.key %>" rows="3"
+                placeholder="<%= sample.message %>"><%= saved.body || '' %></textarea>
+            </div>
+            <p class="hint" style="grid-column:1/-1; margin:0;">
+              Available: <code>{{title}}</code> <code>{{message}}</code> <code>{{severity}}</code>
+              <% sample.fields.forEach(f => { %><code>{{<%= f.label %>}}</code> <% }) %>
+            </p>
+            <p class="hint" style="grid-column:1/-1; margin:0;">
+              Type <code>{{</code> in either field for an autocomplete menu of the placeholders
+              above, or <code>/</code> for a menu of formatting snippets (bold/italic/code) and an
+              emoji picker &mdash; both filter as you keep typing, arrow keys + Enter to pick.
+            </p>
+            <div style="grid-column:1/-1;">
+              <div class="hint" style="margin:0 0 0.25rem;">Preview (as sent to Telegram, with example data):</div>
+              <div class="template-preview" data-trigger="<%= t.key %>" style="border:1px solid var(--border); border-radius:8px; padding:0.75rem 0.9rem; background:var(--surface-alt); font-size:0.85rem; white-space:pre-wrap; overflow-wrap:anywhere;"></div>
+            </div>
+            <%
+              // Not a real nested <form> — this whole card is already inside the "Save templates"
+              // form, and HTML doesn't allow (reliably) nesting one form in another. A plain button
+              // + fetch() instead (see the script below), same example data the preview above uses
+              // but through the ACTUAL send path (sendTemplateTestMessage -> sendToChannel), sent to
+              // whichever channel is picked here rather than every channel this trigger's own rules
+              // happen to use.
+            %>
+            <div style="grid-column:1/-1; display:flex; align-items:center; gap:0.5rem;">
+              <select class="template-test-channel" style="max-width:20rem;" <%= channels.length === 0 ? 'disabled' : '' %>>
+                <% if (channels.length === 0) { %>
+                  <option value="">No channels configured</option>
+                <% } else { %>
+                  <% channels.forEach(c => { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
+                <% } %>
+              </select>
+              <button type="button" class="btn-test template-test-send" data-trigger="<%= t.key %>" <%= channels.length === 0 ? 'disabled' : '' %>><%- icon('link') %> Send test</button>
+              <span class="hint template-test-result" data-trigger="<%= t.key %>" style="margin:0;"></span>
+            </div>
+          </div>
+        </div>
+      </details>
+    <% }) %>
+    <div style="margin-top:0.85rem;">
+      <button type="submit" class="btn-edit"><%- icon('edit') %> Save templates</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  // Live preview for the Message templates card above — pure client-side, against the same example
+  // data the server embeds (notifications.js's own TEMPLATE_PREVIEW_SAMPLES), so nothing is ever
+  // actually sent just to see how a template would look. substituteTemplate mirrors
+  // notifications.js's own function of the same name exactly — same placeholder syntax, same
+  // "leave the whole {{token}} as-is if it isn't a known one" behavior.
+  (function () {
+    var SAMPLES = <%- JSON.stringify(templatePreviewSamples) %>;
+    var SEVERITY_EMOJI = { critical: '\u{1F534}', warning: '\u{1F7E0}', info: 'ℹ️' };
+
+    function substituteTemplate(text, context) {
+      return text.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, function (whole, key) {
+        return Object.prototype.hasOwnProperty.call(context, key) ? String(context[key]) : whole;
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Telegram's own markdown v1 subset (see ensureTelegramMarkdown's own mdv=v1 choice in
+    // notifications.js) — *bold*, _italic_, `code`, [text](url) — rendered here as real HTML so
+    // the preview actually shows what a template with its own markdown in it would look like,
+    // rather than the raw asterisks/underscores as plain text.
+    function renderTelegramMarkdown(text) {
+      var html = escapeHtml(text);
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      html = html.replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>');
+      html = html.replace(/_([^_\n]+)_/g, '<em>$1</em>');
+      html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      return html;
+    }
+
+    function renderPreview(triggerKey) {
+      var sample = SAMPLES[triggerKey];
+      var previewEl = document.querySelector('.template-preview[data-trigger="' + triggerKey + '"]');
+      var titleInput = document.querySelector('.template-title-input[data-trigger="' + triggerKey + '"]');
+      var bodyInput = document.querySelector('.template-body-input[data-trigger="' + triggerKey + '"]');
+      if (!sample || !previewEl || !titleInput || !bodyInput) return;
+
+      var context = { title: sample.title, message: sample.message, severity: sample.severity };
+      sample.fields.forEach(function (f) { context[f.label] = f.value; });
+
+      var titleTemplate = titleInput.value.trim() || sample.title;
+      var customBody = bodyInput.value.trim();
+      var renderedBody = customBody
+        ? substituteTemplate(customBody, context)
+        : sample.message + '\n\n' + sample.fields.map(function (f) { return f.label + ': ' + f.value; }).join('\n');
+
+      var emoji = SEVERITY_EMOJI[sample.severity] || SEVERITY_EMOJI.info;
+      var renderedTitle = emoji + ' ' + substituteTemplate(titleTemplate, context);
+      previewEl.innerHTML = '<strong>' + renderTelegramMarkdown(renderedTitle) + '</strong>\n\n' + renderTelegramMarkdown(renderedBody).replace(/\n/g, '<br>');
+    }
+
+    // Shared "type a trigger char, get a filtered floating menu, pick one to insert" — same
+    // trigger-plus-fixed-panel shape as buildColumnsMenu/the row-actions popover elsewhere in this
+    // app, just anchored to a text caret's approximate position (the field's own bottom-left)
+    // instead of a button, since getting an exact pixel-perfect caret position out of a plain
+    // <textarea>/<input> needs a full mirror-div measurement this doesn't warrant for a lightweight
+    // helper menu. Used below for both "{{" (placeholder autocomplete) and "/" (snippet menu).
+    function attachInlineSuggest(el, triggerChar, stopChars, getItems, formatInsert) {
+      var menu = document.createElement('div');
+      menu.className = 'inline-suggest-menu';
+      menu.hidden = true;
+      document.body.appendChild(menu);
+      var items = [];
+      var rowEls = []; // the actual clickable elements for the current render, in the same order as `items` — NOT menu.children directly, since grid mode also inserts non-selectable .inline-suggest-category headers between them
+      var activeIndex = 0;
+      var matchStart = -1;
+      var activeItems = null; // null while browsing the root list; set to a submenu's (e.g. "/" -> Emoji) full item list once entered
+      var activeGrid = false; // true once inside a submenu whose category item had grid:true (see EMOJI_ITEMS/SLASH_ITEMS below) — renders emoji-only tiles grouped by item.category instead of the plain text-label rows every other level uses
+      var subQueryStart = 0; // length of the trigger-query string at the moment a submenu was entered — only characters typed AFTER that filter the submenu, not whatever was typed to reach it (e.g. "emo" to reach Emoji itself shouldn't count against "fire" typed once inside it)
+
+      function close() { menu.hidden = true; matchStart = -1; activeItems = null; activeGrid = false; subQueryStart = 0; }
+
+      function setActive(i) {
+        activeIndex = i;
+        rowEls.forEach(function (rowEl, ci) {
+          rowEl.classList.toggle('active', ci === activeIndex);
+        });
+        var activeEl = rowEls[i];
+        if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+      }
+
+      function matchesQuery(item, query) {
+        if (!query) return true;
+        var q = query.toLowerCase();
+        if (item.label.toLowerCase().indexOf(q) !== -1) return true;
+        return !!(item.keywords && item.keywords.toLowerCase().indexOf(q) !== -1);
+      }
+
+      function select(i) {
+        var item = items[i];
+        if (!item || matchStart < 0) return;
+        // A category item (e.g. "/" -> Emoji) opens its own sub-list in place instead of
+        // inserting anything — matchStart/the trigger text typed so far stay exactly as they are,
+        // so picking a LEAF item from the sub-list still replaces from the same original position.
+        if (item.items) {
+          activeItems = item.items;
+          activeGrid = !!item.grid;
+          subQueryStart = el.value.slice(matchStart + triggerChar.length, el.selectionStart).length;
+          render(activeItems);
+          return;
+        }
+        var value = el.value;
+        var caret = el.selectionStart;
+        var insertText = formatInsert(item);
+        el.value = value.slice(0, matchStart) + insertText + value.slice(caret);
+        var newCaret = matchStart + insertText.length;
+        el.setSelectionRange(newCaret, newCaret);
+        close();
+        el.focus();
+        el.dispatchEvent(new Event('input'));
+      }
+
+      // Groups consecutive same-category items under one heading + a flex-wrapped row of
+      // emoji-only tiles (no text label — a phone-style picker, browsed and picked by the emoji
+      // itself; item.label only surfaces now as the tile's hover title, for accessibility). Relies
+      // on EMOJI_ITEMS already listing same-category items contiguously — a category header is
+      // only started when `item.category` actually changes from the previous item, so a filtered
+      // subset (search mid-browse) still groups correctly without re-sorting anything.
+      function renderGrid(matchedItems) {
+        var currentCategory = null;
+        var rowWrap = null;
+        matchedItems.forEach(function (item, i) {
+          if (item.category !== currentCategory) {
+            currentCategory = item.category;
+            var heading = document.createElement('div');
+            heading.className = 'inline-suggest-category';
+            heading.textContent = currentCategory || '';
+            menu.appendChild(heading);
+            rowWrap = document.createElement('div');
+            rowWrap.className = 'inline-suggest-emoji-row';
+            menu.appendChild(rowWrap);
+          }
+          var cell = document.createElement('div');
+          cell.className = 'inline-suggest-emoji-item';
+          cell.textContent = item.insertText;
+          cell.title = item.label;
+          cell.addEventListener('mousedown', function (e) { e.preventDefault(); select(i); });
+          rowWrap.appendChild(cell);
+          rowEls.push(cell);
+        });
+      }
+
+      function renderList(matchedItems) {
+        matchedItems.forEach(function (item, i) {
+          var row = document.createElement('div');
+          row.className = 'inline-suggest-item';
+          row.textContent = item.label + (item.items ? ' ›' : '');
+          row.addEventListener('mousedown', function (e) { e.preventDefault(); select(i); });
+          menu.appendChild(row);
+          rowEls.push(row);
+        });
+      }
+
+      function render(matchedItems) {
+        items = matchedItems;
+        // Not a full close() on zero matches — keeps matchStart/activeItems intact so backspacing
+        // one character to fix a typo can still recover the list instead of having to retype the
+        // trigger character from scratch.
+        menu.hidden = items.length === 0;
+        if (items.length === 0) return;
+        menu.innerHTML = '';
+        rowEls = [];
+        menu.classList.toggle('inline-suggest-grid', activeGrid);
+        if (activeGrid) renderGrid(items); else renderList(items);
+        setActive(0);
+        // Same flip-up-if-it-won't-fit-below-but-fits-above logic already used for
+        // tables.js's row-actions-popover — measuring menu's own height needs it visible first,
+        // hence hidden=false before reading getBoundingClientRect() rather than after.
+        menu.hidden = false;
+        var fieldRect = el.getBoundingClientRect();
+        var menuHeight = menu.getBoundingClientRect().height;
+        var spaceBelow = window.innerHeight - fieldRect.bottom;
+        var spaceAbove = fieldRect.top;
+        var flipUp = menuHeight > spaceBelow && spaceAbove > spaceBelow;
+        menu.style.left = fieldRect.left + 'px';
+        if (flipUp) {
+          menu.style.top = 'auto';
+          menu.style.bottom = (window.innerHeight - fieldRect.top + 4) + 'px';
+        } else {
+          menu.style.bottom = 'auto';
+          menu.style.top = (fieldRect.bottom + 4) + 'px';
+        }
+      }
+
+      function check() {
+        var value = el.value;
+        var caret = el.selectionStart;
+        var beforeCaret = value.slice(0, caret);
+        var idx = beforeCaret.lastIndexOf(triggerChar);
+        if (idx === -1) { close(); return; }
+        var query = beforeCaret.slice(idx + triggerChar.length);
+        // Bails once the trigger's own natural "closed" state is typed. A bare space is also a
+        // bail at the ROOT level (this isn't an in-progress snippet/placeholder name any more) —
+        // but once inside a submenu (e.g. searching "red heart" in Emoji) a space is a normal part
+        // of the search term, not a sign to give up.
+        if (/\s/.test(query) && !activeItems) { close(); return; }
+        if (!activeItems && stopChars.some(function (c) { return query.indexOf(c) !== -1; })) { close(); return; }
+        matchStart = idx;
+        if (activeItems) {
+          render(activeItems.filter(function (item) { return matchesQuery(item, query.slice(subQueryStart)); }));
+        } else {
+          render(getItems().filter(function (item) { return matchesQuery(item, query); }));
+        }
+      }
+
+      el.addEventListener('input', check);
+      el.addEventListener('keydown', function (e) {
+        if (menu.hidden) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); setActive(Math.min(activeIndex + 1, items.length - 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(Math.max(activeIndex - 1, 0)); }
+        else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); select(activeIndex); }
+        else if (e.key === 'Escape') { close(); }
+      });
+      el.addEventListener('blur', function () { setTimeout(close, 150); }); // lets a mousedown-select land first
+      window.addEventListener('scroll', function (e) { if (e.target !== menu) close(); }, true);
+    }
+
+    // Telegram doesn't render an actual markdown table, so "table" is left out. The emoji ones
+    // show the actual character right in the list (not just a text description of it) so it
+    // reads as a real picker — "/" -> "Emoji ›" opens this as its own sub-list (see the `items`
+    // property in select() above), same severity/status emoji already used elsewhere in this
+    // notification system (see SEVERITY_EMOJI above and TELEGRAM_SEVERITY_EMOJI in notifications.js).
+    //
+    // A genuinely complete Unicode emoji set runs into the thousands (plus skin-tone/gender
+    // variants) — not something to hand-maintain reliably here. This is instead a broad, keyworded
+    // set across every common category, made actually findable via attachInlineSuggest's live
+    // per-submenu search (keep typing after picking "Emoji" to filter by name or keyword) rather
+    // than requiring anyone to scroll a flat list to find one.
+    // Each item's `category` groups it under a heading in the grid picker (see renderEmojiGrid)
+    // — kept as a plain field rather than nesting arrays-per-category, since matchesQuery/search
+    // needs one flat list to filter across every category at once.
+    var EMOJI_ITEMS = [
+      // Status / alerts (kept first — what a notification message reaches for most often)
+      { category: 'Status', label: '\u{1F534} Red circle', insertText: '\u{1F534}', keywords: 'red circle critical error status alert' },
+      { category: 'Status', label: '\u{1F7E0} Orange circle', insertText: '\u{1F7E0}', keywords: 'orange circle warning status' },
+      { category: 'Status', label: '\u{1F7E1} Yellow circle', insertText: '\u{1F7E1}', keywords: 'yellow circle warning status' },
+      { category: 'Status', label: '\u{1F7E2} Green circle', insertText: '\u{1F7E2}', keywords: 'green circle ok good ready status recover' },
+      { category: 'Status', label: '⚪ White circle', insertText: '⚪', keywords: 'white circle status unknown' },
+      { category: 'Status', label: '⚫ Black circle', insertText: '⚫', keywords: 'black circle status offline' },
+      { category: 'Status', label: '\u{1F535} Blue circle', insertText: '\u{1F535}', keywords: 'blue circle info status' },
+      { category: 'Status', label: '\u{1F7E3} Purple circle', insertText: '\u{1F7E3}', keywords: 'purple circle status' },
+      { category: 'Status', label: 'ℹ️ Info', insertText: 'ℹ️', keywords: 'info information' },
+      { category: 'Status', label: '⚠️ Warning', insertText: '⚠️', keywords: 'warning caution alert' },
+      { category: 'Status', label: '✅ Check mark', insertText: '✅', keywords: 'check ok done success pass' },
+      { category: 'Status', label: '✔️ Heavy check mark', insertText: '✔️', keywords: 'check ok done success' },
+      { category: 'Status', label: '❌ Cross mark', insertText: '❌', keywords: 'cross error fail wrong no' },
+      { category: 'Status', label: '✖️ Heavy multiplication x', insertText: '✖️', keywords: 'cross error fail wrong x' },
+      { category: 'Status', label: '\u{1F6A8} Rotating light', insertText: '\u{1F6A8}', keywords: 'siren alert alarm police critical' },
+      { category: 'Status', label: '\u{1F514} Bell', insertText: '\u{1F514}', keywords: 'bell notification alert ring' },
+      { category: 'Status', label: '\u{1F515} Bell with slash', insertText: '\u{1F515}', keywords: 'bell mute silent off notification' },
+      { category: 'Status', label: '\u{1F6D1} Stop sign', insertText: '\u{1F6D1}', keywords: 'stop sign halt' },
+      { category: 'Status', label: '⛔ No entry', insertText: '⛔', keywords: 'no entry forbidden blocked' },
+      { category: 'Status', label: '❗ Exclamation mark', insertText: '❗', keywords: 'exclamation important warning alert' },
+      { category: 'Status', label: '❓ Question mark', insertText: '❓', keywords: 'question unknown' },
+      { category: 'Status', label: '\u{1F195} New', insertText: '\u{1F195}', keywords: 'new badge' },
+      { category: 'Status', label: '♻️ Recycle', insertText: '♻️', keywords: 'recycle recover reset restart' },
+      { category: 'Status', label: '\u{1F504} Repeat / refresh', insertText: '\u{1F504}', keywords: 'repeat refresh retry sync loop' },
+      { category: 'Status', label: '⏱️ Stopwatch', insertText: '⏱️', keywords: 'timer stopwatch duration time' },
+      { category: 'Status', label: '⏰ Alarm clock', insertText: '⏰', keywords: 'alarm clock time wake' },
+      { category: 'Status', label: '\u{1F4CC} Pushpin', insertText: '\u{1F4CC}', keywords: 'pin location pushpin' },
+      { category: 'Status', label: '\u{1F4CD} Round pushpin', insertText: '\u{1F4CD}', keywords: 'pin location map' },
+      { category: 'Status', label: '\u{1F517} Link', insertText: '\u{1F517}', keywords: 'link chain url' },
+      { category: 'Status', label: '\u{1F512} Locked', insertText: '\u{1F512}', keywords: 'lock locked secure closed' },
+      { category: 'Status', label: '\u{1F513} Unlocked', insertText: '\u{1F513}', keywords: 'lock unlocked open' },
+      { category: 'Status', label: '\u{1F50D} Magnifying glass', insertText: '\u{1F50D}', keywords: 'search find magnify zoom' },
+      { category: 'Status', label: '\u{1F4CA} Bar chart', insertText: '\u{1F4CA}', keywords: 'chart graph stats data bars' },
+      { category: 'Status', label: '\u{1F4C8} Chart increasing', insertText: '\u{1F4C8}', keywords: 'chart graph up increase growth trend' },
+      { category: 'Status', label: '\u{1F4C9} Chart decreasing', insertText: '\u{1F4C9}', keywords: 'chart graph down decrease drop trend' },
+
+      // Smileys & emotion
+      { category: 'Smileys', label: '\u{1F600} Grinning face', insertText: '\u{1F600}', keywords: 'happy smile grin face' },
+      { category: 'Smileys', label: '\u{1F603} Grinning face with big eyes', insertText: '\u{1F603}', keywords: 'happy smile face' },
+      { category: 'Smileys', label: '\u{1F604} Grinning face with smiling eyes', insertText: '\u{1F604}', keywords: 'happy smile face' },
+      { category: 'Smileys', label: '\u{1F601} Beaming face', insertText: '\u{1F601}', keywords: 'happy smile grin face' },
+      { category: 'Smileys', label: '\u{1F606} Grinning squinting face', insertText: '\u{1F606}', keywords: 'happy laugh face' },
+      { category: 'Smileys', label: '\u{1F602} Face with tears of joy', insertText: '\u{1F602}', keywords: 'laugh cry happy funny lol' },
+      { category: 'Smileys', label: '\u{1F642} Slightly smiling face', insertText: '\u{1F642}', keywords: 'smile happy face' },
+      { category: 'Smileys', label: '\u{1F643} Upside-down face', insertText: '\u{1F643}', keywords: 'silly face' },
+      { category: 'Smileys', label: '\u{1F609} Winking face', insertText: '\u{1F609}', keywords: 'wink face' },
+      { category: 'Smileys', label: '\u{1F60A} Smiling face with smiling eyes', insertText: '\u{1F60A}', keywords: 'happy smile face' },
+      { category: 'Smileys', label: '\u{1F60D} Heart eyes', insertText: '\u{1F60D}', keywords: 'love heart eyes face crush' },
+      { category: 'Smileys', label: '\u{1F60E} Smiling face with sunglasses', insertText: '\u{1F60E}', keywords: 'cool sunglasses face' },
+      { category: 'Smileys', label: '\u{1F914} Thinking face', insertText: '\u{1F914}', keywords: 'thinking hmm face' },
+      { category: 'Smileys', label: '\u{1F610} Neutral face', insertText: '\u{1F610}', keywords: 'neutral meh face' },
+      { category: 'Smileys', label: '\u{1F611} Expressionless face', insertText: '\u{1F611}', keywords: 'blank face' },
+      { category: 'Smileys', label: '\u{1F615} Confused face', insertText: '\u{1F615}', keywords: 'confused face' },
+      { category: 'Smileys', label: '\u{1F61E} Disappointed face', insertText: '\u{1F61E}', keywords: 'sad disappointed face' },
+      { category: 'Smileys', label: '\u{1F622} Crying face', insertText: '\u{1F622}', keywords: 'sad cry face tear' },
+      { category: 'Smileys', label: '\u{1F62D} Loudly crying face', insertText: '\u{1F62D}', keywords: 'sad cry sob face' },
+      { category: 'Smileys', label: '\u{1F624} Face with steam from nose', insertText: '\u{1F624}', keywords: 'angry mad frustrated face' },
+      { category: 'Smileys', label: '\u{1F620} Angry face', insertText: '\u{1F620}', keywords: 'angry mad face' },
+      { category: 'Smileys', label: '\u{1F621} Pouting face', insertText: '\u{1F621}', keywords: 'angry rage mad face' },
+      { category: 'Smileys', label: '\u{1F631} Face screaming in fear', insertText: '\u{1F631}', keywords: 'scared shocked fear face' },
+      { category: 'Smileys', label: '\u{1F628} Fearful face', insertText: '\u{1F628}', keywords: 'scared fear afraid face' },
+      { category: 'Smileys', label: '\u{1F62E} Face with open mouth', insertText: '\u{1F62E}', keywords: 'surprised shocked wow face' },
+      { category: 'Smileys', label: '\u{1F633} Flushed face', insertText: '\u{1F633}', keywords: 'surprised embarrassed face' },
+      { category: 'Smileys', label: '\u{1F634} Sleeping face', insertText: '\u{1F634}', keywords: 'sleep tired face zzz' },
+      { category: 'Smileys', label: '\u{1F635} Dizzy face', insertText: '\u{1F635}', keywords: 'dizzy confused face' },
+      { category: 'Smileys', label: '\u{1F912} Face with thermometer', insertText: '\u{1F912}', keywords: 'sick ill fever face' },
+      { category: 'Smileys', label: '\u{1F927} Sneezing face', insertText: '\u{1F927}', keywords: 'sick sneeze face' },
+      { category: 'Smileys', label: '\u{1F636} Face without mouth', insertText: '\u{1F636}', keywords: 'silent quiet face' },
+      { category: 'Smileys', label: '\u{1F644} Face with rolling eyes', insertText: '\u{1F644}', keywords: 'eyeroll annoyed face' },
+      { category: 'Smileys', label: '\u{1F60F} Smirking face', insertText: '\u{1F60F}', keywords: 'smirk face' },
+      { category: 'Smileys', label: '\u{1F4A4} Zzz', insertText: '\u{1F4A4}', keywords: 'sleep zzz tired' },
+
+      // People & gestures
+      { category: 'People', label: '\u{1F44B} Waving hand', insertText: '\u{1F44B}', keywords: 'wave hand hello bye' },
+      { category: 'People', label: '\u{1F44D} Thumbs up', insertText: '\u{1F44D}', keywords: 'thumbs up good yes ok like' },
+      { category: 'People', label: '\u{1F44E} Thumbs down', insertText: '\u{1F44E}', keywords: 'thumbs down bad no dislike' },
+      { category: 'People', label: '\u{1F44F} Clapping hands', insertText: '\u{1F44F}', keywords: 'clap applause well done' },
+      { category: 'People', label: '\u{1F64C} Raising hands', insertText: '\u{1F64C}', keywords: 'celebrate hooray hands' },
+      { category: 'People', label: '\u{1F91D} Handshake', insertText: '\u{1F91D}', keywords: 'handshake deal agreement' },
+      { category: 'People', label: '✌️ Victory hand', insertText: '✌️', keywords: 'peace victory hand' },
+      { category: 'People', label: '\u{1F91E} Crossed fingers', insertText: '\u{1F91E}', keywords: 'luck fingers crossed hope' },
+      { category: 'People', label: '☝️ Index pointing up', insertText: '☝️', keywords: 'point finger up' },
+      { category: 'People', label: '\u{1F449} Pointing right', insertText: '\u{1F449}', keywords: 'point finger right' },
+      { category: 'People', label: '\u{1F448} Pointing left', insertText: '\u{1F448}', keywords: 'point finger left' },
+      { category: 'People', label: '\u{1F64F} Folded hands', insertText: '\u{1F64F}', keywords: 'pray please thanks hands' },
+      { category: 'People', label: '\u{1F4AA} Flexed biceps', insertText: '\u{1F4AA}', keywords: 'strong muscle arm strength' },
+      { category: 'People', label: '\u{1F468}‍\u{1F527} Man mechanic', insertText: '\u{1F468}‍\u{1F527}', keywords: 'mechanic worker repair maintenance' },
+      { category: 'People', label: '\u{1F469}‍\u{1F527} Woman mechanic', insertText: '\u{1F469}‍\u{1F527}', keywords: 'mechanic worker repair maintenance' },
+      { category: 'People', label: '\u{1F9D1}‍\u{1F4BB} Person coding', insertText: '\u{1F9D1}‍\u{1F4BB}', keywords: 'developer coder programmer computer' },
+      { category: 'People', label: '\u{1F440} Eyes', insertText: '\u{1F440}', keywords: 'eyes look watch see' },
+      { category: 'People', label: '\u{1F9E0} Brain', insertText: '\u{1F9E0}', keywords: 'brain smart think' },
+
+      // Nature & weather
+      { category: 'Nature & weather', label: '☀️ Sun', insertText: '☀️', keywords: 'sun sunny weather hot' },
+      { category: 'Nature & weather', label: '\u{1F31E} Sun with face', insertText: '\u{1F31E}', keywords: 'sun sunny weather' },
+      { category: 'Nature & weather', label: '⛅ Sun behind cloud', insertText: '⛅', keywords: 'sun cloud weather partly cloudy' },
+      { category: 'Nature & weather', label: '☁️ Cloud', insertText: '☁️', keywords: 'cloud cloudy weather' },
+      { category: 'Nature & weather', label: '\u{1F327}️ Cloud with rain', insertText: '\u{1F327}️', keywords: 'rain cloud weather' },
+      { category: 'Nature & weather', label: '⛈️ Thunder cloud with rain', insertText: '⛈️', keywords: 'storm thunder lightning weather' },
+      { category: 'Nature & weather', label: '\u{1F329}️ Lightning', insertText: '\u{1F329}️', keywords: 'lightning storm bolt weather' },
+      { category: 'Nature & weather', label: '❄️ Snowflake', insertText: '❄️', keywords: 'snow cold winter weather' },
+      { category: 'Nature & weather', label: '☃️ Snowman', insertText: '☃️', keywords: 'snow winter snowman' },
+      { category: 'Nature & weather', label: '\u{1F32B}️ Fog', insertText: '\u{1F32B}️', keywords: 'fog mist weather' },
+      { category: 'Nature & weather', label: '\u{1F4A8} Wind', insertText: '\u{1F4A8}', keywords: 'wind windy blow weather' },
+      { category: 'Nature & weather', label: '\u{1F308} Rainbow', insertText: '\u{1F308}', keywords: 'rainbow weather' },
+      { category: 'Nature & weather', label: '\u{1F321}️ Thermometer', insertText: '\u{1F321}️', keywords: 'temperature thermometer hot cold' },
+      { category: 'Nature & weather', label: '\u{1F4A7} Droplet', insertText: '\u{1F4A7}', keywords: 'water drop droplet humidity' },
+      { category: 'Nature & weather', label: '\u{1F30A} Water wave', insertText: '\u{1F30A}', keywords: 'wave water ocean' },
+      { category: 'Nature & weather', label: '\u{1F525} Fire', insertText: '\u{1F525}', keywords: 'fire flame hot burn' },
+      { category: 'Nature & weather', label: '\u{1F4A1} Light bulb', insertText: '\u{1F4A1}', keywords: 'light bulb idea power on' },
+      { category: 'Nature & weather', label: '\u{1F33F} Herb', insertText: '\u{1F33F}', keywords: 'plant leaf herb green' },
+      { category: 'Nature & weather', label: '\u{1F333} Tree', insertText: '\u{1F333}', keywords: 'tree nature plant' },
+
+      // Objects, tools & tech
+      { category: 'Objects & tools', label: '\u{1F4F1} Mobile phone', insertText: '\u{1F4F1}', keywords: 'phone mobile smartphone' },
+      { category: 'Objects & tools', label: '\u{1F4BB} Laptop', insertText: '\u{1F4BB}', keywords: 'laptop computer' },
+      { category: 'Objects & tools', label: '\u{1F5A5}️ Desktop computer', insertText: '\u{1F5A5}️', keywords: 'computer desktop pc' },
+      { category: 'Objects & tools', label: '\u{1F4E1} Satellite antenna', insertText: '\u{1F4E1}', keywords: 'antenna satellite signal wifi' },
+      { category: 'Objects & tools', label: '\u{1F50C} Electric plug', insertText: '\u{1F50C}', keywords: 'plug power electricity' },
+      { category: 'Objects & tools', label: '\u{1F50B} Battery', insertText: '\u{1F50B}', keywords: 'battery power charge' },
+      { category: 'Objects & tools', label: '⚡ High voltage', insertText: '⚡', keywords: 'electricity power lightning voltage' },
+      { category: 'Objects & tools', label: '\u{1F6E0}️ Hammer and wrench', insertText: '\u{1F6E0}️', keywords: 'tools repair maintenance fix' },
+      { category: 'Objects & tools', label: '\u{1F527} Wrench', insertText: '\u{1F527}', keywords: 'wrench repair fix tool' },
+      { category: 'Objects & tools', label: '⚙️ Gear', insertText: '⚙️', keywords: 'gear settings config cog' },
+      { category: 'Objects & tools', label: '\u{1F4E6} Package', insertText: '\u{1F4E6}', keywords: 'package box delivery' },
+      { category: 'Objects & tools', label: '\u{1F4E9} Envelope', insertText: '\u{1F4E9}', keywords: 'email envelope mail message' },
+      { category: 'Objects & tools', label: '\u{1F4C1} Folder', insertText: '\u{1F4C1}', keywords: 'folder file directory' },
+      { category: 'Objects & tools', label: '\u{1F4C4} Page', insertText: '\u{1F4C4}', keywords: 'file page document' },
+      { category: 'Objects & tools', label: '\u{1F5A8}️ Printer', insertText: '\u{1F5A8}️', keywords: 'printer print' },
+      { category: 'Objects & tools', label: '\u{1F4F7} Camera', insertText: '\u{1F4F7}', keywords: 'camera photo picture' },
+      { category: 'Objects & tools', label: '\u{1F3E0} House', insertText: '\u{1F3E0}', keywords: 'house home building' },
+      { category: 'Objects & tools', label: '\u{1F3E2} Office building', insertText: '\u{1F3E2}', keywords: 'building office' },
+      { category: 'Objects & tools', label: '\u{1F697} Car', insertText: '\u{1F697}', keywords: 'car vehicle automobile' },
+      { category: 'Objects & tools', label: '\u{1F6AA} Door', insertText: '\u{1F6AA}', keywords: 'door open closed' },
+      { category: 'Objects & tools', label: '\u{1F6BF} Faucet drop', insertText: '\u{1F6BF}', keywords: 'shower water tap' },
+      { category: 'Objects & tools', label: '\u{1F6BD} Toilet', insertText: '\u{1F6BD}', keywords: 'toilet bathroom' },
+      { category: 'Objects & tools', label: '♨️ Heating', insertText: '♨️', keywords: 'hot springs heat sauna' },
+      { category: 'Objects & tools', label: '\u{1F9F9} Broom', insertText: '\u{1F9F9}', keywords: 'clean broom sweep' },
+      { category: 'Objects & tools', label: '\u{1F4C5} Calendar', insertText: '\u{1F4C5}', keywords: 'calendar date schedule' },
+      { category: 'Objects & tools', label: '\u{1F5D3}️ Spiral calendar', insertText: '\u{1F5D3}️', keywords: 'calendar date schedule' },
+
+      // Hearts & symbols
+      { category: 'Hearts & symbols', label: '❤️ Red heart', insertText: '❤️', keywords: 'heart love red' },
+      { category: 'Hearts & symbols', label: '\u{1F49A} Green heart', insertText: '\u{1F49A}', keywords: 'heart love green' },
+      { category: 'Hearts & symbols', label: '\u{1F499} Blue heart', insertText: '\u{1F499}', keywords: 'heart love blue' },
+      { category: 'Hearts & symbols', label: '\u{1F49B} Yellow heart', insertText: '\u{1F49B}', keywords: 'heart love yellow' },
+      { category: 'Hearts & symbols', label: '\u{1F49C} Purple heart', insertText: '\u{1F49C}', keywords: 'heart love purple' },
+      { category: 'Hearts & symbols', label: '\u{1F5A4} Black heart', insertText: '\u{1F5A4}', keywords: 'heart love black' },
+      { category: 'Hearts & symbols', label: '⭐ Star', insertText: '⭐', keywords: 'star favorite' },
+      { category: 'Hearts & symbols', label: '\u{1F31F} Glowing star', insertText: '\u{1F31F}', keywords: 'star sparkle favorite' },
+      { category: 'Hearts & symbols', label: '✨ Sparkles', insertText: '✨', keywords: 'sparkles shine new' },
+      { category: 'Hearts & symbols', label: '\u{1F389} Party popper', insertText: '\u{1F389}', keywords: 'party celebrate confetti' },
+      { category: 'Hearts & symbols', label: '\u{1F3AF} Direct hit', insertText: '\u{1F3AF}', keywords: 'target goal bullseye' },
+      { category: 'Hearts & symbols', label: '\u{1F3C1} Checkered flag', insertText: '\u{1F3C1}', keywords: 'finish flag done complete' },
+      { category: 'Hearts & symbols', label: '♾️ Infinity', insertText: '♾️', keywords: 'infinity forever loop' },
+      { category: 'Hearts & symbols', label: '⬆️ Up arrow', insertText: '⬆️', keywords: 'up arrow increase rise' },
+      { category: 'Hearts & symbols', label: '⬇️ Down arrow', insertText: '⬇️', keywords: 'down arrow decrease fall' },
+      { category: 'Hearts & symbols', label: '➡️ Right arrow', insertText: '➡️', keywords: 'right arrow next' },
+      { category: 'Hearts & symbols', label: '⬅️ Left arrow', insertText: '⬅️', keywords: 'left arrow back previous' },
+      { category: 'Hearts & symbols', label: '\u{1F503} Clockwise arrows', insertText: '\u{1F503}', keywords: 'refresh reload sync arrows' },
+      { category: 'Hearts & symbols', label: '⬜ White square', insertText: '⬜', keywords: 'white square status' },
+      { category: 'Hearts & symbols', label: '⬛ Black square', insertText: '⬛', keywords: 'black square status' },
+      { category: 'Hearts & symbols', label: '\u{1F532} Blue square', insertText: '\u{1F532}', keywords: 'blue square status' },
+      { category: 'Hearts & symbols', label: '\u{1F538} Orange diamond', insertText: '\u{1F538}', keywords: 'orange diamond status' },
+      { category: 'Hearts & symbols', label: '\u{1F539} Blue diamond', insertText: '\u{1F539}', keywords: 'blue diamond status' },
+    ];
+    var SLASH_ITEMS = [
+      { label: 'Bold text', insertText: '*bold*' },
+      { label: 'Italic text', insertText: '_italic_' },
+      { label: 'Code', insertText: '`code`' },
+      { label: 'Emoji', items: EMOJI_ITEMS, grid: true },
+    ];
+
+    Object.keys(SAMPLES).forEach(function (triggerKey) {
+      renderPreview(triggerKey);
+      var sample = SAMPLES[triggerKey];
+      ['.template-title-input', '.template-body-input'].forEach(function (sel) {
+        var el = document.querySelector(sel + '[data-trigger="' + triggerKey + '"]');
+        if (!el) return;
+        el.addEventListener('input', function () { renderPreview(triggerKey); });
+
+        // "{{" -> autocomplete this trigger's own available placeholders.
+        var placeholderItems = [{ label: 'title', value: 'title' }, { label: 'message', value: 'message' }, { label: 'severity', value: 'severity' }]
+          .concat(sample.fields.map(function (f) { return { label: f.label, value: f.label }; }));
+        attachInlineSuggest(el, '{{', ['}}'], function () { return placeholderItems; }, function (item) { return '{{' + item.value + '}}'; });
+
+        // "/" -> a small snippet/emoji menu.
+        attachInlineSuggest(el, '/', [], function () { return SLASH_ITEMS; }, function (item) { return item.insertText; });
+      });
+    });
+  })();
+</script>
+
+<script>
+  // Per-template "Send test" — plain fetch() (JSON in, JSON out, see the /templates/:key/test
+  // route), not a real form: this whole card already lives inside the "Save templates" form, and
+  // a nested <form> would be invalid/unreliable HTML. Updates just this one template's own result
+  // line in place instead of a full page reload.
+  (function () {
+    document.querySelectorAll('.template-test-send').forEach(function (btn) {
+      var triggerKey = btn.dataset.trigger;
+      var select = btn.parentElement.querySelector('.template-test-channel');
+      var resultEl = document.querySelector('.template-test-result[data-trigger="' + triggerKey + '"]');
+      btn.addEventListener('click', function () {
+        if (!select || !select.value) return;
+        var original = btn.innerHTML;
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+        if (resultEl) { resultEl.textContent = ''; resultEl.style.color = ''; }
+        fetch('/admin/notifications/templates/' + encodeURIComponent(triggerKey) + '/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel_id: select.value }),
+        })
+          .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+          .then(function (result) {
+            btn.disabled = false;
+            btn.innerHTML = original;
+            if (!resultEl) return;
+            if (result.ok && result.data.ok) {
+              resultEl.textContent = 'Test message sent.';
+              resultEl.style.color = 'var(--success)';
+            } else {
+              resultEl.textContent = 'Test failed: ' + (result.data.error || 'Unknown error');
+              resultEl.style.color = 'var(--danger)';
+            }
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            btn.innerHTML = original;
+            if (resultEl) { resultEl.textContent = 'Test failed: ' + err.message; resultEl.style.color = 'var(--danger)'; }
+          });
+      });
+    });
+  })();
+</script>
+
 <script>
   // Shows only the field group matching the currently-selected trigger type — mirrors the same
   // toggle-by-select-value pattern used for the Monitor add form's MQTT/Loxone field groups.
@@ -463,7 +1004,11 @@
       var token = get('token'), chatIds = get('chatIds');
       if (!token || !chatIds) return null;
       var ids = chatIds.split(',').map(function (s) { return s.trim(); }).filter(Boolean).join('/');
-      return ids ? ('tgram://' + token + '/' + ids) : null;
+      // format=markdown (mdv=v1, the more lenient of Telegram's two Markdown dialects) — LoxSuite's
+      // own message text is written expecting this (see renderTelegramBody in notifications.js);
+      // sending it as Apprise's default plain text would show the literal *bold*/emoji markup
+      // characters instead of actually formatting anything.
+      return ids ? ('tgram://' + token + '/' + ids + '?format=markdown&mdv=v1') : null;
     }
     function buildSlackUrl(get) {
       var m = /hooks\.slack\.com\/services\/([^/]+)\/([^/]+)\/([^/?]+)/.exec(get('webhookUrl') || '');

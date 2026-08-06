@@ -2,6 +2,7 @@ const { execFile } = require('child_process');
 const db = require('./db');
 const { logSystemEvent } = require('./auditLog');
 const { matchedRung } = require('./thresholdLadder');
+const { formatDateTime } = require('./dateFormat');
 
 // The five trigger types selectable when creating a rule — kept here since routes/notifications.js
 // and this file are the only two places that need the list.
@@ -68,9 +69,157 @@ function renderBody(event) {
   return `${event.message}\n\n${event.fields.map((f) => `${f.label}: ${f.value}`).join('\n')}`;
 }
 
+// One optional {title, body} override per trigger_type (see db.js's migrateNotificationTemplatesSetting
+// and admin-notifications.ejs's own "Message templates" card) — {{title}}/{{message}}/{{severity}}
+// plus every one of this event's own fields[].label are available as {{placeholders}}, substituted
+// against the SAME event data every check* function already builds below, so a custom template
+// never needs its own separate variable-gathering step.
+function getNotificationTemplates() {
+  const row = db.prepare('SELECT notification_templates FROM gateway_settings WHERE id = 1').get();
+  try {
+    const parsed = JSON.parse((row && row.notification_templates) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function saveNotificationTemplates(templates) {
+  db.prepare('UPDATE gateway_settings SET notification_templates = ? WHERE id = 1').run(JSON.stringify(templates));
+}
+
+// Exported separately from getNotificationTemplates/applyTemplate so the admin page's own live
+// preview (client-side) and this real send path substitute the exact same placeholders the exact
+// same way — one JS implementation, not a second one re-typed into the view for the preview box.
+function substituteTemplate(text, context) {
+  return text.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (whole, key) => (
+    Object.prototype.hasOwnProperty.call(context, key) ? String(context[key]) : whole
+  ));
+}
+
+// Sample event data per trigger type, used ONLY for the admin page's own template preview (never
+// actually sent anywhere) — mirrors exactly what each check*/fireRule call site below builds for a
+// REAL event, so the preview's available {{placeholders}} always match what a real notification
+// would actually have to substitute.
+const TEMPLATE_PREVIEW_SAMPLES = {
+  monitor_threshold: {
+    title: 'Living room temp: threshold breached',
+    message: 'Living room temp is now > 25 (current: 26.4).',
+    severity: 'warning',
+    fields: [{ label: 'Monitor', value: 'Living room temp' }, { label: 'Current value', value: 26.4 }, { label: 'Threshold', value: '> 25' }],
+  },
+  miniserver_status: {
+    title: 'Miniserver Villa: offline',
+    message: 'Miniserver "Miniserver Villa" (192.168.1.10) is now offline.',
+    severity: 'critical',
+    fields: [{ label: 'Miniserver', value: 'Miniserver Villa' }, { label: 'Host', value: '192.168.1.10' }, { label: 'Status', value: 'offline' }],
+  },
+  firmware_changed: {
+    title: 'Miniserver Villa: firmware changed',
+    message: 'Miniserver "Miniserver Villa" firmware changed from 15.2.3.1 to 15.3.1.2.',
+    severity: 'info',
+    fields: [{ label: 'Miniserver', value: 'Miniserver Villa' }, { label: 'Previous version', value: '15.2.3.1' }, { label: 'New version', value: '15.3.1.2' }],
+  },
+  loxsuite_update_available: {
+    title: 'LoxSuite v0.11.0 available',
+    message: 'A newer LoxSuite release (v0.11.0) is available on GitHub — currently running v0.10.1-alpha.1.',
+    severity: 'info',
+    fields: [{ label: 'Running version', value: 'v0.10.1-alpha.1' }, { label: 'Latest version', value: 'v0.11.0' }],
+  },
+  mqtt_client_status: {
+    title: 'shelly-plug-1: disconnected',
+    message: 'MQTT client "shelly-plug-1" is now disconnected.',
+    severity: 'warning',
+    fields: [{ label: 'Client', value: 'shelly-plug-1' }, { label: 'Status', value: 'disconnected' }],
+  },
+  backup_failed: {
+    title: 'Backup failed',
+    message: 'rclone exited with code 1: connection refused.',
+    severity: 'critical',
+    fields: [{ label: 'Step', value: 'offsite copy' }],
+  },
+  battery_weak: {
+    title: 'Hallway motion sensor: battery weak',
+    message: '"Hallway motion sensor" on "Miniserver Villa" reports a weak battery (18%).',
+    severity: 'warning',
+    fields: [
+      { label: 'Device', value: 'Hallway motion sensor' }, { label: 'Miniserver', value: 'Miniserver Villa' },
+      { label: 'Battery', value: '18%' }, { label: 'Too weak to update', value: 'No' },
+    ],
+  },
+  device_firmware_changed: {
+    title: 'Kitchen Shelly: firmware changed',
+    message: '"Kitchen Shelly" on "Miniserver Villa" firmware changed from 1.2.0 to 1.3.0.',
+    severity: 'info',
+    fields: [
+      { label: 'Device', value: 'Kitchen Shelly' }, { label: 'Miniserver', value: 'Miniserver Villa' },
+      { label: 'Previous version', value: '1.2.0' }, { label: 'New version', value: '1.3.0' },
+    ],
+  },
+  device_offline: {
+    title: 'Garden sensor: offline',
+    message: '"Garden sensor" on "Miniserver Villa" is now offline.',
+    severity: 'warning',
+    fields: [{ label: 'Device', value: 'Garden sensor' }, { label: 'Miniserver', value: 'Miniserver Villa' }, { label: 'Status', value: 'offline' }],
+  },
+};
+
+function applyTemplate(event, triggerType) {
+  const tpl = getNotificationTemplates()[triggerType];
+  if (!tpl || (!tpl.title && !tpl.body)) return event;
+  const context = { title: event.title, message: event.message, severity: event.severity };
+  (event.fields || []).forEach((f) => { context[f.label] = f.value; });
+  return {
+    ...event,
+    title: tpl.title ? substituteTemplate(tpl.title, context) : event.title,
+    // A custom body fully replaces the auto-appended field list below it (renderBody) — the
+    // template itself is expected to reference whichever fields it cares about by name instead.
+    message: tpl.body ? substituteTemplate(tpl.body, context) : event.message,
+    fields: tpl.body ? [] : event.fields,
+  };
+}
+
+const TELEGRAM_SEVERITY_EMOJI = { critical: '\u{1F534}', warning: '\u{1F7E0}', info: 'ℹ️' };
+
+function isTelegramUrl(url) {
+  return /^tgram:\/\//i.test(url || '');
+}
+
+// Apprise's Telegram plugin renders the message as Markdown once the URL says so (see
+// ensureTelegramMarkdown below) — legacy Markdown (mdv=v1), not the v2 default, since v1 only
+// treats `_*\`[` as special, so real content (a monitor label, a raw value) needs far less
+// escaping to stay safe than v2's much longer reserved-character list would require.
+function escapeTelegramMarkdown(text) {
+  return String(text).replace(/([_*`[])/g, '\\$1');
+}
+
+function renderTelegramTitle(event) {
+  const emoji = TELEGRAM_SEVERITY_EMOJI[event.severity] || TELEGRAM_SEVERITY_EMOJI.info;
+  return `${emoji} *${escapeTelegramMarkdown(event.title)}*`;
+}
+
+function renderTelegramBody(event) {
+  const message = escapeTelegramMarkdown(event.message);
+  if (!event.fields || event.fields.length === 0) return message;
+  const fieldLines = event.fields.map((f) => `_${escapeTelegramMarkdown(f.label)}:_ ${escapeTelegramMarkdown(f.value)}`).join('\n');
+  return `${message}\n\n${fieldLines}`;
+}
+
+// Applied at send time (not just when a channel is first saved) so an already-configured Telegram
+// channel gets the nicer formatting immediately too, without needing to re-save it — appends
+// rather than replaces so a URL someone already hand-edited with its own format= keeps that choice.
+function ensureTelegramMarkdown(url) {
+  if (/[?&]format=/.test(url)) return url;
+  return url + (url.includes('?') ? '&' : '?') + 'format=markdown&mdv=v1';
+}
+
 async function sendToChannel(channel, event) {
   if (!channel.url) throw new Error('This channel has no Apprise URL configured.');
-  await runApprise(channel.url, event.title, renderBody(event), apLevel(event.severity));
+  const telegram = isTelegramUrl(channel.url);
+  const url = telegram ? ensureTelegramMarkdown(channel.url) : channel.url;
+  const title = telegram ? renderTelegramTitle(event) : event.title;
+  const body = telegram ? renderTelegramBody(event) : renderBody(event);
+  await runApprise(url, title, body, apLevel(event.severity));
 }
 
 // Exercised directly by the Notifications admin page's own "Send test" button per channel — same
@@ -81,9 +230,28 @@ async function sendTestMessage(channel) {
     title: 'Test notification',
     message: 'This is a test message from LoxSuite — if you can read this, the channel is configured correctly.',
     severity: 'info',
-    fields: [{ label: 'Channel', value: channel.name }, { label: 'Sent at', value: new Date().toLocaleString() }],
+    fields: [{ label: 'Channel', value: channel.name }, { label: 'Sent at', value: formatDateTime(new Date().toISOString()) }],
     timestamp: new Date().toISOString(),
   });
+}
+
+// Exercised by the Message templates card's own per-template "Send test" — builds a canned event
+// from this trigger type's own TEMPLATE_PREVIEW_SAMPLES entry (the exact same sample data the
+// admin page's own live preview renders against), then runs it through the SAVED template
+// (applyTemplate) so a real send actually reflects the current title/body override, not just the
+// trigger's stock wording — same "genuine end-to-end proof" reasoning as sendTestMessage's own
+// per-channel test just above.
+async function sendTemplateTestMessage(channel, triggerType) {
+  const sample = TEMPLATE_PREVIEW_SAMPLES[triggerType];
+  if (!sample) throw new Error('Unknown trigger type.');
+  const event = applyTemplate({
+    title: sample.title,
+    message: sample.message,
+    severity: sample.severity,
+    fields: sample.fields,
+    timestamp: new Date().toISOString(),
+  }, triggerType);
+  await sendToChannel(channel, event);
 }
 
 // ---- Rule dispatch ----
@@ -128,7 +296,8 @@ function recordNotificationEvent(event, opts) {
   );
 }
 
-async function fireRule(rule, event) {
+async function fireRule(rule, rawEvent) {
+  const event = applyTemplate(rawEvent, rule.trigger_type);
   recordNotificationEvent(event, { eventType: rule.trigger_type, ruleId: rule.id });
 
   const channels = getChannelsForRule(rule.id);
@@ -490,6 +659,7 @@ function notifyBackupFailed(errorMessage, context) {
 module.exports = {
   TRIGGER_TYPES,
   sendTestMessage,
+  sendTemplateTestMessage,
   checkMonitorThreshold,
   checkThresholdLadderNotify,
   checkMiniserverStatus,
@@ -505,4 +675,8 @@ module.exports = {
   compareThreshold,
   operatorLabel,
   extractAppriseError,
+  getNotificationTemplates,
+  saveNotificationTemplates,
+  substituteTemplate,
+  TEMPLATE_PREVIEW_SAMPLES,
 };

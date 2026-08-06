@@ -66,6 +66,75 @@
     return value.toFixed(decimals);
   }
 
+  // The 'line' chart type's own legend — plain HTML, not Chart.js's canvas-drawn one (see
+  // plugins.legend.display:false in render() below), specifically so every series always gets its
+  // own full row (swatch + name + every enabled min/max/avg/current stat, all on that ONE line) —
+  // Chart.js's built-in legend at position:top/bottom instead wraps as many series as fit side by
+  // side on one row, which read as inconsistent once a series' own label could also be carrying a
+  // stats parenthetical. position only changes WHERE this list sits (above/below/beside the plot,
+  // via canvas's own flex-container parent — see .chart-canvas-inner/.monitor-chart-canvas-wrap in
+  // style.css), never how it's laid out internally (always one row per series, top to bottom).
+  // Click-to-toggle a series' visibility, same as Chart.js's own default legend already did.
+  function buildCustomLegend(canvas, chart, show, position, align, stats, decimals) {
+    var wrap = canvas.parentElement; // .chart-canvas-inner / .monitor-chart-canvas-wrap
+    if (!wrap) return;
+    var legendEl = wrap.querySelector(':scope > .chart-custom-legend');
+    if (!show) {
+      if (legendEl) legendEl.remove();
+      wrap.style.flexDirection = '';
+      return;
+    }
+    var isSide = position === 'left' || position === 'right';
+    wrap.style.flexDirection = isSide ? 'row' : 'column';
+    if (!legendEl) {
+      legendEl = document.createElement('div');
+      legendEl.addEventListener('click', function (e) {
+        var row = e.target.closest('.chart-legend-row');
+        if (!row) return;
+        var index = Number(row.dataset.datasetIndex);
+        if (!Number.isInteger(index)) return;
+        var meta = chart.getDatasetMeta(index);
+        var nowHidden = !meta.hidden;
+        chart.setDatasetVisibility(index, !nowHidden);
+        chart.update();
+        row.classList.toggle('chart-legend-hidden', nowHidden);
+      });
+    }
+    legendEl.className = 'chart-custom-legend' + (isSide ? ' chart-custom-legend-side' : '');
+    legendEl.style.alignItems = align === 'center' ? 'center' : (align === 'end' ? 'flex-end' : 'flex-start');
+    legendEl.innerHTML = '';
+    chart.data.datasets.forEach(function (ds, i) {
+      var meta = chart.getDatasetMeta(i);
+      var label = ds.label;
+      if (ds._stats && stats.length) {
+        var d = ds._tooltipDecimals != null ? ds._tooltipDecimals : decimals;
+        var u = ds._tooltipUnit ? ' ' + ds._tooltipUnit : '';
+        var parts = [];
+        if (stats.indexOf('min') !== -1) parts.push('min ' + formatAxisValue(ds._stats.min, d) + u);
+        if (stats.indexOf('max') !== -1) parts.push('max ' + formatAxisValue(ds._stats.max, d) + u);
+        if (stats.indexOf('avg') !== -1) parts.push('avg ' + formatAxisValue(ds._stats.avg, d) + u);
+        if (stats.indexOf('current') !== -1) parts.push('now ' + formatAxisValue(ds._stats.current, d) + u);
+        if (parts.length) label += '  (' + parts.join(', ') + ')';
+      }
+      var row = document.createElement('div');
+      row.className = 'chart-legend-row' + (meta.hidden ? ' chart-legend-hidden' : '');
+      row.dataset.datasetIndex = String(i);
+      var swatch = document.createElement('span');
+      swatch.className = 'chart-legend-swatch';
+      swatch.style.background = ds.borderColor;
+      var text = document.createElement('span');
+      text.className = 'chart-legend-text';
+      // textContent, not innerHTML — a series name comes from a monitor's own free-text label/
+      // override, so it needs the same escaping any other user-supplied text would.
+      text.textContent = label;
+      row.appendChild(swatch);
+      row.appendChild(text);
+      legendEl.appendChild(row);
+    });
+    if (position === 'left' || position === 'top') wrap.insertBefore(legendEl, wrap.firstChild);
+    else wrap.appendChild(legendEl);
+  }
+
   // Draws each threshold either as a horizontal dashed line (the original behavior) or, for a
   // threshold whose own style is 'band' (see the Style column in panel-grid.ejs's threshold
   // builder), a translucent filled zone from that threshold's value up to the NEXT threshold's
@@ -191,6 +260,11 @@
     // behavior — a legend only when there's something to distinguish (>1 monitor). 'off' hides it
     // even then; 'top'/'left'/'right' force it on regardless of monitor count.
     var legendPosition = canvas.dataset.legend || 'auto';
+    // Which of min/max/avg/current (each independently toggled, see the chart panel's own Legend
+    // fields) get appended to that series' legend entry — order here is the fixed display order
+    // regardless of what order they were enabled in, not the data-legend-stats attribute's own.
+    var legendStats = (canvas.dataset.legendStats || '').split(',').filter(Boolean);
+    var legendAlign = ['start', 'center', 'end'].indexOf(canvas.dataset.legendAlign) !== -1 ? canvas.dataset.legendAlign : 'start';
     var unit = canvas.dataset.unit || '';
     var decimals = parseInt(canvas.dataset.decimals, 10);
     if (!Number.isFinite(decimals)) decimals = 2;
@@ -308,6 +382,22 @@
         // that oldest reading happened to be).
         var points = s.rows.filter(function (r) { return r.numeric !== null; }).map(function (r) { return { x: new Date(r.t).getTime(), y: r.numeric * seriesScale }; });
         points.sort(function (a, b) { return a.x - b.x; });
+        // Computed from the REAL points only, before the "hold flat" padding point below gets
+        // added — that padding point just repeats the last real value, so leaving it out of min/
+        // max/avg isn't strictly necessary for min/max (a duplicate can't change either), but avg
+        // would otherwise double-weight whichever reading happened to be most recent.
+        var stats = null;
+        if (points.length && legendStats.length) {
+          var sum = 0;
+          var min = points[0].y;
+          var max = points[0].y;
+          points.forEach(function (p) {
+            sum += p.y;
+            if (p.y < min) min = p.y;
+            if (p.y > max) max = p.y;
+          });
+          stats = { min: min, max: max, avg: sum / points.length, current: points[points.length - 1].y };
+        }
         if (points.length) {
           if (earliestMs === null || points[0].x < earliestMs) earliestMs = points[0].x;
           var last = points[points.length - 1];
@@ -336,6 +426,7 @@
           yAxisID: axisId,
           _tooltipUnit: seriesUnit,
           _tooltipDecimals: seriesDecimals,
+          _stats: stats,
         };
       });
 
@@ -358,6 +449,7 @@
         chart.options.scales.x.max = axisMaxMs;
         if (axisMinMs !== null) chart.options.scales.x.min = axisMinMs;
         chart.update('none');
+        buildCustomLegend(canvas, chart, showLegend, resolvedPosition, legendAlign, legendStats, decimals);
         return;
       }
 
@@ -424,7 +516,13 @@
           // types' feel, regardless of whether points are actually visible.
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            legend: { display: showLegend, position: resolvedPosition },
+            // Always off for this chart type — see buildCustomLegend below, called right after
+            // this chart is created (and again on every live refresh). Chart.js's own canvas-drawn
+            // legend wraps as many series as fit side by side on one row at position:top/bottom;
+            // once a series' own label can also carry a min/max/avg/current stat onto that SAME
+            // line, two of those sharing a row got unreadable fast, and there's no built-in way to
+            // force one series per line short of replacing the whole thing.
+            legend: { display: false },
             // Only meaningfully active when data-zoom="1" (see the Zoom & pan toggle in
             // panel-grid.ejs) — chartjs-plugin-zoom is registered globally (harmless/inert for
             // every other chart) but each instance's own pan/zoom stays off unless enabled here.
@@ -453,6 +551,7 @@
           scales: scales,
         },
       });
+      buildCustomLegend(canvas, chart, showLegend, resolvedPosition, legendAlign, legendStats, decimals);
     }
 
     // Polar Area/Doughnut/Pie/Radar/Bar-compare — a snapshot of each monitor's CURRENT value, not

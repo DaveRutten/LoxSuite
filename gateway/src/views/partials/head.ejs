@@ -16,7 +16,7 @@
     })();
   </script>
 </head>
-<body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>" data-dash-range="<%= typeof dashboardRange !== 'undefined' && dashboardRange ? 'true' : '' %>" data-page-size="<%= tablePageSize %>">
+<body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>" data-page-size="<%= tablePageSize %>">
 <div class="app-shell">
   <%
     // Hidden on desktop entirely via CSS (display:none outside the mobile breakpoint) — always
@@ -163,7 +163,40 @@
   <div class="content">
     <header class="topbar">
       <button type="button" id="mobile-nav-toggle" class="icon-btn mobile-nav-toggle" title="Menu"><%- icon('menu') %></button>
-      <h1><%= pageTitle %></h1>
+      <div class="topbar-title">
+        <h1 id="page-title"><%= pageTitle %></h1>
+        <% if (typeof dashboardId !== 'undefined' && typeof canEditPanels !== 'undefined' && canEditPanels) { %>
+        <button type="button" id="dashboard-rename-trigger" class="icon-btn" title="Rename dashboard" aria-label="Rename dashboard"><%- icon('edit') %></button>
+        <form method="post" action="/dashboards/<%= dashboardId %>/rename" id="dashboard-rename-form" class="dashboard-rename-form" hidden>
+          <input type="hidden" name="redirect_to" value="/dashboards/<%= dashboardId %>">
+          <input type="text" name="name" value="<%= pageTitle %>" required>
+          <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+          <button type="button" id="dashboard-rename-cancel" class="btn-soft">Cancel</button>
+        </form>
+        <script>
+          // Standalone, not the shared [data-toggle-row] mechanism (tables.js) — that one only
+          // ever targets a <tr class="expand-row"> inside a table, since it needs a <td> to fold
+          // content into; the topbar h1 here isn't a table row at all.
+          (function () {
+            var trigger = document.getElementById('dashboard-rename-trigger');
+            var form = document.getElementById('dashboard-rename-form');
+            var title = document.getElementById('page-title');
+            var cancelBtn = document.getElementById('dashboard-rename-cancel');
+            trigger.addEventListener('click', function () {
+              title.hidden = true;
+              trigger.hidden = true;
+              form.hidden = false;
+              form.querySelector('input[name="name"]').focus();
+            });
+            cancelBtn.addEventListener('click', function () {
+              form.hidden = true;
+              title.hidden = false;
+              trigger.hidden = false;
+            });
+          })();
+        </script>
+        <% } %>
+      </div>
       <%
         const helpAnchors = {
           dashboard: 'dashboard', monitor: 'monitor', dashboards: 'dashboards', miniservers: 'miniservers', hardware: 'hardware', 'live-data': 'live-data', 'mqtt-to-loxone': 'mqtt-to-loxone',
@@ -174,6 +207,39 @@
         const helpAnchor = helpAnchors[active];
       %>
       <div class="topbar-right">
+        <% if (typeof topbarRange !== 'undefined' && topbarRange) { %>
+        <%
+          // A page-wide time filter next to the auto-refresh control — opted into by My Dashboards
+          // (NOT the shared Home dashboard, which has no use for it) and every Logs tab. Drives a
+          // plain ?range= query param via a real navigation (shareable/bookmarkable, and rides
+          // along for free on every live-refresh cycle — foot.ejs's own tick() re-fetches
+          // location.pathname+location.search on every tick) rather than a fetch-and-swap.
+          //
+          // This is a SEPARATE <form> from whatever other filters the page has (Logs' own
+          // Contains/Level/Apply form) — each carries the OTHER's current value forward as a
+          // hidden field (topbarRangeExtra here; Logs' own inline form does the same for `range`,
+          // see e.g. logs-system.ejs), so submitting either one doesn't silently drop what the
+          // other had set.
+          const topbarRangeExtraParams = typeof topbarRangeExtra !== 'undefined' && topbarRangeExtra ? topbarRangeExtra : {};
+        %>
+        <form method="get" action="<%= typeof topbarRangeAction !== 'undefined' ? topbarRangeAction : '' %>" class="range-picker-form">
+          <%- rangeField(typeof topbarRangeValue !== 'undefined' ? topbarRangeValue : '', { autoSubmit: true, blankLabel: typeof topbarRangeBlankLabel !== 'undefined' ? topbarRangeBlankLabel : undefined }) %>
+          <% Object.keys(topbarRangeExtraParams).forEach(function (key) { %>
+            <% if (topbarRangeExtraParams[key]) { %><input type="hidden" name="<%= key %>" value="<%= topbarRangeExtraParams[key] %>"><% } %>
+          <% }) %>
+          <button type="submit" class="btn-soft range-go-btn">Go</button>
+        </form>
+        <% } %>
+        <%
+          // Was scattered as its own little "hide help text" button above nearly every settings-
+          // style form (Settings, Miniservers add/edit, ...) — one shared copy here instead, right
+          // next to Help/Notifications, toggles the exact same sitewide `panel-hints-hidden` body
+          // class every page's own .hint text already responds to (see foot.ejs). Deliberately left
+          // ALONE on the Add-panel form (panel-grid.ejs) and Monitor detail's own chart-settings
+          // form (monitor-detail.ejs) — those stay as their own dedicated buttons right there, since
+          // that's a drawer/inline form a user is actively filling in, not a quick sitewide toggle.
+        %>
+        <button type="button" id="topbar-hints-toggle" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide help text under form fields sitewide"><%- icon('lightbulb') %></button>
         <% if (helpAnchor) { %>
           <a class="topbar-help" href="/help#help-<%= helpAnchor %>" data-help-open data-help-anchor="help-<%= helpAnchor %>" title="Explain this page" aria-label="Help">
             <%- icon('help') %>

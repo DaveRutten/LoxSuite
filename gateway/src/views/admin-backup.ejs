@@ -271,7 +271,7 @@
       applyBackendVisibility();
     })();
   </script>
-  <div id="rclone-save-row" style="margin-top:0.9rem; display:<%= settings.rclone_enabled ? 'flex' : 'none' %>; align-items:center; gap:0.6rem;">
+  <div id="rclone-save-row" class="btn-row" style="margin-top:0.9rem; display:<%= settings.rclone_enabled ? 'flex' : 'none' %>;">
     <button type="submit" form="rclone-settings-form" class="btn-edit"><%- icon('edit') %> Save</button>
     <form method="post" action="/admin/backup/rclone/test" style="margin:0;">
       <button type="submit" class="btn-test"><%- icon('refresh') %> Test connection</button>

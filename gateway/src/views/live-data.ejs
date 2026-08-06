@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: 'Live Data', active: 'live-data' }) %>
+<%- include('partials/head', { pageTitle: 'Live Data', active: 'live-data', refresh: 60, liveSwap: true }) %>
 
 <p class="hint">
   Every control the selected Miniserver's structure file knows about, grouped by room and then by
@@ -56,7 +56,13 @@
 <% } %>
 
 <% if (miniserverId) { %>
-<div class="table-toolbar" style="margin-bottom:1.25rem; border-radius:var(--radius); border:1px solid var(--border);">
+<%
+  // padding-right matches .add-panel summary's own 1.4rem (not .table-toolbar's usual 1.1rem) so
+  // Refresh here lines up with Suggest dashboard on every room row directly below it — those are
+  // .add-panel cards, not .table-wrap ones, so this toolbar's normal right edge (calibrated for a
+  // table's own cells) sits 0.3rem further right than the room rows it's stacked on top of here.
+%>
+<div class="table-toolbar" style="margin-bottom:1.25rem; border-radius:var(--radius); border:1px solid var(--border); padding-right:1.4rem;">
   <% if (rooms.length > 0) { %>
   <div class="search-combo" style="max-width:100%;">
     <select id="live-data-filter-field">
@@ -73,11 +79,25 @@
 </div>
 <% } %>
 
+<div id="live-data-rooms">
 <% rooms.forEach(room => { %>
   <details class="add-panel live-data-room" data-room-uuid="<%= room.roomUuid %>" data-miniserver-id="<%= miniserverId %>">
     <summary>
       <%= room.name %>
-      <span class="hint" style="margin:0;">(<%= room.categoryCount %> categor<%= room.categoryCount === 1 ? 'y' : 'ies' %>, <%= room.controlCount %> control<%= room.controlCount === 1 ? '' : 's' %>)</span>
+      <span class="hint live-data-room-summary-count" style="margin:0;">(<%= room.categoryCount %> categor<%= room.categoryCount === 1 ? 'y' : 'ies' %>, <%= room.controlCount %> control<%= room.controlCount === 1 ? '' : 's' %>)</span>
+      <%
+        // Rides in the same right-aligned slot as Suggest dashboard just below (see
+        // .live-data-inline-bulk in style.css) rather than its own standalone full-width bar —
+        // shows/hides identically on EVERY room's own copy since selection is tracked globally
+        // (checkboxes can span rooms), all wired to the same document-level state in the script
+        // near the bottom of this file.
+      %>
+      <span class="live-data-inline-bulk hint" hidden>
+        <span class="live-data-bulk-count"></span>
+        <button type="button" class="primary live-data-bulk-monitor" title="Monitor every selected control"><%- icon('plus') %> Monitor selected</button>
+        <button type="button" class="primary live-data-bulk-widget" title="Add every selected control as a dashboard widget"><%- icon('plus') %> Widget selected</button>
+        <button type="button" class="btn-soft live-data-bulk-clear">Clear selection</button>
+      </span>
       <% if (suggestionsEnabled) { %>
         <button type="button" class="btn-soft suggest-dashboard-btn" title="Generate a starter dashboard for this room">Suggest dashboard</button>
       <% } %>
@@ -93,6 +113,7 @@
     <div class="suggest-preview" hidden></div>
   <% } %>
 <% }) %>
+</div>
 
 <script>
   (function () {
@@ -197,23 +218,32 @@
       // content, so two categories next to each other visually don't line up at all. A <colgroup>
       // with fixed percentages keeps every category's table the same shape regardless of content.
       table.appendChild(el('colgroup', {}, [
-        el('col', { style: 'width:22%;' }),
-        el('col', { style: 'width:14%;' }),
-        el('col', { style: 'width:44%;' }),
+        el('col', { style: 'width:4%;' }),
+        el('col', { style: 'width:20%;' }),
+        el('col', { style: 'width:13%;' }),
+        el('col', { style: 'width:43%;' }),
         el('col', { style: 'width:20%;' }),
       ]));
       var thead = el('thead');
-      thead.appendChild(el('tr', {}, [el('th', { text: 'Control' }), el('th', { text: 'State' }), el('th', { text: 'Value' }), el('th', { text: 'Actions' })]));
+      thead.appendChild(el('tr', {}, [
+        el('th', {}, [el('input', { type: 'checkbox', class: 'live-data-select-all', title: 'Select every row in this category' })]),
+        el('th', { text: 'Control' }), el('th', { text: 'State' }), el('th', { text: 'Value' }), el('th', { text: 'Actions' }),
+      ]));
       table.appendChild(thead);
       var tbody = el('tbody', { class: 'live-data-body' });
 
       cat.controls.forEach(function (control) {
         control.states.forEach(function (s) {
           var row = el('tr');
+          var label = [control.name, s.stateName].filter(Boolean).join(' / ');
+          var checkbox = el('input', {
+            type: 'checkbox', class: 'live-data-row-select',
+            'data-miniserver-id': miniserverId, 'data-uuid': s.uuid, 'data-label': label,
+          });
+          row.appendChild(el('td', {}, [checkbox]));
           row.appendChild(el('td', {}, [document.createTextNode(control.name + ' '), el('span', { class: 'hint', style: 'margin:0;', text: '(' + control.type + ')' })]));
           row.appendChild(el('td', { text: s.stateName }));
           row.appendChild(el('td', { 'data-value-for': s.uuid, class: 'hint' }, [document.createTextNode('…')]));
-          var label = [control.name, s.stateName].filter(Boolean).join(' / ');
           var actions = el('div', { class: 'row-actions' }, [
             buildMonitorForm(miniserverId, s.uuid, label),
             buildWidgetForm(miniserverId, s.uuid, label),
@@ -624,8 +654,17 @@
       });
     }
 
+    // Debounced on typing only (not the field-select change, and not the MutationObserver below) —
+    // applyFilter walks every room/category/row in the whole page (hundreds of controls on a real
+    // structure), so running it on every single keystroke made fast typing visibly lag behind. A
+    // short pause after the last keystroke is imperceptible but lets several keystrokes in a row
+    // share one filter pass instead of one each.
+    var debounceTimer = null;
+    queryInput.addEventListener('input', function () {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(applyFilter, 250);
+    });
     fieldSelect.addEventListener('change', applyFilter);
-    queryInput.addEventListener('input', applyFilter);
     // Re-applies once a room/category finishes lazily loading, so an already-typed filter keeps
     // working on content that didn't exist yet when it was first typed.
     new MutationObserver(applyFilter).observe(document.body, { childList: true, subtree: true });
@@ -647,6 +686,148 @@
       applyFilter();
     });
   })();
+</script>
+
+<script>
+  // Checkbox selection + bulk +Monitor/+Widget across every room/category on the page — event
+  // delegation throughout (not per-row listeners at creation time) since rows are built lazily as
+  // rooms/categories are expanded, well after this script has already run once.
+  (function () {
+    // One .live-data-inline-bulk copy per room (see its own comment in the markup above) rather
+    // than a single global bar — all driven from the SAME selection state below, so every copy
+    // shows/hides and updates its count in lockstep regardless of which room's checkboxes changed.
+    var clusters = Array.prototype.slice.call(document.querySelectorAll('.live-data-inline-bulk'));
+    if (!clusters.length) return;
+
+    function selectedCheckboxes() {
+      return Array.prototype.slice.call(document.querySelectorAll('.live-data-row-select:checked'));
+    }
+
+    function updateBar() {
+      var n = selectedCheckboxes().length;
+      clusters.forEach(function (cluster) {
+        cluster.hidden = n === 0;
+        cluster.querySelector('.live-data-bulk-count').textContent = n + ' selected';
+      });
+    }
+
+    document.addEventListener('change', function (e) {
+      if (e.target.classList.contains('live-data-select-all')) {
+        var tbody = e.target.closest('table').querySelector('.live-data-body');
+        tbody.querySelectorAll('.live-data-row-select').forEach(function (cb) { cb.checked = e.target.checked; });
+        updateBar();
+        return;
+      }
+      if (e.target.classList.contains('live-data-row-select')) {
+        // Keep that category's own "select all" box in sync — checked only once every one of its
+        // rows is, indeterminate for a partial selection, same tri-state convention as any other
+        // bulk-select-all checkbox.
+        var table = e.target.closest('table');
+        var selectAll = table.querySelector('.live-data-select-all');
+        var boxes = Array.prototype.slice.call(table.querySelectorAll('.live-data-row-select'));
+        var checkedCount = boxes.filter(function (cb) { return cb.checked; }).length;
+        selectAll.checked = checkedCount === boxes.length;
+        selectAll.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+        updateBar();
+      }
+    });
+
+    function clearSelection() {
+      selectedCheckboxes().forEach(function (cb) { cb.checked = false; });
+      document.querySelectorAll('.live-data-select-all').forEach(function (cb) { cb.checked = false; cb.indeterminate = false; });
+      updateBar();
+    }
+
+    // JSON body — csrf.js exempts application/json requests from the CSRF check entirely (see
+    // partials/foot.ejs's own stampCsrfTokens comment), so these need no token of their own, and
+    // the existing /monitor and /dashboards/quick-add-loxone routes read req.body identically
+    // either way (express.json() populates it the same shape express.urlencoded() would).
+    // `siblingClass` re-labels every OTHER room's copy of the same button too, not just the one
+    // actually clicked, so all of them read "Adding N…" together instead of just the one under
+    // whichever room summary happened to be clicked.
+    function bulkAdd(url, buildBody, siblingClass, label) {
+      var boxes = selectedCheckboxes();
+      if (boxes.length === 0) return;
+      var buttons = Array.prototype.slice.call(document.querySelectorAll('.' + siblingClass));
+      buttons.forEach(function (b) { b.disabled = true; b.textContent = 'Adding ' + boxes.length + '…'; });
+      Promise.allSettled(boxes.map(function (cb) {
+        return fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildBody(cb)),
+        });
+      })).then(function (results) {
+        var failed = results.filter(function (r) { return r.status !== 'fulfilled' || !r.value.ok; }).length;
+        buttons.forEach(function (b) { b.disabled = false; b.textContent = label; });
+        clearSelection();
+        window.alert(failed === 0
+          ? 'Added ' + boxes.length + (boxes.length === 1 ? ' item' : ' items') + '.'
+          : (boxes.length - failed) + ' of ' + boxes.length + ' added — ' + failed + ' failed.');
+      });
+    }
+
+    // Buttons live inside <summary>, so a click needs stopping from also toggling that room open
+    // or closed — same reasoning/pattern as .suggest-dashboard-btn's own click handler above.
+    document.querySelectorAll('.live-data-bulk-clear').forEach(function (btn) {
+      btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); clearSelection(); });
+    });
+    document.querySelectorAll('.live-data-bulk-monitor').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        bulkAdd('/monitor', function (cb) {
+          return { source_type: 'loxone', miniserver_id: cb.dataset.miniserverId, loxone_uuid: cb.dataset.uuid, label: cb.dataset.label };
+        }, 'live-data-bulk-monitor', btn.textContent);
+      });
+    });
+    document.querySelectorAll('.live-data-bulk-widget').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        bulkAdd('/dashboards/quick-add-loxone', function (cb) {
+          return { miniserver_id: cb.dataset.miniserverId, loxone_uuid: cb.dataset.uuid, label: cb.dataset.label };
+        }, 'live-data-bulk-widget', btn.textContent);
+      });
+    });
+  })();
+</script>
+
+<script>
+  // Background structure refresh — driven by the shared auto-refresh timer (partials/head.ejs's
+  // refresh:60/liveSwap:true above gives this page the same topbar interval/pause control every
+  // other auto-refreshing page has; partials/foot.ejs's own tick() calls window.refreshTables()
+  // after each one). liveSwap's generic swapFrom() only touches [data-live-id] elements and
+  // .table-wrap/.panel-table tbodies — none of which this page's server-rendered HTML contains
+  // (every category table here is built client-side after a room is opened, see the big IIFE
+  // above), so it's a safe no-op here and this function is the only thing that actually runs.
+  //
+  // Deliberately narrow: only refreshes each EXISTING room's own category/control count text —
+  // never touches which rooms/categories are open or what's already loaded inside them, so nothing
+  // collapses or flickers. A genuinely new/removed room (Loxone Config rarely changes this) falls
+  // back to one plain reload rather than duplicating this file's own <details>-building markup a
+  // second time in JS just to insert/remove one client-side without a refresh.
+  window.refreshTables = function () {
+    var anyRoom = document.querySelector('.live-data-room');
+    if (!anyRoom) return;
+    var miniserverId = anyRoom.dataset.miniserverId;
+    fetch('/live-data/rooms?miniserver_id=' + encodeURIComponent(miniserverId))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.rooms) return;
+        var existingRooms = document.querySelectorAll('.live-data-room');
+        if (data.rooms.length !== existingRooms.length) { location.reload(); return; }
+        data.rooms.some(function (room) {
+          var details = document.querySelector('.live-data-room[data-room-uuid="' + room.roomUuid + '"]');
+          if (!details) { location.reload(); return true; }
+          var countSpan = details.querySelector('.live-data-room-summary-count');
+          if (countSpan) {
+            countSpan.textContent = '(' + room.categoryCount + ' categor' + (room.categoryCount === 1 ? 'y' : 'ies') + ', ' + room.controlCount + ' control' + (room.controlCount === 1 ? '' : 's') + ')';
+          }
+          return false;
+        });
+      })
+      .catch(function () { /* best-effort — counts just stay as they were until the next tick */ });
+  };
 </script>
 
 <%- include('partials/foot') %>

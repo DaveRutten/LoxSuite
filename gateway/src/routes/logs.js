@@ -2,6 +2,8 @@ const express = require('express');
 const db = require('../db');
 const { requirePermission } = require('../middleware/requirePermission');
 const { classifyLogLevel } = require('../logLevel');
+const { resolveRange, rangeToWindow } = require('./monitor');
+const mqttClient = require('../mqttClient');
 
 const router = express.Router();
 
@@ -11,19 +13,23 @@ const MAX_ROWS = 1000;
 // this is the candidate pool size that gets classified/filtered down to MAX_ROWS.
 const FILTER_CANDIDATE_ROWS = 5000;
 
-// datetime-local inputs ("2026-07-28T10:30") have no timezone, so Date() parses them as local
-// time — converting to the same ISO form recorded_at is stored in keeps the string comparison
-// in the SQL WHERE clause correct.
-function toIso(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
+// Shared range vocabulary (presets/custom duration/absolute From-To — see rangeField() in
+// chartFieldHelpers.js and resolveRange/rangeToWindow in routes/monitor.js), same as Monitor
+// detail/Home/the dashboard panel Range field — replaces this page's own previous from/to
+// datetime-local pair, which had no quick presets and (via a plain `new Date(value)`) parsed
+// against the SERVER's own timezone instead of the configured display one.
+//
+// Unlike Monitor detail, an absent/blank range here defaults to 'all', not resolveRange()'s own
+// generic '24h' fallback — this page's own long-standing default (nothing typed in From/To) was
+// "show everything, newest first, capped at MAX_ROWS", and silently narrowing every fresh visit
+// down to the last 24h would be a real behavior change, not just an added convenience.
 function parseFilters(query) {
+  const range = query.range ? resolveRange(query.range) : 'all';
+  const { since, until } = rangeToWindow(range);
   return {
-    from: toIso(query.from),
-    to: toIso(query.to),
+    range,
+    from: since,
+    to: until,
     level: ['error', 'warning', 'info'].includes(query.level) ? query.level : '',
     q: (query.q || '').trim(),
   };
@@ -78,11 +84,14 @@ const LOG_TAB_PATHS = { logs_mqtt: '/logs/mqtt', logs_loxone: '/logs/loxone', lo
 // Own parser, not a reuse of parseFilters() above — notification_events.severity uses a different
 // vocabulary (info/warning/critical, set directly by notifications.js) than classifyLogLevel's
 // (error/warning/info, guessed from free text), so "level" there isn't the same thing as
-// "severity" here.
+// "severity" here. Same 'all'-by-default reasoning as parseFilters() above, though.
 function parseNotificationFilters(query) {
+  const range = query.range ? resolveRange(query.range) : 'all';
+  const { since, until } = rangeToWindow(range);
   return {
-    from: toIso(query.from),
-    to: toIso(query.to),
+    range,
+    from: since,
+    to: until,
     severity: ['info', 'warning', 'critical'].includes(query.severity) ? query.severity : '',
     q: (query.q || '').trim(),
   };
@@ -119,7 +128,13 @@ router.get('/mqtt', requirePermission('logs_mqtt', 'view'), (req, res) => {
   const filters = parseFilters(req.query);
   const rows = queryLogs({ source: 'mqtt', filters });
   const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
-  res.render('logs-mqtt', { rows, query: req.query, retentionDays: settings.log_retention_days });
+  // Same blur+notice treatment as /logs/loxone's own permission gate, different underlying cause:
+  // there's no separate poller error to check here since mosquittoLog.js reads the broker's OWN
+  // log file locally (not over MQTT), which keeps working fine even while the broker itself is
+  // down — mqttClient.state.connected is the actual signal that matters, since a disconnected
+  // broker means nothing NEW is arriving to eventually show up here either way.
+  const brokerOffline = !mqttClient.state.connected;
+  res.render('logs-mqtt', { rows, query: req.query, range: filters.range, retentionDays: settings.log_retention_days, brokerOffline });
 });
 
 router.get('/mqtt/export.txt', requirePermission('logs_mqtt', 'edit'), (req, res) => {
@@ -137,7 +152,7 @@ router.get('/mqtt/export.txt', requirePermission('logs_mqtt', 'edit'), (req, res
 const LOXONE_LINE_TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3});/;
 
 router.get('/loxone', requirePermission('logs_loxone', 'view'), (req, res) => {
-  const miniservers = db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all();
+  const miniservers = db.prepare('SELECT id, name, logbook_error FROM miniservers ORDER BY sort_order, id').all();
   const miniserverId = req.query.miniserver_id ? Number(req.query.miniserver_id) : null;
   const filters = parseFilters(req.query);
 
@@ -147,8 +162,34 @@ router.get('/loxone', requirePermission('logs_loxone', 'view'), (req, res) => {
       return { ...r, miniserverName: r.sourceLabel, displayTime: match ? match[1] : null };
     });
 
+  // Full blur+notice when one specific Miniserver is picked, OR when "all Miniservers" is picked
+  // but EVERY one of them is broken — in that second case there's no working Miniserver's rows
+  // mixed in to make the table still worth looking at, same as the single-Miniserver case. Only
+  // genuinely MIXED results (some working, some not) get the lighter, non-blurring warning banner
+  // instead — blurring the whole table there would wrongly hide rows from whichever Miniserver(s)
+  // are actually fine.
+  const selectedMiniserver = miniserverId ? miniservers.find((m) => m.id === miniserverId) : null;
+  const allBroken = !miniserverId && miniservers.length > 0 && miniservers.every((m) => m.logbook_error);
+  const brokenMiniservers = (!miniserverId && !allBroken) ? miniservers.filter((m) => m.logbook_error) : [];
+  const logbookError = selectedMiniserver
+    ? selectedMiniserver.logbook_error
+    : allBroken
+      ? (miniservers.length === 1
+        ? miniservers[0].logbook_error
+        : `Every configured Miniserver is failing to fetch its Logbook. Most recent error (${miniservers[0].name}): ${miniservers[0].logbook_error}`)
+      : null;
+
   const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
-  res.render('logs-loxone', { rows, miniservers, miniserverId, query: req.query, retentionDays: settings.log_retention_days });
+  res.render('logs-loxone', {
+    rows,
+    miniservers,
+    miniserverId,
+    logbookError,
+    brokenMiniservers,
+    query: req.query,
+    range: filters.range,
+    retentionDays: settings.log_retention_days,
+  });
 });
 
 router.get('/loxone/export.txt', requirePermission('logs_loxone', 'edit'), (req, res) => {
@@ -166,7 +207,7 @@ router.get('/loxone-commands', requirePermission('logs_loxone_commands', 'view')
   const filters = parseFilters(req.query);
   const rows = queryLogs({ source: 'loxone_commands', filters });
   const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
-  res.render('logs-loxone-commands', { rows, query: req.query, retentionDays: settings.log_retention_days });
+  res.render('logs-loxone-commands', { rows, query: req.query, range: filters.range, retentionDays: settings.log_retention_days });
 });
 
 router.get('/loxone-commands/export.txt', requirePermission('logs_loxone_commands', 'edit'), (req, res) => {
@@ -184,7 +225,7 @@ router.get('/system', requirePermission('logs_system', 'view'), (req, res) => {
   const filters = parseFilters(req.query);
   const rows = queryLogs({ source: 'system', filters });
   const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
-  res.render('logs-system', { rows, query: req.query, retentionDays: settings.log_retention_days });
+  res.render('logs-system', { rows, query: req.query, range: filters.range, retentionDays: settings.log_retention_days });
 });
 
 router.get('/system/export.txt', requirePermission('logs_system', 'edit'), (req, res) => {
@@ -198,7 +239,7 @@ router.get('/notifications', requirePermission('logs_notifications', 'view'), (r
   const filters = parseNotificationFilters(req.query);
   const rows = queryNotificationEvents(filters);
   const settings = db.prepare('SELECT notification_retention_days FROM gateway_settings WHERE id = 1').get();
-  res.render('logs-notifications', { rows, query: req.query, retentionDays: settings.notification_retention_days });
+  res.render('logs-notifications', { rows, query: req.query, range: filters.range, retentionDays: settings.notification_retention_days });
 });
 
 router.get('/notifications/export.txt', requirePermission('logs_notifications', 'edit'), (req, res) => {

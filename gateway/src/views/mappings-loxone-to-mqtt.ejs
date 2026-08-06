@@ -118,9 +118,9 @@
         <tr>
           <td><span class="badge badge-live <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
           <td>
-            <div style="display:flex; align-items:center; gap:0.35rem;">
-              <code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code>
-              <button type="button" class="copy-btn btn-soft" data-copy="<%= m.mqtt_topic %>" title="Copy the MQTT topic">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:0.35rem;">
+              <code class="truncate" style="flex:1; min-width:0; max-width:none;" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code>
+              <button type="button" class="copy-btn btn-soft" style="flex-shrink:0;" data-copy="<%= m.mqtt_topic %>" title="Copy the MQTT topic">
                 <%- icon('copy') %> <span class="btn-label">Copy</span>
               </button>
             </div>
@@ -133,9 +133,9 @@
           <td>
             <code class="truncate" title="<%= m.token %>"><%= m.token %></code>
             <% if (m.transport === 'udp') { %>
-            <div class="hint" style="margin:0.3rem 0 0; display:flex; align-items:center; gap:0.35rem;">
-              UDP message: <code class="truncate" title="<%= m.udpMessage %>"><%= m.udpMessage %></code>
-              <button type="button" class="copy-btn btn-soft" data-copy="<%= m.udpMessage %>" title="Copy the exact &quot;&lt;token&gt;=&lt;value&gt;&quot; message a Virtual UDP Output should send">
+            <div class="hint" style="margin:0.3rem 0 0; display:flex; align-items:center; justify-content:space-between; gap:0.35rem;">
+              <code class="truncate" style="flex:1; min-width:0; max-width:none;" title="UDP message: <%= m.udpMessage %>">UDP message: <%= m.udpMessage %></code>
+              <button type="button" class="copy-btn btn-soft" style="flex-shrink:0;" data-copy="<%= m.udpMessage %>" title="Copy the exact &quot;&lt;token&gt;=&lt;value&gt;&quot; message a Virtual UDP Output should send">
                 <%- icon('copy') %> <span class="btn-label">Copy</span>
               </button>
             </div>
@@ -143,9 +143,9 @@
           </td>
           <td><%= m.transport === 'udp' ? m.udpPort : '-' %></td>
           <td>
-            <div class="hint" style="margin:0; display:flex; align-items:center; gap:0.35rem;">
-              Loxone Command: <code class="truncate" title="<%= m.mqtt_topic %> \v"><%= m.mqtt_topic %> \v</code>
-              <button type="button" class="copy-btn btn-soft" data-copy="<%= m.mqtt_topic %> \v" title="Copy for a native MQTT Virtual Output's Command Recognition field (Loxone Config 12+) — bypasses this HTTP/UDP bridge entirely">
+            <div class="hint" style="margin:0; display:flex; align-items:center; justify-content:space-between; gap:0.35rem;">
+              <code class="truncate" style="flex:1; min-width:0; max-width:none;" title="Loxone Command: <%= m.mqtt_topic %> \v">Loxone Command: <%= m.mqtt_topic %> \v</code>
+              <button type="button" class="copy-btn btn-soft" style="flex-shrink:0;" data-copy="<%= m.mqtt_topic %> \v" title="Copy for a native MQTT Virtual Output's Command Recognition field (Loxone Config 12+) — bypasses this HTTP/UDP bridge entirely">
                 <%- icon('copy') %> <span class="btn-label">Copy</span>
               </button>
             </div>
@@ -171,22 +171,24 @@
         <% if (canEdit('loxone_to_mqtt')) { %>
         <tr class="expand-row" id="test-row-<%= m.id %>">
           <td colspan="9">
-            <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
-              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">Value to send:</label>
-              <% if (m.translationValues && m.translationValues.length > 0) { %>
-                <select class="test-value-input" style="max-width:12rem;">
-                  <% m.translationValues.forEach(v => { %><option value="<%= v %>"><%= v %></option><% }) %>
-                </select>
-              <% } else { %>
-                <div class="value-suggest-wrap">
-                  <input type="text" class="test-value-input value-suggest-input" autocomplete="off" placeholder="e.g. on" style="max-width:12rem;">
-                  <div class="value-suggest-list" hidden>
-                    <% ['1', '0', 'on', 'off', 'true', 'false'].forEach(v => { %><button type="button" data-value="<%= v %>"><%= v %></button><% }) %>
+            <div style="display:flex; flex-direction:column; gap:0.4rem; margin-top:0.5rem;">
+              <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+                <label style="margin:0; font-size:0.78rem;">Value to send:</label>
+                <% if (m.translationValues && m.translationValues.length > 0) { %>
+                  <select class="test-value-input" style="max-width:12rem;">
+                    <% m.translationValues.forEach(v => { %><option value="<%= v %>"><%= v %></option><% }) %>
+                  </select>
+                <% } else { %>
+                  <div class="value-suggest-wrap">
+                    <input type="text" class="test-value-input value-suggest-input" autocomplete="off" placeholder="e.g. on" style="max-width:12rem;">
+                    <div class="value-suggest-list" hidden>
+                      <% ['1', '0', 'on', 'off', 'true', 'false'].forEach(v => { %><button type="button" data-value="<%= v %>"><%= v %></button><% }) %>
+                    </div>
                   </div>
-                </div>
-              <% } %>
-              <button type="button" class="test-send-btn btn-test" data-mapping-id="<%= m.id %>"><%- icon('link') %> Send</button>
-              <span class="hint test-result" style="margin:0;"></span>
+                <% } %>
+                <button type="button" class="test-send-btn btn-test" style="margin-left:auto;" data-mapping-id="<%= m.id %>"><%- icon('link') %> Send</button>
+              </div>
+              <span class="hint test-result" style="margin:0; font-size:0.78rem;"></span>
             </div>
           </td>
         </tr>
@@ -284,6 +286,24 @@
     if (!e.target.classList.contains('value-suggest-input')) return;
     var list = e.target.parentElement.querySelector('.value-suggest-list');
     if (list) list.hidden = false;
+    // If this whole test panel is living inside a kebab-collapsed row-actions-popover (see
+    // collapseRowActions in tables.js), that popover's own max-height was already capped BEFORE
+    // this dropdown existed to measure (it only reveals on focus, well after the popover itself
+    // opened) — without regrowing it here too, the newly-shown list got clipped by the popover's
+    // own overflow-y:auto instead of just being visible, same fix already applied for opening the
+    // test panel itself.
+    var popover = e.target.closest('.row-actions-popover');
+    if (popover && list) {
+      popover.style.maxHeight = Math.min(popover.scrollHeight, window.innerHeight * 0.85) + 'px';
+      // The list is `position:absolute` (see .value-suggest-list in style.css), so it takes no
+      // part in the popover's own scrollHeight above no matter how far it pokes out below the
+      // popover's actual (shrink-to-fit) box — left as overflow-y:auto, that box clips the list
+      // exactly where its own in-flow content ends, which is what "the dropdown disappears the
+      // moment you click the field" actually was: it opened, then was immediately clipped away.
+      // Switching to visible while it's open trades the popover's own scrollbar (not needed here —
+      // this merged panel's content is short) for actually letting the list show past the box.
+      popover.style.overflowY = 'visible';
+    }
   });
   document.addEventListener('focusout', function (e) {
     if (!e.target.classList.contains('value-suggest-input')) return;
@@ -293,7 +313,10 @@
     // Delayed so a mousedown on a suggestion button (which blurs the input first) still gets its
     // click handled — and its own explicit input.focus() re-applied — before this fires.
     setTimeout(function () {
-      if (!wrap.contains(document.activeElement)) list.hidden = true;
+      if (wrap.contains(document.activeElement)) return;
+      list.hidden = true;
+      var popover = wrap.closest('.row-actions-popover');
+      if (popover) popover.style.overflowY = ''; // back to the stylesheet's own auto
     }, 150);
   });
   document.addEventListener('click', function (e) {

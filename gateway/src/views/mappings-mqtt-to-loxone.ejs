@@ -102,7 +102,7 @@
       <% mappings.forEach(m => { %>
         <tr>
           <td><span class="badge badge-live <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
-          <td><code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
+          <td><code class="truncate" style="max-width:none; width:100%;" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
           <td><%= m.miniserver_name %></td>
           <td><%= m.transport %></td>
           <td><%= m.target %></td>

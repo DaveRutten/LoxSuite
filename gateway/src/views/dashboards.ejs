@@ -32,7 +32,7 @@
           <td><%= d.panelCount %></td>
           <td>
             <div class="row-actions">
-              <a class="inline" href="/dashboards/<%= d.id %>"><button type="button"><%- icon('list') %> Open</button></a>
+              <a class="inline" href="/dashboards/<%= d.id %>"><button type="button" class="btn-soft"><%- icon('list') %> Open</button></a>
               <form class="inline" method="post" action="/dashboards/<%= d.id %>/<%= d.isFavorited ? 'unfavorite' : 'favorite' %>">
                 <input type="hidden" name="redirect_to" value="/dashboards">
                 <button type="submit" class="btn-soft favorite-toggle-btn <%= d.isFavorited ? 'is-favorited' : '' %>" title="<%= d.isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>"><%- icon('star') %> <%= d.isFavorited ? 'Remove from favorite' : 'Add to favorite' %></button>
@@ -49,7 +49,7 @@
           <td colspan="3">
             <form method="post" action="/dashboards/<%= d.id %>/rename" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
               <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">New name:</label>
-              <input type="text" name="name" value="<%= d.name %>" required style="max-width:16rem;">
+              <input type="text" name="name" value="<%= d.name %>" required style="flex:1; min-width:8rem; max-width:24rem;">
               <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
             </form>
           </td>
@@ -158,7 +158,7 @@
             <td><span class="badge badge-live <%= d.canEdit ? 'badge-ok' : 'badge-neutral' %>"><%= d.canEdit ? 'Editor' : 'Viewer' %></span></td>
             <td>
               <div class="row-actions">
-                <a class="inline" href="/dashboards/<%= d.id %>"><button type="button"><%- icon('list') %> Open</button></a>
+                <a class="inline" href="/dashboards/<%= d.id %>"><button type="button" class="btn-soft"><%- icon('list') %> Open</button></a>
                 <form class="inline" method="post" action="/dashboards/<%= d.id %>/<%= d.isFavorited ? 'unfavorite' : 'favorite' %>">
                   <input type="hidden" name="redirect_to" value="/dashboards">
                   <button type="submit" class="btn-soft favorite-toggle-btn <%= d.isFavorited ? 'is-favorited' : '' %>" title="<%= d.isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>"><%- icon('star') %> <%= d.isFavorited ? 'Remove from favorite' : 'Add to favorite' %></button>

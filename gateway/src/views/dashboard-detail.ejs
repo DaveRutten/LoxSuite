@@ -1,24 +1,18 @@
-<%- include('partials/head', { pageTitle: dashboard.name, active: 'dashboards', refresh: 5, liveSwap: true, dashboardRange: true, dashboardId: dashboard.id }) %>
+<%- include('partials/head', { pageTitle: dashboard.name, active: 'dashboards', refresh: 5, liveSwap: true, dashboardId: dashboard.id, canEditPanels: canEditPanels, topbarRange: true, topbarRangeValue: currentRange, topbarRangeBlankLabel: 'Default range' }) %>
 
-<p class="hint" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+<p class="hint">
   <span>
     <a href="/dashboards">&larr; back to My Dashboards</a>
     <% if (sharedByOwner) { %>
       &mdash; shared with you by <%= sharedByOwner %><%= canEditPanels ? ' (you can edit)' : ' (view only)' %>
     <% } %>
   </span>
-  <form method="post" action="/dashboards/<%= dashboard.id %>/<%= isFavorited ? 'unfavorite' : 'favorite' %>" style="margin-left:auto;">
-    <input type="hidden" name="redirect_to" value="/dashboards/<%= dashboard.id %>">
-    <button type="submit" class="btn-soft favorite-toggle-btn <%= isFavorited ? 'is-favorited' : '' %>" title="<%= isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>">
-      <%- icon('star') %> <%= isFavorited ? 'Remove from favorite' : 'Add to favorite' %>
-    </button>
-  </form>
 </p>
 
 <% if (error) { %>
   <p class="error"><%= error %></p>
 <% } %>
 
-<%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEditPanels, defaultPanelDecimals: defaultPanelDecimals, panelTypeDefaultsExist: panelTypeDefaultsExist }) %>
+<%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEditPanels, defaultPanelDecimals: defaultPanelDecimals, panelTypeDefaultsExist: panelTypeDefaultsExist, isFavorited: isFavorited }) %>
 
 <%- include('partials/foot') %>

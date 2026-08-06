@@ -63,7 +63,7 @@ function insertHistory(monitorId, value) {
   const numericValue = toNumeric(value);
   db.prepare('INSERT INTO monitor_history (monitor_id, recorded_at, value, numeric_value) VALUES (?, ?, ?, ?)')
     .run(monitorId, recordedAt, String(value), numericValue);
-  currentValues.set(monitorId, { value: String(value), recordedAt });
+  currentValues.set(monitorId, { value: String(value), recordedAt, numericValue });
   if (numericValue !== null) {
     checkMonitorThreshold(monitorId, numericValue);
     checkThresholdLadderNotify(monitorId, numericValue);
@@ -196,7 +196,7 @@ function getCurrentValue(monitorId) {
   const cached = currentValues.get(monitorId);
   if (cached) return cached;
 
-  const row = db.prepare('SELECT value, recorded_at AS recordedAt FROM monitor_history WHERE monitor_id = ? ORDER BY recorded_at DESC LIMIT 1').get(monitorId);
+  const row = db.prepare('SELECT value, recorded_at AS recordedAt, numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ? ORDER BY recorded_at DESC LIMIT 1').get(monitorId);
   if (!row) return null;
   currentValues.set(monitorId, row);
   return row;

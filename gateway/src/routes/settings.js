@@ -5,6 +5,7 @@ const { requirePermission } = require('../middleware/requirePermission');
 const { invalidateTimezoneCache } = require('../dateFormat');
 const { logSystemEvent } = require('../auditLog');
 const { encrypt, decrypt } = require('../secretCrypto');
+const { getAllDistinctStateNames } = require('../loxoneStructure');
 
 function isValidTimezone(tz) {
   try {
@@ -81,6 +82,16 @@ router.post('/', requirePermission('settings', 'edit'), (req, res) => {
   }
   db.prepare('UPDATE gateway_settings SET dashboard_suggestions_enabled = ? WHERE id = 1').run(req.body.dashboard_suggestions_enabled ? 1 : 0);
 
+  // One state name per line — plain textarea rather than individual add/remove rows, since this
+  // is a short, infrequently-edited list. Always overwritten (not skipped when empty) so clearing
+  // every line and saving actually clears the setting, unlike the numeric fields above which treat
+  // "didn't parse" as "leave it alone".
+  const hiddenStates = String(req.body.live_data_hidden_states || '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  db.prepare('UPDATE gateway_settings SET live_data_hidden_states = ? WHERE id = 1').run(JSON.stringify(hiddenStates));
+
   // The one per-user field on this otherwise gateway-wide page (see settings-general.ejs's own
   // "Table preferences" card) — still saved against THIS user's own row, not gateway_settings.
   const pageSizeRaw = Number(req.body.table_page_size);
@@ -89,6 +100,15 @@ router.post('/', requirePermission('settings', 'edit'), (req, res) => {
 
   logSystemEvent(`"${req.user.username}" updated general settings.`);
   res.render('settings-general', { gatewaySettings: loadGatewaySettings(), timezones: TIMEZONES, saved: true, error: null });
+});
+
+// Backs the "Hidden state names" field's autocomplete (settings-general.ejs) — every distinct
+// state-name key across every configured Miniserver's structure, so picking one to hide (or to
+// un-hide) doesn't mean guessing the exact spelling Loxone itself uses (e.g. "jLocked", not
+// "jlocked" or "locked"). Read-only, no permission gate beyond this router's own settings/view.
+router.get('/live-data-state-names', (req, res) => {
+  const miniservers = db.prepare('SELECT * FROM miniservers').all();
+  getAllDistinctStateNames(miniservers).then((names) => res.json({ names }));
 });
 
 router.get('/broker', (req, res) => {

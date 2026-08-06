@@ -121,8 +121,10 @@ app.locals.serializeAnnotations = dashboardsRoutes.serializeAnnotations;
 app.locals.escAttr = chartFieldHelpers.escAttr;
 app.locals.unitField = chartFieldHelpers.unitField;
 app.locals.scaleField = chartFieldHelpers.scaleField;
+app.locals.valueMappingField = chartFieldHelpers.valueMappingField;
 app.locals.thresholdField = chartFieldHelpers.thresholdField;
 app.locals.annotationField = chartFieldHelpers.annotationField;
+app.locals.rangeField = chartFieldHelpers.rangeField;
 // Exposed as a global for the client-side chart (public/monitor-chart.js) — everything
 // server-rendered uses formatDateTime() directly and never needs this.
 app.use((req, res, next) => { res.locals.displayTimezone = getDisplayTimezone(); next(); });

@@ -5,6 +5,213 @@
 // Monitor detail page's own chart settings became a second consumer — both pages just need
 // LoxColorPicker (color-picker.js) loaded first, same as panel-grid.ejs already required.
 
+// Generic drag-to-reorder for any dynamic row-builder list — threshold/value-mapping/annotation
+// rows all share this same shape (a flat list of sibling rows in one container, each serialized
+// back into a hidden textarea by reading the container's CURRENT DOM order), so one shared helper
+// covers all three rather than three near-identical drag implementations. A small dedicated grip
+// handle (not the whole row) is what's actually draggable — a row is full of its own inputs/
+// selects/color pickers, and making the whole thing draggable risks fighting those for an
+// ordinary click/drag-to-select-text gesture. Exposed globally (not an IIFE-private helper) since
+// foot.ejs's own value-mapping-builder script is a separate <script> block from this file, loaded
+// afterward — see panel-grid.ejs/monitor-detail.ejs's own <script src> order for why this file's
+// top-level code is guaranteed to have already run by the time that one calls in.
+// Pointer-based (mousedown/move/up), not native HTML5 drag-and-drop — tried native drag first
+// (draggable=true + dragstart/dragover/drop + an explicit small setDragImage to avoid the
+// browser's own oversized default ghost) but a translucent-layer rendering artifact still showed
+// during the drag regardless, almost certainly Chromium flattening the whole position:fixed
+// .panel-settings-form drawer into a compositing layer for the drag operation because of its own
+// CSS transform (the same mechanism that drawer's slide-in animation uses). A plain pointer-driven
+// reorder — the same technique the panel-resize-handle elsewhere in this app already uses — never
+// starts a native drag operation at all, so that whole rendering path never gets involved.
+//
+// A GridStack-based rewrite of this (reusing the same engine as the dashboard panel grid) was
+// tried and reverted — dragging never reliably registered via dragHandle scoping inside the
+// .panel-settings-form drawer's own fixed-position/transformed layout, and a failed drag left the
+// grid's internal state inconsistent enough to also break the color picker and delete on the SAME
+// row afterward. This hand-rolled version has none of that: it never asks GridStack to track
+// anything happening inside a drawer at all.
+window.LoxRowReorder = (function () {
+  var GRIP_SVG = '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></svg>';
+
+  // Call once per newly-built row, right after it's appended to its own container. opts.handle
+  // lets a caller supply its OWN pre-existing element as the drag trigger (e.g. a dashboard
+  // group's header bar already has its own grip icon in a specific spot) instead of always
+  // getting a freshly-created, auto-prepended one — every existing caller omits it and gets the
+  // original behavior unchanged.
+  function attachRow(row, container, onReorder, opts) {
+    var handle = opts && opts.handle;
+    if (!handle) {
+      handle = document.createElement('span');
+      handle.className = 'row-drag-handle';
+      handle.title = 'Drag to reorder';
+      handle.innerHTML = GRIP_SVG;
+      row.insertBefore(handle, row.firstChild);
+    }
+
+    var dragging = false;
+
+    // Belt-and-suspenders against a NATIVE drag ever starting from the grip (its <svg> icon, an
+    // image, etc.). This is NOT what caused the "see through the edit panel" glitch — that was
+    // GridStack grabbing the panel, handled just below — but a stray native drag is cheap to rule
+    // out and would look just as broken, so dragstart is cancelled here and (for the duration of a
+    // reorder) at the document level too.
+    function blockNativeDrag(e) { e.preventDefault(); }
+    handle.setAttribute('draggable', 'false');
+    handle.addEventListener('dragstart', blockNativeDrag);
+
+    // THE important one: a threshold/value/annotation row lives inside the panel's edit drawer, which
+    // is itself inside a GridStack grid item (the panel being edited). GridStack listens for a
+    // pointerdown/mousedown bubbling up out of that item and — since the press isn't on its own
+    // .widget-drag-handle it should ignore it, but in practice a press that then moves still kicked
+    // off a panel drag — starts dragging the WHOLE panel. That stray panel drag is what turned the
+    // drawer translucent ("see through the edit panel") AND lit up the dashboard's drop zones behind
+    // it. Stopping the press from propagating past the grip keeps GridStack from ever seeing it, so
+    // grabbing a row reorders the row and nothing else. (Harmless for the group-reorder caller, whose
+    // handle isn't inside a grid item.)
+    handle.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+
+    // Where would the row land if dropped at this Y? Tested against the OTHER rows' live positions,
+    // which never move during the drag (see onMove) — so this stays a plain midpoint check, and it
+    // works fine for variable-height items too (the group-reorder caller drags whole group units).
+    function computeAfterEl(clientY) {
+      var siblings = Array.prototype.slice.call(container.children).filter(function (el) {
+        return el !== row && el !== dropIndicator;
+      });
+      for (var i = 0; i < siblings.length; i++) {
+        var rect = siblings[i].getBoundingClientRect();
+        if (clientY - rect.top - rect.height / 2 < 0) return siblings[i];
+      }
+      return null;
+    }
+
+    // Optional live "it lands here" box (opts.dropIndicator) — a green drop zone shown at the target
+    // slot during the drag, so a group reorder gets the same green drop feedback the panel grids give
+    // (see .lox-reorder-drop-indicator in style.css). Only this thin marker moves through the DOM;
+    // the dragged item itself just rides its transform. Off by default, so the drawer row-builders
+    // keep their plain lift-and-snap.
+    var showDropIndicator = !!(opts && opts.dropIndicator);
+    var dropIndicator = null;
+    // Sized to match row's own height (instead of the CSS default, a flat 46px) and slotted into
+    // its exact original spot BEFORE floatRow() below pulls row out of flow — so the vacated gap is
+    // filled in the very same reflow that creates it. Skipping that meant the indicator didn't exist
+    // yet for that first reflow, so every later sibling jumped up to close row's WHOLE gap a frame
+    // early; computeAfterEl(startClientY) then measured against those already-shifted siblings while
+    // startClientY itself still described the OLD layout, so the indicator could land a sibling or two
+    // away from a drag that hadn't actually moved yet — reported as "the drop box shows right under
+    // the bar I just grabbed" instead of tracking the group before/after it.
+    function initDropIndicator() {
+      if (!showDropIndicator || dropIndicator) return;
+      var rect = row.getBoundingClientRect();
+      dropIndicator = document.createElement('div');
+      dropIndicator.className = 'lox-reorder-drop-indicator';
+      dropIndicator.style.height = rect.height + 'px';
+      container.insertBefore(dropIndicator, row.nextElementSibling);
+    }
+    function moveDropIndicator(clientY) {
+      if (!showDropIndicator || !dropIndicator) return;
+      var afterEl = computeAfterEl(clientY);
+      if (afterEl == null) container.appendChild(dropIndicator);
+      else container.insertBefore(dropIndicator, afterEl);
+    }
+    function clearDropIndicator() {
+      if (dropIndicator && dropIndicator.parentNode) dropIndicator.parentNode.removeChild(dropIndicator);
+      dropIndicator = null;
+    }
+
+    var startClientY = 0;
+
+    // With the drop indicator on, row is ALSO pulled clean out of normal flow for the drag's
+    // duration (position:fixed, sized/positioned to match exactly where it already was) — one
+    // single reflow right at drag-start, not per-frame. Without this, row's own original slot stays
+    // reserved in the layout the whole time (a transform never removes anything from flow), so the
+    // indicator computed a target a few rows away while row's own now-empty-looking gap sat right
+    // next to it — reading as two boxes for one drag instead of the one it's supposed to be. The
+    // drawer row-builders (no indicator) skip this entirely and keep the simpler, reflow-free
+    // transform-only version — that one-time reflow is exactly what the transform rewrite above was
+    // introduced to avoid inside the drawer's own compositing layer.
+    var floated = false;
+    function floatRow() {
+      if (!showDropIndicator || floated) return;
+      floated = true;
+      var rect = row.getBoundingClientRect();
+      row.style.position = 'fixed';
+      row.style.top = rect.top + 'px';
+      row.style.left = rect.left + 'px';
+      row.style.width = rect.width + 'px';
+      row.style.zIndex = '1000';
+    }
+    function unfloatRow() {
+      if (!floated) return;
+      floated = false;
+      row.style.position = '';
+      row.style.top = '';
+      row.style.left = '';
+      row.style.width = '';
+      row.style.zIndex = '';
+    }
+
+    // The picked-up row FOLLOWS the cursor with a transform only (or, with the drop indicator on,
+    // by updating its own fixed `top`) — the DOM is never touched while the drag is in flight. The
+    // old version re-ran insertBefore on every mousemove; that continuous reflow, inside a
+    // position:fixed drawer the compositor keeps as its own layer, is exactly what made the drawer
+    // flash translucent ("see through the edit panel") every frame. A transform is resolved on the
+    // compositor with no layout/reflow at all, so the drawer stays put and opaque. The real reorder
+    // happens once, on drop (onUp), from the final cursor position.
+    function onMove(e) {
+      if (!dragging) return;
+      if (floated) row.style.top = (e.clientY - startClientY + parseFloat(row.dataset.floatStartTop)) + 'px';
+      else row.style.transform = 'translateY(' + (e.clientY - startClientY) + 'px)';
+      moveDropIndicator(e.clientY);
+    }
+    function onUp(e) {
+      if (!dragging) return;
+      dragging = false;
+      row.classList.remove('row-dragging');
+      document.body.classList.remove('lox-row-reordering');
+      row.style.transform = '';
+      unfloatRow();
+      clearDropIndicator();
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('dragstart', blockNativeDrag, true);
+      var afterEl = computeAfterEl(e.clientY);
+      if (afterEl == null) container.appendChild(row);
+      else container.insertBefore(row, afterEl);
+      onReorder();
+    }
+
+    handle.addEventListener('mousedown', function (e) {
+      e.preventDefault(); // no text-selection/native-drag getting a foot in the door
+      e.stopPropagation(); // and don't let GridStack (an ancestor grid item) treat this as a panel drag
+      dragging = true;
+      startClientY = e.clientY;
+      // Swallow any dragstart anywhere for the whole reorder, so a native drag can't spin up while a
+      // row is in hand — see blockNativeDrag above.
+      document.addEventListener('dragstart', blockNativeDrag, true);
+      row.classList.add('row-dragging');
+      document.body.classList.add('lox-row-reordering');
+      if (showDropIndicator) {
+        var rect = row.getBoundingClientRect();
+        row.dataset.floatStartTop = String(rect.top);
+        initDropIndicator();
+        floatRow();
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+  // The counterpart to attachRow — a plain row.remove() covers this hand-rolled version's own
+  // needs entirely (no wrapper shell to clean up the way the reverted GridStack version needed),
+  // kept as its own named function anyway so the two callers (threshold/annotation builders here,
+  // value-mapping in foot.ejs) don't need to know which implementation is behind it.
+  function removeRow(row) {
+    row.remove();
+  }
+
+  return { attachRow: attachRow, removeRow: removeRow };
+})();
+
 // Threshold ladder: value + color + line/band style per row ("<value>=<color>=<style>"). The Style
 // column only visibly changes anything on a Chart panel (drawn as either a dashed line or a filled
 // band — see makeThresholdPlugin in monitor-chart.js); every other panel type that reuses this same
@@ -42,7 +249,9 @@
       '<button type="button" class="icon-btn icon-btn-danger threshold-row-remove" title="Remove" aria-label="Remove">&times;</button>';
     row.querySelector('.threshold-row-value').value = value == null ? '' : value;
     row.querySelector('.threshold-row-style').value = style === 'band' ? 'band' : 'line';
-    builder.querySelector('.threshold-builder-rows').appendChild(row);
+    var rowsContainer = builder.querySelector('.threshold-builder-rows');
+    rowsContainer.appendChild(row);
+    LoxRowReorder.attachRow(row, rowsContainer, function () { serializeRows(builder); });
 
     row.querySelector('.threshold-row-value').addEventListener('input', function () { serializeRows(builder); });
     row.querySelector('.threshold-row-style').addEventListener('change', function () { serializeRows(builder); });
@@ -53,7 +262,7 @@
       notifyBox.addEventListener('change', function () { serializeRows(builder); });
     }
     row.querySelector('.threshold-row-remove').addEventListener('click', function () {
-      row.remove();
+      LoxRowReorder.removeRow(row);
       serializeRows(builder);
     });
   }
@@ -108,13 +317,15 @@
       '<button type="button" class="icon-btn icon-btn-danger annotation-row-remove" title="Remove" aria-label="Remove">&times;</button>';
     row.querySelector('.annotation-row-time').value = toLocalInputValue(ms != null ? ms : Date.now());
     row.querySelector('.annotation-row-label').value = label == null ? '' : label;
-    builder.querySelector('.annotation-builder-rows').appendChild(row);
+    var rowsContainer = builder.querySelector('.annotation-builder-rows');
+    rowsContainer.appendChild(row);
+    LoxRowReorder.attachRow(row, rowsContainer, function () { serializeRows(builder); });
 
     row.querySelector('.annotation-row-time').addEventListener('change', function () { serializeRows(builder); });
     row.querySelector('.annotation-row-label').addEventListener('input', function () { serializeRows(builder); });
     row.querySelector('.annotation-row-color').addEventListener('change', function () { serializeRows(builder); });
     row.querySelector('.annotation-row-remove').addEventListener('click', function () {
-      row.remove();
+      LoxRowReorder.removeRow(row);
       serializeRows(builder);
     });
   }

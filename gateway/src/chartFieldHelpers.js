@@ -1,5 +1,5 @@
 const { icon } = require('./icons');
-const { serializeThresholdLadder, serializeAnnotations } = require('./routes/dashboards');
+const { serializeThresholdLadder, serializeAnnotations, serializeValueMappings } = require('./routes/dashboards');
 
 // Shared chart-config field builders, registered as global EJS helpers (see app.locals in
 // server.js) — originally lived only in panel-grid.ejs's own top block since it was the only
@@ -87,4 +87,98 @@ function annotationField(fieldName, list) {
   </details>`;
 }
 
-module.exports = { escAttr, unitField, scaleField, thresholdField, annotationField };
+// Same shape as thresholdField() (a collapsible, dynamic add/remove-row builder over a hidden
+// textarea in the exact format dashboards.js already parses) but for an EXACT value match rather
+// than a >= ladder — each row is a value, the name to show instead of it, and an optional color of
+// its own (its own color wins over the threshold ladder for that one value, since it's the more
+// specific rule — see loadPanelsWithMonitors). Moved here (was originally only in panel-grid.ejs)
+// once the Monitor detail page's own chart settings became a second consumer, same reasoning as
+// the other fields in this file — a reading is sometimes a Loxone/MQTT enum (1 = Active, 50 =
+// Resetting), not a continuous quantity, on a single-monitor chart exactly as much as it can be on
+// a dashboard's 'value' panel.
+function valueMappingField(fieldName, mappings) {
+  return `<details class="threshold-builder-details" style="grid-column:1/-1;" ${mappings && mappings.length > 0 ? 'open' : ''}>
+    <summary>Value names &amp; colors (optional)</summary>
+    <div class="value-mapping-builder" data-name="${fieldName}">
+      <div class="value-mapping-rows"></div>
+      <button type="button" class="btn-soft value-mapping-add-row">${icon('plus')} Add value</button>
+      <textarea name="${fieldName}" class="value-mapping-hidden" hidden>${escAttr(serializeValueMappings(mappings))}</textarea>
+      <p class="hint" style="margin:0.4rem 0 0;">Shows the name instead of a matching reading's raw value — every row gets a color too, starting from a default you can pick your own instead of.</p>
+    </div>
+  </details>`;
+}
+
+// Shared range-picker: dropdown presets + a custom-duration text input ("3h", "10m") + a real
+// absolute From/To date-time pair — one shared implementation of what used to be four separate
+// ones (the dashboard-panel Range field, Monitor detail's own freeform text box, the Home/My
+// Dashboards popover, and Logs' bare From/To pair with no presets at all), all driving the exact
+// same server-side vocabulary (resolveRange/rangeToWindow in routes/monitor.js). The client-side
+// sync behavior — only one of select/custom-input/absolute-hidden-input ever carries a `name` at
+// a time, so the field always submits exactly one "range" value regardless of which mode is
+// active — lives in public/range-picker.js, loaded once for the whole site (see partials/foot.ejs)
+// rather than per-page, since every consumer needs the identical behavior.
+const RANGE_PRESETS = [
+  ['1h', 'Last hour'], ['24h', 'Last 24 hours'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['all', 'All'],
+];
+const ABS_RANGE_RE = /^abs_(\d+)_(\d+)$/;
+function rangeField(currentValue, opts) {
+  opts = opts || {};
+  const presetValues = RANGE_PRESETS.map((p) => p[0]);
+  const absMatch = typeof currentValue === 'string' ? currentValue.match(ABS_RANGE_RE) : null;
+  // Only the dashboard-panel Range field has anything to inherit FROM (the dashboard-wide
+  // filter) — every other consumer (Monitor detail, Home/My Dashboards, Logs) has no such parent
+  // to follow, so this option is off unless a call site explicitly asks for it.
+  const isDashboardDefault = !!opts.includeDashboardDefault && currentValue === 'dashboard';
+  const isBlank = !!opts.blankLabel && !currentValue;
+  const isCustom = !!currentValue && !presetValues.includes(currentValue) && !absMatch && !isDashboardDefault;
+  // autoSubmit: picking a plain preset immediately submits the enclosing <form> — right for every
+  // read-only "filter this page" consumer (Monitor detail/Home/Logs), but NOT the dashboard panel
+  // Range field, which lives inside its own auto-saving settings form instead (see
+  // range-picker.js's own sync() for where this actually gets read).
+  // Wrapped in its own inline-flex span (not left to whatever the parent happens to be) so the
+  // custom-duration input always sits BESIDE the select — shrinking to fit rather than dropping
+  // to its own line — regardless of whether the parent is a form-grid cell (Logs/dashboard panel
+  // forms), a topbar row, or anything else. The absolute From/To pair still doesn't fit inline at
+  // any reasonable width, so that one floats out to the right instead (see .range-field-inline in
+  // style.css) — this wrapper's own position:relative is what gives it something to anchor to
+  // everywhere, not just the one page that used to hand-roll that positioning itself.
+  let html = '<span class="range-field-inline">';
+  html += `<select class="range-select" data-range-name="range"${opts.autoSubmit ? ' data-auto-submit="1"' : ''}>`;
+  if (opts.includeDashboardDefault) {
+    // Follows the dashboard-wide time filter (see loadPanelsWithMonitors in dashboards.js) rather
+    // than a real range of its own — the default for every new panel, so most panels move
+    // together when that filter changes; picking one of the real ranges below instead pins THIS
+    // panel to its own choice regardless of what the dashboard-wide filter says.
+    html += `<option value="dashboard" ${isDashboardDefault ? 'selected' : ''}>Dashboard default</option>`;
+  }
+  // blankLabel: a page-level "no override" state (e.g. the Home/My Dashboards filter's own
+  // "Default range", meaning every panel just uses its own saved range) — a DIFFERENT concept
+  // from includeDashboardDefault above (that's one specific PANEL following the page-wide
+  // filter); this is the page-wide filter itself having nothing active. Submits as an empty
+  // string, which the resolveRange() call site treats the same as the param being absent.
+  if (opts.blankLabel) {
+    html += `<option value="" ${isBlank ? 'selected' : ''}>${opts.blankLabel}</option>`;
+  }
+  RANGE_PRESETS.forEach(([value, label]) => {
+    html += `<option value="${value}" ${currentValue === value ? 'selected' : ''}>${label}</option>`;
+  });
+  html += `<option value="__custom__" ${isCustom ? 'selected' : ''}>Custom&hellip;</option>`;
+  html += `<option value="__absolute__" ${absMatch ? 'selected' : ''}>Absolute range&hellip;</option></select>`;
+  html += `<input type="text" class="range-custom-input" placeholder="e.g. 3h, 10m, 45s"
+    value="${isCustom ? escAttr(currentValue) : ''}" style="${isCustom ? '' : 'display:none;'}">`;
+  // Raw epoch ms (not a pre-formatted date string) — the actual datetime-local values are filled
+  // in by client-side JS from these, specifically so they render in the BROWSER's own local
+  // timezone. Formatting them here instead would use the server process's timezone (the Docker
+  // container, always UTC — see dateFormat.js), silently showing the wrong moment to anyone not in
+  // UTC themselves.
+  html += `<div class="range-absolute-wrap" data-start-ms="${absMatch ? absMatch[1] : ''}" data-end-ms="${absMatch ? absMatch[2] : ''}"
+    style="${absMatch ? '' : 'display:none;'}">
+    <div><label style="font-size:0.7rem; margin-bottom:0.15rem;">From</label><input type="datetime-local" class="range-absolute-start"></div>
+    <div><label style="font-size:0.7rem; margin-bottom:0.15rem;">To</label><input type="datetime-local" class="range-absolute-end"></div>
+    <input type="hidden" class="range-absolute-hidden">
+  </div>`;
+  html += '</span>';
+  return html;
+}
+
+module.exports = { escAttr, unitField, scaleField, thresholdField, annotationField, valueMappingField, rangeField };

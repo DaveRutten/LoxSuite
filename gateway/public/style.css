@@ -371,6 +371,35 @@ button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-bt
   font-weight: 600;
   margin: 0 0 1.25rem;
 }
+/* Wraps h1 + the optional dashboard-rename trigger/form (partials/head.ejs) as ONE flex item, not
+   several loose ones — .topbar itself is justify-content:space-between across its direct children
+   (mobile-nav-toggle / this / .topbar-right), so adding the rename controls as bare siblings of h1
+   would have made space-between redistribute the gap across 5 items instead of 3, pushing h1 and
+   .topbar-right apart oddly instead of just sitting next to the title where they belong. */
+.topbar-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+}
+.topbar-title h1 { margin: 0; }
+.dashboard-rename-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.dashboard-rename-form input[type="text"] { max-width: 20rem; }
+/* Same [hidden]-vs-author-display specificity clash as .table-pager/.live-data-inline-bulk/etc
+   elsewhere in this file — this class's own display:flex above ties the browser's plain
+   `[hidden] { display: none }` UA rule on specificity and wins on source order, so the form's own
+   `hidden` attribute (set by head.ejs until the rename pencil is clicked) had no visual effect at
+   all and it showed up already open on every page load. */
+.dashboard-rename-form[hidden] { display: none; }
+/* Same [hidden]-vs-author-display clash as #topbar-hints-toggle above — .icon-btn's own
+   display:inline-flex (base rule) otherwise wins over the plain [hidden] default, so the pencil
+   trigger stayed visibly rendered (alongside the now-open rename form) despite head.ejs's script
+   setting trigger.hidden = true the moment it's clicked. */
+#dashboard-rename-trigger[hidden] { display: none; }
 
 /* .topbar-help, .refresh-control, and .account-menu-btn (further below) are the same row of
    bordered topbar controls — explicit height on all of them (rather than letting each size itself
@@ -407,74 +436,76 @@ button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-bt
   flex-shrink: 0;
 }
 
-/* Interval select + pause toggle for auto-refreshing pages, injected into .topbar-right by
-   partials/foot.ejs — one bordered pill (matching .topbar-help right next to it) rather than two
-   loose floating controls, so it reads as a single grouped thing rather than stray leftovers.
-   Also reused as-is by the dashboard time filter right next to it (same file) — a select plus,
-   once "Custom…" is picked, two date/time picker buttons and a Go button, all inside this same
-   one bordered pill instead of a second one glued on next to it. */
+/* Same circular sizing as .topbar-help/.notification-center-btn right next to it (see the "same
+   row of bordered topbar controls" comment above) — .icon-btn-neutral already gives it the right
+   border color at rest/hover, it just needed the fixed circle dimensions those two already have
+   instead of its own base .icon-btn's smaller content-sized square. */
+.topbar-right > .hints-toggle-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+}
+/* Same [hidden]-vs-author-display clash fixed elsewhere in this file (.table-pager, .live-data-
+   inline-bulk, ...) — .icon-btn's own display:inline-flex ties the browser's plain [hidden]
+   default on specificity and wins as the later author rule, so the topbar copy (see foot.ejs's
+   own "hide when this page has nothing to toggle" check) stayed visibly rendered despite its
+   hidden attribute being set correctly. */
+#topbar-hints-toggle[hidden] { display: none; }
+
+/* Auto-refresh interval control (injected into .topbar-right by partials/foot.ejs) — plain
+   controls, the same border/background/sizing every <select>/<input>/<button> already gets
+   everywhere else (e.g. Logs' own filter forms), rather than a bespoke compact "pill". The pill
+   used to force background:none on its select/input, which read as a wrongly light/white box in
+   the dark theme instead of the normal themed var(--surface) fill — dropping the special-casing
+   fixes that by construction, not by chasing the specific color that leaked through. */
 .refresh-control {
   display: inline-flex;
   align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.refresh-control input[type="text"] { width: 4.6rem; }
+.refresh-toggle-btn.refresh-paused { color: var(--warning); background: var(--warning-soft); }
+
+/* rangeField()'s own self-contained wrapper (see chartFieldHelpers.js) — the custom-duration
+   input always sits BESIDE the select (shrinking to fit, not dropping to its own line below) no
+   matter which page renders it: a form-grid cell (Logs/the dashboard panel Range field), the
+   topbar filter, or Monitor detail's own range-picker-form. min-width:0 on the flex children is
+   what actually lets them shrink below their natural content width instead of overflowing once
+   the whole thing is wider than its container. */
+.range-field-inline {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+}
+.range-field-inline .range-select { flex: 0 1 auto; min-width: 4rem; }
+.range-field-inline .range-custom-input { flex: 1 1 6rem; min-width: 3.5rem; max-width: 10rem; }
+/* The absolute From/To pair never fits inline at any reasonable width (two labeled datetime
+   fields), so it floats out to the right instead of pushing whatever it's part of taller —
+   same "anchored panel under a control" idea as .columns-menu-panel, just plain CSS
+   position:absolute since it only ever needs to anchor to this one always-present parent (no
+   JS-computed coordinates needed, unlike a popover that can open from many different triggers).
+   Clamped to the viewport width so it can't run off-screen on a narrow one. */
+.range-field-inline .range-absolute-wrap {
+  position: absolute !important;
+  left: calc(100% + 0.4rem);
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
   gap: 0.3rem;
-  height: 2.25rem;
-  padding: 0 0.4rem;
+  width: 14rem;
+  max-width: min(16rem, 90vw);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-}
-/* Every direct child keeps its own natural (content) width instead of the flex default of
-   shrinking to fit — a shrunk button/select wraps its text onto a second line while still stuck
-   at this pill's fixed height, clipping it, instead of the pill simply growing wider to fit. */
-.refresh-control > * {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-/* Sized down from the generic select/input to sit comfortably inside this compact pill. */
-.refresh-control select, .refresh-control input {
-  padding: 0 1.5rem 0 0.5rem;
-  height: 1.75rem;
-  font-size: 0.82rem;
-  border: none;
-  background: none;
-}
-.refresh-control select { background-position: right 0.5rem center; background-size: 0.7rem; }
-.refresh-control input[type="text"] { width: 4.6rem; padding-right: 0.5rem; }
-.refresh-control select:focus, .refresh-control input:focus { box-shadow: none; }
-.refresh-toggle-btn.refresh-paused { color: var(--warning); background: var(--warning-soft); }
-/* The shared button rule (button.primary/.btn-soft/...) gives every button a fixed 1.85rem
-   height — taller than this pill's own 2.25rem outer height would comfortably fit, so buttons
-   inside here (the dashboard time filter's date pickers + Go) get sized down to match. */
-.refresh-control button.btn-soft, .refresh-control button.primary {
-  height: 1.75rem;
-  padding: 0 0.5rem;
-  font-size: 0.78rem;
-  margin: 0;
+  padding: 0.6rem;
+  box-shadow: var(--shadow-md);
 }
 
-/* The dashboard time filter's date/time popovers (see buildDateTimePicker() in partials/foot.ejs)
-   — reuses .columns-menu-panel's own floating-panel look, just with its own compact content. */
-.dash-datetime-panel { padding: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; min-width: auto; }
-/* Same [hidden]-vs-author-display specificity clash as .dash-range-custom below (and
-   .value-suggest-list/.rule-fields elsewhere) — .dash-datetime-panel's own `display: flex` above
-   ties with the UA `[hidden] { display: none }` rule and wins on source order, so without this
-   override BOTH the "From" and "To" popovers stayed visibly stacked on top of each other at all
-   times regardless of which one JS actually toggled open. */
-.dash-datetime-panel[hidden] { display: none; }
-.dash-datetime-row { display: flex; align-items: center; gap: 0.3rem; }
-.dash-datetime-row input[type="date"] { font-size: 0.82rem; padding: 0.35rem 0.5rem; }
-.dash-datetime-row select { font-size: 0.82rem; padding: 0.35rem 1.4rem 0.35rem 0.5rem; width: auto; }
-.dash-datetime-panel button.primary { width: 100%; justify-content: center; }
-
-/* The dashboard time filter's "Custom…" fallback (see partials/foot.ejs) — same bordered-pill
-   base as .refresh-control, just with two datetime-local fields and a Go button instead of a
-   single select, so the datetime inputs need their own (wider, no dropdown-arrow gap) padding. */
-.dash-range-custom input[type="datetime-local"] { width: 11rem; padding-right: 0.5rem; }
-.dash-range-custom button { height: 1.6rem; padding: 0.2rem 0.55rem; font-size: 0.78rem; margin: 0; }
-/* .refresh-control's own `display: inline-flex` (its base class, see above) has the same
-   specificity as the browser's `[hidden] { display: none }` UA rule and wins on source order —
-   same fix already needed for .value-suggest-list/.rule-fields elsewhere in this file — so toggling
-   .hidden via JS on this element did nothing visually without this override. */
-.dash-range-custom[hidden] { display: none; }
+.range-picker-form { display: inline-flex; align-items: center; gap: 0.4rem; }
 
 .account-menu { position: relative; }
 
@@ -669,13 +700,16 @@ button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-bt
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: 0.4rem;
   padding: 0.5rem 0.9rem 0.2rem;
 }
 .notification-center-panel .notification-center-footer a,
 .notification-center-panel .notification-center-footer button {
   width: auto;
   padding: 0.3rem 0.5rem;
+  /* Same fight as .row-actions/.table-toolbar's own reset — the shared button rule's own
+     margin-right otherwise stacks on top of this row's own gap/space-between. */
+  margin-right: 0;
 }
 
 main {
@@ -844,11 +878,14 @@ h2 {
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.4rem;
   padding: 0.6rem 1.1rem;
   background: var(--surface-alt);
   border-top: 1px solid var(--border);
 }
+/* Same fight as .row-actions/.table-toolbar/.confirm-bar-inner's own reset — Prev/Next's shared
+   margin-right:0.3rem otherwise stacks on top of this row's own gap. */
+.table-pager > button { margin-right: 0; }
 /* Without this, tables.js's own pager.el.hidden = true (toggled once a filter drops the visible
    row count back to/below one page) has no visual effect at all — an author stylesheet's
    `display` always wins over the browser's own non-!important `[hidden] { display: none }`
@@ -856,6 +893,11 @@ h2 {
    overriding "hidden" entirely. The extra [hidden] attribute selector here is specific enough to
    win back over it. */
 .table-pager[hidden] { display: none; }
+/* Same [hidden]-vs-author-display clash as .table-pager just above — this class's own
+   display:flex (see .live-data-inline-bulk below) would otherwise silently win over the browser's
+   plain [hidden] default and leave Live Data's own per-room bulk-select cluster visible at all
+   times regardless of its hidden attribute. */
+.live-data-inline-bulk[hidden] { display: none; }
 /* margin-left:auto (not the container's own gap, which already spaces every OTHER child evenly)
    pins this to the far right instead of bunching it up hard against Next with an inconsistent
    double gap (the flex gap plus this element's own margin) — Prev/numbers/Next then read as one
@@ -868,7 +910,10 @@ h2 {
    order would let whichever of the two happens to be declared later win, which is exactly what was
    still happening here even after the reset above was added. */
 .table-pager-label { white-space: nowrap; margin: 0 0 0 auto !important; }
-.table-pager-numbers { display: flex; align-items: center; gap: 0.3rem; }
+.table-pager-numbers { display: flex; align-items: center; gap: 0.4rem; }
+/* Same fight as .table-pager's own reset just above — each page-number button's shared
+   margin-right:0.3rem otherwise stacks on top of this row's own gap too. */
+.table-pager-numbers > button { margin-right: 0; }
 /* justify-content:center (the shared button rule itself never sets this, so it defaults to
    flex-start) — without it, a page number whose own text+padding is narrower than this min-width
    floor (any single digit) has its text hugging the left edge with all the min-width's extra space
@@ -1131,6 +1176,60 @@ th.col-hidden, td.col-hidden { display: none; }
   white-space: nowrap;
 }
 
+/* "{{" placeholder autocomplete / "/" snippet menu (see attachInlineSuggest in
+   admin-notifications.ejs) — same trigger-plus-fixed-panel shape as .columns-menu-panel, anchored
+   to the text field's own bottom-left instead of a button. */
+.inline-suggest-menu {
+  position: fixed;
+  z-index: 30;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  padding: 0.3rem;
+  min-width: 160px;
+  max-width: 20rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+.inline-suggest-item {
+  padding: 0.35rem 0.6rem;
+  border-radius: 5px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inline-suggest-item.active, .inline-suggest-item:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* Emoji submenu specifically (attachInlineSuggest's renderGrid) — a phone-style picker: emoji-only
+   tiles grouped under a category heading, no text label (the label only surfaces as a hover
+   title). Wider/taller than the plain text-list menu since a grid needs the room to actually read
+   as a grid rather than one cramped column. */
+.inline-suggest-menu.inline-suggest-grid { width: 17rem; max-width: 17rem; max-height: 18rem; }
+.inline-suggest-category {
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 0.4rem 0.3rem 0.2rem;
+}
+.inline-suggest-emoji-row { display: flex; flex-wrap: wrap; gap: 0.1rem; }
+.inline-suggest-emoji-item {
+  width: 2.1rem;
+  height: 2.1rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.inline-suggest-emoji-item.active, .inline-suggest-emoji-item:hover { background: var(--accent-soft); }
+
 .columns-menu-reset {
   display: block;
   width: 100%;
@@ -1170,19 +1269,40 @@ td .row-actions {
   justify-content: flex-end;
 }
 
-/* Collapsed Actions column (tables.js's collapseRowActions) — every action button/form moves down
-   into a pushed-open row below (the same [data-toggle-row]/tr.expand-row pattern already used for
-   Test/Rename/Reset-password elsewhere), replaced inline by a single "more actions" kebab toggle,
-   so the column no longer grows every time a page gains one more capability
-   (View/Edit/Reset password/Delete/Test/...). A floating dropdown was tried first but got clipped
-   for rows near the bottom of a .table-wrap (overflow-x:auto implicitly clips overflow-y too). */
+/* Collapsed Actions column (tables.js's collapseRowActions) — every action button/form moves into
+   a floating popover, replaced inline by a single "more actions" kebab toggle, so the column no
+   longer grows every time a page gains one more capability (View/Edit/Reset password/Delete/
+   Test/...). position:fixed (see .row-actions-popover below) escapes the .table-wrap's own
+   overflow-x:auto (which implicitly clips overflow-y too) the same way buildColumnsMenu's own
+   panel and foot.ejs's confirm-bar-popover already do. */
 .row-actions-toggle { flex-shrink: 0; }
-/* Undoes the Actions-column .row-actions rule above — this row has the whole table's width to
-   work with (it's a colspan'd cell, not squeezed into one column), and wrapping onto a second
-   line here is completely normal, same as any other tr.expand-row's content. */
+/* Undoes the Actions-column .row-actions rule above — the popover itself grows to fit its content
+   width (see .row-actions-popover's own width:max-content below) up to a generous cap rather than
+   being squeezed into one table column, so this stays a single row of buttons. Wrap (rather than
+   nowrap) so a page with a longer action list still wraps sanely instead of overflowing the
+   popover's own width cap. */
 .row-actions.row-actions-expanded {
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+/* Same trigger-plus-fixed-panel shape as .columns-menu-panel — position set inline by
+   collapseRowActions() from the toggle button's own getBoundingClientRect(), flipping to open
+   upward near the bottom of the viewport the same way that one does. width:max-content (capped)
+   lets it grow as wide as its own buttons + any result text actually need, rather than a fixed
+   width that forced them to wrap past it. */
+.row-actions-popover {
+  position: fixed;
+  z-index: 20;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 0.6rem 0.7rem;
+  width: max-content;
+  min-width: 160px;
+  max-width: min(28rem, 92vw);
+  overflow-y: auto;
 }
 
 .row-actions {
@@ -1259,6 +1379,53 @@ td .row-actions {
   max-width: 0;
 }
 .confirm-bar.open { max-height: 4rem; opacity: 1; margin-top: 0.5rem; flex-basis: 100%; max-width: 100%; }
+
+/* .table-toolbar's own variant (see the toolbar-detection in foot.ejs) — a fixed-position popover
+   anchored under the triggering button via JS (top/right set inline) instead of a full-width block
+   in flow, so opening it can never push a later toolbar child (e.g. Columns) onto a new line, and
+   position:fixed escapes the .filterable-table-card's own overflow:hidden the same way
+   buildColumnsMenu's own dropdown already does. Overrides the max-height-driven reveal above with
+   a plain opacity/visibility one — a fixed popover has no "flow height" for max-height to animate. */
+.confirm-bar.confirm-bar-popover {
+  position: fixed;
+  z-index: 96;
+  max-height: none;
+  overflow: visible;
+  min-width: 16rem;
+  max-width: min(22rem, 90vw);
+  margin-top: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 0.75rem;
+  transition: opacity 0.15s var(--ease);
+}
+.confirm-bar.confirm-bar-popover.open {
+  max-width: min(22rem, 90vw);
+  flex-basis: auto;
+  margin-top: 0;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+/* The base .confirm-bar-inner is a left-packed flex row (fine for the full-width block everywhere
+   else) — in this narrow popover, Yes/Cancel wrapping onto their own line under the message reads
+   oddly stuck to the left edge instead of under the button that opened it. Also scoped to a
+   .row-actions-popover's own MERGED confirm-bar (see growRowActionsPopover in foot.ejs — that one
+   deliberately does NOT get .confirm-bar-popover itself, since it stays a plain in-flow block
+   inside a popover that's already floating) so Delete/Cancel there right-align the same way the
+   row-actions-expanded buttons right above them already do, instead of sitting flush left.
+   A dashboard panel's own confirm-bar (its Delete button) is the same story yet again — see
+   tableRowActions in foot.ejs, which deliberately excludes .dash-panel-head from the popover
+   treatment too, so it ALSO never gets .confirm-bar-popover. That one's own .confirm-bar is
+   inserted as a SIBLING right after .dash-panel-head (anchor.insertAdjacentElement('afterend', …)
+   in foot.ejs), not nested inside it — `.dash-panel-head .confirm-bar-inner` (descendant) would
+   never match it, hence the adjacent-sibling selector here instead. */
+.confirm-bar-popover .confirm-bar-inner, .row-actions-popover .confirm-bar-inner, .dash-panel-head + .confirm-bar .confirm-bar-inner { justify-content: flex-end; }
 /* .table-toolbar's own `gap: 0.4rem` (see above) applies on BOTH sides of this element even while
    it's zero-width and collapsed, so any button followed by a data-confirm form visually sits twice
    as far from its neighbor as a plain button-to-button pair. A negative margin-left cancels exactly
@@ -1267,8 +1434,25 @@ td .row-actions {
    which don't share this gap value and don't have the same doubling to correct for. */
 .table-toolbar > .confirm-bar { margin-left: -0.4rem; }
 .table-toolbar > .confirm-bar.open { margin-left: 0; }
-.confirm-bar-inner { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.6rem; }
+.confirm-bar-inner { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+/* Same fight as .row-actions/.table-toolbar's own reset just above — the shared button rule's own
+   margin-right stacks on TOP of this row's flex gap, doubling the space between Yes and Cancel.
+   !important: Yes carries class="danger" (see foot.ejs), and the shared rule's own `button.danger`
+   selector ties this one's specificity exactly (element + one class each) — with a tie, source
+   order decides, and the shared rule comes later in this file, so without !important it silently
+   won back the 0.3rem this was supposed to zero out (Cancel's plain .btn-soft has no element
+   prefix, so it never had this problem — only Yes did). */
+.confirm-bar-inner button { margin-right: 0 !important; }
 .confirm-bar-text { font-size: 0.82rem; color: var(--text-muted); }
+
+/* Shared utility for any ad-hoc row of side-by-side buttons that doesn't already have its own
+   named class (.row-actions/.table-toolbar/.confirm-bar-inner cover the recurring cases; this
+   covers everywhere else — form footers, filter-form Apply/Clear pairs, ...). Same 0.4rem "narrow"
+   gap as those three, with the same margin-right:0 reset — without it, the shared button rule's
+   own margin-right:0.3rem (a fallback for a button with no flex/gap container at all) stacks on
+   top of this row's own gap and doubles the space between buttons. */
+.btn-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.btn-row > button, .btn-row > a > button, .btn-row > form > button { margin-right: 0; }
 
 /* A row revealed via [data-toggle-row] (Rename/Test/Reset password) — collapsed by default,
    expanding smoothly on .open instead of the abrupt snap a hidden-attribute toggle gives. The
@@ -1360,10 +1544,14 @@ code.recognition-string {
    to. Tied to the .table-cols-fixed class tables.js adds at that exact moment, not to
    table-layout:fixed directly (an attribute-string CSS selector on inline styles is fragile) —
    this is what makes widening a column reveal more text and narrowing one properly re-ellipsize
-   instead of a hard, "..."-less clip right at the new edge. */
+   instead of a hard, "..."-less clip right at the new edge. !important because a handful of
+   call sites (Hardware's Serial/MAC/Version, Miniservers' Name/External URL) set their own
+   inline max-width, which — being inline — would otherwise always beat this rule regardless of
+   which one is more specific, permanently pinning those columns to their original narrow cap even
+   once the real column is dragged (or naturally renders) much wider than that. */
 .table-cols-fixed .truncate,
 .table-cols-fixed code.recognition-string {
-  max-width: 100%;
+  max-width: 100% !important;
 }
 
 /* Click toggles this (see partials/foot.ejs) — shows the full text in place, wrapping within
@@ -1490,7 +1678,7 @@ code.recognition-string {
    explanation rather than just a label (e.g. Settings > Data retention). */
 .settings-field-list { display: flex; flex-direction: column; gap: 1.1rem; }
 .settings-field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
-.settings-field input, .settings-field select { width: 100%; max-width: 10rem; }
+.settings-field input, .settings-field select, .settings-field textarea { width: 100%; max-width: 48rem; }
 .settings-field .hint { margin: 0.35rem 0 0; max-width: 40rem; }
 
 .form-grid label {
@@ -1517,6 +1705,12 @@ input[type="file"], input[type="date"], input[type="datetime-local"], select, te
   font-size: 0.88rem;
   transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
+
+/* Same (element + class) specificity as the shared rule just above, so this has to come after it
+   to actually win — 0.88rem read as visibly larger than the label and .test-result hint sitting
+   right next to it in the Loxone -> MQTT "Value to send" row (both 0.78rem, sized for this compact
+   popover), not any wider page context this shared rule normally serves. */
+input.test-value-input, select.test-value-input { font-size: 0.78rem; }
 
 input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus,
 input[type="email"]:focus, input[type="file"]:focus, input[type="date"]:focus,
@@ -1565,7 +1759,7 @@ input[type="file"]::file-selector-button:hover { background: var(--text-muted); 
    their row. Without the exclusion a checkbox stretches to the row's full width and leaves its
    sibling label text 0px to work with, which — combined with overflow-wrap:anywhere — wraps every
    single character onto its own line (seen on the dash-panel Monitors checklist). */
-.form-grid input:not([type="checkbox"]):not([type="radio"]), .form-grid select { width: 100%; }
+.form-grid input:not([type="checkbox"]):not([type="radio"]), .form-grid select, .form-grid textarea { width: 100%; }
 
 /* A dense action popover (the dash-panel Edit settings) packs many fields into a narrow single
    column — the roomy defaults above are sized for full-width page forms, not this, so it needs
@@ -1586,7 +1780,11 @@ input[type="file"]::file-selector-button:hover { background: var(--text-muted); 
 /* Toggled by the "?" button next to a drawer's own star icon, or the Add/Edit Miniserver forms'
    own copy of it (see foot.ejs) — a sitewide display preference, not per-form, so every one of
    these respects it immediately without its own separate toggle state. */
-body.panel-hints-hidden .panel-settings-form .hint,
+/* :not(.panel-save-status) — that element borrows .hint purely for its small-muted-text look, not
+   as an actual dismissible help paragraph; without this exclusion, hints being off by default (see
+   foot.ejs) hid the auto-save "Saving…/Saved" indicator on every panel/monitor chart settings form
+   the instant the page loaded, with no way to tell whether a change had actually been saved. */
+body.panel-hints-hidden .panel-settings-form .hint:not(.panel-save-status),
 body.panel-hints-hidden #add-ms-form .hint,
 body.panel-hints-hidden #edit-ms-form .hint,
 body.panel-hints-hidden #mqtt-broker-card .hint,
@@ -1672,6 +1870,42 @@ label.switch { display: inline-flex; align-items: center; cursor: pointer; margi
 .annotation-row .annotation-row-remove { flex-shrink: 0; }
 .threshold-builder-row,
 .value-mapping-row { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Drag-to-reorder grip (see LoxRowReorder in threshold-annotation-builder.js) — inserted as each
+   row's own first child, so the existing flex row/gap above spaces it for free. flex-shrink:0
+   keeps it from being squeezed by its wide text-input siblings. */
+.row-drag-handle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  cursor: grab;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.row-drag-handle:hover { opacity: 1; color: var(--accent); }
+.row-drag-handle:active { cursor: grabbing; }
+/* No opacity/dimming while dragging — the earlier "everything goes transparent" bug was actually
+   the browser's own default drag-ghost snapshot (fixed via setDragImage in LoxRowReorder), not
+   this rule, and the row itself fading out on top of that just read as another visual glitch even
+   once the real bug was gone. The row simply moves now, full opacity throughout. */
+
+/* Picked-up row visibly lifts above its siblings while dragging — a solid elevated fill, an accent
+   (brand-green) ring and a drop shadow — so it reads as "held", closer to how a dashboard panel drag
+   looks, instead of silently jumping between slots. Outline (not border) and z-index only, so
+   nothing in the row's own box shifts the instant it's grabbed. Pairs with the de-composited drawer
+   above (body.lox-row-reordering) so the lift renders crisply without the see-through layer glitch. */
+.threshold-builder-row.row-dragging,
+.value-mapping-row.row-dragging,
+.annotation-row.row-dragging {
+  position: relative;
+  z-index: 3;
+  background: var(--surface-alt);
+  border-radius: var(--radius);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: var(--shadow-lg);
+  cursor: grabbing;
+}
 /* The global "form-grid input isn't a checkbox/radio -> width:100%" rule (see further up this
    file) is a class + element + two :not() argument selectors — (0,3,1) — which beats a plain
    two-class selector here. Matches that specificity exactly (class + element + two attribute-
@@ -1892,7 +2126,10 @@ label.switch { display: inline-flex; align-items: center; cursor: pointer; margi
 .catalog-editor-row .row-topic { flex: 2; min-width: 14rem; }
 .catalog-editor-row .row-actions { flex: 1; min-width: 10rem; font-family: 'SF Mono', Consolas, monospace; font-size: 0.78rem; }
 .catalog-editor-row .row-channel-label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; white-space: nowrap; flex: 0 0 auto; }
-.catalog-editor-family-footer { display: flex; align-items: center; gap: 0.5rem; }
+.catalog-editor-family-footer { display: flex; align-items: center; gap: 0.4rem; }
+/* Same fight as .row-actions/.table-toolbar's own reset — each button's shared margin-right
+   otherwise stacks on top of this row's own gap. */
+.catalog-editor-family-footer > button { margin-right: 0; }
 /* A <label class="btn-soft"> wrapping a hidden file input (see the Import buttons in
    mappings-commands.ejs) — .btn-soft's own rule gives it the right look already, this just
    restores the pointer cursor a <label> doesn't get by default the way a real <button> does. */
@@ -1939,6 +2176,12 @@ td button:not(.danger):not(.primary):not(.btn-edit):not(.btn-test) {
   margin-right: 0.3rem;
   transition: background 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
 }
+/* Same (class) specificity as .btn-test above, so this has to come after it to actually win — that
+   margin-right:0.3rem (a fallback for buttons outside a flex/gap container) fought this button's
+   own margin-left:auto (Loxone -> MQTT "Value to send" row), which pushes it to the row's right
+   edge, leaving it a few px short of actually flush unlike its sibling "Test" button elsewhere in
+   the same popover (a direct .row-actions child, where this same margin is already reset to 0). */
+.test-send-btn { margin-right: 0; }
 
 button.primary {
   background: var(--accent-soft);
@@ -2098,37 +2341,10 @@ main > p.hint:first-of-type { margin-top: 0; }
 
 .tabs a.active:hover { color: #fff; }
 
-.range-custom-form { display: flex; gap: 0.4rem; margin-left: 0.25rem; }
-
-.range-custom-form input {
-  width: 11rem;
-  padding: 0.45rem 0.7rem;
-  border-radius: 7px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.86rem;
-}
-
-.range-custom-form button {
-  padding: 0.45rem 0.9rem;
-  border-radius: 7px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 0.86rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
-}
-
-.range-custom-form button:hover { color: var(--text); border-color: var(--accent); }
-
-.range-custom-form button.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
+/* .range-picker-form (Monitor detail/Home/Logs' own wrapper around the shared rangeField()) needs
+   no bespoke rules of its own — .range-select/.range-custom-input/.range-absolute-wrap (see
+   chartFieldHelpers.js) already carry their own layout from the dashboard panel Range field. */
+.range-picker-form { display: flex; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; }
 
 /* ---- Login ---- */
 .login-page {
@@ -2160,15 +2376,24 @@ main > p.hint:first-of-type { margin-top: 0; }
 
 /* Drag handle used by both the home Dashboard's and My Dashboards' panel grids
    (see partials/panel-grid.ejs) — the old standalone widget system this was
-   originally built for is gone, but the handle style lives on. */
-.widget-drag-handle {
+   originally built for is gone, but the handle style lives on. Now the target of GridStack's own
+   `dragHandle` option (set in the grid-init script) rather than a hand-rolled pointer-drag
+   listener — same look, same spot, different mechanism underneath. */
+.widget-drag-handle,
+.group-drag-handle {
   position: absolute;
   top: 0.6rem;
   left: 0.5rem;
   color: var(--text-muted);
   font-size: 0.8rem;
   line-height: 1;
+  cursor: grab;
 }
+/* .dash-panel-group-header's own bar is noticeably shorter than a regular panel's card (0.35rem
+   padding vs 1rem) — the shared top:0.6rem sits a little low against that shorter height instead
+   of landing centered the way it does on a regular panel. */
+.dash-panel-group-header .group-drag-handle { top: 50%; transform: translateY(-50%); }
+.group-drag-handle:active { cursor: grabbing; }
 
 /* Small icon-only action button (edit/delete on a dash-panel header, etc.) — same
    look the Dashboard's old widget-delete button once established, generalized so
@@ -2229,15 +2454,16 @@ main > p.hint:first-of-type { margin-top: 0; }
    open" the same way — filled in with the accent color — rather than only being distinguishable
    by whatever's now visible below it. Set generically on click by the shared [data-toggle-row]
    handler (see partials/foot.ejs), so a new icon-only trigger gets this for free just by using
-   that same attribute. Scoped to .icon-btn specifically: a colored action button (Rename/Edit,
-   already yellow via .btn-edit) uses this same attribute too, but forcing it to ALSO turn accent
-   green while open would clash with its own resting color rather than read as "active."
+   that same attribute. :not(.icon-btn-edit): a colored action button (Rename/Edit, already yellow
+   via .icon-btn-edit) uses this same attribute too, and forcing it to ALSO turn accent green while
+   open clashed with its own resting color instead of reading as "active" — it should just stay
+   yellow, open or not.
    !important on all three: a chevron inside a <td> (every one of these is) also matches the
    generic `.btn-soft, td button:not(.danger):not(.primary):not(.btn-edit):not(.btn-test)` skin
    rule, whose four :not() classes out-specificity this two-class selector and would otherwise
    silently win color/background/border back to plain neutral regardless of .active — same
    fight, same fix, as .favorite-toggle-btn.is-favorited above. */
-.icon-btn.active { color: var(--accent) !important; background: var(--accent-soft) !important; border-color: var(--accent) !important; }
+.icon-btn.active:not(.icon-btn-edit) { color: var(--accent) !important; background: var(--accent-soft) !important; border-color: var(--accent) !important; }
 
 /* A panel's "Save as default" star (panel-grid.ejs), once a default is actually saved for its
    type — same bordered-box treatment as Edit/Duplicate/Delete, and the same filled-icon-means-
@@ -2375,6 +2601,29 @@ main > p.hint:first-of-type { margin-top: 0; }
    header buttons elsewhere in the app. */
 .suggest-dashboard-btn { margin-left: auto; font-size: 0.78rem; padding: 0.25rem 0.6rem; }
 
+/* The per-room bulk-select cluster (Monitor/Widget/Clear selected — see live-data.ejs) rides in
+   this same right-aligned slot, shown only while something's checked. margin-left:auto here too
+   (not just on .suggest-dashboard-btn) so it still pushes itself to the row's far right on its
+   own when Suggest dashboard is disabled/absent for this Miniserver. */
+.live-data-inline-bulk {
+  /* Reset all four sides, not just margin-left: this also carries .hint for its color/font-size
+     (see live-data.ejs), whose own margin (-0.4rem 0 1.25rem, meant for block-level paragraph
+     spacing) otherwise survives and skews this flex item's margin box enough that <summary>'s own
+     align-items:center no longer lines its text up with Suggest dashboard/the room name next to
+     it — same fight, same fix, as the table-pager row-count span elsewhere in this file. */
+  margin: 0 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 400;
+}
+.live-data-inline-bulk button { font-size: 0.78rem; padding: 0.25rem 0.6rem; }
+/* Once the cluster is showing, .suggest-dashboard-btn's OWN margin-left:auto (needed when it's
+   the only thing here, see its own rule above) has to stand down — two auto margins on the same
+   line split the free space between them instead of one pushing the whole group, which opened up
+   a visible gap between the cluster and Suggest dashboard instead of the two sitting flush together. */
+.live-data-inline-bulk:not([hidden]) ~ .suggest-dashboard-btn { margin-left: 0; }
+
 .suggest-preview {
   margin: 0 0.6rem 0.85rem 1.7rem;
   padding: 0.75rem 0.9rem;
@@ -2439,6 +2688,13 @@ tr.expand-row.open td > .ms-diagnostics-card { border-width: 1px; padding: 0.85r
    class name has tables.js's collapseRowActions() attached, which would sweep this into its own
    "..." kebab menu instead of showing the buttons directly). Same plain flex/gap layout either way. */
 .ms-update-actions { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 1.5rem; }
+/* Same fight as .row-actions/.table-toolbar's own reset — each button's shared margin-right
+   otherwise stacks on top of this row's own gap. Covers both a direct <button> (Check for
+   update/Update to latest release) and one nested one form deep (Add to Dashboard/Add to
+   Monitor's own submit buttons) — !important since two of these carry class="primary", which
+   ties this reset's own specificity via the shared rule's own `button.primary` selector; with a
+   tie, source order would otherwise let that later rule quietly win the fight back. */
+.ms-update-actions > button, .ms-update-actions > form > button { margin-right: 0 !important; }
 .ms-update-result { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; }
 
 /* This card's real content height is much shorter than the shared tr.expand-row.open cap (40rem —
@@ -2509,6 +2765,24 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
   animation: panel-fade-in 0.18s var(--ease);
 }
 
+/* Dashboard's own "Add panel" — a plain button (see #dash-add-panel-btn in panel-grid.ejs, next to
+   Add group/Auto order) toggling this card's [hidden], rather than a <details class="add-panel">
+   disclosure like every OTHER "Add X" form in the app. Its own class (not a shared .add-panel<
+   details>) since there's no <summary> here for .add-panel-body's usual border-top/padding-top to
+   visually separate from — this card IS just the body, so it gets the full card's own padding on
+   every side instead. */
+.dash-add-panel-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow);
+}
+.dash-add-panel-card .add-panel-body {
+  padding: 1.4rem;
+  animation: panel-fade-in 0.18s var(--ease);
+}
+
 @keyframes panel-fade-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -2518,40 +2792,156 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
 .chart-wrap {
   position: relative;
   height: 320px;
+  /* Column layout so the current-value bar (fixed to its own content height) and the canvas's own
+     wrapper (flex:1, see .monitor-chart-canvas-wrap below) split this fixed 320px between them —
+     without this, Chart.js's own resize-to-parent logic would still size the canvas to the WHOLE
+     320px regardless of the bar taking up real space above it, overflowing the card by the bar's
+     own height. */
+  display: flex;
+  flex-direction: column;
+}
+
+.monitor-current-value-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.monitor-current-value-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.monitor-current-value-main {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+/* Chart.js's own responsive resize (responsive:true, maintainAspectRatio:false — see
+   monitor-chart.js) sizes the canvas to fill its DIRECT parent, not .chart-wrap itself — this
+   inner wrapper is what actually gets measured, so the canvas only ever claims the space left over
+   after .monitor-current-value-bar above it, instead of the bar's own height being double-counted. */
+.monitor-chart-canvas-wrap,
+.chart-canvas-inner {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+/* The canvas itself, once the custom legend (see monitor-chart.js's buildCustomLegend) becomes its
+   sibling inside this same flex wrapper. Without flex:1 here, a plain flex item defaults to
+   sizing itself from its own current width/height — whatever Chart.js had last set them to,
+   typically the WHOLE wrapper, from before the legend existed as a sibling taking up any of that
+   space at all — so the pair together overflowed the wrapper's own fixed box by however tall/wide
+   the legend turned out to be, instead of the canvas actually shrinking to make room for it. */
+.monitor-chart-canvas-wrap > canvas,
+.chart-canvas-inner > canvas {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Chart.js's own canvas-drawn legend (plugins.legend) is display:false for every 'line'-type chart
+   (see monitor-chart.js) — its wrapping behavior at position:top/bottom packs as many series as
+   fit side by side on one row, which read as "some values run together, some don't" once each
+   series' own name could also carry a min/max/avg/current stat onto the SAME line (see the Legend
+   fields in panel-grid.ejs/monitor-detail.ejs) — a long line already, and two of them sharing a
+   row got unreadable fast. This custom HTML one instead always gives each series its own row,
+   with everything about it (swatch, name, every enabled stat) on that ONE line — regardless of
+   position, which only changes WHERE this list sits (above/below/beside the plot), never how it's
+   laid out internally. */
+.chart-custom-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text);
+  overflow: auto;
+  flex-shrink: 0;
+}
+.chart-custom-legend-side { max-width: 45%; }
+.chart-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chart-legend-row.chart-legend-hidden { opacity: 0.45; text-decoration: line-through; }
+.chart-legend-swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 /* ---- Custom dashboards ---- */
-.dash-grid {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  grid-auto-rows: 70px;
-  gap: 1rem;
+/* GridStack.js (see panel-grid.ejs) now owns the actual grid layout, in one ".grid-stack" instance
+   per "zone" — this wrapper holds zone 0 (ungrouped panels, always first) and, once any group
+   exists, #dash-groups-sort-list right after it: a plain block list (NOT a second GridStack
+   instance — see the group-reorder script in panel-grid.ejs, which drives it via LoxRowReorder's
+   hand-rolled pointer-drag instead) whose own items are each a WHOLE group (header + that group's
+   own zone, see .dash-group-unit) rather than an individual panel. Direct children of THIS
+   wrapper are therefore just "zone 0" and "every group, as one block" — group_header itself is
+   never a direct child here any more, it's nested inside the sort-list's own items, so spacing
+   between INDIVIDUAL groups comes from .dash-groups-sort-list's own gap below instead. */
+.dash-grid-wrap {
   margin-bottom: 1.5rem;
-  /* Deliberately NOT grid-auto-flow: dense — tried it to make Auto order's packing tighter, but it
-     broke live drag-reorder: that logic works by physically moving the dragged card in the DOM on
-     every dragover (see getDragAfterElement below), and with dense active the grid re-packs OTHER
-     cards into the gap the dragged one leaves *during* that same drag, which reads as multiple
-     panels sliding at once instead of just the one being dragged. Auto order's own
-     largest-panel-first DOM ordering (see its script below) already gives sparse flow a
-     reasonably tight result without that side effect. */
 }
+.dash-grid-wrap > .grid-stack,
+.dash-grid-wrap > .dash-groups-sort-list {
+  margin-top: 1rem;
+}
+.dash-grid-wrap > :first-child {
+  margin-top: 0;
+}
+.dash-groups-sort-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+/* GridStack's own item gap (the `margin` grid option, set in panel-grid.ejs's init script) handles
+   spacing BETWEEN panels within one zone — no gap/grid-template-columns declared here any more,
+   GridStack positions each .grid-stack-item itself via inline styles instead of CSS Grid tracks. */
 
 .dash-panel {
   position: relative;
   display: flex;
   flex-direction: column;
+  /* Fills whatever box GridStack's own .grid-stack-item-content gives it (that element is
+     absolutely positioned with a definite height — see gridstack.min.css — so height:100% here
+     resolves against a real number, not against an undefined "auto"). Meaningless (and harmless)
+     for a group_header, which isn't nested inside a grid-stack-item at all. */
+  height: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem 1.2rem 1.2rem 1.9rem;
   box-shadow: var(--shadow);
-  cursor: grab;
   transition: box-shadow 0.18s var(--ease), border-color 0.18s var(--ease);
   overflow: visible;
 }
 
 .dash-panel:hover { box-shadow: var(--shadow-md); border-color: color-mix(in srgb, var(--accent) 25%, var(--border)); }
-.dash-panel.dragging { opacity: 0.4; }
+
+/* A radial gauge's own ring is square (has to stay circular, can't stretch non-uniformly to fill
+   a rectangle), so any container taller than it is wide already leaves it centered with vertical
+   breathing room on its own — the base 1rem/1.2rem top/bottom padding shared by every OTHER panel
+   type on top of that made a gauge specifically read as having an oversized empty margin above
+   and below the ring. Scoped to just gauge panels (not a sitewide padding change) via :has(). */
+.dash-panel:has(.gauge-radial-wrap) { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+/* GridStack applies its own .ui-draggable-dragging class (see gridstack.min.css) to the
+   .grid-stack-item being dragged — .dash-panel itself no longer gets a .dragging class of its own
+   (the old pointer-based drag-reorder script that set one is gone). */
 
 /* A dashboard panel's own edit form (and the Monitor detail page's own chart-settings form, see
    monitor-detail.ejs) — opens as a fixed side drawer (the same pattern as the app's Help drawer:
@@ -2590,6 +2980,18 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
 }
 .panel-settings-form.open { transform: translateX(0); }
 
+/* While a drawer row is being drag-reordered (LoxRowReorder in threshold-annotation-builder.js sets
+   this flag on <body> for the duration of the drag), un-promote the drawer's own compositing layer
+   and drop the backdrop blur: a fixed + transformed + backdrop-blurred layer flattens into a GPU
+   layer that renders semi-transparent (and leaves ghost repaint trails of the row's native inputs)
+   while the row slides through the DOM. transition:none is essential here — WITHOUT it the drawer's
+   own `transition: transform` keeps animating toward `none`, so the transform stays a live identity
+   matrix (still a promoted layer) for the whole 0.28s instead of collapsing to a true `none`;
+   killing the transition makes it snap to none instantly and the layer actually goes away.
+   translateX(0) and none are the same position, so this is visually identical — just un-promoted. */
+body.lox-row-reordering .panel-settings-form.open { transform: none; transition: none; }
+body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
 /* One drag handle per panel (a sibling right after its own .panel-settings-form, see
    panel-grid.ejs), but only the currently-open one's is ever shown — position:fixed with 100% -
    var(...) tracks the same right-anchored drawer's left edge regardless of which panel it
@@ -2622,6 +3024,55 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
 }
 .panel-edit-backdrop.open { display: block; opacity: 1; }
 
+/* A log source that's known to be broken right now — a Miniserver whose Logbook fetch has been
+   failing (loxoneLog.js's poller, /logs/loxone) or the MQTT broker itself being disconnected
+   (/logs/mqtt) — blurs the table+toolbar rather than just leaving them looking empty, which
+   otherwise reads exactly like "no log lines yet" instead of "this is actually broken."
+   pointer-events:none since a blurred, non-functional table shouldn't still be clickable
+   underneath the notice sitting on top of it. */
+.filterable-table-card.log-source-unavailable-blurred { position: relative; }
+.filterable-table-card.log-source-unavailable-blurred > .table-toolbar,
+.filterable-table-card.log-source-unavailable-blurred > .table-wrap {
+  filter: blur(4px);
+  pointer-events: none;
+  user-select: none;
+}
+.log-source-unavailable-notice {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.log-source-unavailable-notice-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 1.25rem 1.5rem;
+  max-width: 26rem;
+  text-align: center;
+}
+/* The raw error string, in its own block below the explanation paragraph rather than inline
+   mid-sentence (see <code> elsewhere in this file) — inline meant it could break across lines
+   right in the middle of a word, and the surrounding sentence and the error text read as one
+   confusing run-on. left-aligned and pre-wrapped despite the box around it being centered text —
+   a right-ragged, left-aligned error message is far more readable than one centered line-by-line. */
+.log-source-unavailable-error {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-family: "SF Mono", Consolas, monospace;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* The one panel whose drawer is currently open (see the editing/syncBackdrop JS in
    panel-grid.ejs) — lifted above the backdrop's z-index so it stays sharp/undimmed while every
    other panel is blurred behind it, letting a live-refresh or auto-saved change actually be seen
@@ -2633,6 +3084,69 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
    partly behind the drawer itself, or squeezed into a thin sliver at the edge of the remaining
    visible area. */
 .dash-panel.editing { z-index: 95; box-shadow: 0 0 0 2px var(--accent), var(--shadow-lg); transition: left 0.2s var(--ease), top 0.2s var(--ease); }
+/* GridStack's own resize handle is a child of .grid-stack-item — the OUTER wrapper, one level up
+   from the .dash-panel that centerEditingPanel() (see foot.ejs) lifts to z-index:95 and re-centers
+   via position:fixed while its drawer is open. The wrapper itself never moves (fixed positioning
+   takes the panel out of the grid's own layout entirely), so the resize handle — still a plain
+   child of that stationary wrapper — kept sitting at the panel's OLD, now-vacated grid slot the
+   whole time editing was open: a resize corner floating on its own with no panel behind it,
+   nowhere near where the panel actually rendered. Hidden while editing rather than chasing the
+   panel's new position, since a panel can already be resized normally with the drawer closed. */
+.grid-stack-item:has(> .grid-stack-item-content > .dash-panel.editing) > .ui-resizable-handle {
+  display: none;
+}
+
+/* GridStack's own default (gridstack.min.css) is overflow-y:auto on this wrapper — meant for
+   content that's genuinely taller than the widget. Ours never is (Auto order sizes every panel to
+   fit its content exactly), so that rule only ever fires on a harmless artifact: a rotated child
+   (the radial gauge ring's <svg style="transform:rotate(...)">) reports a larger post-rotation
+   bounding box than its own pre-rotation layout box, which browsers still count as scrollable
+   overflow even though nothing is actually clipped or misplaced on screen. The result was a
+   spurious scrollbar sitting along a gauge panel's edge with nothing to scroll to. Any panel type
+   that DOES need internal scrolling (tables, value lists) already sets overflow-y:auto on its own
+   inner content element one level deeper, so hiding overflow here doesn't affect them.
+   .grid-stack-item-content alone never actually won this fight: GridStack's OWN rule is the
+   three-deep .grid-stack>.grid-stack-item>.grid-stack-item-content (specificity 0-3-0), which
+   beats a plain single-class override outright — and even matching that chain isn't future-proof
+   against whatever GridStack's next vendored version happens to write it as. !important is the
+   right tool for deliberately overriding a third-party library's own default, rather than a
+   selector arms race against a file we don't control. Scoped to .dash-grid-wrap — the dashboard
+   panel grid is the only thing GridStack drives on this page; the threshold/annotation/value-
+   mapping row-reorder lists use their own hand-rolled pointer-drag instead (see
+   threshold-annotation-builder.js) specifically because a GridStack-based version of THOSE didn't
+   coexist well with a color-picker popover opening position:absolute within the same row. */
+.dash-grid-wrap .grid-stack-item-content { overflow-y: hidden !important; }
+/* GridStack's own drag placeholder (gridstack.min.css: .grid-stack-placeholder > .placeholder-
+   content) — the plain grey box shown where a panel will land while dragging. Square-cornered by
+   default, next to a dash-panel's own rounded corners, it stood out as visibly different chrome
+   rather than a preview of the same thing settling into place. */
+.grid-stack-placeholder > .placeholder-content { border-radius: var(--radius); }
+
+/* An empty zone (a group with no panels yet, or the ungrouped zone-0) is 0px tall, so GridStack has
+   no area to drop a cross-zone drag onto — moving a panel INTO an empty group did nothing. While a
+   panel is being dragged, panel-grid.ejs adds this class to every currently-empty zone so it opens
+   up into a clearly-marked drop target (the brand green), then removes it the moment the drag ends. */
+.grid-stack.dash-grid-empty-droppable {
+  min-height: 84px;
+  outline: 2px dashed var(--accent);
+  outline-offset: -6px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  transition: min-height 0.12s var(--ease);
+}
+
+/* Live "the group lands here" drop zone, shown while a whole group is being drag-reordered (see
+   opts.dropIndicator in threshold-annotation-builder.js / the group-reorder wiring in
+   panel-grid.ejs). Same green dashed treatment as the empty-panel drop zones above, so the two read
+   as one system. */
+.lox-reorder-drop-indicator {
+  height: 46px;
+  margin: 8px 0;
+  border-radius: var(--radius);
+  border: 2px dashed var(--accent);
+  background: var(--accent-soft);
+  pointer-events: none;
+}
 
 /* Monitor detail page's own equivalent of .dash-panel.editing above (see the syncBackdrop JS in
    monitor-detail.ejs, which also re-centers it exactly the way centerEditingPanel() does for a
@@ -2641,21 +3155,9 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
    stay blurred like everything not currently being edited. */
 #monitor-chart-wrap.editing { z-index: 95; box-shadow: 0 0 0 2px var(--accent), var(--shadow-lg); }
 
-.dash-panel-resize-handle {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-  border-bottom: 2px solid var(--text-muted);
-  border-right: 2px solid var(--text-muted);
-  border-radius: 0 0 4px 0;
-  opacity: 0.5;
-}
-
-.dash-panel-resize-handle { transition: opacity 0.15s var(--ease), border-color 0.15s var(--ease); }
-.dash-panel-resize-handle:hover { opacity: 1; border-color: var(--accent); }
+/* Per-panel resize handle is GridStack's own now (see gridstack.min.css's .ui-resizable-*
+   rules) — the old bottom-right-corner .dash-panel-resize-handle span/CSS is gone with the
+   hand-rolled pointer-drag script that used to draw and drive it. */
 
 .dash-panel-head {
   flex-shrink: 0;
@@ -2674,6 +3176,62 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
   letter-spacing: 0.03em;
 }
 
+/* A group_header panel: a slim full-width divider/section-collapse bar, not a card — rendered as
+   a plain block-flow sibling BETWEEN two ".grid-stack" zones (see panel-grid.ejs's render loop),
+   never as a grid-stack-item itself, so it's naturally only as tall as its own content with no
+   grid row-track to shrink or work around at all (the old fixed-70px-row workaround this used to
+   need, syncGroupHeaderRowHeights(), is gone along with the CSS Grid layout it was compensating
+   for). */
+.dash-panel-group-header {
+  padding: 0.35rem 1rem 0.35rem 1.9rem;
+  background: var(--surface-alt);
+  box-shadow: none;
+}
+.dash-panel-group-header:hover { box-shadow: none; }
+.dash-panel-group-header .dash-panel-head {
+  margin-bottom: 0;
+  align-items: center;
+}
+/* flex:1 (not the chevron/title/row-actions default even split from .dash-panel-head's own
+   justify-content:space-between) is what actually pins the title against the chevron on the left
+   — with 3 plain flex siblings and space-between, the MIDDLE one (the title) lands roughly
+   centered in the leftover space instead of hugging the item next to it. Absorbing all the extra
+   space into the title itself (text-align left within that now-wider box) still leaves
+   row-actions pinned to the far right, just without stranding the title in the middle. */
+.dash-panel-group-header .dash-panel-title {
+  flex: 1;
+  text-align: left;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+}
+/* The title itself stays bold (inherited from .dash-panel-group-header .dash-panel-title above) —
+   this is just the "- description" tail read back to normal weight/color so only the title reads
+   as emphasized, matching a plain "**Title** - description" markdown-style convention. */
+.dash-panel-group-description {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.group-header-toggle {
+  flex-shrink: 0;
+}
+.group-header-chevron {
+  display: inline-flex;
+  transition: transform 0.2s var(--ease);
+}
+.group-header-toggle.is-collapsed .group-header-chevron {
+  transform: rotate(-90deg);
+}
+/* Applied by the collapse-toggle script (panel-grid.ejs) to a group_header's own ".grid-stack"
+   zone div (the one immediately after it — see the render loop) while that group is collapsed —
+   one element hidden instead of every member individually, now that each group is its own
+   separate GridStack instance rather than a DOM-order-based run of panels. */
+.dash-panel-group-collapsed {
+  display: none !important;
+}
+
 /* Inside a dash-panel, content fills whatever height the panel was resized to
    (the base .chart-wrap height:320px above is for the standalone Monitor detail
    page and doesn't apply here — flex:1 overrides it). */
@@ -2681,8 +3239,10 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
 .dash-panel .panel-table-scroll,
 .dash-panel .panel-value-list,
 .dash-panel .gauge-wrap,
+.dash-panel .gauge-radial-wrap,
 .dash-panel .threshold-wrap,
-.dash-panel .stat-delta {
+.dash-panel .stat-delta,
+.dash-panel .state-bar-panel {
   flex: 1;
   min-height: 0;
 }
@@ -2742,7 +3302,7 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
 .panel-value-list[data-layout="row"] .panel-value-row .value { text-align: left; }
 
 /* ---- Gauge / threshold / stat-delta panels ---- */
-.gauge-wrap, .threshold-wrap, .stat-delta {
+.threshold-wrap, .stat-delta {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -2750,11 +3310,45 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
   flex: 1;
 }
 
+/* .gauge-wrap/.gauge-radial-wrap (below) hold ONE .gauge-bar-item/.gauge-radial-item per monitor
+   in the panel (see panel-grid.ejs) — a plain wrapping flex row, so a single-monitor gauge (the
+   overwhelming common case) just renders one item that naturally fills the whole row, and a
+   several-monitor gauge lays its items out side by side instead of needing a whole separate
+   layout mode. */
+.gauge-wrap {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 1rem;
+  flex: 1;
+}
+.gauge-bar-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3rem;
+  flex: 1 1 10rem;
+  min-width: 8rem;
+}
+.gauge-bar-label { font-size: 0.78rem; color: var(--text-muted); }
+
 .gauge-track {
   height: 10px;
   border-radius: 999px;
   background: var(--accent-soft);
   overflow: hidden;
+}
+
+/* Bar style's own equivalent of the radial section ring — a thin always-visible strip showing
+   the full threshold ladder (see barSectionsGradient in panel-grid.ejs), separate from .gauge-fill
+   itself so the fill can stay colored by just the CURRENT value's own matched threshold without
+   hiding where the other bands start. */
+.gauge-bar-sections {
+  height: 4px;
+  border-radius: 999px;
+  margin-top: 4px;
 }
 
 .gauge-fill {
@@ -2766,7 +3360,242 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
 
 .gauge-value { font-size: 1.5rem; font-weight: 600; }
 
+.gauge-radial-wrap {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+/* Multi-value gauges sit side by side while the panel is wider than tall, but STACK vertically once
+   it's clearly taller than wide (a narrow, tall panel) — so each gauge fills the available height
+   instead of being squeezed into a thin side-by-side sliver. The wrap is made a size container so
+   its OWN aspect ratio drives the switch; forcing every item onto a full-width flex line is what
+   stacks them (flex-wrap is already on). container-type:size needs a definite height, which every
+   gauge panel has from its grid cell (and centerEditingPanel sets one explicitly while editing), so
+   the wrap never collapses. A single-value gauge is unaffected — it fills the row either way. */
+.gauge-wrap,
+.gauge-radial-wrap { container-type: size; }
+@container (max-aspect-ratio: 9 / 10) {
+  .gauge-radial-wrap > .gauge-radial-item,
+  .gauge-wrap > .gauge-bar-item { flex-basis: 100%; }
+}
+
+/* container-type:size on the item is what lets .gauge-radial-outer below size itself from the
+   ACTUAL space this one gauge got (both width and height — several gauges side by side, or a
+   panel resized taller/wider, both change that) rather than a fixed pixel box that never grew
+   past its original size regardless of how big the panel itself was resized to. */
+.gauge-radial-item {
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  flex: 1 1 0;
+  min-width: 4.5rem;
+  min-height: 0;
+}
+.gauge-radial-label { font-size: 0.78rem; color: var(--text-muted); max-width: 100%; }
+
+/* Min at the left, max at the right — roughly under the arc's own two ends (an open arc's gap
+   sits at the bottom, so its start/end land lower-left/lower-right) rather than one "0–40 unit"
+   string centered below, which read as disconnected from which side of the ring was which.
+   Reset all four margins, not just the ones .hint's own block-paragraph spacing would otherwise
+   leave behind — same fight/fix as the table-pager row-count span elsewhere in this file. */
+.gauge-radial-minmax {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0;
+}
+
+/* Arc shape only (see the render loop's own shape !== 'circle' check) — anchored right at the
+   ring's own two ends (gaugeMinPoint/gaugeMaxPoint in panel-grid.ejs), rather than centered below
+   the whole item where there'd otherwise be a big gap to the ring's own visible end (the arc
+   doesn't reach the bottom of its own square bounding box). translate() pulls each label back
+   INWARD from its own anchor point (toward this gauge's own center) rather than outward away from
+   the ring — several gauges side by side in one panel (see .gauge-radial-wrap) sit close enough
+   together that labels reading outward instead collided with the NEXT gauge's own min/max, right
+   in the narrow gap between items. */
+.gauge-radial-min,
+.gauge-radial-max {
+  position: absolute;
+  margin: 0;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+.gauge-radial-min { transform: translate(0%, 20%); }
+.gauge-radial-max { transform: translate(-100%, 20%); }
+
+.gauge-radial-outer {
+  container-type: size;
+  position: relative;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
+  margin: 0 auto;
+}
+
+/* The SVG's own rotation (set inline per-panel, see panel-grid.ejs's gaugeRotation) positions the
+   sweep's low (min) end at the right place for whichever shape (full circle vs. an open arc) this
+   gauge is using — an SVG circle's own dash-start point is 3 o'clock, so a plain closed ring needs
+   no particular rotation at all (0deg leaves it fully symmetric), while an arc's gap has to be spun
+   into place the same way a battery/loading-ring convention would. */
+.gauge-radial { width: 100%; height: 100%; }
+.gauge-radial-track { fill: none; stroke: var(--accent-soft); stroke-width: 9; }
+/* Ring just outside the main one (r=46 vs. the track's own r=38, with a modest gap between — see
+   panel-grid.ejs) — the full threshold ladder, always fully visible regardless of the current
+   reading, so the main ring's own fill/needle can be colored by just ITS one matched threshold
+   without hiding where the other bands actually start. About 1/3 the main ring's own stroke-width
+   (9) rather than matching it — thin enough to read as a marker ring, not a second value ring. */
+.gauge-radial-section { fill: none; stroke-width: 3; }
+.gauge-radial-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 9;
+  stroke-linecap: butt;
+  transition: stroke-dasharray 0.3s var(--ease), stroke 0.3s var(--ease);
+}
+/* Needle style (Style: Round + Needle on) — a plain pointer from center to the current value's
+   angle, drawn instead of the filled progress arc above so the sections/track underneath it stay
+   fully visible the way a real speedometer's needle doesn't hide its own dial face. */
+.gauge-radial-needle {
+  stroke: var(--text);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: x2 0.3s var(--ease), y2 0.3s var(--ease);
+}
+.gauge-radial-needle-pivot { fill: var(--text); }
+
+.gauge-radial-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2cqw;
+  text-align: center;
+  padding: 0 8cqw;
+}
+.gauge-radial-value-text {
+  font-weight: 600;
+  /* Scales with the ring's own (container-query) size instead of a fixed rem, so several gauges
+     crammed side by side — or one stretched across a big resized panel — both keep the value text
+     proportional to the ring drawing it, rather than clipping small or looking lost when huge. */
+  font-size: clamp(0.6rem, 20cqw, 2rem);
+}
+/* Trend line under value (Style: Round only, see panel-grid.ejs's own sparklinePoints) — stroke:
+   currentColor by default so it inherits the SAME threshold color .gauge-radial-value is already
+   set to, rather than needing its own separate color rule that could drift out of sync with it.
+   .gauge-radial-sparkline-neutral (Trend line color: "Default") overrides that back to a plain
+   muted color instead, for whenever a reading's own ever-changing threshold color is more
+   distraction than help on the trend line specifically. */
+.gauge-radial-sparkline {
+  width: 55%;
+  height: 16cqw;
+  min-height: 10px;
+  max-height: 1.4rem;
+  overflow: visible;
+}
+.gauge-radial-sparkline polyline {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.7;
+}
+.gauge-radial-sparkline-neutral polyline { stroke: var(--text-muted); }
+
 .threshold-wrap { align-items: flex-start; }
+
+/* ---- State bar panel (Grafana-style discrete state timeline) ---- */
+/* A CSS Grid, not flex rows — with flex, each .state-bar-row sized its own .state-bar-label
+   independently (flex:0 0 auto just means "as wide as THIS row's own text", capped at 30%, not
+   "the same width as every other row's label"), so a panel with one short label and one long one
+   had its tracks start at visibly different x-positions instead of lining up. Grid's own
+   max-content column sizing gives every row the SAME label-column width for free — sized to the
+   single widest label across the whole panel, capped by .state-bar-label's own max-width. */
+.state-bar-panel {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  /* start, not center: center looks nicer when there's a LITTLE extra room, but once the row stack
+     is taller than the box (see overflow-y below), centering means the overflow splits evenly
+     above AND below — the first row clips at the top by the same amount the last one clips at the
+     bottom, and both look cut off before you've scrolled at all. start keeps row 1 anchored fully
+     in view at rest, with any overflow landing entirely at the bottom where scrolling for "more
+     rows below" already reads as the natural thing to do. */
+  align-content: start;
+  row-gap: 0.6rem;
+  column-gap: 0.6rem;
+  /* Safety net for a panel dragged shorter than all its rows need: without this, rows that don't
+     fit bleed straight into the header/footer above and below (flex/grid content overflows its own
+     box by default, it doesn't get clipped or pushed anywhere) — the exact "edit button and
+     timestamp end up under the data" bug this was built to prevent. applyMinSizes() (panel-grid.ejs)
+     keeps the panel itself from ever getting THAT small in the first place, but this is what makes
+     going smaller still a scroll instead of an overlap if it ever does. */
+  overflow-y: auto;
+}
+.state-bar-row {
+  display: contents;
+}
+.state-bar-label {
+  /* No max-width of our own — the shared .truncate class (see below in the markup) already caps
+     any single label at 320px and handles click-to-expand/ellipsis. A percentage max-width here
+     would resolve against this GRID COLUMN's own track, not the panel — since the track itself is
+     max-content-sized FROM these same labels, that's circular: the browser sizes the column to fit
+     the widest label, then re-clamps every label back down to a fraction of that same column,
+     chopping most of the text regardless of how much room the panel actually has. */
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  /* Width may still shrink (a narrower panel is fine), but never below about 15 characters — past
+     that the label stops actually identifying which monitor a bar belongs to. ch is a character-
+     width unit, so this scales with font-size instead of needing a re-guess in px. */
+  min-width: 15ch;
+}
+.state-bar-track {
+  position: relative;
+  height: 1.6rem;
+  min-width: 2.5rem;
+  background: var(--surface-alt);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.state-bar-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: left 0.3s var(--ease), width 0.3s var(--ease), background 0.3s var(--ease);
+}
+/* A gap with no recorded reading yet — a muted diagonal stripe rather than a flat fill, so it
+   reads as "nothing known here" instead of as its own real (if oddly gray) state. */
+.state-bar-segment-nodata {
+  background-image: repeating-linear-gradient(45deg, var(--border), var(--border) 4px, transparent 4px, transparent 8px) !important;
+}
+/* White + a dark shadow reads legibly against any segment color a user might pick, without
+   needing to compute per-color contrast. Hidden entirely (not just clipped) once it's wider than
+   its own segment — see the "state-bar-fit-labels" script in panel-grid.ejs — a truncated "Act…"
+   is worse than no label at all on a bar this narrow. */
+.state-bar-segment-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.state-bar-segment-label.is-overflowing {
+  visibility: hidden;
+}
 
 .stat-delta-value { font-size: 1.6rem; font-weight: 600; }
 
@@ -2926,11 +3755,9 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
 
   main { padding: 0 1rem 1.5rem; }
 
-  /* The 12-column grid and each panel's own inline grid-column/grid-row span (set per-panel from
-     its stored col_span/row_span, see partials/panel-grid.ejs) both stay exactly as saved — only
-     how they're PRESENTED changes here. !important is the only way to win against an inline
-     style from a stylesheet rule; row span is deliberately left alone (still whatever height the
-     panel was sized to on desktop) since that's still a reasonable chart/value height full-width. */
-  .dash-grid { grid-template-columns: 1fr; }
-  .dash-panel { grid-column: 1 / -1 !important; }
+  /* No CSS override needed here any more — GridStack itself switches every zone to a single,
+     full-width column below its own `oneColumnSize` option (768, set in panel-grid.ejs's
+     grid-init script to match this exact breakpoint), the same "stay exactly as saved, only how
+     it's PRESENTED changes" behavior the old inline grid-column/grid-row !important override
+     used to force by hand against CSS Grid's per-panel inline styles. */
 }

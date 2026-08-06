@@ -35,7 +35,7 @@
     <tbody>
       <% topics.forEach(t => { %>
         <tr>
-          <td><code class="truncate" title="<%= t.topic %>"><%= t.topic %></code></td>
+          <td><code class="truncate" style="max-width:none; width:100%;" title="<%= t.topic %>"><%= t.topic %></code></td>
           <td><strong class="truncate" title="<%= t.value %>"><%= t.value %></strong></td>
           <td>
             <% if (t.previousValue === null) { %>-<% } else { %>
@@ -44,10 +44,14 @@
           </td>
           <td title="<%= t.count %>"><%= formatCount(t.count) %></td>
           <td><%= formatDateTime(t.lastSeen) %></td>
-          <td><code class="recognition-string" title="<%= t.recognition %>"><%= t.recognition %></code></td>
+          <td>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:0.35rem;">
+              <code class="recognition-string" style="flex:1; min-width:0; max-width:none;" title="<%= t.recognition %>"><%= t.recognition %></code>
+              <button type="button" class="copy-btn btn-soft" style="flex-shrink:0;" data-copy="<%= t.recognition %>" title="Copy Command Recognition string"><%- icon('copy') %> <span class="btn-label">Copy</span></button>
+            </div>
+          </td>
           <td>
             <div class="row-actions">
-              <button type="button" class="copy-btn" data-copy="<%= t.recognition %>" title="Copy Command Recognition string"><%- icon('copy') %> <span class="btn-label">Copy</span></button>
               <% if (canEdit('mqtt_to_loxone')) { %>
               <a class="inline" href="/mappings/mqtt-to-loxone?topic=<%= encodeURIComponent(t.topic) %>" title="Use this topic in a new MQTT&nbsp;&rarr;&nbsp;Loxone mapping"><button type="button" class="primary"><%- icon('link') %> Map</button></a>
               <% } %>

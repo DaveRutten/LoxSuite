@@ -377,6 +377,14 @@ function migrateMiniserverStatusColumns() {
     // Miniserver shouldn't also delete every Miniserver that merely points at it as a Client.
     db.exec('ALTER TABLE miniservers ADD COLUMN gateway_client_of INTEGER REFERENCES miniservers(id) ON DELETE SET NULL');
   }
+  if (!columns.includes('logbook_error')) {
+    // Set by loxoneLog.js's poller whenever GET /dev/fsget/log/def.log fails (most commonly a
+    // restricted Loxone user account without rights to read the Miniserver's own logbook — some
+    // installations set up a deliberately limited user for a Client Miniserver that can still do
+    // plenty else over the same HTTP API), cleared back to NULL the next time it succeeds. Lets
+    // /logs/loxone show an explanatory message instead of silently looking like "no lines yet".
+    db.exec('ALTER TABLE miniservers ADD COLUMN logbook_error TEXT');
+  }
 }
 
 migrateMiniserverStatusColumns();
@@ -501,6 +509,41 @@ function migrateDashboardPanelConfig() {
 
 migrateDashboardPanelConfig();
 
+// panel_type's own CHECK constraint is a fixed allowlist SQLite can't ALTER in place — every new
+// panel type (state_bar, and group_header from the still-in-progress collapsible panel groups
+// work) needs the same "recreate the table with a wider CHECK, copy every row over" migration as
+// migrateDashboardPanelConfig above. Guarded by inspecting the table's own stored CREATE TABLE SQL
+// (sqlite_master) rather than a column check — this migration doesn't add a column, so there's no
+// "does this column exist yet" signal to key off like the earlier ones use.
+function migrateDashboardPanelTypesExpanded() {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'dashboard_panels'").get();
+  if (!row || row.sql.includes('state_bar')) return;
+
+  db.exec(`
+    CREATE TABLE dashboard_panels_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dashboard_id INTEGER NOT NULL REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+      panel_type TEXT NOT NULL CHECK (panel_type IN ('chart', 'table', 'value', 'gauge', 'stat_delta', 'threshold', 'state_bar', 'group_header')),
+      title TEXT,
+      range TEXT NOT NULL DEFAULT '24h',
+      config TEXT NOT NULL DEFAULT '{}',
+      col_span INTEGER NOT NULL DEFAULT 4,
+      row_span INTEGER NOT NULL DEFAULT 3,
+      position INTEGER NOT NULL DEFAULT 0
+    );
+
+    INSERT INTO dashboard_panels_new (id, dashboard_id, panel_type, title, range, config, col_span, row_span, position)
+    SELECT id, dashboard_id, panel_type, title, range, config, col_span, row_span, position
+    FROM dashboard_panels;
+
+    DROP TABLE dashboard_panels;
+    ALTER TABLE dashboard_panels_new RENAME TO dashboard_panels;
+  `);
+  console.log('Migrated dashboard_panels: added state_bar/group_header panel types.');
+}
+
+migrateDashboardPanelTypesExpanded();
+
 // The home Dashboard is being unified with My Dashboards: it becomes one ordinary
 // `custom_dashboards` row with no owner (shared, editable by anyone with the `dashboard` Access
 // Role area) instead of a second, parallel widget system. A dashboard row needs to be ownerless,
@@ -594,6 +637,20 @@ function migrateLogRetentionSetting() {
 }
 
 migrateLogRetentionSetting();
+
+function migrateLiveDataHiddenStatesSetting() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('live_data_hidden_states')) {
+    // JSON array of exact state-name strings (e.g. "jLocked") to hide from both Live Data's
+    // room/category tree and Monitor's "pick a state" list — see loxoneStructure.js's
+    // flattenStates/buildRoomCategoryTree, the one place both read from. A user-editable list
+    // rather than a curated fixed set: which sub-states read as noise varies a lot by installation
+    // and control mix, so there's no one "right" default list to ship.
+    db.exec("ALTER TABLE gateway_settings ADD COLUMN live_data_hidden_states TEXT NOT NULL DEFAULT '[]'");
+  }
+}
+
+migrateLiveDataHiddenStatesSetting();
 
 // Access Roles (view/edit permissions per page) and Pocket ID SSO both need `users` to support a
 // nullable password (SSO-only accounts have none) and a role reference — SQLite can't relax a
@@ -1576,5 +1633,39 @@ function ensureLoxoneHardwareDevicesTable() {
 }
 
 ensureLoxoneHardwareDevicesTable();
+
+// One optional {title, body} template per trigger_type (see notifications.js's TRIGGER_TYPES),
+// stored as a single JSON blob keyed by trigger_type rather than a whole extra table — there are
+// only ever these 9 fixed types, never user-created ones, so there's no real row-per-template need.
+// A type absent from this object (the default, empty '{}') keeps using its own hardcoded
+// title/message exactly as before this existed — see notifications.js's applyTemplate.
+function migrateNotificationTemplatesSetting() {
+  const columns = db.prepare('PRAGMA table_info(gateway_settings)').all().map((c) => c.name);
+  if (!columns.includes('notification_templates')) {
+    db.exec("ALTER TABLE gateway_settings ADD COLUMN notification_templates TEXT NOT NULL DEFAULT '{}'");
+  }
+}
+
+migrateNotificationTemplatesSetting();
+
+// GridStack.js replaced the hand-rolled skyline auto-packer and pointer-based drag/resize (see
+// panel-grid.ejs) — it tracks each panel's own explicit x/y grid coordinate natively, unlike the
+// old CSS-Grid-auto-placement-with-only-col/row-span model. col_span/row_span keep meaning
+// width/height in grid units exactly as before (reused as GridStack's own w/h), so only the
+// missing x/y coordinate needs a new column each. NULL means "never explicitly positioned by
+// GridStack yet" (true for every panel that already existed before this migration) —
+// panel-grid.ejs's own render loop omits gs-x/gs-y for those, so GridStack auto-places them (in
+// their existing position order) the first time an editor's own dashboard load runs, then
+// immediately persists the computed result via POST .../panels/layout, so the next load has a
+// real saved position instead of re-auto-placing every time.
+function migrateDashboardPanelGridPosition() {
+  const columns = db.prepare('PRAGMA table_info(dashboard_panels)').all().map((c) => c.name);
+  if (columns.includes('grid_x')) return;
+  db.exec('ALTER TABLE dashboard_panels ADD COLUMN grid_x INTEGER');
+  db.exec('ALTER TABLE dashboard_panels ADD COLUMN grid_y INTEGER');
+  console.log('Migrated dashboard_panels: added grid_x/grid_y for GridStack.js explicit positioning.');
+}
+
+migrateDashboardPanelGridPosition();
 
 module.exports = db;

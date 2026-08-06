@@ -8,53 +8,14 @@
   // global EJS helpers in server.js, alongside toggleSwitch/icon/serializeThresholdLadder etc.)
   // once the Monitor detail page's own chart settings became a second consumer of them.
 
-  // Same shape as thresholdField() (a collapsible, dynamic add/remove-row builder over a
-  // hidden textarea in the exact format dashboards.js already parses) but for an EXACT value
-  // match rather than a >= ladder — each row is a value, the name to show instead of it, and an
-  // optional color of its own (its own color wins over the threshold ladder for that one value,
-  // since it's the more specific rule — see loadPanelsWithMonitors).
-  function valueMappingField(fieldName, mappings) {
-    return `<details class="threshold-builder-details" style="grid-column:1/-1;" ${mappings && mappings.length > 0 ? 'open' : ''}>
-      <summary>Value names &amp; colors (optional)</summary>
-      <div class="value-mapping-builder" data-name="${fieldName}">
-        <div class="value-mapping-rows"></div>
-        <button type="button" class="btn-soft value-mapping-add-row">${icon('plus')} Add value</button>
-        <textarea name="${fieldName}" class="value-mapping-hidden" hidden>${escAttr(serializeValueMappings(mappings))}</textarea>
-        <p class="hint" style="margin:0.4rem 0 0;">Shows the name instead of a matching reading's raw value — every row gets a color too, starting from a default you can pick your own instead of.</p>
-      </div>
-    </details>`;
-  }
+  // valueMappingField moved to chartFieldHelpers.js (registered as a global EJS helper) once the
+  // Monitor detail page's own chart settings became a second consumer — same reasoning as
+  // escAttr/unitField/thresholdField/annotationField above.
 
-  const RANGE_PRESETS = [
-    ['1h', 'Last hour'], ['24h', 'Last 24 hours'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['all', 'All'],
-  ];
-  const ABS_RANGE_RE = /^abs_(\d+)_(\d+)$/;
-  function rangeField(currentValue) {
-    const presetValues = RANGE_PRESETS.map((p) => p[0]);
-    const absMatch = typeof currentValue === 'string' ? currentValue.match(ABS_RANGE_RE) : null;
-    const isCustom = !!currentValue && !presetValues.includes(currentValue) && !absMatch;
-    let html = '<select class="range-select" data-range-name="range">';
-    RANGE_PRESETS.forEach(([value, label]) => {
-      html += `<option value="${value}" ${currentValue === value ? 'selected' : ''}>${label}</option>`;
-    });
-    html += `<option value="__custom__" ${isCustom ? 'selected' : ''}>Custom&hellip;</option>`;
-    html += `<option value="__absolute__" ${absMatch ? 'selected' : ''}>Absolute range&hellip;</option></select>`;
-    html += `<input type="text" class="range-custom-input" placeholder="e.g. 3h, 10m, 45s"
-      value="${isCustom ? escAttr(currentValue) : ''}" style="margin-top:0.3rem; width:100%; ${isCustom ? '' : 'display:none;'}">`;
-    // Raw epoch ms (not a pre-formatted date string) — the actual datetime-local values are filled
-    // in by client-side JS from these, specifically so they render in the BROWSER's own local
-    // timezone. Formatting them here instead would use the server process's timezone (the Docker
-    // container, always UTC — see dateFormat.js), silently showing the wrong moment to anyone not
-    // in UTC themselves, the exact bug an earlier fix this session (Monitor's "Last updated") was
-    // for, just for a different field.
-    html += `<div class="range-absolute-wrap" data-start-ms="${absMatch ? absMatch[1] : ''}" data-end-ms="${absMatch ? absMatch[2] : ''}"
-      style="margin-top:0.3rem; display:flex; flex-direction:column; gap:0.3rem; ${absMatch ? '' : 'display:none;'}">
-      <div><label style="font-size:0.7rem; margin-bottom:0.15rem;">From</label><input type="datetime-local" class="range-absolute-start"></div>
-      <div><label style="font-size:0.7rem; margin-bottom:0.15rem;">To</label><input type="datetime-local" class="range-absolute-end"></div>
-      <input type="hidden" class="range-absolute-hidden">
-    </div>`;
-    return html;
-  }
+  // rangeField() itself moved to chartFieldHelpers.js (registered as a global EJS helper) once
+  // Monitor detail/Home/Logs became consumers too — every call site in this file now passes
+  // { includeDashboardDefault: true } for the "Dashboard default" inherit option only this page
+  // (a dashboard panel's own Range field) actually has any use for.
 %>
 <%
   // Not deferred, and loaded here rather than down with chart.umd.min.js/monitor-chart.js at the
@@ -64,10 +25,51 @@
   // just before the page finishes loading.
 %>
 <script src="/color-picker.js"></script>
+<%
+  // GridStack.js (vendored MIT-licensed build, see /vendor/gridstack-all.min.js's own header) —
+  // one instance per "zone" powers the whole panel grid below, replacing the old hand-rolled
+  // skyline auto-packer + pointer-based drag/resize entirely (see the grid-init script and the
+  // render loop's own comment further down). Loaded here rather than in partials/head.ejs/foot.ejs
+  // since this grid is the only consumer, same reasoning as color-picker.js just above.
+%>
+<link rel="stylesheet" href="/vendor/gridstack.min.css">
+<script src="/vendor/gridstack-all.min.js"></script>
+<%
+  // Favorite lives in the same row-actions bar as Add panel/Add group whenever both are present,
+  // but neither gates the other — favoriting is a personal action available to a view-only
+  // visitor of a shared dashboard (who has no Add panel/Add group at all, hence its own row here),
+  // same as it always was before it lived in the page's own header instead of this shared partial.
+%>
+<% if (typeof isFavorited !== 'undefined' || canEditPanels) { %>
+<div class="row-actions" style="margin-bottom:0.75rem;">
+  <% if (typeof isFavorited !== 'undefined') { %>
+  <form method="post" action="/dashboards/<%= dashboardId %>/<%= isFavorited ? 'unfavorite' : 'favorite' %>" class="inline">
+    <input type="hidden" name="redirect_to" value="/dashboards/<%= dashboardId %>">
+    <button type="submit" class="btn-soft favorite-toggle-btn <%= isFavorited ? 'is-favorited' : '' %>" title="<%= isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>">
+      <%- icon('star') %> <%= isFavorited ? 'Remove from favorite' : 'Add to favorite' %>
+    </button>
+  </form>
+  <% } %>
+  <% if (canEditPanels) { %>
+  <button type="button" id="dash-add-panel-btn" class="btn-soft"><%- icon('plus') %> Add panel</button>
+  <form method="post" action="/dashboards/<%= dashboardId %>/panels" class="inline">
+    <input type="hidden" name="panel_type" value="group_header">
+    <input type="hidden" name="title" value="New group">
+    <button type="submit" class="btn-soft" title="Adds a full-width divider bar — every panel added afterwards lands in this group (its own separate mini-grid) until the next header, if there is one. The chevron on the header then collapses/expands everything currently in that group.">
+      <%- icon('plus') %> Add group
+    </button>
+  </form>
+  <% if (panels.length > 1) { %>
+  <button type="button" id="dash-auto-order-btn" class="btn-soft" style="margin-left:auto;" title="Pack every group's panels tightly, closing up any gaps">
+    <%- icon('grid') %> Auto order
+  </button>
+  <% } %>
+  <% } %>
+</div>
+<% } %>
 <% if (canEditPanels) { %>
 <div id="panel-edit-backdrop" class="panel-edit-backdrop"></div>
-<details class="add-panel">
-  <summary>Add panel</summary>
+<div id="dash-add-panel-card" class="dash-add-panel-card" hidden>
   <div class="add-panel-body">
     <form method="post" action="/dashboards/<%= dashboardId %>/panels">
       <div class="form-grid">
@@ -80,12 +82,13 @@
             <option value="gauge">Gauge</option>
             <option value="stat_delta">Stat with change</option>
             <option value="threshold">Threshold indicator</option>
+            <option value="state_bar">State bar</option>
           </select>
         </div>
         <div><label>Title (optional)</label><input type="text" name="title" placeholder="Leave blank to auto-generate one"></div>
         <div id="panel-range-field">
           <label>Range</label>
-          <%- rangeField('24h') %>
+          <%- rangeField('dashboard', { includeDashboardDefault: true }) %>
         </div>
       </div>
 
@@ -101,16 +104,34 @@
             <option value="radar">Radar</option>
           </select>
         </div>
-        <div>
-          <label>Legend</label>
-          <select name="legend_position">
-            <option value="auto" selected>Auto (only when &gt;1 monitor)</option>
-            <option value="top">Top</option>
-            <option value="bottom">Bottom</option>
-            <option value="left">Left</option>
-            <option value="right">Right</option>
-            <option value="off">Off</option>
-          </select>
+        <div class="threshold-builder-details-wrap" style="grid-column:1/-1;">
+          <details class="threshold-builder-details" open>
+            <summary>Legend</summary>
+            <div class="form-grid">
+              <div>
+                <label>Legend</label>
+                <select name="legend_position" id="legend-position-select" class="legend-position-select">
+                  <option value="auto" selected>Auto (only when &gt;1 monitor)</option>
+                  <option value="top">Top</option>
+                  <option value="bottom">Bottom</option>
+                  <option value="left">Left</option>
+                  <option value="right">Right</option>
+                  <option value="off">Off</option>
+                </select>
+              </div>
+              <div data-chart-type-for="line" data-legend-for="on"><label>Legend alignment</label>
+                <select name="legend_align">
+                  <option value="start" selected>Left</option>
+                  <option value="center">Center</option>
+                  <option value="end">Right</option>
+                </select>
+              </div>
+              <div data-chart-type-for="line" data-legend-for="on"><label>Show min in legend</label><%- toggleSwitch('legend_show_min', false) %></div>
+              <div data-chart-type-for="line" data-legend-for="on"><label>Show max in legend</label><%- toggleSwitch('legend_show_max', false) %></div>
+              <div data-chart-type-for="line" data-legend-for="on"><label>Show average in legend</label><%- toggleSwitch('legend_show_avg', false) %></div>
+              <div data-chart-type-for="line" data-legend-for="on"><label>Show current value in legend</label><%- toggleSwitch('legend_show_current', false) %></div>
+            </div>
+          </details>
         </div>
         <div data-chart-type-for="line"><label>Y-axis unit (optional)</label><%- unitField('unit_chart', '') %></div>
         <div data-chart-type-for="line"><label>Stepped line</label>
@@ -158,16 +179,36 @@
       </div>
 
       <div class="form-grid" id="table-fields" style="margin-top:0.85rem; display:none;">
-        <div><label>Value scale (multiplier, optional)</label><input type="number" name="scale_table" value="1" step="any"></div>
+        <div><label>Value scale (optional)</label><%- scaleField('scale_table', 1) %></div>
+        <div><label>Decimals (optional)</label><input type="number" name="decimals_table" min="0" max="6" placeholder="Default"></div>
         <%- thresholdField('table_thresholds', []) %>
       </div>
 
       <div class="form-grid" id="gauge-fields" style="margin-top:0.85rem; display:none;">
+        <div><label>Style</label>
+          <select name="gauge_style" id="gauge-style-select">
+            <option value="bar">Bar</option>
+            <option value="radial">Round</option>
+          </select>
+        </div>
+        <div data-gauge-style-for="radial"><label>Shape</label>
+          <select name="gauge_shape">
+            <option value="arc" selected>Arc</option>
+            <option value="circle">Full circle</option>
+          </select>
+        </div>
         <div><label>Minimum</label><input type="number" name="gauge_min" value="0" step="any"></div>
         <div><label>Maximum</label><input type="number" name="gauge_max" value="100" step="any"></div>
         <div><label>Unit (optional)</label><%- unitField('unit_gauge', '') %></div>
-        <div><label>Value scale (multiplier, optional)</label><input type="number" name="scale_gauge" value="1" step="any"></div>
+        <div><label>Value scale (optional)</label><%- scaleField('scale_gauge', 1) %></div>
+        <div><label>Decimals (optional)</label><input type="number" name="decimals_gauge" min="0" max="6" placeholder="Default"></div>
+        <div><label>Threshold sections</label><%- toggleSwitch('gauge_sections', false) %></div>
+        <div data-gauge-sections-for="on"><label>Gradient sections</label><%- toggleSwitch('gauge_sections_gradient', false) %></div>
+        <div data-gauge-style-for="radial"><label>Needle</label><%- toggleSwitch('gauge_needle', false) %></div>
+        <div data-gauge-style-for="radial"><label>Trend line under value</label><%- toggleSwitch('gauge_sparkline', false) %></div>
+        <div data-gauge-style-for="radial" data-gauge-sparkline-for="on"><label>Neutral trend line color</label><%- toggleSwitch('gauge_sparkline_neutral', false) %></div>
         <%- thresholdField('gauge_thresholds', []) %>
+        <p class="hint" style="grid-column:1/-1; margin:0;">Check more than one monitor above to show several gauges side by side in this panel, all sharing this same range/unit/thresholds.</p>
       </div>
 
       <div class="form-grid" id="stat-delta-fields" style="margin-top:0.85rem; display:none;">
@@ -180,7 +221,8 @@
             <option value="down_good">Lower is better</option>
           </select>
         </div>
-        <div><label>Value scale (multiplier, optional)</label><input type="number" name="scale_stat_delta" value="1" step="any"></div>
+        <div><label>Value scale (optional)</label><%- scaleField('scale_stat_delta', 1) %></div>
+        <div><label>Decimals (optional)</label><input type="number" name="decimals_stat_delta" min="0" max="6" placeholder="Default"></div>
         <%- thresholdField('stat_delta_thresholds', []) %>
       </div>
 
@@ -196,10 +238,17 @@
         </div>
         <div><label>Threshold</label><input type="number" name="threshold_value" value="0" step="any"></div>
         <div><label>Unit (optional)</label><%- unitField('unit_threshold', '') %></div>
-        <div><label>Value scale (multiplier, optional)</label><input type="number" name="scale_threshold" value="1" step="any"></div>
+        <div><label>Value scale (optional)</label><%- scaleField('scale_threshold', 1) %></div>
+        <div><label>Decimals (optional)</label><input type="number" name="decimals_threshold" min="0" max="6" placeholder="Default"></div>
         <p class="hint" style="grid-column:1/-1; margin:0;">The threshold above is compared against the value <em>after</em> scaling.</p>
         <div><label>Label when normal</label><input type="text" name="label_ok" placeholder="Normal"></div>
         <div><label>Label when alert</label><input type="text" name="label_alert" placeholder="Alert"></div>
+      </div>
+
+      <div class="form-grid" id="state-bar-fields" style="margin-top:0.85rem; display:none;">
+        <div><label>Default color (unmapped values)</label><input type="color" class="single-color-input" name="state_bar_default_color" value="#8a93a6"></div>
+        <%- valueMappingField('state_bar_value_labels', []) %>
+        <p class="hint" style="grid-column:1/-1; margin:0;">Check more than one monitor above to stack several state bars in this one panel, one row per monitor.</p>
       </div>
 
       <p class="hint" style="margin-top:0.6rem;">New panels start at a default size &mdash; drag a panel's bottom-right corner afterwards to resize it.</p>
@@ -218,7 +267,7 @@
         <p class="hint" style="margin:0.4rem 0 0;">Appears once you've checked a monitor below — rename a value, give it its own unit, or scale/round it independently from the others.</p>
       </details>
 
-      <div style="margin-top:0.85rem;">
+      <div style="margin-top:0.85rem;" id="monitors-section">
         <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);">
           Monitors
         </label>
@@ -244,23 +293,65 @@
       </div>
     </form>
   </div>
-</details>
-<% } %>
-
-<% if (canEditPanels && panels.length > 1) { %>
-<div class="row-actions" style="justify-content:flex-end; margin-bottom:0.75rem;">
-  <button type="button" id="dash-auto-order-btn" class="btn-soft" title="Resize every panel to fit its own content, then pack them tightly with the fewest gaps">
-    <%- icon('grid') %> Auto order
-  </button>
 </div>
 <% } %>
 
-<div class="dash-grid" id="dash-grid">
+<div class="dash-grid-wrap" id="dash-grid">
+  <%
+    // One GridStack instance per "zone", not one grid for the whole dashboard — zone 0 is every
+    // panel before the first group_header, rendered inside its own <div class="grid-stack">
+    // opened right below; each group_header then closes whatever zone preceded it and immediately
+    // opens a brand-new one (even if it turns out to have zero members, so the collapse-toggle
+    // script below always has a same-sized sibling to show/hide) for the panels that follow IT, up
+    // to the next header or the end of the list. Every group (header + its own zone-grid) also
+    // sits inside a shared .dash-groups-sort-list — a plain block container, NOT a second GridStack
+    // instance (see the group-reorder script further down, which reuses LoxRowReorder's hand-
+    // rolled pointer-drag instead) — nesting a second INTERACTIVE GridStack grid inside one of the
+    // panel zones' own draggable items was tried and reverted, it broke hit-testing for both drags
+    // it was ever supposed to coexist with. Zone 0 (ungrouped panels) stays outside it entirely —
+    // it's not a group, and always renders first regardless of how the groups below it reorder.
+    let dashZoneIndex = 0;
+    let hasOpenGroupUnit = false;
+  %>
+  <div class="grid-stack" id="dash-grid-zone-0">
   <% panels.forEach(p => { %>
-    <div class="dash-panel" data-id="<%= p.id %>" data-col-span="<%= p.col_span %>" data-row-span="<%= p.row_span %>" draggable="<%= canEditPanels ? 'true' : 'false' %>" style="grid-column: span <%= p.col_span %>; grid-row: span <%= p.row_span %>;">
-      <% if (canEditPanels) { %><span class="widget-drag-handle" title="Drag to reorder">&#8942;&#8942;</span><% } %>
+    <% const isGroupHeader = p.panel_type === 'group_header'; %>
+    <% if (isGroupHeader) { %>
+      </div>
+      <% if (hasOpenGroupUnit) { %></div><% } %>
+      <% if (!hasOpenGroupUnit) { %><div class="dash-groups-sort-list" id="dash-groups-sort-list"><% } %>
+      <div class="dash-group-unit" data-group-panel-id="<%= p.id %>">
+      <% hasOpenGroupUnit = true; %>
+    <% } %>
+    <% if (!isGroupHeader) { %>
+      <%
+        // NULL grid_x/grid_y (see db.js's migrateDashboardPanelGridPosition) means this panel has
+        // never been explicitly positioned by GridStack — omitting gs-x/gs-y entirely (rather than
+        // e.g. defaulting to 0,0) is what tells GridStack to auto-place it instead, in its existing
+        // position order, alongside whatever else in this same zone already has (or lacks) one.
+        // data-needs-position flags it for the grid-init script further down, which persists
+        // GridStack's own computed x/y right after auto-placing it so the NEXT load has a real
+        // saved spot instead of re-auto-placing every time.
+        const hasGridPos = p.grid_x !== null && p.grid_x !== undefined && p.grid_y !== null && p.grid_y !== undefined;
+      %>
+    <div class="grid-stack-item" gs-w="<%= p.col_span %>" gs-h="<%= p.row_span %>" gs-min-w="2" gs-min-h="2" gs-id="<%= p.id %>"<% if (hasGridPos) { %> gs-x="<%= p.grid_x %>" gs-y="<%= p.grid_y %>"<% } else { %> data-needs-position="1"<% } %>>
+      <div class="grid-stack-item-content">
+    <% } %>
+    <div class="dash-panel<%= isGroupHeader ? ' dash-panel-group-header' : '' %>" data-id="<%= p.id %>" data-panel-type="<%= p.panel_type %>">
+      <% if (canEditPanels && !isGroupHeader) { %><span class="widget-drag-handle" title="Drag to reorder">&#8942;&#8942;</span><% } %>
+      <% if (canEditPanels && isGroupHeader) { %><span class="group-drag-handle" title="Drag to reorder this group">&#8942;&#8942;</span><% } %>
       <div class="dash-panel-head">
-        <div class="dash-panel-title"><%= p.title || (p.panel_type.charAt(0).toUpperCase() + p.panel_type.slice(1)) %></div>
+        <% if (isGroupHeader) { %>
+          <button type="button" class="icon-btn icon-btn-neutral group-header-toggle" title="Collapse/expand this group" aria-label="Collapse/expand this group">
+            <span class="group-header-chevron"><%- icon('chevron') %></span>
+          </button>
+        <% } %>
+        <div class="dash-panel-title">
+          <%= p.title || (p.panel_type.charAt(0).toUpperCase() + p.panel_type.slice(1)) %>
+          <% if (isGroupHeader && p.config.description) { %>
+            <span class="dash-panel-group-description"> - <%= p.config.description %></span>
+          <% } %>
+        </div>
         <% if (canEditPanels) { %>
         <div class="row-actions">
           <button type="button" class="icon-btn icon-btn-edit" title="Edit panel" data-toggle-row="panel-edit-<%= p.id %>"><%- icon('edit') %></button>
@@ -310,12 +401,18 @@
             <option value="gauge" <%= p.panel_type === 'gauge' ? 'selected' : '' %>>Gauge</option>
             <option value="stat_delta" <%= p.panel_type === 'stat_delta' ? 'selected' : '' %>>Stat with change</option>
             <option value="threshold" <%= p.panel_type === 'threshold' ? 'selected' : '' %>>Threshold indicator</option>
+            <option value="state_bar" <%= p.panel_type === 'state_bar' ? 'selected' : '' %>>State bar</option>
+            <option value="group_header" <%= p.panel_type === 'group_header' ? 'selected' : '' %>>Group header</option>
           </select>
         </div>
         <div><label>Title</label><input type="text" name="title" value="<%= p.title || '' %>" placeholder="Title"></div>
-        <div data-fields-for="chart,table,stat_delta">
+        <div data-fields-for="group_header">
+          <label>Description (optional)</label>
+          <input type="text" name="description" value="<%= p.panel_type === 'group_header' ? (p.config.description || '') : '' %>" placeholder="Shown after the title as &quot;Title - description&quot;">
+        </div>
+        <div data-fields-for="chart,table,stat_delta,state_bar">
           <label>Range</label>
-          <%- rangeField(p.range) %>
+          <%- rangeField(p.range, { includeDashboardDefault: true }) %>
         </div>
 
         <%
@@ -348,16 +445,35 @@
               <option value="radar" <%= chartType === 'radar' ? 'selected' : '' %>>Radar</option>
             </select>
           </div>
-          <div>
-            <label>Legend</label>
-            <select name="legend_position">
-              <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto (only when &gt;1 monitor)</option>
-              <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
-              <option value="bottom" <%= legendPos === 'bottom' ? 'selected' : '' %>>Bottom</option>
-              <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
-              <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
-              <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
-            </select>
+          <% var legendAlign = p.panel_type === 'chart' ? (p.config.legendAlign || 'start') : 'start'; %>
+          <div class="threshold-builder-details-wrap" style="grid-column:1/-1;">
+            <details class="threshold-builder-details" open>
+              <summary>Legend</summary>
+              <div class="form-grid">
+                <div>
+                  <label>Legend</label>
+                  <select name="legend_position" class="legend-position-select">
+                    <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto (only when &gt;1 monitor)</option>
+                    <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
+                    <option value="bottom" <%= legendPos === 'bottom' ? 'selected' : '' %>>Bottom</option>
+                    <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
+                    <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
+                    <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
+                  </select>
+                </div>
+                <div data-chart-type-for="line" data-legend-for="on"><label>Legend alignment</label>
+                  <select name="legend_align">
+                    <option value="start" <%= legendAlign === 'start' ? 'selected' : '' %>>Left</option>
+                    <option value="center" <%= legendAlign === 'center' ? 'selected' : '' %>>Center</option>
+                    <option value="end" <%= legendAlign === 'end' ? 'selected' : '' %>>Right</option>
+                  </select>
+                </div>
+                <div data-chart-type-for="line" data-legend-for="on"><label>Show min in legend</label><%- toggleSwitch('legend_show_min', p.panel_type === 'chart' && !!p.config.legendShowMin) %></div>
+                <div data-chart-type-for="line" data-legend-for="on"><label>Show max in legend</label><%- toggleSwitch('legend_show_max', p.panel_type === 'chart' && !!p.config.legendShowMax) %></div>
+                <div data-chart-type-for="line" data-legend-for="on"><label>Show average in legend</label><%- toggleSwitch('legend_show_avg', p.panel_type === 'chart' && !!p.config.legendShowAvg) %></div>
+                <div data-chart-type-for="line" data-legend-for="on"><label>Show current value in legend</label><%- toggleSwitch('legend_show_current', p.panel_type === 'chart' && !!p.config.legendShowCurrent) %></div>
+              </div>
+            </details>
           </div>
           <div data-chart-type-for="line"><label>Y-axis unit</label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
           <div data-chart-type-for="line"><label>Stepped line</label>
@@ -434,10 +550,8 @@
 
         <div class="panel-section" data-fields-for="table">
           <div class="panel-section-title">Appearance</div>
-          <div>
-            <label>Value scale (multiplier)</label>
-            <input type="number" name="scale_table" value="<%= p.panel_type === 'table' && p.config.scale != null ? p.config.scale : 1 %>" step="any">
-          </div>
+          <div><label>Value scale</label><%- scaleField('scale_table', p.panel_type === 'table' && p.config.scale != null ? p.config.scale : 1) %></div>
+          <div><label>Decimals (optional)</label><input type="number" name="decimals_table" min="0" max="6" placeholder="Default" value="<%= p.panel_type === 'table' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
         </div>
         <div data-fields-for="table" style="grid-column:1/-1;">
           <%- thresholdField('table_thresholds', p.panel_type === 'table' ? p.config.thresholds : []) %>
@@ -445,13 +559,32 @@
 
         <div class="panel-section" data-fields-for="gauge">
           <div class="panel-section-title">Range</div>
+          <div><label>Style</label>
+            <select name="gauge_style" class="gauge-style-select">
+              <option value="bar" <%= !(p.panel_type === 'gauge' && p.config.style === 'radial') ? 'selected' : '' %>>Bar</option>
+              <option value="radial" <%= p.panel_type === 'gauge' && p.config.style === 'radial' ? 'selected' : '' %>>Round</option>
+            </select>
+          </div>
+          <div data-gauge-style-for="radial"><label>Shape</label>
+            <select name="gauge_shape">
+              <option value="arc" <%= !(p.panel_type === 'gauge' && p.config.shape === 'circle') ? 'selected' : '' %>>Arc</option>
+              <option value="circle" <%= p.panel_type === 'gauge' && p.config.shape === 'circle' ? 'selected' : '' %>>Full circle</option>
+            </select>
+          </div>
           <div><label>Minimum</label><input type="number" name="gauge_min" value="<%= p.panel_type === 'gauge' ? p.config.min : 0 %>" step="any"></div>
           <div><label>Maximum</label><input type="number" name="gauge_max" value="<%= p.panel_type === 'gauge' ? p.config.max : 100 %>" step="any"></div>
           <div><label>Unit</label><%- unitField('unit_gauge', p.panel_type === 'gauge' ? (p.config.unit || '') : '') %></div>
-          <div><label>Value scale (multiplier)</label><input type="number" name="scale_gauge" value="<%= p.panel_type === 'gauge' && p.config.scale != null ? p.config.scale : 1 %>" step="any"></div>
+          <div><label>Value scale</label><%- scaleField('scale_gauge', p.panel_type === 'gauge' && p.config.scale != null ? p.config.scale : 1) %></div>
+          <div><label>Decimals (optional)</label><input type="number" name="decimals_gauge" min="0" max="6" placeholder="Default" value="<%= p.panel_type === 'gauge' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
+          <div><label>Threshold sections</label><%- toggleSwitch('gauge_sections', p.panel_type === 'gauge' && !!p.config.sections) %></div>
+          <div data-gauge-sections-for="on"><label>Gradient sections</label><%- toggleSwitch('gauge_sections_gradient', p.panel_type === 'gauge' && !!p.config.sectionsGradient) %></div>
+          <div data-gauge-style-for="radial"><label>Needle</label><%- toggleSwitch('gauge_needle', p.panel_type === 'gauge' && !!p.config.needle) %></div>
+          <div data-gauge-style-for="radial"><label>Trend line under value</label><%- toggleSwitch('gauge_sparkline', p.panel_type === 'gauge' && !!p.config.sparkline) %></div>
+          <div data-gauge-style-for="radial" data-gauge-sparkline-for="on"><label>Neutral trend line color</label><%- toggleSwitch('gauge_sparkline_neutral', p.panel_type === 'gauge' && p.config.sparklineColor === 'default') %></div>
         </div>
         <div data-fields-for="gauge" style="grid-column:1/-1;">
           <%- thresholdField('gauge_thresholds', p.panel_type === 'gauge' ? p.config.thresholds : []) %>
+          <% if (p.panel_type === 'gauge') { %><p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor above to show several gauges side by side, all sharing this same range/unit/thresholds.</p><% } %>
         </div>
 
         <div class="panel-section" data-fields-for="stat_delta">
@@ -465,7 +598,8 @@
               <option value="down_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'down_good' ? 'selected' : '' %>>Lower is better</option>
             </select>
           </div>
-          <div><label>Value scale (multiplier)</label><input type="number" name="scale_stat_delta" value="<%= p.panel_type === 'stat_delta' && p.config.scale != null ? p.config.scale : 1 %>" step="any"></div>
+          <div><label>Value scale</label><%- scaleField('scale_stat_delta', p.panel_type === 'stat_delta' && p.config.scale != null ? p.config.scale : 1) %></div>
+          <div><label>Decimals (optional)</label><input type="number" name="decimals_stat_delta" min="0" max="6" placeholder="Default" value="<%= p.panel_type === 'stat_delta' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
         </div>
         <div data-fields-for="stat_delta" style="grid-column:1/-1;">
           <%- thresholdField('stat_delta_thresholds', p.panel_type === 'stat_delta' ? p.config.thresholds : []) %>
@@ -484,7 +618,8 @@
           </div>
           <div><label>Threshold</label><input type="number" name="threshold_value" value="<%= p.panel_type === 'threshold' ? p.config.value : 0 %>" step="any"></div>
           <div><label>Unit</label><%- unitField('unit_threshold', p.panel_type === 'threshold' ? (p.config.unit || '') : '') %></div>
-          <div><label>Value scale (multiplier)</label><input type="number" name="scale_threshold" value="<%= p.panel_type === 'threshold' && p.config.scale != null ? p.config.scale : 1 %>" step="any"></div>
+          <div><label>Value scale</label><%- scaleField('scale_threshold', p.panel_type === 'threshold' && p.config.scale != null ? p.config.scale : 1) %></div>
+          <div><label>Decimals (optional)</label><input type="number" name="decimals_threshold" min="0" max="6" placeholder="Default" value="<%= p.panel_type === 'threshold' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
           <p class="hint" style="grid-column:1/-1; margin:0;">The threshold above is compared against the value <em>after</em> scaling.</p>
         </div>
         <div class="panel-section" data-fields-for="threshold">
@@ -492,10 +627,18 @@
           <div><label>When normal</label><input type="text" name="label_ok" value="<%= p.panel_type === 'threshold' ? p.config.labelOk : 'Normal' %>"></div>
           <div><label>When alert</label><input type="text" name="label_alert" value="<%= p.panel_type === 'threshold' ? p.config.labelAlert : 'Alert' %>"></div>
         </div>
+        <div class="panel-section" data-fields-for="state_bar">
+          <div class="panel-section-title">State bar</div>
+          <div><label>Default color (unmapped values)</label><input type="color" class="single-color-input" name="state_bar_default_color" value="<%= p.panel_type === 'state_bar' && p.config.defaultColor ? p.config.defaultColor : '#8a93a6' %>"></div>
+        </div>
+        <div data-fields-for="state_bar" style="grid-column:1/-1;">
+          <%- valueMappingField('state_bar_value_labels', p.panel_type === 'state_bar' ? p.config.valueLabels : []) %>
+          <p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor below to stack several state bars in this one panel, one row per monitor.</p>
+        </div>
 
-        <div class="panel-section-title" style="grid-column:1/-1;">Monitors</div>
-        <div style="grid-column:1/-1;">
-          <p class="hint panel-single-monitor-hint" data-fields-for="table,gauge,stat_delta,threshold" style="display:none; margin:0 0 0.25rem; font-size:0.7rem;">
+        <div class="panel-section-title" data-fields-for="chart,table,value,gauge,stat_delta,threshold,state_bar" style="grid-column:1/-1;">Monitors</div>
+        <div data-fields-for="chart,table,value,gauge,stat_delta,threshold,state_bar" style="grid-column:1/-1;">
+          <p class="hint panel-single-monitor-hint" data-fields-for="table,stat_delta,threshold" style="display:none; margin:0 0 0.25rem; font-size:0.7rem;">
             This panel type only uses the first checked monitor.
           </p>
           <input type="text" class="panel-monitor-filter" placeholder="Filter monitors&hellip;" style="margin-bottom:0.25rem; width:100%;">
@@ -521,10 +664,14 @@
       <span class="panel-drawer-resize-handle" title="Drag to resize"></span>
       <% } %>
 
-      <% if (p.monitors.length === 0) { %>
+      <% if (isGroupHeader) { %>
+        <!-- a group header has no body of its own — it's just the head bar above, acting as a
+             full-width divider/collapse toggle for whatever panels follow it. -->
+      <% } else if (p.monitors.length === 0) { %>
         <p class="hint">No monitors left in this panel &mdash; they may have been deleted from the Monitor page. Remove this panel or add a new one.</p>
       <% } else if (p.panel_type === 'chart') { %>
         <div class="chart-wrap">
+          <div class="chart-canvas-inner">
           <%
             // No panel-wide Decimals/Value scale for chart any more — every series can set its
             // own of both in "Series settings" now, so the panel-wide ones were just a redundant
@@ -540,8 +687,14 @@
             // (legacy boolean) becomes 'before' here too, so an old saved panel keeps rendering
             // exactly as it did before this option existed instead of silently losing its step.
             var canvasStepped = p.config.stepped === true ? 'before' : (p.config.stepped || '');
+            var legendStats = [];
+            if (p.config.legendShowMin) legendStats.push('min');
+            if (p.config.legendShowMax) legendStats.push('max');
+            if (p.config.legendShowAvg) legendStats.push('avg');
+            if (p.config.legendShowCurrent) legendStats.push('current');
           %>
-          <canvas data-chart-type="<%= p.config.chartType || 'line' %>" data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.displayRange || p.range %>" data-range-until="<%= p.chartUntilMs || '' %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>" data-scale="1" data-fill="<%= p.config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= p.config.curveTension != null ? p.config.curveTension : 0.15 %>" data-points="<%= p.config.points ? '1' : '' %>" data-animation="<%= p.config.animation ? '1' : '' %>" data-y-scale-type="<%= p.config.yScaleType || 'linear' %>" data-y-min="<%= p.config.yMin != null ? p.config.yMin : '' %>" data-y-max="<%= p.config.yMax != null ? p.config.yMax : '' %>" data-zoom="<%= p.config.zoom ? '1' : '' %>" data-thresholds="<%= JSON.stringify(p.config.thresholds || []) %>" data-annotations="<%= JSON.stringify(p.config.annotations || []) %>" data-series="<%= JSON.stringify(p.config.series || {}) %>"></canvas>
+          <canvas data-chart-type="<%= p.config.chartType || 'line' %>" data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.displayRange || p.range %>" data-range-until="<%= p.chartUntilMs || '' %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-legend-align="<%= p.config.legendAlign || 'start' %>" data-legend-stats="<%= legendStats.join(',') %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>" data-scale="1" data-fill="<%= p.config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= p.config.curveTension != null ? p.config.curveTension : 0.15 %>" data-points="<%= p.config.points ? '1' : '' %>" data-animation="<%= p.config.animation ? '1' : '' %>" data-y-scale-type="<%= p.config.yScaleType || 'linear' %>" data-y-min="<%= p.config.yMin != null ? p.config.yMin : '' %>" data-y-max="<%= p.config.yMax != null ? p.config.yMax : '' %>" data-zoom="<%= p.config.zoom ? '1' : '' %>" data-thresholds="<%= JSON.stringify(p.config.thresholds || []) %>" data-annotations="<%= JSON.stringify(p.config.annotations || []) %>" data-series="<%= JSON.stringify(p.config.series || {}) %>"></canvas>
+          </div>
         </div>
       <% } else if (p.panel_type === 'table') { %>
         <div class="panel-table-scroll">
@@ -558,11 +711,246 @@
           </table>
         </div>
       <% } else if (p.panel_type === 'gauge') { %>
-        <div class="gauge-wrap" data-live-id="panel-<%= p.id %>-body">
-          <div class="gauge-track"><div class="gauge-fill" style="width: <%= p.percent === null ? 0 : p.percent %>%; <% if (p.thresholdColor) { %>background: <%= p.thresholdColor %>;<% } %>"></div></div>
-          <div class="gauge-value" <% if (p.thresholdColor) { %>style="color: <%= p.thresholdColor %>;"<% } %>><%= p.current ? p.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
-          <div class="hint" style="margin:0;"><%= p.config.min %>&ndash;<%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
-        </div>
+        <%
+          // Shared geometry for every gauge in this panel (shape/sweep/rotation depend only on the
+          // panel's own config, not on any one monitor's reading). 'arc' sweeps 210°
+          // (Grafana/Home-Assistant-style speedometer: "more than half round, not fully round")
+          // with the gap centered at the bottom (6 o'clock); 'circle' sweeps the full 360° (no gap
+          // at all, sweep===360 makes the trailing gap-length zero). rotation positions each
+          // circle's own natural dash-start point (3 o'clock) at the sweep's low (min) end.
+          //
+          // Two concentric rings, not one: gaugeR (42) is the MAIN ring — plain track + either a
+          // fill-to-current-value arc or a needle, colored by the CURRENT reading's own matched
+          // threshold color. gaugeSectionR (48, thin, only drawn when Sections is on) sits just
+          // OUTSIDE it showing the FULL threshold ladder as fixed colored bands, always fully
+          // visible regardless of the current value — same "value ring colored by its own
+          // threshold, thin ring around it showing where the thresholds actually are" split
+          // Grafana's own gauge panel uses, rather than the bands replacing the value ring itself
+          // (which hid the very thing coloring the value once the fill covered them).
+          // gaugeR close to the original 42 (main ring's own stroke-width unchanged at 9) with the
+          // thin section ring (stroke-width 3, ~1/3 of the main ring's own) sitting just outside
+          // it — main ring's outer edge at 42.5, section ring's inner edge at 44.5, a modest ~2
+          // unit gap so they read as two distinct rings without a wide empty gulf between them.
+          const gaugeR = 38;
+          const gaugeSectionR = 46;
+          function circumference(r) { return 2 * Math.PI * r; }
+          const gaugeSweep = p.config.shape === 'circle' ? 360 : 210;
+          const gaugeRotation = 270 - gaugeSweep / 2;
+          function arcLenFor(r) { return circumference(r) * gaugeSweep / 360; }
+          const gaugeC = circumference(gaugeR);
+          const gaugeArcLen = arcLenFor(gaugeR);
+
+          // Hex-only color blend (named CSS colors / the implicit leading fill's own
+          // var(--accent-soft) below just fall back to a hard step at the midpoint instead of a
+          // blend — there's no way to resolve a CSS custom property's actual computed color from
+          // here to interpolate it) — used to turn the hard edge between two adjacent thresholds
+          // into a smooth gradient across several small sub-segments, same "Grafana threshold
+          // gradient" look rather than a flat color swapping abruptly at the boundary.
+          function hexToRgb(hex) {
+            var m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(hex || '');
+            if (!m) return null;
+            var h = m[1].length === 3 ? m[1].split('').map(function (c) { return c + c; }).join('') : m[1];
+            var num = parseInt(h, 16);
+            return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+          }
+          function blendColor(colorA, colorB, t) {
+            var a = hexToRgb(colorA), b = hexToRgb(colorB);
+            if (!a || !b) return t < 0.5 ? colorA : colorB;
+            var r = Math.round(a.r + (b.r - a.r) * t);
+            var g = Math.round(a.g + (b.g - a.g) * t);
+            var bl = Math.round(a.b + (b.b - a.b) * t);
+            return 'rgb(' + r + ',' + g + ',' + bl + ')';
+          }
+          // Threshold ladder -> a sorted list of {from, color} stops spanning [min,max] — shared
+          // by both the radial section ring (gaugeSections, arcs) and the Bar style's own section
+          // strip (barSectionsGradient, a flat CSS gradient) below, so the two styles' "Threshold
+          // sections"/"Gradient sections" toggles mean exactly the same ladder either way. null
+          // when Sections is off or there's no ladder to draw one from.
+          function thresholdStops() {
+            var min = p.config.min;
+            if (!p.config.sections || p.config.max <= min || !p.config.thresholds || !p.config.thresholds.length) return null;
+            var sorted = p.config.thresholds.slice().sort(function (a, b) { return a.value - b.value; });
+            var stops = [];
+            // A plain hex (not var(--accent-soft), which blendColor can't resolve/interpolate
+            // against) for the "nothing defined yet" zone below the lowest threshold, but only
+            // when Gradient is actually on — needed so it can blend smoothly INTO the first real
+            // threshold color instead of a hard step there being the one exception to an otherwise
+            // fully gradiented ring. Neutral enough to read reasonably on both themes; exact
+            // theme-matching isn't possible from here anyway (a CSS custom property's actual
+            // resolved value isn't known server-side). Plain bands (Gradient off) keep the
+            // theme-aware var(--accent-soft) instead, same as before — there's no blend to need
+            // a resolvable color for there.
+            if (sorted[0].value > min) stops.push({ from: min, color: p.config.sectionsGradient ? '#8a93a6' : 'var(--accent-soft)' });
+            sorted.forEach(function (t) { stops.push({ from: t.value, color: t.color }); });
+            return stops;
+          }
+          const gaugeStops = thresholdStops();
+
+          // Stops -> a list of colored sub-arcs for the thin outer section ring, subdivided into
+          // GRADIENT_STEPS tiny segments per transition (blendColor above) rather than one flat-
+          // colored band per rung, so it reads as a smooth gradient rather than a hard-edged
+          // stripe. The FINAL rung (nothing above it to blend toward) stays one flat segment all
+          // the way to max. GRADIENT_STEPS=1 collapses this back to plain hard-edged bands when
+          // Gradient itself is off (Sections can be on independently of it).
+          function gaugeSections() {
+            if (!gaugeStops) return null;
+            var min = p.config.min, max = p.config.max, range = max - min;
+            var sectionArcLen = arcLenFor(gaugeSectionR);
+            var sectionC = circumference(gaugeSectionR);
+            var GRADIENT_STEPS = p.config.sectionsGradient ? 16 : 1;
+            var bands = [];
+            for (var i = 0; i < gaugeStops.length; i++) {
+              var from = gaugeStops[i].from;
+              var to = i + 1 < gaugeStops.length ? gaugeStops[i + 1].from : max;
+              var fromPct = Math.min(100, Math.max(0, ((from - min) / range) * 100));
+              var toPct = Math.min(100, Math.max(0, ((to - min) / range) * 100));
+              if (toPct <= fromPct) continue;
+              var hasNext = i + 1 < gaugeStops.length;
+              var steps = hasNext ? GRADIENT_STEPS : 1;
+              for (var s = 0; s < steps; s++) {
+                var segFromPct = fromPct + (toPct - fromPct) * (s / steps);
+                var segToPct = fromPct + (toPct - fromPct) * ((s + 1) / steps);
+                var segColor = hasNext && steps > 1 ? blendColor(gaugeStops[i].color, gaugeStops[i + 1].color, (s + 0.5) / steps) : gaugeStops[i].color;
+                var bandLen = sectionArcLen * (segToPct - segFromPct) / 100;
+                bands.push({ color: segColor, dasharray: bandLen + ' ' + (sectionC - bandLen), rotate: gaugeSweep * (segFromPct / 100) });
+              }
+            }
+            return bands;
+          }
+          const gaugeBands = gaugeSections();
+
+          // Stops -> a plain CSS linear-gradient() string for the Bar style's own section strip —
+          // CSS gradients already interpolate color between explicit stops on their own, so
+          // Gradient here just means "omit the hard-stop pairs" rather than needing the manual
+          // sub-segment subdivision the SVG arc technique above requires.
+          function barSectionsGradient() {
+            if (!gaugeStops) return null;
+            var min = p.config.min, max = p.config.max, range = max - min;
+            var parts = gaugeStops.map(function (s, i) {
+              var pct = Math.min(100, Math.max(0, ((s.from - min) / range) * 100));
+              if (p.config.sectionsGradient || i === 0) return s.color + ' ' + pct + '%';
+              // Hard stop: repeat the previous color right up to this same position first, so the
+              // swap happens instantly at pct rather than blending across the whole span before it.
+              return gaugeStops[i - 1].color + ' ' + pct + '%, ' + s.color + ' ' + pct + '%';
+            });
+            return 'linear-gradient(to right, ' + parts.join(', ') + ')';
+          }
+          const barGradientCss = barSectionsGradient();
+
+          // Needle angle (local, pre-rotation) — the CSS rotate() already applied to the whole
+          // <svg> below carries this line to the correct world angle for free, same as the track.
+          // Starts at NEEDLE_INNER_R, well clear of true center and the value text sitting there,
+          // rather than the pivot the original design had right at (50,50) — that sat exactly
+          // where the value text is also centered, so toggling Needle on/off shifted the value
+          // text between two different vertical positions to dodge it. No separate pivot dot
+          // either any more — just the one line, still reading as "pointing out from the middle"
+          // by its own direction even though the visible segment itself starts a bit short of true
+          // center. Reaches out to just past the (thin) section ring, same "needle spans most of
+          // the dial" look a real speedometer has, rather than stopping short at the main ring's
+          // own edge.
+          const NEEDLE_INNER_R = 24;
+          function needleLine(percent) {
+            var localDeg = percent === null ? 0 : gaugeSweep * (percent / 100);
+            var rad = localDeg * Math.PI / 180;
+            var rOuter = gaugeSectionR - 2;
+            return {
+              x1: 50 + NEEDLE_INNER_R * Math.cos(rad), y1: 50 + NEEDLE_INNER_R * Math.sin(rad),
+              x2: 50 + rOuter * Math.cos(rad), y2: 50 + rOuter * Math.sin(rad),
+            };
+          }
+
+          // Where the ring's own two ends actually are (percent position within the square
+          // .gauge-radial-outer box) — an open arc's min/max labels anchor right there instead of
+          // centered below the whole item, which for a 210°-sweep arc left a big gap between the
+          // ring's own visible end (well above the box's bottom edge, since the arc doesn't fill
+          // the bottom of its own bounding square) and the label. Meaningless for a full circle
+          // (sweep 360 — both ends are the same point), which keeps the old centered "min–max"
+          // text below instead (see the render loop).
+          function endpointPct(localDeg) {
+            var worldRad = (localDeg + gaugeRotation) * Math.PI / 180;
+            var r = gaugeSectionR + 7;
+            return { left: 50 + r * Math.cos(worldRad), top: 50 + r * Math.sin(worldRad) };
+          }
+          const gaugeMinPoint = endpointPct(0);
+          const gaugeMaxPoint = endpointPct(gaugeSweep);
+
+          // A monitor's own recent-history sample (see loadPanelsWithMonitors), already normalized
+          // 0-1 — turned into a flat SVG polyline "points" string in a small fixed 100x26 box.
+          function sparklinePoints(values) {
+            if (!values || values.length < 2) return null;
+            var w = 100, h = 26, pad = 2;
+            return values.map(function (v, i) {
+              var x = (i / (values.length - 1)) * w;
+              var y = pad + (1 - v) * (h - pad * 2);
+              return x.toFixed(1) + ',' + y.toFixed(1);
+            }).join(' ');
+          }
+        %>
+        <% if (p.config.style === 'radial') { %>
+          <div class="gauge-radial-wrap" data-live-id="panel-<%= p.id %>-body">
+            <% p.gauges.forEach(function (g) { %>
+              <%
+                var fillLen = g.percent === null ? 0 : gaugeArcLen * (g.percent / 100);
+                var needle = needleLine(g.percent);
+              %>
+              <div class="gauge-radial-item">
+                <div class="gauge-radial-outer">
+                  <svg class="gauge-radial" viewBox="0 0 100 100" style="transform: rotate(<%= gaugeRotation %>deg);">
+                    <% if (gaugeBands) { %>
+                      <% gaugeBands.forEach(function (b) { %>
+                        <circle class="gauge-radial-section" cx="50" cy="50" r="<%= gaugeSectionR %>" transform="rotate(<%= b.rotate %> 50 50)" style="stroke-dasharray: <%= b.dasharray %>; stroke: <%= b.color %>;"></circle>
+                      <% }) %>
+                    <% } %>
+                    <circle class="gauge-radial-track" cx="50" cy="50" r="<%= gaugeR %>" style="stroke-dasharray: <%= gaugeArcLen %> <%= gaugeC - gaugeArcLen %>;"></circle>
+                    <% if (p.config.needle) { %>
+                      <line class="gauge-radial-needle" x1="<%= needle.x1 %>" y1="<%= needle.y1 %>" x2="<%= needle.x2 %>" y2="<%= needle.y2 %>"></line>
+                    <% } else { %>
+                      <circle class="gauge-radial-fill" cx="50" cy="50" r="<%= gaugeR %>"
+                        style="stroke-dasharray: <%= fillLen %> <%= gaugeC - fillLen %>; <% if (g.thresholdColor) { %>stroke: <%= g.thresholdColor %>;<% } %>"></circle>
+                    <% } %>
+                  </svg>
+                  <div class="gauge-radial-value" <% if (g.thresholdColor) { %>style="color: <%= g.thresholdColor %>;"<% } %>>
+                    <div class="gauge-radial-value-text"><%= g.current ? g.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+                    <%
+                      // Always reserves the sparkline's own slot (via visibility, not display/
+                      // presence) rather than only rendering it when actually enabled+has data —
+                      // a flex column centered with justify-content:center re-centers around
+                      // however many children it actually has, so the value text itself shifted
+                      // position depending on whether this one extra child was there at all.
+                      var sparkPts = p.config.sparkline ? sparklinePoints(g.sparkline) : null;
+                    %>
+                    <svg class="gauge-radial-sparkline<%= p.config.sparklineColor === 'default' ? ' gauge-radial-sparkline-neutral' : '' %>" viewBox="0 0 100 26" preserveAspectRatio="none" <% if (!sparkPts) { %>style="visibility:hidden;"<% } %>>
+                      <polyline points="<%= sparkPts || '0,13 100,13' %>"></polyline>
+                    </svg>
+                  </div>
+                  <% if (p.config.shape !== 'circle') { %>
+                    <span class="gauge-radial-min hint" style="left: <%= gaugeMinPoint.left %>%; top: <%= gaugeMinPoint.top %>%;"><%= p.config.min %><%= p.config.unit ? ' ' + p.config.unit : '' %></span>
+                    <span class="gauge-radial-max hint" style="left: <%= gaugeMaxPoint.left %>%; top: <%= gaugeMaxPoint.top %>%;"><%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></span>
+                  <% } %>
+                </div>
+                <% if (p.gauges.length > 1) { %><div class="gauge-radial-label truncate" title="<%= g.monitor.label %>"><%= g.monitor.label %></div><% } %>
+                <% if (p.config.shape === 'circle') { %>
+                  <div class="gauge-radial-minmax hint">
+                    <span><%= p.config.min %><%= p.config.unit ? ' ' + p.config.unit : '' %></span>
+                    <span><%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></span>
+                  </div>
+                <% } %>
+              </div>
+            <% }) %>
+          </div>
+        <% } else { %>
+          <div class="gauge-wrap" data-live-id="panel-<%= p.id %>-body">
+            <% p.gauges.forEach(function (g) { %>
+              <div class="gauge-bar-item">
+                <% if (p.gauges.length > 1) { %><div class="gauge-bar-label truncate" title="<%= g.monitor.label %>"><%= g.monitor.label %></div><% } %>
+                <div class="gauge-track"><div class="gauge-fill" style="width: <%= g.percent === null ? 0 : g.percent %>%; <% if (g.thresholdColor) { %>background: <%= g.thresholdColor %>;<% } %>"></div></div>
+                <% if (barGradientCss) { %><div class="gauge-bar-sections" style="background: <%= barGradientCss %>;"></div><% } %>
+                <div class="gauge-value" <% if (g.thresholdColor) { %>style="color: <%= g.thresholdColor %>;"<% } %>><%= g.current ? g.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+                <div class="hint" style="margin:0;"><%= p.config.min %>&ndash;<%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
       <% } else if (p.panel_type === 'stat_delta') { %>
         <% const RANGE_LABELS = { '1h': '1 hour', '24h': '24 hours', '7d': '7 days', '30d': '30 days', all: 'the start' };
            let deltaClass = 'neutral';
@@ -578,7 +966,7 @@
             <p class="hint" style="margin:0;">No comparison reading yet.</p>
           <% } else { %>
             <div class="stat-delta-change <%= deltaClass %>">
-              <%- p.delta > 0 ? '&#9650;' : (p.delta < 0 ? '&#9660;' : '&#8212;') %> <%= Math.abs(p.delta).toFixed(2) %><%= p.config.unit ? ' ' + p.config.unit : '' %>
+              <%- p.delta > 0 ? '&#9650;' : (p.delta < 0 ? '&#9660;' : '&#8212;') %> <%= p.displayDelta %><%= p.config.unit ? ' ' + p.config.unit : '' %>
             </div>
             <p class="hint" style="margin:0;">vs <%= RANGE_LABELS[p.displayRange || p.range] || p.displayRange || p.range %> ago</p>
           <% } %>
@@ -587,6 +975,37 @@
         <div class="threshold-wrap" data-live-id="panel-<%= p.id %>-body">
           <div class="gauge-value"><%= p.current ? p.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
           <span class="badge <%= p.isAlert ? 'badge-off' : 'badge-ok' %>"><%= p.isAlert ? p.config.labelAlert : p.config.labelOk %></span>
+        </div>
+      <% } else if (p.panel_type === 'state_bar') { %>
+        <%
+          var stateBarTotalMs = p.rangeEndMs - p.rangeStartMs;
+          function stateBarPct(ms) { return stateBarTotalMs > 0 ? ((ms - p.rangeStartMs) / stateBarTotalMs) * 100 : 0; }
+        %>
+        <div class="state-bar-panel" data-live-id="panel-<%= p.id %>-body">
+          <% p.bars.forEach(function (bar) { %>
+            <div class="state-bar-row">
+              <% if (p.bars.length > 1) { %><div class="state-bar-label truncate" title="<%= bar.monitor.label %>"><%= bar.monitor.label %></div><% } %>
+              <div class="state-bar-track">
+                <% if (bar.segments.length === 0) { %>
+                  <div class="state-bar-segment state-bar-segment-nodata" style="left:0; width:100%;" title="No data in this range"></div>
+                <% } else { %>
+                  <% bar.segments.forEach(function (seg) { %>
+                    <%
+                      var segLeft = stateBarPct(seg.startMs);
+                      var segWidth = Math.max(stateBarPct(seg.endMs) - segLeft, 0.2);
+                    %>
+                    <div class="state-bar-segment<%= seg.noData ? ' state-bar-segment-nodata' : '' %>" style="left: <%= segLeft %>%; width: <%= segWidth %>%; background: <%= seg.color %>;" title="<%= seg.label %> — <%= formatDateTime(seg.startMs) %> to <%= formatDateTime(seg.endMs) %>">
+                      <span class="state-bar-segment-label"><%= seg.label %></span>
+                    </div>
+                  <% }) %>
+                <% } %>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+        <div class="gauge-radial-minmax hint" style="margin-top:0.3rem;">
+          <span><%= formatDateTime(p.rangeStartMs) %></span>
+          <span><%= formatDateTime(p.rangeEndMs) %></span>
         </div>
       <% } else { %>
         <div class="panel-value-list" data-layout="<%= p.config.layout === 'row' ? 'row' : 'stacked' %>" data-live-id="panel-<%= p.id %>-body">
@@ -606,13 +1025,51 @@
           <% }) %>
         </div>
       <% } %>
-      <% if (canEditPanels) { %><span class="dash-panel-resize-handle" title="Drag to resize"></span><% } %>
     </div>
+    <% if (!isGroupHeader) { %>
+      </div>
+    </div>
+    <% } else { %>
+      <% dashZoneIndex += 1; %>
+      <div class="grid-stack" id="dash-grid-zone-<%= dashZoneIndex %>" data-group-id="<%= p.id %>">
+    <% } %>
   <% }) %>
+  </div>
+  <% if (hasOpenGroupUnit) { %></div></div><% } %>
   <% if (panels.length === 0) { %>
     <p class="hint">No panels yet<% if (canEditPanels) { %> &mdash; add one above<% } %>.</p>
   <% } %>
 </div>
+
+<script>
+  // Upgrades every plain server-rendered <input type="color" class="single-color-input"> (a
+  // one-off field like State bar's "Default color", not a repeatable row — those already build
+  // their own picker markup entirely client-side, see chart-series-rows/threshold-builder-rows
+  // etc.) to the same custom swatch-plus-popover LoxColorPicker.buildPickerHtml() gives every other
+  // color field in this app, rather than the browser's own bare rectangular <input type="color">.
+  // The hidden value input inherits the original's `name` so form submission needs no other change.
+  (function () {
+    document.querySelectorAll('input.single-color-input[type="color"]').forEach(function (input) {
+      var temp = document.createElement('div');
+      temp.innerHTML = LoxColorPicker.buildPickerHtml(input.value, 'single-color-value');
+      var wrap = temp.firstElementChild;
+      wrap.querySelector('.color-picker-value').name = input.name;
+      input.replaceWith(wrap);
+    });
+  })();
+</script>
+
+<script>
+  // "Add panel" button toggles the card below it — a plain show/hide rather than a <details>
+  // disclosure (every other "Add X" form in the app still uses that), so it can sit as a normal
+  // button alongside Add group/Auto order in one row instead of a <summary> line of its own.
+  (function () {
+    var btn = document.getElementById('dash-add-panel-btn');
+    var card = document.getElementById('dash-add-panel-card');
+    if (!btn || !card) return;
+    btn.addEventListener('click', function () { card.hidden = !card.hidden; });
+  })();
+</script>
 
 <script>
   (function () {
@@ -627,15 +1084,23 @@
     var gaugeFields = document.getElementById('gauge-fields');
     var statDeltaFields = document.getElementById('stat-delta-fields');
     var thresholdFields = document.getElementById('threshold-fields');
+    var stateBarFields = document.getElementById('state-bar-fields');
     var chartSeriesSettings = document.getElementById('chart-series-settings');
     var valueSeriesSettings = document.getElementById('value-series-settings');
     var chartTypeSelect = document.getElementById('chart-type-select');
-    var SINGLE_MONITOR_TYPES = ['table', 'gauge', 'stat_delta', 'threshold'];
+    var gaugeStyleSelect = document.getElementById('gauge-style-select');
+    var monitorsSection = document.getElementById('monitors-section');
+    var SINGLE_MONITOR_TYPES = ['table', 'stat_delta', 'threshold'];
+    // group_header isn't a selectable option on this form any more (see #dash-add-panel-btn's own
+    // "Add group" button, right next to this one, which creates it directly) — this select's own
+    // options never produce that value, so NO_RANGE_TYPES/NO_MONITOR_TYPES have no reason to
+    // mention it any more either.
     var NO_RANGE_TYPES = ['value', 'gauge', 'threshold'];
 
     function syncPanelType() {
       var type = panelTypeSelect.value;
       rangeField.style.display = NO_RANGE_TYPES.indexOf(type) !== -1 ? 'none' : '';
+      monitorsSection.style.display = '';
       tableHint.style.display = SINGLE_MONITOR_TYPES.indexOf(type) !== -1 ? '' : 'none';
       chartFields.style.display = type === 'chart' ? '' : 'none';
       valueLayoutField.style.display = type === 'value' ? '' : 'none';
@@ -643,24 +1108,58 @@
       gaugeFields.style.display = type === 'gauge' ? '' : 'none';
       statDeltaFields.style.display = type === 'stat_delta' ? '' : 'none';
       thresholdFields.style.display = type === 'threshold' ? '' : 'none';
+      stateBarFields.style.display = type === 'state_bar' ? '' : 'none';
       chartSeriesSettings.style.display = type === 'chart' ? '' : 'none';
       valueSeriesSettings.style.display = type === 'value' ? '' : 'none';
     }
     panelTypeSelect.addEventListener('change', syncPanelType);
+
+    // Sub-toggle within gauge-fields itself — Shape/Sections/Needle only mean anything for the
+    // 'radial' style (a Bar has no ring to shape/band/point a needle around). Same independent-
+    // of-syncPanelType() shape as syncChartType() just below: #gauge-fields already goes
+    // display:none as a whole when panel_type isn't 'gauge', this only worries about its own style.
+    var gaugeSectionsInput = gaugeFields.querySelector('input[name="gauge_sections"]');
+    var gaugeSparklineInput = gaugeFields.querySelector('input[name="gauge_sparkline"]');
+    function syncGaugeStyle() {
+      var style = gaugeStyleSelect.value;
+      gaugeFields.querySelectorAll('[data-gauge-style-for], [data-gauge-sections-for], [data-gauge-sparkline-for]').forEach(function (el) {
+        var visible = true;
+        var styleFor = el.getAttribute('data-gauge-style-for');
+        if (styleFor) visible = styleFor.split(',').indexOf(style) !== -1;
+        // Two more sub-toggles nested within this same group: Gradient sections only means
+        // anything once Threshold sections is actually on, and Neutral trend line color only
+        // means anything once the trend line itself is showing at all.
+        if (visible && el.hasAttribute('data-gauge-sections-for')) visible = gaugeSectionsInput.checked;
+        if (visible && el.hasAttribute('data-gauge-sparkline-for')) visible = gaugeSparklineInput.checked;
+        el.style.display = visible ? '' : 'none';
+      });
+    }
+    gaugeStyleSelect.addEventListener('change', syncGaugeStyle);
+    gaugeSectionsInput.addEventListener('change', syncGaugeStyle);
+    gaugeSparklineInput.addEventListener('change', syncGaugeStyle);
+    syncGaugeStyle();
     syncPanelType();
 
     // Sub-toggle within chart-fields itself — line-only sections (Y-axis, zoom, thresholds,
     // annotations, stepped/curve/points/fill) hide when a snapshot chart type is picked. Independent
     // of syncPanelType() above: #chart-fields already goes display:none as a whole when panel_type
     // isn't 'chart', so this only ever needs to worry about the chart_type axis on its own.
+    var legendSelect = document.getElementById('legend-position-select');
     function syncChartType() {
       var chartType = chartTypeSelect.value;
+      var legendOn = !legendSelect || legendSelect.value !== 'off';
       chartFields.querySelectorAll('[data-chart-type-for]').forEach(function (el) {
         var types = el.getAttribute('data-chart-type-for').split(',');
-        el.style.display = types.indexOf(chartType) !== -1 ? '' : 'none';
+        var visible = types.indexOf(chartType) !== -1;
+        // The min/max/avg/current legend toggles are meaningless with no legend to show them in
+        // — data-legend-for="on" hides them the same way data-chart-type-for already hides every
+        // other line-only field for a snapshot chart type.
+        if (visible && el.hasAttribute('data-legend-for')) visible = legendOn;
+        el.style.display = visible ? '' : 'none';
       });
     }
     chartTypeSelect.addEventListener('change', syncChartType);
+    if (legendSelect) legendSelect.addEventListener('change', syncChartType);
     syncChartType();
 
     var filterInput = document.getElementById('monitor-filter');
@@ -685,21 +1184,38 @@
       // matches once and ANDs the two checks, rather than two independent passes that would each
       // blindly overwrite the other's display verdict.
       var chartTypeSelect = form.querySelector('.chart-type-select');
+      var gaugeStyleSelect = form.querySelector('.gauge-style-select');
+      var gaugeSectionsInput = form.querySelector('input[name="gauge_sections"]');
+      var gaugeSparklineInput = form.querySelector('input[name="gauge_sparkline"]');
+      var legendSelect = form.querySelector('.legend-position-select');
 
       function sync() {
         var type = select.value;
         var chartType = chartTypeSelect ? chartTypeSelect.value : 'line';
-        form.querySelectorAll('[data-fields-for], [data-chart-type-for]').forEach(function (el) {
+        var gaugeStyle = gaugeStyleSelect ? gaugeStyleSelect.value : 'bar';
+        var legendOn = !legendSelect || legendSelect.value !== 'off';
+        form.querySelectorAll('[data-fields-for], [data-chart-type-for], [data-gauge-style-for], [data-gauge-sections-for], [data-gauge-sparkline-for], [data-legend-for]').forEach(function (el) {
           var visible = true;
           var fieldsFor = el.getAttribute('data-fields-for');
           if (fieldsFor) visible = fieldsFor.split(',').indexOf(type) !== -1;
           var chartTypeFor = el.getAttribute('data-chart-type-for');
           if (visible && chartTypeFor) visible = type === 'chart' && chartTypeFor.split(',').indexOf(chartType) !== -1;
+          var gaugeStyleFor = el.getAttribute('data-gauge-style-for');
+          if (visible && gaugeStyleFor) visible = type === 'gauge' && gaugeStyleFor.split(',').indexOf(gaugeStyle) !== -1;
+          // Same two nested sub-toggles as the Add-panel form's own syncGaugeStyle() above.
+          if (visible && el.hasAttribute('data-gauge-sections-for')) visible = type === 'gauge' && !!(gaugeSectionsInput && gaugeSectionsInput.checked);
+          if (visible && el.hasAttribute('data-gauge-sparkline-for')) visible = type === 'gauge' && !!(gaugeSparklineInput && gaugeSparklineInput.checked);
+          // Min/max/avg/current legend toggles: meaningless with no legend to show them in.
+          if (visible && el.hasAttribute('data-legend-for')) visible = legendOn;
           el.style.display = visible ? '' : 'none';
         });
       }
       select.addEventListener('change', sync);
       if (chartTypeSelect) chartTypeSelect.addEventListener('change', sync);
+      if (gaugeStyleSelect) gaugeStyleSelect.addEventListener('change', sync);
+      if (gaugeSectionsInput) gaugeSectionsInput.addEventListener('change', sync);
+      if (gaugeSparklineInput) gaugeSparklineInput.addEventListener('change', sync);
+      if (legendSelect) legendSelect.addEventListener('change', sync);
       sync();
     });
 
@@ -715,128 +1231,17 @@
   })();
 </script>
 
-<script>
-  // Same "select of presets + hidden custom text input" pattern as .unit-select (its own sync
-  // script now lives in partials/foot.ejs, shared with the Monitor detail page) above, for the
-  // panel Range field — a duration like "3h" stands in for a preset, and (a third state) a fixed
-  // From/To pair stands in for both — only ONE of the select/custom-input/absolute-hidden-input
-  // ever has a `name` at a time, so the field submits exactly one "range" value regardless of
-  // which mode is active.
-  (function () {
-    document.querySelectorAll('.range-select').forEach(function (select) {
-      var customInput = select.nextElementSibling;
-      var absWrap = customInput.nextElementSibling;
-      var startInput = absWrap.querySelector('.range-absolute-start');
-      var endInput = absWrap.querySelector('.range-absolute-end');
-      var hiddenInput = absWrap.querySelector('.range-absolute-hidden');
-      var name = select.dataset.rangeName;
-
-      function pad(n) { return String(n).padStart(2, '0'); }
-      function toLocalInputValue(ms) {
-        var d = new Date(ms);
-        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-      }
-      // Pre-fills once from the server-supplied raw epoch ms (see rangeField() in this same file)
-      // — done here in the browser specifically so these show in ITS local timezone, not whatever
-      // timezone the Node process happens to be running in.
-      if (absWrap.dataset.startMs) startInput.value = toLocalInputValue(Number(absWrap.dataset.startMs));
-      if (absWrap.dataset.endMs) endInput.value = toLocalInputValue(Number(absWrap.dataset.endMs));
-
-      function updateHidden() {
-        if (!startInput.value || !endInput.value) return;
-        hiddenInput.value = 'abs_' + new Date(startInput.value).getTime() + '_' + new Date(endInput.value).getTime();
-      }
-      updateHidden();
-
-      function sync() {
-        var mode = select.value;
-        select.removeAttribute('name');
-        customInput.removeAttribute('name');
-        hiddenInput.removeAttribute('name');
-        customInput.style.display = 'none';
-        absWrap.style.display = 'none';
-        if (mode === '__custom__') {
-          customInput.name = name;
-          customInput.style.display = '';
-        } else if (mode === '__absolute__') {
-          hiddenInput.name = name;
-          absWrap.style.display = 'flex';
-          updateHidden();
-        } else {
-          select.name = name;
-        }
-      }
-      select.addEventListener('change', function () {
-        sync();
-        if (select.value === '__custom__') customInput.focus();
-      });
-      startInput.addEventListener('change', updateHidden);
-      endInput.addEventListener('change', updateHidden);
-      sync();
-    });
-  })();
-</script>
+<!-- .range-select's own sync behavior now lives in public/range-picker.js, loaded sitewide via
+     partials/foot.ejs — shared with Monitor detail/Home/Logs, all of which render the same
+     rangeField() markup. -->
 
 <script src="/threshold-annotation-builder.js"></script>
 
-<script>
-  // Drives every .value-mapping-builder (see valueMappingField() above) — same idea as the
-  // threshold builder just above, a dynamic add/remove-row UI over a hidden textarea, kept in the
-  // "<value>=<label>[=<color>]" format dashboards.js's parseValueMappings already handles. The
-  // color segment is optional per row (a value can just be renamed, with no color of its own).
-  (function () {
-    function serializeRows(builder) {
-      var lines = [];
-      builder.querySelectorAll('.value-mapping-row').forEach(function (row) {
-        var value = row.querySelector('.value-mapping-row-value').value.trim();
-        var name = row.querySelector('.value-mapping-row-name').value.trim();
-        var color = row.querySelector('.value-mapping-row-color').value;
-        if (value !== '' && name !== '') lines.push(value + '=' + name + '=' + color);
-      });
-      builder.querySelector('.value-mapping-hidden').value = lines.join('\n');
-    }
-
-    // Every row always carries a color — starting from the next palette slot not already used by
-    // a sibling row (see nextAvailableColor in color-picker.js) rather than gated behind its own
-    // "give this value a color" checkbox, which was one more click for what's the common case
-    // anyway and, on top of that, rendered as a plain unthemed white box in dark mode.
-    function addRow(builder, value, name, color) {
-      var row = document.createElement('div');
-      row.className = 'value-mapping-row';
-      var usedColors = Array.prototype.map.call(builder.querySelectorAll('.value-mapping-row-color'), function (el) { return el.value; });
-      row.innerHTML =
-        '<input type="text" class="value-mapping-row-value" placeholder="Value">' +
-        '<input type="text" class="value-mapping-row-name" placeholder="Name to show">' +
-        LoxColorPicker.buildPickerHtml(color || LoxColorPicker.nextAvailableColor(usedColors), 'value-mapping-row-color') +
-        '<button type="button" class="icon-btn icon-btn-danger value-mapping-row-remove" title="Remove" aria-label="Remove">&times;</button>';
-      row.querySelector('.value-mapping-row-value').value = value == null ? '' : value;
-      row.querySelector('.value-mapping-row-name').value = name == null ? '' : name;
-      builder.querySelector('.value-mapping-rows').appendChild(row);
-
-      row.querySelector('.value-mapping-row-value').addEventListener('input', function () { serializeRows(builder); });
-      row.querySelector('.value-mapping-row-name').addEventListener('input', function () { serializeRows(builder); });
-      row.querySelector('.value-mapping-row-color').addEventListener('change', function () { serializeRows(builder); });
-      row.querySelector('.value-mapping-row-remove').addEventListener('click', function () {
-        row.remove();
-        serializeRows(builder);
-      });
-    }
-
-    document.querySelectorAll('.value-mapping-builder').forEach(function (builder) {
-      var hidden = builder.querySelector('.value-mapping-hidden');
-      hidden.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
-        var parts = line.split('=');
-        if (parts.length < 2) return;
-        var color = parts.length > 2 ? parts.slice(2).join('=').trim() : '';
-        addRow(builder, parts[0], parts[1], color);
-      });
-      builder.querySelector('.value-mapping-add-row').addEventListener('click', function () {
-        addRow(builder, '', '', '');
-        serializeRows(builder);
-      });
-    });
-  })();
-</script>
+<%
+  // .value-mapping-builder's own JS wiring moved to partials/foot.ejs (shared with the Monitor
+  // detail page, once its own chart settings became a second consumer of valueMappingField) —
+  // same reasoning as .unit-select/.scale-select above.
+%>
 
 <script>
   // Drives every .chart-series-settings (Add-panel's and each panel's own Edit form both have
@@ -1190,27 +1595,50 @@
       var openForm = document.querySelector('.dash-panel > .panel-settings-form.open');
       var drawerWidth = openForm ? openForm.getBoundingClientRect().width : 0;
       var availableWidth = window.innerWidth - drawerWidth;
-      // Reads the panel's CURRENT box — its natural grid size the first time this runs (right as
-      // .editing/fixed positioning is applied), or its own already-fixed size on a later resize
-      // recompute, either way the right thing to hold onto as "the panel's width/height" here.
+
+      // Always measure the panel at its NATURAL grid size, not whatever fixed size a previous run
+      // left on it — otherwise a panel shrunk once (below) could never grow back when the drawer is
+      // later dragged narrower to give it more room. Clearing the inline overrides first, then
+      // reading, is what gives a stable natural measurement on every recompute.
+      panel.style.position = '';
+      panel.style.left = '';
+      panel.style.top = '';
+      panel.style.width = '';
+      panel.style.height = '';
+      panel.style.margin = '';
       var rect = panel.getBoundingClientRect();
-      // Nothing useful to center against once the panel's own footprint doesn't even fit the
-      // leftover space (a very narrow window) — leave it at its natural grid position instead of
-      // fighting for room that isn't there.
-      if (rect.width >= availableWidth || rect.height >= window.innerHeight) {
-        panel.style.position = '';
-        panel.style.left = '';
-        panel.style.top = '';
-        panel.style.width = '';
-        panel.style.margin = '';
-        return;
-      }
-      var left = Math.max(0, Math.round((availableWidth - rect.width) / 2));
-      var top = Math.max(0, Math.round((window.innerHeight - rect.height) / 2));
+
+      // Breathing room so the lifted panel never crowds the drawer's edge or the viewport edges.
+      var MARGIN = 32;
+      var maxW = availableWidth - MARGIN;
+      var maxH = window.innerHeight - MARGIN;
+      // Too little room left to show anything useful (an extremely narrow window, or a drawer
+      // dragged very wide) — leave the panel at its natural grid position rather than shrinking it
+      // into an unreadable sliver.
+      if (maxW < 200 || maxH < 160) return;
+
+      // Shrink (never enlarge) the panel just enough to fit ENTIRELY in the space left of the
+      // drawer, preserving its aspect ratio. A wide chart panel used to overflow that space and get
+      // dropped back into normal document flow — which read as the chart sitting half-under the edit
+      // drawer instead of centered beside it (a gauge or state bar, being narrower, always fit and
+      // so always centered correctly — hence the inconsistency). Narrow panels keep scale === 1 and
+      // behave exactly as before.
+      var scale = Math.min(1, maxW / rect.width, maxH / rect.height);
+      var w = Math.round(rect.width * scale);
+      var h = Math.round(rect.height * scale);
+      var left = Math.max(0, Math.round((availableWidth - w) / 2));
+      var top = Math.max(0, Math.round((window.innerHeight - h) / 2));
       panel.style.position = 'fixed';
       panel.style.left = left + 'px';
       panel.style.top = top + 'px';
-      panel.style.width = Math.round(rect.width) + 'px';
+      panel.style.width = w + 'px';
+      // Height too, not just width — position:fixed pulls the panel out of the CSS grid entirely, so
+      // without an explicit height it falls back to auto (shrink-to-content). Every OTHER panel body
+      // (chart canvas, table, plain flex value/bar-gauge lists) never depended on the parent having
+      // a definite height, so this went unnoticed until the radial gauge's own container-query
+      // sizing (.gauge-radial-outer, see style.css) needed one to size itself from — with no definite
+      // height to query, it silently resolved to zero and the whole gauge disappeared.
+      panel.style.height = h + 'px';
       panel.style.margin = '0';
     }
 
@@ -1219,6 +1647,7 @@
       panel.style.left = '';
       panel.style.top = '';
       panel.style.width = '';
+      panel.style.height = '';
       panel.style.margin = '';
       // Restores whatever draggable value the grid's own reorder script set (see
       // "draggable" further below) — dragging a panel around while its OWN drawer is still open
@@ -1302,9 +1731,11 @@
     // And .panel-drawer-resize-handle — the drawer-width drag handle sits as its OWN direct child
     // right after .panel-settings-form, not nested inside it, so it was quietly the first match
     // here (silently "fixing" every panel's content at whatever tiny size that handle renders at)
-    // until this was added.
+    // until this was added. (No more .dash-panel-resize-handle exclusion needed — GridStack's own
+    // resize handles live on .grid-stack-item, a level up from .dash-panel, not as one of its
+    // direct children any more.)
     function getContentEl(card) {
-      return card.querySelector(':scope > *:not(.widget-drag-handle):not(.dash-panel-head):not(.confirm-bar):not(.panel-settings-form):not(.panel-drawer-resize-handle):not(.dash-panel-resize-handle)');
+      return card.querySelector(':scope > *:not(.widget-drag-handle):not(.dash-panel-head):not(.confirm-bar):not(.panel-settings-form):not(.panel-drawer-resize-handle)');
     }
 
     function applyPatch(card, freshCard) {
@@ -1448,176 +1879,168 @@
 </script>
 
 <script>
-  // Drag-reorder for dashboard panels — distance-based: find the nearest card by
-  // straight-line distance, then decide before/after by which side of its center
-  // the pointer is on (a simple Y-only check can't tell cards in the same row apart
-  // once the grid wraps into multiple columns).
+  // GridStack.js drives the whole panel grid now — one instance per "zone" (see the render loop
+  // above), replacing the old hand-rolled pointer-based drag/resize scripts AND the skyline
+  // auto-packer in one step. float:false (GridStack's own default, set explicitly here for
+  // clarity) means every zone keeps itself gravity-compacted continuously as panels are
+  // dragged/resized, not just on an explicit Auto-order click — arguably the actual fix for "Auto
+  // order doesn't work great": a one-shot algorithm swapped for a library that keeps things tight
+  // all the time. acceptWidgets:true lets a panel be dragged from one zone's instance into
+  // another (restoring "move a panel into/out of a group" — the 'added' handler further down is
+  // what actually makes that stick server-side, since GridStack itself has no idea "group" means
+  // anything; it just sees the item land in a different grid-stack element).
   (function () {
-    var grid = document.getElementById('dash-grid');
-    if (!grid) return;
-    var dragEl = null;
+    var canEdit = <%- canEditPanels ? 'true' : 'false' %>;
+    var grids = [];
+    document.querySelectorAll('.grid-stack').forEach(function (el) {
+      grids.push(GridStack.init({
+        column: 12,
+        cellHeight: 70,
+        margin: 8,
+        float: false,
+        staticGrid: !canEdit,
+        acceptWidgets: true,
+        dragHandle: '.widget-drag-handle',
+        resizable: { handles: 'se, sw' },
+        oneColumnSize: 768, // matches this app's own mobile breakpoint elsewhere, see style.css
+        // Off for this first, one-time layout pass — GridStack's own .grid-stack-animate class
+        // (see gridstack.min.css) puts a transition on every x/y/w/h change it makes, including
+        // placing each panel at its OWN saved position for the very first time on page load. With
+        // it on, that read as every panel visibly starting somewhere wrong and sliding into its
+        // real spot the instant the page opened. Turned back on right below, once this pass is
+        // done — real drag/resize interactions from here on still animate normally.
+        animate: false,
+      }, el));
+    });
+    grids.forEach(function (grid) { grid.setAnimation(true); });
+    // A view-only visitor gets exactly the saved layout with staticGrid (no drag/resize, so
+    // nothing here can ever change) — none of the persistence/Auto-order wiring below applies.
+    if (!canEdit || grids.length === 0) return;
 
-    function getDragAfterElement(x, y) {
-      // .editing is excluded for the same reason .dragging already is — that one panel's
-      // getBoundingClientRect() is wherever centerEditingPanel() (see the drawer script above)
-      // put it on the screen, not its real grid slot, so measuring distance to it would throw off
-      // every reorder decision made while its own drawer happens to still be open.
-      var cards = Array.prototype.slice.call(grid.querySelectorAll('.dash-panel:not(.dragging):not(.editing)'));
-      var closestCard = null;
-      var closestCenterX = 0;
-      var closestDistance = Infinity;
-
-      cards.forEach(function (card) {
-        var box = card.getBoundingClientRect();
-        var centerX = box.left + box.width / 2;
-        var centerY = box.top + box.height / 2;
-        var distance = Math.hypot(x - centerX, y - centerY);
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestCard = card;
-          closestCenterX = centerX;
-        }
-      });
-
-      if (!closestCard) return null;
-      return x < closestCenterX ? closestCard : closestCard.nextElementSibling;
-    }
-
-    function saveOrder() {
-      var order = Array.prototype.map.call(grid.querySelectorAll('.dash-panel'), function (c) {
-        return Number(c.dataset.id);
-      });
-      fetch('/dashboards/<%= dashboardId %>/panels/reorder', {
+    // Persists every affected panel's new x/y/w/h in one request whenever a drag or resize
+    // completes (GridStack's own 'change' event) — replaces the role the old separate /reorder and
+    // /panels/:panelId/resize routes used to serve. gs-id (set to the panel's own id at render
+    // time, see the render loop above) is what each changed item's own .id carries through here.
+    function persistLayout(items) {
+      var updates = (items || [])
+        .map(function (item) { return { id: Number(item.id), x: item.x, y: item.y, w: item.w, h: item.h }; })
+        .filter(function (u) { return Number.isFinite(u.id); });
+      if (!updates.length) return;
+      fetch('/dashboards/<%= dashboardId %>/panels/layout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: order }),
+        body: JSON.stringify({ updates: updates }),
       }).catch(function () { /* best-effort */ });
     }
 
-    grid.querySelectorAll('.dash-panel').forEach(function (card) {
-      card.addEventListener('dragstart', function (e) {
-        // A resize-drag on the corner handle must never also start a reorder-drag.
-        if (e.target.closest('.dash-panel-resize-handle')) { e.preventDefault(); return; }
-        dragEl = card;
-        card.classList.add('dragging');
-        // Left to its own default, the browser builds the drag-ghost by rendering this card's
-        // whole subtree — including its own .panel-settings-form, a position:fixed, near-
-        // full-viewport edit drawer that's only invisible day-to-day because it's translated off
-        // to the right (see .dash-panel > .panel-settings-form in style.css). Some browsers'
-        // default ghost snapshot ignores that transform and paints the drawer at its in-flow
-        // position instead, which is what made a single dragged panel look like the entire
-        // dashboard was sliding. An explicit, contained image (just this panel's own header bar)
-        // sidesteps that entirely instead of depending on the browser to get it right.
-        if (e.dataTransfer && e.dataTransfer.setDragImage) {
-          var head = card.querySelector('.dash-panel-head');
-          if (head) e.dataTransfer.setDragImage(head, 20, 20);
-        }
-      });
-      card.addEventListener('dragend', function () {
-        card.classList.remove('dragging');
-        saveOrder();
-      });
-      card.addEventListener('dragover', function (e) {
-        e.preventDefault();
-        var after = getDragAfterElement(e.clientX, e.clientY);
-        if (!dragEl) return;
-        if (after == null) grid.appendChild(dragEl);
-        else grid.insertBefore(dragEl, after);
-      });
-    });
-  })();
-</script>
-
-<script>
-  // Drag-to-resize from each panel's bottom-right corner handle — separate from the
-  // whole-card HTML5 reorder-drag above (that one is cancelled when it starts on this
-  // handle, see the dragstart listener). Pointer-based (mousedown/move/up), converts
-  // the live pixel delta into whole grid-column/row units against the grid's actual
-  // measured column width and the fixed row-unit height set in style.css, so a resize
-  // means the same thing regardless of viewport width.
-  (function () {
-    var grid = document.getElementById('dash-grid');
-    if (!grid) return;
-    var ROW_UNIT_PX = 70; // must match .dash-grid's grid-auto-rows in style.css
-    var COLUMNS = 12;
-    var MIN_COL_SPAN = 2, MAX_COL_SPAN = 12, MIN_ROW_SPAN = 2, MAX_ROW_SPAN = 200;
-
-    function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
-
-    grid.querySelectorAll('.dash-panel-resize-handle').forEach(function (handle) {
-      handle.addEventListener('mousedown', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        var card = handle.closest('.dash-panel');
-        var gapPx = parseFloat(getComputedStyle(grid).columnGap) || 0;
-        var colStep = (grid.getBoundingClientRect().width + gapPx) / COLUMNS;
-        var rowStep = ROW_UNIT_PX + gapPx;
-
-        var startX = e.clientX, startY = e.clientY;
-        var startColSpan = Number(card.dataset.colSpan) || 4;
-        var startRowSpan = Number(card.dataset.rowSpan) || 3;
-        var colSpan = startColSpan, rowSpan = startRowSpan;
-        // Same reasoning as the panel-drawer-resize-handle fix above — the handle's own CSS
-        // cursor only shows while actually hovering its small hit area, which a real drag moves
-        // off of instantly. Forced on <body> for the drag's duration instead.
-        document.body.style.cursor = 'nwse-resize';
-        document.body.style.userSelect = 'none';
-
-        function onMove(e) {
-          colSpan = clamp(startColSpan + Math.round((e.clientX - startX) / colStep), MIN_COL_SPAN, MAX_COL_SPAN);
-          rowSpan = clamp(startRowSpan + Math.round((e.clientY - startY) / rowStep), MIN_ROW_SPAN, MAX_ROW_SPAN);
-          card.style.gridColumn = 'span ' + colSpan;
-          card.style.gridRow = 'span ' + rowSpan;
-        }
-
-        function onUp() {
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
-          document.body.style.cursor = '';
-          document.body.style.userSelect = '';
-          card.dataset.colSpan = colSpan;
-          card.dataset.rowSpan = rowSpan;
-          fetch('/dashboards/<%= dashboardId %>/panels/' + card.dataset.id + '/resize', {
+    grids.forEach(function (grid) {
+      grid.on('change', function (event, items) { persistLayout(items); });
+      // Fires only for an item that newly landed in THIS grid instance — i.e. a cross-zone drag
+      // (a same-zone drag/resize only ever fires 'change' above). GridStack itself doesn't know
+      // "zone" means "group" — this is what actually moves the panel server-side, by renumbering
+      // its position to fall inside whichever group this grid's own data-group-id names (absent
+      // on zone 0's own element, which /panels/:panelId/move-to-zone reads as "ungrouped").
+      grid.on('added', function (event, items) {
+        persistLayout(items);
+        var afterGroupId = grid.el.dataset.groupId || null;
+        (items || []).forEach(function (item) {
+          if (!Number.isFinite(Number(item.id))) return;
+          fetch('/dashboards/<%= dashboardId %>/panels/' + item.id + '/move-to-zone', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ colSpan: colSpan, rowSpan: rowSpan }),
+            body: JSON.stringify({ afterGroupId: afterGroupId }),
           }).catch(function () { /* best-effort */ });
-        }
-
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
+        });
       });
     });
-  })();
-</script>
 
-<script>
-  // "Auto order": resize every panel to fit its own content, then let CSS Grid's dense auto-flow
-  // (see .dash-grid in style.css) pack them with the fewest gaps — a client-side approximation of
-  // Grafana-style auto-layout, built from the same col_span/row_span grid model the manual
-  // drag-resize handle above already uses (same /resize and /reorder endpoints, just computed here
-  // instead of read from a mouse drag).
-  (function () {
-    var btn = document.getElementById('dash-auto-order-btn');
-    if (!btn) return;
-    var grid = document.getElementById('dash-grid');
-    if (!grid) return;
+    // An empty zone (a group with no panels yet, or the ungrouped zone-0) renders 0px tall, which
+    // leaves GridStack no area to drop a cross-zone drag onto — so dragging a panel INTO an
+    // otherwise-empty group silently did nothing (the whole "move to another group" complaint).
+    // While any panel drag is in progress, give every currently-empty zone a real, clearly-marked
+    // drop height; collapse them again the instant the drag ends. GridStack fires 'dragstart'
+    // reliably on the SOURCE grid, but 'dragstop' does NOT fire for a cross-grid drop (the item has
+    // already left that grid by then), so a capture-phase pointerup/cancel is the dependable
+    // "drag is over" signal.
+    function setEmptyDropZonesActive(active) {
+      grids.forEach(function (grid) {
+        var isEmpty = grid.el.querySelectorAll(':scope > .grid-stack-item').length === 0;
+        grid.el.classList.toggle('dash-grid-empty-droppable', active && isEmpty);
+      });
+    }
+    grids.forEach(function (grid) {
+      grid.on('dragstart', function () { setEmptyDropZonesActive(true); });
+    });
+    document.addEventListener('pointerup', function () { setEmptyDropZonesActive(false); }, true);
+    document.addEventListener('pointercancel', function () { setEmptyDropZonesActive(false); }, true);
 
-    var ROW_UNIT_PX = 70; // must match .dash-grid's grid-auto-rows in style.css
+    // Migration: a panel saved before GridStack existed has no real x/y yet (see db.js's
+    // grid_x/grid_y columns) — the render loop above omits gs-x/gs-y for those (flagging them with
+    // data-needs-position instead), so GridStack just auto-placed them in their existing position
+    // order as part of the GridStack.init() call right above. Persisted immediately so the NEXT
+    // load has a real saved spot instead of re-auto-placing every time (harmless either way, just
+    // wasted work skipped).
+    var needsInitialSave = [];
+    document.querySelectorAll('.grid-stack-item[data-needs-position]').forEach(function (el) {
+      var node = el.gridstackNode;
+      if (node) needsInitialSave.push({ id: node.id, x: node.x, y: node.y, w: node.w, h: node.h });
+    });
+    if (needsInitialSave.length) persistLayout(needsInitialSave);
+
+    // "Auto order" — two passes, same idea as the pre-GridStack version this replaces (resize
+    // every panel to fit its own content, THEN pack), just driven through GridStack's own API
+    // instead of hand-rolled CSS Grid placement. Skipping the resize pass and only calling
+    // compact() (an earlier version of this migration did exactly that) leaves every panel at
+    // whatever size it happened to already have — compact() only closes gaps BETWEEN panels, it
+    // has no idea a panel is bigger or smaller than its actual content, so a short state-bar
+    // panel next to a tall one still reads as "lots of wasted space" and a state-bar panel too
+    // narrow for its own longest label still visually breaks.
+    var ROW_UNIT_PX = 70; // must match GridStack's own cellHeight in the init options above
+    var GAP_PX = 8; // must match GridStack's own margin in the init options above
     var MIN_ROW_SPAN = 2, MAX_ROW_SPAN = 200, MIN_COL_SPAN = 2, MAX_COL_SPAN = 12;
-
     function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
 
-    // Same selector as applyPatch's getContentEl above (a separate IIFE, hence duplicated rather
-    // than shared) — the one element that's actually this panel's own body, everything else being
-    // chrome (drag handle, header, the edit drawer, the resize handle).
+    // Every direct child that's actually part of this panel's own body, everything else being
+    // chrome (drag handle, header, the edit drawer). Most panel types render exactly ONE such
+    // child, but state_bar renders a second, plain trailing sibling after it too (the range
+    // start/end timestamp footer, reusing .gauge-radial-minmax's styling) — an easy one to miss if
+    // this only ever looked at the FIRST match, which is exactly what silently under-measured it
+    // until this was caught by an actual overlap in the rendered panel.
+    function getContentEls(card) {
+      return Array.prototype.filter.call(card.children, function (el) {
+        return !el.classList.contains('widget-drag-handle')
+          && !el.classList.contains('dash-panel-head')
+          && !el.classList.contains('confirm-bar')
+          && !el.classList.contains('panel-settings-form')
+          && !el.classList.contains('panel-drawer-resize-handle');
+      });
+    }
+
     function getContentEl(card) {
-      return card.querySelector(':scope > *:not(.widget-drag-handle):not(.dash-panel-head):not(.confirm-bar):not(.panel-settings-form):not(.panel-drawer-resize-handle):not(.dash-panel-resize-handle)');
+      return getContentEls(card)[0] || null;
+    }
+
+    // Sums every body child's own height + vertical margins — not just the first one. The first
+    // child is typically a flex:1 element (chart-wrap/panel-table-scroll/state-bar-panel/...,
+    // see style.css) that can currently be squeezed smaller than its content actually needs;
+    // scrollHeight reports its TRUE natural extent regardless of that squeeze. Any additional
+    // sibling after it is a plain, unflexed block whose current rendered height already IS its
+    // natural one, so a plain getBoundingClientRect is enough for those — but the margin between
+    // siblings still needs adding, since scrollHeight only covers the flexed element's own box.
+    function measureBodyHeight(card) {
+      var kids = getContentEls(card);
+      if (!kids.length) return 20;
+      var total = 0;
+      kids.forEach(function (el, i) {
+        var style = getComputedStyle(el);
+        var h = i === 0 ? el.scrollHeight : el.getBoundingClientRect().height;
+        total += h + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0);
+      });
+      return total;
     }
 
     // Width by content shape, not measured — a chart reads better wide (time axis resolution), a
-    // table's timestamp+value columns want more room than a compact gauge/stat/threshold tile
+    // table/state-bar's own row labels want more room than a compact gauge/stat/threshold tile
     // needs. Height (see below) is what's actually measured from real content, since "how many
     // rows/values does this panel have" varies per panel far more than "what type is it" does.
     function guessColSpan(card) {
@@ -1625,41 +2048,136 @@
       if (!content) return 4;
       if (content.classList.contains('chart-wrap')) return 6;
       if (content.classList.contains('panel-table-scroll')) return 5;
+      if (content.classList.contains('state-bar-panel')) return 6;
       if (content.classList.contains('panel-value-list')) return 4;
       return 3; // gauge, stat_delta, threshold — compact, roughly square tiles
     }
 
-    btn.addEventListener('click', function () {
-      var cards = Array.prototype.slice.call(grid.querySelectorAll('.dash-panel'));
+    // A chart's canvas has no natural "content minimum" the way a table's rows or a state bar's
+    // list do — Chart.js just fills whatever box height it's handed and redistributes that space
+    // internally between its legend, axis labels, and the actual plot. measureBodyHeight above
+    // ends up reading back roughly whatever height the panel already happened to have (a
+    // near-tautological measurement, not a real requirement), so a chart that started small — the
+    // common case for a freshly added panel — stayed small forever: legend + axes ate a fixed
+    // chunk of that little box, leaving the plot itself cramped. Floor charts higher than the
+    // generic per-type minimum so the legend and axes always have enough room to not crowd the
+    // part of the panel someone's actually looking at.
+    function contentMinRowSpan(card) {
+      var content = getContentEl(card);
+      return content && content.classList.contains('chart-wrap') ? 5 : MIN_ROW_SPAN;
+    }
+
+    // The interactive drag-resize floor — deliberately smaller than Auto-order's own target size
+    // (which fits ALL of a panel's content). This only has to cover one row/tile's worth of the
+    // main content, on the assumption anything beyond that can scroll internally instead (see
+    // .state-bar-panel's own overflow-y:auto) — a state bar with 20 monitors would otherwise force
+    // a huge floor just to keep every row fully in view. What it MUST always reserve in full,
+    // never leaving to a "just resize bigger" assumption, is the header (title + edit/copy/delete
+    // buttons) and any trailing footer (state_bar's/circle-gauge's own timestamp or min/max row) —
+    // both are plain, non-flexed siblings of the main content, so a panel shorter than all three
+    // combined doesn't shrink them, it lets the content bleed straight over them instead.
+    function applyMinSizes(grid) {
+      var cellW = grid.cellWidth();
+      grid.engine.nodes.slice().forEach(function (node) {
+        var card = node.el.querySelector('.dash-panel');
+        if (!card || card.classList.contains('dash-panel-group-header')) return;
+        var kids = getContentEls(card);
+        var content = kids[0] || null;
+        var headEl = card.querySelector('.dash-panel-head');
+        var cardStyle = getComputedStyle(card);
+        var paddingV = (parseFloat(cardStyle.paddingTop) || 0) + (parseFloat(cardStyle.paddingBottom) || 0);
+        var paddingH = (parseFloat(cardStyle.paddingLeft) || 0) + (parseFloat(cardStyle.paddingRight) || 0);
+        var headOuter = 0;
+        if (headEl) {
+          var headStyle = getComputedStyle(headEl);
+          headOuter = headEl.getBoundingClientRect().height + (parseFloat(headStyle.marginBottom) || 0);
+        }
+        var footerPx = 0;
+        for (var i = 1; i < kids.length; i++) {
+          var footerStyle = getComputedStyle(kids[i]);
+          footerPx += kids[i].getBoundingClientRect().height + (parseFloat(footerStyle.marginTop) || 0) + (parseFloat(footerStyle.marginBottom) || 0);
+        }
+        var contentItemEl = node.el.querySelector('.grid-stack-item-content');
+        var contentInset = contentItemEl ? (parseFloat(getComputedStyle(contentItemEl).top) || 0) : 0;
+
+        var minContentPx = 40; // gauge, stat_delta, threshold — small, roughly square tiles
+        if (content) {
+          if (content.classList.contains('chart-wrap')) minContentPx = 180; // a chart needs real plot room even at its smallest, not just its legend/axes
+          else if (content.classList.contains('panel-table-scroll')) minContentPx = 60; // header row + one data row
+          else if (content.classList.contains('state-bar-panel')) {
+            var track = content.querySelector('.state-bar-track');
+            minContentPx = track ? track.getBoundingClientRect().height + 10 : 40; // one bar row; the rest scrolls
+          }
+        }
+        // +16: a fixed safety margin, not just rounding slop — a footer/head measured a frame or
+        // two before web fonts finish swapping in can read a few px shorter than its settled size
+        // (seen in practice: the state_bar timestamp footer measured ~16px tall right after load,
+        // ~20px once the font had actually loaded). Erring a little tall here only costs a sliver
+        // of extra panel height; erring short is the exact overlap bug this whole thing exists to
+        // prevent. The rAF-delayed re-run below (after grids.forEach) catches the settled value on
+        // the very next frame regardless, this just keeps the FIRST pass from being too optimistic
+        // in the meantime.
+        var neededHeightPx = paddingV + headOuter + footerPx + minContentPx + contentInset * 2 + 6 + 16;
+        var minH = clamp(Math.ceil((neededHeightPx + GAP_PX) / (ROW_UNIT_PX + GAP_PX)), MIN_ROW_SPAN, MAX_ROW_SPAN);
+
+        // Width floor: only state_bar has real text that stops being useful below a certain
+        // width (see .state-bar-label's own min-width:15ch) — every other panel type's content
+        // reflows/wraps or is already compact, so MIN_COL_SPAN alone is enough for those.
+        var minW = MIN_COL_SPAN;
+        if (content && content.classList.contains('state-bar-panel')) {
+          var label = content.querySelector('.state-bar-label');
+          var labelMinPx = label ? (parseFloat(getComputedStyle(label).minWidth) || 0) : 0;
+          var rowNeedPx = labelMinPx > 0 ? labelMinPx + 48 /* track floor + column gap */ : 0;
+          // The footer's own two timestamp spans (range start/end) sit side by side with
+          // justify-content:space-between and no wrap — plain text can't flex-shrink below its own
+          // natural width, so a panel narrower than both spans combined doesn't wrap or truncate
+          // them, it just runs them into each other. Sum the SPANS' own widths, not the footer
+          // element's — that outer div is width:100% (see style.css), so ITS scrollWidth is just
+          // whatever the panel's current width already is, not the smaller natural minimum the
+          // two spans actually need.
+          var footerEl = kids[1];
+          var footerNeedPx = 0;
+          if (footerEl && footerEl.classList.contains('gauge-radial-minmax')) {
+            Array.prototype.forEach.call(footerEl.children, function (span) {
+              footerNeedPx += span.getBoundingClientRect().width;
+            });
+          }
+          var neededWidthPx = Math.max(rowNeedPx, footerNeedPx);
+          if (neededWidthPx > 0 && cellW > 0) {
+            minW = clamp(Math.ceil((paddingH + neededWidthPx + contentInset * 2) / cellW), MIN_COL_SPAN, MAX_COL_SPAN);
+          }
+        }
+
+        if (node.minH !== minH || node.minW !== minW) grid.update(node.el, { minH: minH, minW: minW });
+      });
+    }
+
+    function autoOrderZone(grid) {
+      var cards = Array.prototype.slice.call(grid.el.querySelectorAll('.dash-panel')).filter(function (c) {
+        return !c.classList.contains('dash-panel-group-header');
+      });
       if (cards.length === 0) return;
-      btn.disabled = true;
 
       // Pass 1 (writes only): assign a content-appropriate width and force one reflow, so pass 2's
       // measurements below reflect real wrapping at the new width instead of whatever it was
       // before (reading in a loop instead of once here would thrash layout for a big dashboard).
       cards.forEach(function (card) {
-        var colSpan = guessColSpan(card);
-        card.style.gridColumn = 'span ' + colSpan;
-        card.dataset.pendingColSpan = colSpan;
+        var item = card.closest('.grid-stack-item');
+        grid.update(item, { w: guessColSpan(card) });
       });
-      grid.getBoundingClientRect();
-
-      var gapPx = parseFloat(getComputedStyle(grid).rowGap) || parseFloat(getComputedStyle(grid).columnGap) || 0;
+      grid.el.getBoundingClientRect();
 
       // Pass 2: measure each panel's own content element directly (.chart-wrap,
-      // .panel-table-scroll, ...), NOT the outer .dash-panel card. A table/value-list panel's
-      // content has its own overflow-y:auto + min-height:0 (see style.css) specifically so it can
-      // scroll internally instead of forcing the card to grow — which means the card's OWN
-      // scrollHeight never reflects that overflow at all, it just reports back whatever (possibly
-      // far too small) height the card already happens to be. The content element's scrollHeight
-      // doesn't have that problem: it always reports its true natural extent regardless of its own
-      // current box size, for every panel type here (chart/gauge/stat/threshold's plain
-      // overflow:visible content behaves the same way, just via visible overflow instead of an
-      // internal scrollbar). Head height + card padding (both fixed, not content-dependent) are
-      // added back on top since neither is part of the content element itself.
+      // .panel-table-scroll, .state-bar-panel, ...), NOT the outer .dash-panel card — a
+      // table/value-list/state-bar panel's content has its own overflow-y:auto + min-height:0 (see
+      // style.css) specifically so IT can scroll internally instead of forcing the card to grow,
+      // which means the card's OWN scrollHeight never reflects that overflow at all. The content
+      // element's scrollHeight doesn't have that problem: it always reports its true natural
+      // extent regardless of its own current box size. Head height + card padding (both fixed, not
+      // content-dependent) are added back on top since neither is part of the content element.
       var sized = cards.map(function (card) {
-        var content = getContentEl(card);
-        var contentH = content ? content.scrollHeight : 20;
+        var item = card.closest('.grid-stack-item');
+        var contentH = measureBodyHeight(card);
         var headEl = card.querySelector('.dash-panel-head');
         var cardStyle = getComputedStyle(card);
         var paddingV = (parseFloat(cardStyle.paddingTop) || 0) + (parseFloat(cardStyle.paddingBottom) || 0);
@@ -1668,44 +2186,179 @@
           var headStyle = getComputedStyle(headEl);
           headOuter = headEl.getBoundingClientRect().height + (parseFloat(headStyle.marginBottom) || 0);
         }
-        var neededPx = paddingV + headOuter + contentH + 6; // +6: corner resize-handle / border rounding margin
-        var rowSpan = clamp(Math.ceil((neededPx + gapPx) / (ROW_UNIT_PX + gapPx)), MIN_ROW_SPAN, MAX_ROW_SPAN);
-        var colSpan = clamp(Number(card.dataset.pendingColSpan) || 4, MIN_COL_SPAN, MAX_COL_SPAN);
-        return { card: card, colSpan: colSpan, rowSpan: rowSpan, area: colSpan * rowSpan };
+        // GridStack's own .grid-stack-item-content is position:absolute; inset:<margin>px (see
+        // gridstack.min.css) — that inset eats into the item's OWN height on both the top AND
+        // bottom edge, space the pre-GridStack version of this never had to account for (a plain
+        // CSS Grid item had no such absolutely-positioned wrapper stealing room from its content).
+        // Read from the actual computed style rather than hardcoded, so this stays correct if the
+        // margin option above ever changes.
+        var contentInset = parseFloat(getComputedStyle(item.querySelector('.grid-stack-item-content')).top) || 0;
+        var neededPx = paddingV + headOuter + contentH + contentInset * 2 + 6; // +6: corner resize-handle / border rounding margin
+        var h = clamp(Math.ceil((neededPx + GAP_PX) / (ROW_UNIT_PX + GAP_PX)), contentMinRowSpan(card), MAX_ROW_SPAN);
+        var w = clamp(item.gridstackNode.w, MIN_COL_SPAN, MAX_COL_SPAN);
+        return { item: item, w: w, h: h, area: w * h };
       });
 
-      // First-fit-decreasing: placing the largest panels first gives sparse row-major placement
-      // the best shot at tucking later, smaller panels into whatever gaps they leave — the
-      // standard bin-packing approximation for this kind of layout (exact packing is NP-hard).
-      // (Not grid-auto-flow: dense — see the comment on .dash-grid in style.css for why that broke
-      // live drag-reorder.)
+      // First-fit-decreasing: applying the largest panels' real sizes first gives compact()'s own
+      // gravity packing the best shot at tucking later, smaller panels into whatever gaps they
+      // leave — the standard bin-packing approximation for this kind of layout (exact packing is
+      // NP-hard). GridStack updates one at a time (not a single batch call) since compact() itself
+      // needs to run against each new size in turn to find the tightest y for the NEXT one.
       sized.sort(function (a, b) { return b.area - a.area; });
+      sized.forEach(function (s) { grid.update(s.item, { w: s.w, h: s.h }); });
+      grid.compact();
+      growToFillZone(grid);
+    }
 
-      sized.forEach(function (item) {
-        item.card.style.gridColumn = 'span ' + item.colSpan;
-        item.card.style.gridRow = 'span ' + item.rowSpan;
-        item.card.dataset.colSpan = item.colSpan;
-        item.card.dataset.rowSpan = item.rowSpan;
-        delete item.card.dataset.pendingColSpan;
-        grid.appendChild(item.card); // re-insert in the new order; dense packing does the rest
+    // Pass 3: the sizes above are each panel's own CONTENT MINIMUM — enough to show its data
+    // without clipping or overlap, nothing more. That alone tends to leave a ragged right edge and
+    // uneven row bottoms once packed. This pass grows panels (width, then height) to soak up
+    // whatever space compact() left unused, one grid cell at a time, stopping the instant growing
+    // further would collide with another panel — so it only ever ADDS on top of the content
+    // minimum already applied above, never shrinks below it. Height growth is capped at the
+    // zone's own tallest current bottom edge (computed once, up front) so a panel alone in a short
+    // column doesn't balloon downward forever just because nothing else happens to be below it.
+    function growToFillZone(grid) {
+      var maxCol = grid.getColumn ? grid.getColumn() : 12;
+      var nodes = grid.engine.nodes;
+      if (!nodes.length) return;
+      var maxBottom = 0;
+      nodes.forEach(function (n) { maxBottom = Math.max(maxBottom, n.y + n.h); });
+      function overlapsAny(rect, self) {
+        return nodes.some(function (o) {
+          if (o === self) return false;
+          return rect.x < o.x + o.w && rect.x + rect.w > o.x && rect.y < o.y + o.h && rect.y + rect.h > o.y;
+        });
+      }
+      var ordered = nodes.slice().sort(function (a, b) { return a.y - b.y || a.x - b.x; });
+      ordered.forEach(function (node) {
+        var w = node.w;
+        while (node.x + w < maxCol && !overlapsAny({ x: node.x, y: node.y, w: w + 1, h: node.h }, node)) w += 1;
+        if (w !== node.w) grid.update(node.el, { w: w });
+        var h = node.h;
+        while (node.y + h < maxBottom && !overlapsAny({ x: node.x, y: node.y, w: node.w, h: h + 1 }, node)) h += 1;
+        if (h !== node.h) grid.update(node.el, { h: h });
       });
+    }
 
-      var order = sized.map(function (item) { return Number(item.card.dataset.id); });
+    var autoOrderBtn = document.getElementById('dash-auto-order-btn');
+    if (autoOrderBtn) {
+      autoOrderBtn.addEventListener('click', function () {
+        grids.forEach(function (grid) {
+          autoOrderZone(grid);
+          applyMinSizes(grid);
+          persistLayout(grid.save(false));
+        });
+      });
+    }
 
-      Promise.all(sized.map(function (item) {
-        return fetch('/dashboards/<%= dashboardId %>/panels/' + item.card.dataset.id + '/resize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ colSpan: item.colSpan, rowSpan: item.rowSpan }),
+    // Runs on every load, not just after clicking Auto order — a panel dragged too small in a
+    // PAST session is exactly the case this needs to catch, and it has to be enforced before
+    // anyone gets a chance to drag anything in THIS one. Re-run once more a couple of frames
+    // later: measuring immediately on load can catch layout mid-settle (e.g. a web font still
+    // swapping in makes the state_bar footer measure a few px shorter than its real size), which
+    // would under-compute minH on this first pass — by the next frame everything's settled, and
+    // grid.update() self-heals h upward too if the corrected minH now exceeds it.
+    grids.forEach(function (grid) { applyMinSizes(grid); });
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        grids.forEach(function (grid) { applyMinSizes(grid); });
+      });
+    });
+  })();
+</script>
+
+<script>
+  // Drag-to-reorder WHOLE GROUPS (header + every panel inside it, moving together as one unit) —
+  // LoxRowReorder's own hand-rolled pointer-drag (threshold-annotation-builder.js), the SAME
+  // mechanism the threshold/annotation/value-mapping row lists use, reused here via its opts.handle
+  // so the drag trigger is the group header's OWN grip icon rather than an auto-inserted extra one.
+  // A GridStack-based version of this (a second, nested interactive grid) was tried and reverted —
+  // see the render loop's own comment above for why. Zone 0 (ungrouped panels) sits outside
+  // #dash-groups-sort-list entirely — it's not a group, and always stays first regardless of how
+  // the groups below it get reordered.
+  (function () {
+    var sortList = document.getElementById('dash-groups-sort-list');
+    if (!sortList) return;
+    var canEdit = <%- canEditPanels ? 'true' : 'false' %>;
+    if (!canEdit) return;
+
+    function persistGroupOrder() {
+      var order = Array.prototype.slice.call(sortList.querySelectorAll(':scope > .dash-group-unit'))
+        .map(function (unit) { return unit.dataset.groupPanelId; });
+      fetch('/dashboards/<%= dashboardId %>/panels/reorder-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupOrder: order }),
+      }).catch(function () { /* best-effort */ });
+    }
+
+    Array.prototype.slice.call(sortList.children).forEach(function (unit) {
+      var handle = unit.querySelector('.group-drag-handle');
+      LoxRowReorder.attachRow(unit, sortList, persistGroupOrder, { handle: handle, dropIndicator: true });
+    });
+  })();
+</script>
+
+<script>
+  // group_header collapse/expand — now just shows/hides that whole group's own zone element (a
+  // ".grid-stack" div — see the render loop above: every group_header is immediately followed by
+  // exactly one such div, holding only that group's own members) rather than toggling a class on
+  // every member individually, which is what the old DOM-order-based "everything up to the next
+  // group_header" bookkeeping (and the row-height workaround that came with it) used to need.
+  // Collapsed state is a personal display preference, not app data — kept in localStorage (same
+  // convention as the refresh-interval/panel-drawer-width prefs, see foot.ejs), keyed by dashboard
+  // AND panel id so it doesn't collide with another dashboard's own group headers.
+  (function () {
+    function storageKey(headerCard) {
+      return 'dashGroupCollapsed:<%= dashboardId %>:' + headerCard.dataset.id;
+    }
+    function isCollapsed(headerCard) {
+      return localStorage.getItem(storageKey(headerCard)) === '1';
+    }
+    function applyState(headerCard) {
+      var collapsed = isCollapsed(headerCard);
+      var toggle = headerCard.querySelector('.group-header-toggle');
+      if (toggle) toggle.classList.toggle('is-collapsed', collapsed);
+      var zone = headerCard.nextElementSibling;
+      if (zone && zone.classList.contains('grid-stack')) zone.classList.toggle('dash-panel-group-collapsed', collapsed);
+    }
+    document.querySelectorAll('.dash-panel-group-header').forEach(function (headerCard) {
+      var toggle = headerCard.querySelector('.group-header-toggle');
+      if (toggle) {
+        toggle.addEventListener('click', function () {
+          localStorage.setItem(storageKey(headerCard), isCollapsed(headerCard) ? '0' : '1');
+          applyState(headerCard);
         });
-      })).then(function () {
-        return fetch('/dashboards/<%= dashboardId %>/panels/reorder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order: order }),
-        });
-      }).catch(function () { /* best-effort — the layout above is already applied client-side either way */ })
-        .then(function () { btn.disabled = false; });
+      }
+      applyState(headerCard);
+    });
+  })();
+</script>
+
+<script>
+  // A segment's label is only worth showing once it actually fits — a truncated ellipsis-cut
+  // name reads worse than the color alone on a bar this narrow. Measured in pixels (percentage
+  // widths don't tell you that on their own), so this has to run client-side after layout, not
+  // be baked in server-side. Re-run on resize and after every live-refresh swap (MutationObserver
+  // on the panel body, same pattern as incoming-clients.ejs's filter) rather than hooking
+  // window.refreshTables directly, so this doesn't depend on tables.js having already loaded.
+  (function () {
+    function fitStateBarLabels() {
+      document.querySelectorAll('.state-bar-segment').forEach(function (seg) {
+        var label = seg.querySelector('.state-bar-segment-label');
+        if (!label) return;
+        label.classList.remove('is-overflowing');
+        if (label.scrollWidth > seg.clientWidth) label.classList.add('is-overflowing');
+      });
+    }
+    fitStateBarLabels();
+    window.addEventListener('resize', function () {
+      clearTimeout(window.__stateBarFitTimer);
+      window.__stateBarFitTimer = setTimeout(fitStateBarLabels, 150);
+    });
+    document.querySelectorAll('.state-bar-panel').forEach(function (panel) {
+      new MutationObserver(fitStateBarLabels).observe(panel, { childList: true, subtree: true });
     });
   })();
 </script>

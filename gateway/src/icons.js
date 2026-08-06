@@ -25,6 +25,11 @@ const ICONS = {
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
   share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.6 15.4 6.4M8.6 13.4 15.4 17.6"/>',
+  // Miniservers page's own Gateway/Client toggle (see miniserver-row.ejs's data-toggle-clients
+  // button, and the "Expand/Collapse all clients" button) — replaced `share` there, which read as
+  // "broadcast to" rather than "this Miniserver has Clients under it". One block branching down to
+  // two reads as the org-chart/hierarchy shape a Gateway-and-its-Clients relationship actually is.
+  sitemap: '<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M12 12H6v4M12 12h6v4"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
   // Three plain bars — distinct from `list` above (which has dots, meant for an actual list of
   // items) so it reads unambiguously as a nav/menu toggle rather than "view as list".

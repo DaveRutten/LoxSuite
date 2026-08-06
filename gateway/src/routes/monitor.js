@@ -56,17 +56,6 @@ function buildAbsoluteRange(startMs, endMs) {
   return `abs_${Math.round(startMs)}_${Math.round(endMs)}`;
 }
 
-// Inverse of parseRangeEndpoint below — re-renders an abs_<start>_<end> range back into the same
-// "D-M-YYYY H:MM" shape it (or the Absolute range picker) can be typed as, so re-opening the
-// custom-range field after a reload shows a readable date instead of the raw abs_1754... string,
-// and resubmitting it unchanged round-trips through parseRangeEndpoint correctly.
-function formatRangeEndpointForInput(ms, tz) {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(new Date(ms)).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
-  return `${parts.day}-${parts.month}-${parts.year} ${parts.hour}:${parts.minute}`;
-}
-
 // A typed absolute date/time, D-M-YYYY (matching how this app's user actually writes dates) or
 // plain ISO YYYY-MM-DD, either alone optionally followed by a time as "H:MM" — distinguished from
 // the D-M-YYYY form by the first segment being 4 digits, so "1-8-2026" and "2026-08-01" are never
@@ -210,6 +199,8 @@ function loadMonitor(id) {
 }
 
 router.get('/', (req, res) => {
+  const { listAccessibleDashboardIds } = require('./dashboards');
+  const accessibleDashboardIds = listAccessibleDashboardIds(req.session.userId, req.user && req.user.roleId);
   const monitors = db
     .prepare(
       `SELECT monitors.*, miniservers.name AS miniserver_name,
@@ -234,12 +225,23 @@ router.get('/', (req, res) => {
         const thresholds = JSON.parse(m.config || '{}').thresholds;
         hasNotifyThreshold = Array.isArray(thresholds) && thresholds.some((t) => t.notify);
       } catch { /* malformed config — treat as no notify threshold rather than erroring the whole list */ }
+      // The query above has no ownership filter of its own (a monitor can be used on ANY
+      // dashboard, not just this viewer's) — dropped here rather than in SQL so "My Dashboards"
+      // and this page's own "Dashboard" column always agree on what's actually reachable, instead
+      // of this page pointing at a dashboard the viewer would just get a 403 clicking through to.
+      if (m.dashboardPairs) {
+        m.dashboardPairs = m.dashboardPairs
+          .split(',')
+          .filter((pair) => accessibleDashboardIds.has(Number(pair.slice(0, pair.indexOf(':')))))
+          .join(',') || null;
+      }
       return { ...m, current: getCurrentValue(m.id), hasNotifyThreshold };
     });
 
   const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   const retention = db.prepare('SELECT monitor_retention_days FROM gateway_settings WHERE id = 1').get();
   const unusedCount = monitors.filter((m) => m.panelCount === 0).length;
+  const { getDefaultPanelDecimals } = require('./dashboards');
 
   res.render('monitor', {
     monitors,
@@ -249,6 +251,7 @@ router.get('/', (req, res) => {
     unusedCount,
     prefillTopic: req.query.topic || '',
     DIAG_FIELD_LABELS,
+    defaultPanelDecimals: getDefaultPanelDecimals(),
     error: null,
   });
 });
@@ -312,6 +315,7 @@ router.post('/', requirePermission('monitor', 'edit'), async (req, res) => {
     const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
     const retention = db.prepare('SELECT monitor_retention_days FROM gateway_settings WHERE id = 1').get();
     const unusedCount = monitors.filter((m) => m.panelCount === 0).length;
+    const { getDefaultPanelDecimals } = require('./dashboards');
     res.render('monitor', {
       monitors,
       miniservers,
@@ -320,6 +324,7 @@ router.post('/', requirePermission('monitor', 'edit'), async (req, res) => {
       unusedCount,
       prefillTopic: '',
       DIAG_FIELD_LABELS,
+      defaultPanelDecimals: getDefaultPanelDecimals(),
       error: err.message,
     });
   }
@@ -508,22 +513,13 @@ router.get('/:id', (req, res) => {
   const chartDefaultRow = db.prepare('SELECT monitor_chart_default_config FROM gateway_settings WHERE id = 1').get();
   const chartDefaultExists = !!chartDefaultRow && chartDefaultRow.monitor_chart_default_config !== '{}';
 
-  // The custom-range text field shows this back, not the raw `range` value — an abs_<start>_<end>
-  // range (from either endpoint being a typed absolute date, see customAbsoluteRange above) is
-  // reformatted into the same readable "D-M-YYYY H:MM to D-M-YYYY H:MM" shape it can be typed as,
-  // so reopening/resubmitting the field after a reload doesn't show raw epoch millisecond gibberish.
-  const absMatch = typeof range === 'string' ? range.match(ABS_RANGE_RE) : null;
-  const customRangeDisplay = absMatch
-    ? `${formatRangeEndpointForInput(Number(absMatch[1]), res.locals.displayTimezone)} to ${formatRangeEndpointForInput(Number(absMatch[2]), res.locals.displayTimezone)}`
-    : range;
-
   res.render('monitor-detail', {
     monitor,
     config,
+    current: getCurrentValue(monitor.id),
     chartDefaultExists,
     defaultPanelDecimals: getDefaultPanelDecimals(),
     range,
-    customRangeDisplay,
     rows,
     groups,
     groupMode,
@@ -558,17 +554,18 @@ router.post('/:id/chart-settings', requirePermission('monitor', 'edit'), (req, r
   // in save-as-default below: that config is shared across every monitor, and a chart_series entry
   // keyed by THIS monitor's id would silently never match any other monitor's id once applied via
   // "Reset to default" there.
+  const { buildConfig, parseValueMappings } = require('./dashboards');
   const scale = Number(req.body.monitor_scale);
   const decimals = Number(req.body.monitor_decimals);
   const unit = typeof req.body.unit_chart === 'string' ? req.body.unit_chart.trim() : '';
+  const valueLabels = parseValueMappings(req.body.monitor_value_labels);
   const seriesEntry = {};
   if (unit) seriesEntry.unit = unit;
   if (Number.isFinite(scale) && scale !== 0 && scale !== 1) seriesEntry.scale = scale;
   if (req.body.monitor_decimals !== '' && Number.isFinite(decimals)) seriesEntry.decimals = decimals;
+  if (valueLabels.length) seriesEntry.valueLabels = valueLabels;
   req.body.chart_series = Object.keys(seriesEntry).length ? JSON.stringify({ [monitor.id]: seriesEntry }) : '{}';
   req.body.unit_chart = '';
-
-  const { buildConfig } = require('./dashboards');
   const config = buildConfig('chart', req.body);
   db.prepare('UPDATE monitors SET config = ? WHERE id = ?').run(JSON.stringify(config), monitor.id);
   res.redirect(req.get('referer') || `/monitor/${monitor.id}`);

@@ -21,6 +21,8 @@
 <span class="help-drawer-resize-handle" title="Drag to resize"></span>
 
 <script src="/tables.js?v=<%= assetVersion %>" defer></script>
+<script src="/range-picker.js?v=<%= assetVersion %>" defer></script>
+<script src="/auto-submit-select.js?v=<%= assetVersion %>" defer></script>
 <script>
   // Stamps the CSRF token (see middleware/csrf.js) onto every plain-HTML form on the page,
   // instead of hand-adding a hidden field to each of the ~40 view files that have one. Exposed on
@@ -105,7 +107,30 @@
       );
     }
 
+    // tables.js's collapseRowActions() builds a row's "more actions" popover as a sibling of
+    // <body>, not a descendant of the row's own <tr> (see its own comment on why — position:fixed
+    // to escape .table-wrap's overflow-x:auto clipping) — and MOVES that row's action buttons
+    // into it rather than cloning them. A tbody swap below replaces the row (and whatever's left of
+    // its now-emptied .row-actions) with fresh markup, but has no way to reach — let alone close —
+    // this detached popover, so it would just sit there open, showing stale pre-refresh content,
+    // while refreshTables() (called after every swap) builds a SECOND, hidden popover for the same
+    // row on top of it. Postponing here, the same way menuOpen()/selectionActive() already do for
+    // an open Columns menu or an active Logs selection, avoids all of that by simply not swapping
+    // until whatever's open gets closed.
+    function rowActionsOpen() {
+      return !!document.querySelector('.row-actions-popover:not([hidden])');
+    }
+
     function swapFrom(doc) {
+      // Swapping a tbody's innerHTML shouldn't move anything, but a row count/height change can
+      // still leave a scrolled-down table (or the whole page, if it's the one thing keeping the
+      // page tall enough to be scrolled) looking like it "jumped" — restored explicitly rather
+      // than assumed, since that's cheap insurance regardless of the actual cause.
+      var scrollY = window.scrollY;
+      var wrapScrolls = Array.prototype.map.call(document.querySelectorAll('.table-wrap'), function (wrap) {
+        return { wrap: wrap, left: wrap.scrollLeft };
+      });
+
       document.querySelectorAll('[data-live-id]').forEach(function (el) {
         var fresh = doc.querySelector('[data-live-id="' + el.dataset.liveId + '"]');
         if (fresh) el.innerHTML = fresh.innerHTML;
@@ -129,6 +154,9 @@
 
       window.stampCsrfTokens();
       if (window.refreshTables) window.refreshTables();
+
+      window.scrollTo(window.scrollX, scrollY);
+      wrapScrolls.forEach(function (entry) { entry.wrap.scrollLeft = entry.left; });
     }
 
     function selectionActive() {
@@ -139,7 +167,7 @@
 
     function tick() {
       setTimeout(function () {
-        if (isPaused() || menuOpen() || selectionActive()) { tick(); return; }
+        if (isPaused() || menuOpen() || selectionActive() || rowActionsOpen()) { tick(); return; }
         if (!liveSwap) { location.reload(); return; }
         fetch(location.pathname + location.search)
           .then(function (res) { return res.text(); })
@@ -243,175 +271,10 @@
 
   })();
 </script>
-<script>
-  // Dashboard-wide time filter, next to the auto-refresh control above — only on pages that opt
-  // in (data-dash-range, see dashboard.ejs/dashboard-detail.ejs's own head include). Drives every
-  // time-series panel's *display* window via a plain ?range= query param on the dashboard's own
-  // URL, read server-side by loadPanelsWithMonitors() (routes/dashboards.js) — a real navigation
-  // rather than a fetch-and-swap, so it's a shareable/bookmarkable link and rides along for free
-  // on every live-refresh cycle after that (partials/foot.ejs's own tick() already re-fetches
-  // location.pathname + location.search on every tick). Each panel keeps its own saved range
-  // untouched in the database; this only overrides what's computed for display while active.
-  (function () {
-    if (document.body.dataset.dashRange !== 'true') return;
-    var topbarRight = document.querySelector('.topbar-right');
-    if (!topbarRight) return;
-
-    var PRESETS = [['1h', 'Last hour'], ['24h', 'Last 24 hours'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['all', 'All']];
-    var ABS_RE = /^abs_(\d+)_(\d+)$/;
-    var current = new URLSearchParams(location.search).get('range') || '';
-    var absMatch = current.match(ABS_RE);
-
-    function navigate(range) {
-      var params = new URLSearchParams(location.search);
-      if (range) params.set('range', range); else params.delete('range');
-      var qs = params.toString();
-      location.href = location.pathname + (qs ? '?' + qs : '');
-    }
-    function pad(n) { return String(n).padStart(2, '0'); }
-    function toDateInputValue(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
-    function formatShort(ms) {
-      var d = new Date(ms);
-      return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-    }
-
-    // A single popover per field — a native <input type="date"> (Chrome's own calendar picker is
-    // already good, no reason to rebuild that part) plus hour/minute <select>s instead of the
-    // datetime-local widget's own time half, which has no equivalent click-to-pick UI and has to
-    // be typed digit by digit instead. Same floating-popover shape as .columns-menu-panel.
-    function buildDateTimePicker(label, initialMs) {
-      var ms = initialMs || null;
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn-soft';
-      function renderLabel() { btn.textContent = ms ? formatShort(ms) : label; }
-      renderLabel();
-
-      var panel = document.createElement('div');
-      panel.className = 'columns-menu-panel dash-datetime-panel';
-      panel.hidden = true;
-
-      var dateInput = document.createElement('input');
-      dateInput.type = 'date';
-
-      var hourSelect = document.createElement('select');
-      for (var h = 0; h < 24; h++) {
-        var hOpt = document.createElement('option');
-        hOpt.value = h;
-        hOpt.textContent = pad(h);
-        hourSelect.appendChild(hOpt);
-      }
-      var minuteSelect = document.createElement('select');
-      for (var m = 0; m < 60; m += 5) {
-        var mOpt = document.createElement('option');
-        mOpt.value = m;
-        mOpt.textContent = pad(m);
-        minuteSelect.appendChild(mOpt);
-      }
-
-      var seed = new Date(ms || Date.now());
-      dateInput.value = toDateInputValue(seed);
-      hourSelect.value = seed.getHours();
-      minuteSelect.value = Math.min(55, Math.round(seed.getMinutes() / 5) * 5);
-
-      var row = document.createElement('div');
-      row.className = 'dash-datetime-row';
-      row.appendChild(dateInput);
-      row.appendChild(hourSelect);
-      row.appendChild(document.createTextNode(':'));
-      row.appendChild(minuteSelect);
-      var setBtn = document.createElement('button');
-      setBtn.type = 'button';
-      setBtn.className = 'primary';
-      setBtn.textContent = 'Set';
-      panel.appendChild(row);
-      panel.appendChild(setBtn);
-
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var wasHidden = panel.hidden;
-        document.querySelectorAll('.dash-datetime-panel').forEach(function (p) { p.hidden = true; });
-        if (wasHidden) {
-          // .columns-menu-panel is position:fixed with no static top/left of its own (see
-          // style.css's own comment on that rule) — tables.js computes those from its trigger
-          // button on each open; this reused panel needs the same treatment, right-aligned under
-          // its own button same as that one.
-          var rect = btn.getBoundingClientRect();
-          panel.style.top = (rect.bottom + 6) + 'px';
-          panel.style.left = 'auto';
-          panel.style.right = (window.innerWidth - rect.right) + 'px';
-        }
-        panel.hidden = !wasHidden;
-      });
-      panel.addEventListener('click', function (e) { e.stopPropagation(); });
-      setBtn.addEventListener('click', function () {
-        if (!dateInput.value) return;
-        var d = new Date(dateInput.value + 'T00:00:00');
-        d.setHours(Number(hourSelect.value), Number(minuteSelect.value), 0, 0);
-        ms = d.getTime();
-        renderLabel();
-        panel.hidden = true;
-      });
-
-      return { btn: btn, panel: panel, getMs: function () { return ms; } };
-    }
-
-    var wrap = document.createElement('div');
-    wrap.className = 'refresh-control';
-
-    var select = document.createElement('select');
-    select.title = 'Time range for chart/table/comparison panels — leave on Default to let each panel use its own saved range';
-    var defaultOpt = document.createElement('option');
-    defaultOpt.value = '';
-    defaultOpt.textContent = 'Default range';
-    select.appendChild(defaultOpt);
-    PRESETS.forEach(function (p) {
-      var opt = document.createElement('option');
-      opt.value = p[0];
-      opt.textContent = p[1];
-      select.appendChild(opt);
-    });
-    var customOpt = document.createElement('option');
-    customOpt.value = '__custom__';
-    customOpt.textContent = 'Custom…';
-    select.appendChild(customOpt);
-
-    var isPreset = PRESETS.some(function (p) { return p[0] === current; });
-    select.value = absMatch ? '__custom__' : (isPreset ? current : '');
-
-    var startPicker = buildDateTimePicker('From', absMatch ? Number(absMatch[1]) : null);
-    var endPicker = buildDateTimePicker('To', absMatch ? Number(absMatch[2]) : null);
-    var goBtn = document.createElement('button');
-    goBtn.type = 'button';
-    goBtn.className = 'btn-soft';
-    goBtn.textContent = 'Go';
-    var customGroup = [startPicker.btn, endPicker.btn, goBtn];
-    customGroup.forEach(function (el) { el.hidden = !absMatch; });
-
-    select.addEventListener('change', function () {
-      var isCustom = select.value === '__custom__';
-      customGroup.forEach(function (el) { el.hidden = !isCustom; });
-      if (!isCustom) navigate(select.value);
-    });
-    goBtn.addEventListener('click', function () {
-      var startMs = startPicker.getMs();
-      var endMs = endPicker.getMs();
-      if (!startMs || !endMs || !(startMs < endMs)) return;
-      navigate('abs_' + startMs + '_' + endMs);
-    });
-    document.addEventListener('click', function () {
-      document.querySelectorAll('.dash-datetime-panel').forEach(function (p) { p.hidden = true; });
-    });
-
-    wrap.appendChild(select);
-    wrap.appendChild(startPicker.btn);
-    wrap.appendChild(startPicker.panel);
-    wrap.appendChild(endPicker.btn);
-    wrap.appendChild(endPicker.panel);
-    wrap.appendChild(goBtn);
-    topbarRight.insertBefore(wrap, topbarRight.firstChild);
-  })();
-</script>
+<!-- The dashboard-wide time filter used to be built entirely here via document.createElement — now
+     server-rendered directly in partials/head.ejs's topbar-right (the same shared rangeField()
+     widget as Monitor detail/Logs/the dashboard panel Range field), synced by the sitewide
+     public/range-picker.js. -->
 <script>
   // Collapsible sections, keyed by an arbitrary data-nav-section string persisted server-side
   // (routes/navPrefs.js) so it follows the user across devices/browsers, same as their table
@@ -475,6 +338,22 @@
     // this has to check for the explicit "shown" value rather than the more obvious-looking
     // `=== '1'` (which would default to shown).
     applyState(localStorage.getItem(STORAGE_KEY) !== '0');
+
+    // The topbar's own copy (see partials/head.ejs) is rendered unconditionally on every page —
+    // unlike a page's own dedicated "?" button, which only ever exists on a page that actually has
+    // a hint-bearing form to go with it. Pages with neither (Live Data, Logs, Hardware, ...) had a
+    // button that visibly did nothing when clicked, which read as broken rather than "there's just
+    // nothing to toggle here". Hidden whenever none of the scoped selectors the CSS rule above
+    // actually targets (see .panel-hints-hidden in style.css) are present on the page at all.
+    // Also hidden on any page with .dash-panel (Home/My Dashboards) even though those DO have
+    // .panel-settings-form on them — every one of those forms (Add-panel included) already carries
+    // its own dedicated hints-toggle button in its own header, so the global topbar copy would just
+    // be a second, redundant way to do the exact same thing right next to the one that's actually
+    // scoped to the form you're looking at.
+    var topbarToggle = document.getElementById('topbar-hints-toggle');
+    if (topbarToggle && (document.querySelector('.dash-panel') || !document.querySelector('.panel-settings-form, #add-ms-form, #edit-ms-form, #mqtt-broker-card, #settings-form'))) {
+      topbarToggle.hidden = true;
+    }
 
     document.addEventListener('click', function (e) {
       if (e.target.closest('.hints-toggle-btn')) {
@@ -863,7 +742,10 @@
       var yesBtn = document.createElement('button');
       yesBtn.type = 'button';
       yesBtn.className = submitBtn.className;
-      yesBtn.innerHTML = submitBtn.innerHTML;
+      // Plain "Yes" (not a copy of the trigger's own "Delete"/label+icon) — shared by every
+      // data-confirm bar sitewide, so this one change is enough everywhere it appears. Keeps the
+      // trigger's own color class (className below) so a destructive action still reads red.
+      yesBtn.textContent = 'Yes';
       var noBtn = document.createElement('button');
       noBtn.type = 'button';
       noBtn.className = 'btn-soft';
@@ -880,14 +762,76 @@
       var anchor = form.closest('.dash-panel-head') || form.closest('.row-actions') || form;
       anchor.insertAdjacentElement('afterend', bar);
 
+      // A .table-toolbar's own flex-wrap means this bar's usual "full-width block below the
+      // buttons" treatment (flex-basis:100% once .open, see .confirm-bar in style.css) shoves
+      // every toolbar child placed AFTER it (e.g. the Columns button, appended by tables.js) down
+      // onto a new line the moment it opens — there's no "after" for it to push things into once
+      // it's the toolbar's own child, unlike row-actions/dash-panel-head where nothing else follows
+      // it anyway. Fixed-position popover anchored under the triggering button instead, same
+      // "escape the .filterable-table-card's own overflow:hidden via position:fixed +
+      // getBoundingClientRect()" trick buildColumnsMenu's own dropdown already relies on — so
+      // opening it can't move anything else in the toolbar at all.
+      var toolbar = form.closest('.table-toolbar');
+      // Already living inside tables.js's own floating .row-actions-popover (a kebab-collapsed
+      // Actions column) — that's already a fixed-position popover of its own, so this bar stays a
+      // plain in-flow block INSIDE it (see growRowActionsPopover below) instead of becoming a
+      // second, independently-floating popover stacked underneath it.
+      var rowActionsPopover = form.closest('.row-actions-popover');
+      // A plain table row's own .row-actions (Edit/Delete, etc. — Miniservers/Users/Roles/... when
+      // NOT kebab-collapsed) gets the same popover treatment: a full-width block there is squeezed
+      // into that one <td>'s own narrow width, wrapping the message/buttons across several cramped
+      // lines instead of a clean floating card. Excludes .dash-panel-head's own row-actions (a
+      // dashboard panel's Delete/Duplicate) — that one's "stacks under the whole head" block
+      // treatment already reads fine there and isn't a table row.
+      var tableRowActions = !toolbar && !rowActionsPopover && !form.closest('.dash-panel-head') ? form.closest('.row-actions') : null;
+      var usePopover = !!(toolbar || tableRowActions);
+      if (usePopover) bar.classList.add('confirm-bar-popover');
+
+      // Grows the row-actions-popover itself to fit this bar once it opens (rather than relying
+      // purely on its own overflow-y:auto scroll) — same "make the first one bigger if needed"
+      // request the popover conversion itself came from. Shrinks back once cancelled/closed so a
+      // later, shorter interaction doesn't inherit a stale taller box.
+      function growRowActionsPopover(open) {
+        if (!rowActionsPopover) return;
+        if (open) {
+          if (!rowActionsPopover.dataset.baseMaxHeight) rowActionsPopover.dataset.baseMaxHeight = rowActionsPopover.style.maxHeight || '';
+          var needed = rowActionsPopover.scrollHeight + bar.scrollHeight + 8;
+          var current = parseFloat(rowActionsPopover.style.maxHeight) || 0;
+          if (needed > current) rowActionsPopover.style.maxHeight = Math.min(needed, window.innerHeight * 0.8) + 'px';
+        } else if (rowActionsPopover.dataset.baseMaxHeight != null) {
+          rowActionsPopover.style.maxHeight = rowActionsPopover.dataset.baseMaxHeight;
+        }
+      }
+
+      // Only one sub-panel open at a time inside a row-actions-popover — Test's own merged content
+      // (see collapseRowActions in tables.js) fires this same 'subpanelopen' event when IT opens,
+      // so this bar closes itself in response instead of both stacking up together.
+      if (rowActionsPopover) {
+        rowActionsPopover.addEventListener('subpanelopen', function (e) {
+          if (e.detail !== bar && bar.classList.contains('open')) {
+            bar.classList.remove('open');
+            growRowActionsPopover(false);
+            submitBtn.hidden = false;
+          }
+        });
+      }
+
       submitBtn.addEventListener('click', function (e) {
         e.preventDefault();
+        if (usePopover) {
+          var rect = submitBtn.getBoundingClientRect();
+          bar.style.top = (rect.bottom + 6) + 'px';
+          bar.style.right = (window.innerWidth - rect.right) + 'px';
+        }
+        if (rowActionsPopover) rowActionsPopover.dispatchEvent(new CustomEvent('subpanelopen', { detail: bar }));
         submitBtn.hidden = true;
         bar.classList.add('open');
+        growRowActionsPopover(true);
       });
       yesBtn.addEventListener('click', function () { form.submit(); });
       noBtn.addEventListener('click', function () {
         bar.classList.remove('open');
+        growRowActionsPopover(false);
         setTimeout(function () { submitBtn.hidden = false; }, 200);
       });
     });
@@ -952,6 +896,122 @@
         if (select.value === '__custom__') input.focus();
       });
       sync();
+    });
+  })();
+</script>
+<script>
+  // Drives every .value-mapping-builder (see chartFieldHelpers.js's valueMappingField) — same idea
+  // as the threshold builder (threshold-annotation-builder.js), a dynamic add/remove-row UI over a
+  // hidden textarea, kept in the "<value>=<label>[=<color>]" format dashboards.js's own
+  // parseValueMappings already handles. The color segment is optional per row (a value can just be
+  // renamed, with no color of its own). Lives here (not panel-grid.ejs, its original home) since
+  // foot.ejs is the one partial every page that uses valueMappingField() actually includes.
+  (function () {
+    function serializeRows(builder) {
+      var lines = [];
+      builder.querySelectorAll('.value-mapping-row').forEach(function (row) {
+        var value = row.querySelector('.value-mapping-row-value').value.trim();
+        var name = row.querySelector('.value-mapping-row-name').value.trim();
+        var color = row.querySelector('.value-mapping-row-color').value;
+        if (value !== '' && name !== '') lines.push(value + '=' + name + '=' + color);
+      });
+      builder.querySelector('.value-mapping-hidden').value = lines.join('\n');
+    }
+
+    // Every row always carries a color — starting from the next palette slot not already used by
+    // a sibling row (see nextAvailableColor in color-picker.js) rather than gated behind its own
+    // "give this value a color" checkbox, which was one more click for what's the common case
+    // anyway and, on top of that, rendered as a plain unthemed white box in dark mode.
+    function addRow(builder, value, name, color) {
+      var row = document.createElement('div');
+      row.className = 'value-mapping-row';
+      var usedColors = Array.prototype.map.call(builder.querySelectorAll('.value-mapping-row-color'), function (el) { return el.value; });
+      row.innerHTML =
+        '<input type="text" class="value-mapping-row-value" placeholder="Value">' +
+        '<input type="text" class="value-mapping-row-name" placeholder="Name to show">' +
+        LoxColorPicker.buildPickerHtml(color || LoxColorPicker.nextAvailableColor(usedColors), 'value-mapping-row-color') +
+        '<button type="button" class="icon-btn icon-btn-danger value-mapping-row-remove" title="Remove" aria-label="Remove">&times;</button>';
+      row.querySelector('.value-mapping-row-value').value = value == null ? '' : value;
+      row.querySelector('.value-mapping-row-name').value = name == null ? '' : name;
+      var rowsContainer = builder.querySelector('.value-mapping-rows');
+      rowsContainer.appendChild(row);
+      LoxRowReorder.attachRow(row, rowsContainer, function () { serializeRows(builder); });
+
+      row.querySelector('.value-mapping-row-value').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.value-mapping-row-name').addEventListener('input', function () { serializeRows(builder); });
+      row.querySelector('.value-mapping-row-color').addEventListener('change', function () { serializeRows(builder); });
+      row.querySelector('.value-mapping-row-remove').addEventListener('click', function () {
+        LoxRowReorder.removeRow(row);
+        serializeRows(builder);
+      });
+    }
+
+    document.querySelectorAll('.value-mapping-builder').forEach(function (builder) {
+      var hidden = builder.querySelector('.value-mapping-hidden');
+      hidden.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
+        var parts = line.split('=');
+        if (parts.length < 2) return;
+        var color = parts.length > 2 ? parts.slice(2).join('=').trim() : '';
+        addRow(builder, parts[0], parts[1], color);
+      });
+      builder.querySelector('.value-mapping-add-row').addEventListener('click', function () {
+        addRow(builder, '', '', '');
+        serializeRows(builder);
+      });
+    });
+  })();
+</script>
+<script>
+  // Instant, no-reload filter for every Logs page's own table — same column-index-based approach
+  // Monitor/Miniservers already use (see monitor.ejs's own #monitor-filter-field), generalized into
+  // one shared implementation since 5 different log pages needed the identical behavior. Column
+  // indices are read from data-filter-key on each table's own <th> at runtime rather than hardcoded,
+  // since one of them (Logs > Loxone) conditionally adds a Miniserver column that would otherwise
+  // shift every index after it.
+  (function () {
+    document.querySelectorAll('.log-search-combo').forEach(function (combo) {
+      var fieldSelect = combo.querySelector('.log-search-field');
+      var queryInput = combo.querySelector('.log-search-query');
+      var clearBtn = combo.querySelector('.log-search-clear');
+      var card = combo.closest('.filterable-table-card');
+      var table = card && card.querySelector('.table-wrap table');
+      if (!fieldSelect || !queryInput || !table) return;
+
+      function columnIndexFor(key) {
+        var ths = table.querySelectorAll('thead th');
+        for (var i = 0; i < ths.length; i++) {
+          if (ths[i].dataset.filterKey === key) return i;
+        }
+        return -1;
+      }
+
+      function applyFilter() {
+        var colIndex = columnIndexFor(fieldSelect.value);
+        var q = queryInput.value.trim().toLowerCase();
+        if (clearBtn) clearBtn.hidden = !q;
+        table.querySelectorAll('tbody tr').forEach(function (row) {
+          if (!q || colIndex === -1) { row.style.display = ''; return; }
+          var cell = row.children[colIndex];
+          var text = cell ? cell.textContent.toLowerCase() : '';
+          row.style.display = text.indexOf(q) !== -1 ? '' : 'none';
+        });
+      }
+
+      fieldSelect.addEventListener('change', applyFilter);
+      // Debounced same as Live Data's own search — a log table can be a few hundred rows, no reason
+      // to re-scan the whole tbody on every single keystroke of a fast typist.
+      var debounceTimer = null;
+      queryInput.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(applyFilter, 200);
+      });
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+          queryInput.value = '';
+          applyFilter();
+          queryInput.focus();
+        });
+      }
     });
   })();
 </script>

@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-system', refresh: 5, liveSwap: true }) %>
+<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-system', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/system', topbarRangeValue: range, topbarRangeExtra: { q: query.q } }) %>
 
 <p class="hint">
   This gateway's own housekeeping events &mdash; e.g. a disconnected MQTT client getting
@@ -7,27 +7,18 @@
   &mdash; <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
 </p>
 
-<form method="get" action="/logs/system" class="form-grid" style="margin-bottom:1rem; align-items:end;">
-  <div>
-    <label>From</label>
-    <input type="datetime-local" name="from" value="<%= query.from || '' %>">
-  </div>
-  <div>
-    <label>To</label>
-    <input type="datetime-local" name="to" value="<%= query.to || '' %>">
-  </div>
-  <div>
-    <label>Contains</label>
-    <input type="text" name="q" value="<%= query.q || '' %>" placeholder="Search log text">
-  </div>
-  <div style="display:flex; gap:0.5rem;">
-    <button type="submit" class="btn-soft"><%- icon('filter') %> Apply</button>
-    <a href="/logs/system"><button type="button" class="btn-soft">Clear</button></a>
-  </div>
-</form>
-
 <div class="filterable-table-card">
   <div class="table-toolbar">
+    <div class="search-combo log-search-combo">
+      <select class="log-search-field">
+        <option value="time">Time</option>
+        <option value="message" selected>Message</option>
+      </select>
+      <div class="clearable-input-wrap">
+        <input type="text" class="log-search-query" placeholder="Filter…">
+        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+      </div>
+    </div>
     <span class="log-selection-count hint" style="margin:0;"></span>
     <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label">Copy selection</span></button>
     <% if (canEdit('logs_system')) { %>
@@ -38,7 +29,7 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th>Time</th><th>Line</th></tr>
+      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th data-filter-key="time">Time</th><th data-filter-key="message">Message</th></tr>
     </thead>
     <tbody>
       <% rows.forEach(r => { %>

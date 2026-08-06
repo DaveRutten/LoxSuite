@@ -36,7 +36,7 @@
       <% } else { %>
         <button type="button" class="icon-btn icon-btn-neutral" data-toggle-row="ms-diag-<%= ms.id %>" title="Show diagnostics"><%- icon('chevron') %></button>
         <% if (ms.gatewayClientCount > 0) { %>
-          <button type="button" class="icon-btn icon-btn-neutral" data-toggle-clients="<%= ms.id %>" title="Show its <%= ms.gatewayClientCount %> Client Miniserver<%= ms.gatewayClientCount === 1 ? '' : 's' %>"><%- icon('share') %></button>
+          <button type="button" class="icon-btn icon-btn-neutral" data-toggle-clients="<%= ms.id %>" title="Show its <%= ms.gatewayClientCount %> Client Miniserver<%= ms.gatewayClientCount === 1 ? '' : 's' %>"><%- icon('sitemap') %></button>
         <% } %>
       <% } %>
     </div>
@@ -47,7 +47,7 @@
     <span class="badge badge-live <%= badgeClass %>"><%= badgeText %></span>
   </td>
   <td>
-    <span class="truncate" style="max-width:150px;" title="<%= ms.name %>"><%= ms.name %></span>
+    <span class="truncate" style="max-width:220px;" title="<%= ms.name %>"><%= ms.name %></span>
   </td>
   <td>
     <% if (ms.gatewayClientCount > 0) { %>
@@ -62,25 +62,18 @@
   <td><%= ms.http_port %></td>
   <td><%= ms.use_https ? 'yes' : 'no' %></td>
   <td><%= ms.udp_port || '-' %></td>
-  <td><% if (ms.external_url) { %><span class="truncate" style="max-width:180px;" title="<%= ms.external_url %>"><%= ms.external_url %></span><% } else { %>-<% } %></td>
+  <td><% if (ms.external_url) { %><span class="truncate" style="max-width:260px;" title="<%= ms.external_url %>"><%= ms.external_url %></span><% } else { %>-<% } %></td>
   <td><%= ms.username %></td>
   <td><%= ms.last_checked_at ? formatDateTime(ms.last_checked_at) : '-' %></td>
   <td>
     <% if (canEdit('miniservers')) { %>
     <div class="row-actions">
       <%
-        // A plain (non-button) child of .row-actions — tables.js's collapseRowActions() moves
-        // EVERY child into its auto-generated kebab expand-row indiscriminately, not just
-        // buttons, so this rides along with Edit/Test/Delete into that same row and ends up on
-        // the left of them for free (flex:1 eats the row's leftover width, pushing the actual
-        // buttons to the right — same effect .row-actions-expanded's justify-content:flex-end
-        // would give them on its own).
+        // "Test now" (+ its own result breakdown) used to live here — removed in favor of the
+        // complete Test already on this Miniserver's own Edit page (see miniserver-edit.ejs),
+        // rather than keeping two separate Test implementations in sync.
       %>
-      <div class="ms-test-result" data-ms-result-for="<%= ms.id %>" style="flex:1; min-width:10rem;">
-        <p class="hint" style="margin:0;">Click "Test now" to check connectivity.</p>
-      </div>
       <a class="inline" href="/miniservers/<%= ms.id %>/edit"><button type="button" class="btn-edit"><%- icon('edit') %> Edit</button></a>
-      <button type="button" class="btn-test ms-test-btn" data-ms-id="<%= ms.id %>"><%- icon('refresh') %> Test now</button>
       <form class="inline" method="post" action="/miniservers/<%= ms.id %>/delete" data-confirm="Delete this Miniserver?">
         <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
       </form>

@@ -7,6 +7,7 @@ const { fetchMiniserver } = require('./loxone');
 const BACKFILL_LINES = 500;
 
 const insertLogEntry = db.prepare('INSERT INTO log_entries (source, source_id, source_label, line, recorded_at) VALUES (?, ?, ?, ?, ?)');
+const updateLogbookError = db.prepare('UPDATE miniservers SET logbook_error = ? WHERE id = ?');
 
 // miniserver_id -> full def.log text last seen, so the next poll can diff against it instead of
 // re-processing the whole file every time.
@@ -50,8 +51,9 @@ function newLines(miniserverId, fullText) {
 async function pollMiniserver(miniserver) {
   try {
     const res = await fetchMiniserver(miniserver, '/dev/fsget/log/def.log', { timeoutMs: 15000 });
-    if (!res.ok) throw new Error(`Miniserver responded with HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`Miniserver responded with HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' — this Miniserver\'s Loxone user account likely lacks permission to read the Logbook' : ''}`);
     const text = await res.text();
+    if (miniserver.logbook_error) updateLogbookError.run(null, miniserver.id);
 
     const lines = newLines(miniserver.id, text);
     if (lines.length === 0) return;
@@ -63,6 +65,7 @@ async function pollMiniserver(miniserver) {
     insertAll();
   } catch (err) {
     console.error(`Failed to fetch Loxone log for miniserver ${miniserver.id} (${miniserver.name}):`, err.message);
+    updateLogbookError.run(err.message, miniserver.id);
   }
 }
 
