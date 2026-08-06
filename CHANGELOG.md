@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.11.0-alpha.1] - 2026-08-06
+
+### Added
+- Dashboard panels are now laid out with GridStack instead of the old custom grid, adding real
+  free-form drag/resize and **panel groups**: a collapsible header that bundles a set of panels
+  into their own zone, independently sortable from other groups (drag the group's own header bar
+  to reorder groups) and reorderable amongst themselves without disturbing ungrouped panels. A
+  panel can be dragged straight onto a group's header bar to join that group, not just into its
+  body.
+- A chart panel's legend can show **min / max / avg / current** for each series, toggled
+  independently per series (and per stat) rather than all-or-nothing for the whole legend.
+- Threshold, annotation, and value-mapping row lists (and now dashboard groups too) share one
+  drag-to-reorder module instead of duplicated one-off logic — a picked-up row lifts with an
+  accent ring and the same drop shadow a dragged panel gets, and a live drop-indicator shows where
+  it'll land.
+- The admin Notification Center gained per-trigger **message templates**: a customizable title and
+  body per trigger type, with `{{placeholder}}` autocomplete, a live preview rendered against
+  sample data, and a "Send test" button per template.
+- The Dashboard panel Range field, Monitor detail's own range picker, the Home/My Dashboards time
+  filter, and each Logs page's filter form now share one Range field component (preset dropdown,
+  Custom, or an absolute From/To pair), instead of each page carrying its own variant.
+- Live Data gained multi-select bulk actions (Monitor selected / Widget selected) and a way to hide
+  specific control states from the table.
+- A Miniserver's last Loxone Logbook fetch error is now persisted and surfaced with a friendlier
+  message when it's a permissions problem (HTTP 401/403), instead of only appearing transiently in
+  the server log.
+
 ## [0.10.1-alpha.1] - 2026-08-04
 
 ### Added

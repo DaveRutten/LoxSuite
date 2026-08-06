@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.9.2-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.11.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -168,6 +168,11 @@ hardware ones also carry their own configurable severity — except one:
   additionally logs it here and can notify a channel, the same way a Miniserver's own firmware
   change can.
 
+Each trigger type's own **message template** (title and body) is customizable from its admin page —
+type `{{` in either field for an autocomplete menu of that trigger's own available placeholders, see
+a live preview rendered against sample data as you type, and send a real test message to any
+configured channel before saving.
+
 Each item has its own **&times;** to dismiss just that one — personal to you, not a delete; the
 underlying event still shows in Logs → Notifications and in every other user's own popover.
 **Mark all read** at the bottom dismisses everything currently listed in one go and resets the
@@ -222,8 +227,9 @@ Create any number of named dashboards, each holding **panels**:
   panel: legend position, Y-axis unit, straight or stepped line, optional point markers,
   fill-under-line, linear or logarithmic Y-axis with an optional fixed min/max,
   scroll-to-zoom/drag-to-pan, threshold lines *or* filled bands, and time-anchored annotations. Per
-  series: rename, its own unit/scale/decimals, the right-hand axis, a fixed color, and a line style
-  (solid/thick/dashed/dotted). **Chart type** can also be switched to **Bar (compare)**,
+  series: rename, its own unit/scale/decimals, the right-hand axis, a fixed color, a line style
+  (solid/thick/dashed/dotted), and any combination of **min/max/avg/current** shown right in the
+  legend. **Chart type** can also be switched to **Bar (compare)**,
   **Doughnut**, **Pie**, **Polar Area**, or **Radar** — these five are snapshots (each monitor's
   *current* value, side by side) rather than a time series, for comparing several monitors at a
   glance instead of tracking one over time.
@@ -255,6 +261,11 @@ regardless of window width — or click **Auto order** to resize every panel to 
 repack them with the fewest gaps in one pass. Chart panels refresh via their own polling loop; every
 other panel type rides the same 5-second auto-refresh the home Dashboard uses. Deleting a monitor
 removes it from any panel referencing it automatically.
+
+Panels can also be bundled into **groups** — a named, collapsible header that holds a set of panels
+in their own zone. Drag a panel straight onto a group's header bar to move it in, drag it back out to
+the top level, and drag a group's own header bar to reorder groups relative to each other (they
+always sort amongst themselves, never mixed in with ungrouped panels).
 
 Any panel's Edit form has a star and a reset icon: **star** saves that panel's whole appearance
 (colors, legend, thresholds, line styles, ...) as the default for every panel of that type *on this
@@ -337,6 +348,11 @@ toggle it off in Settings if you'd rather always add monitors/panels one at a ti
 you fine-tune before creating anything: uncheck any auto-picked item, **+ Add** another state of a
 control already in a bucket (e.g. a climate control's target alongside its actual temperature), and
 override which panel type or which bucket any individual item ends up in.
+
+Check any number of individual control states across the page and the toolbar shows a running
+count with **Monitor selected** and **Widget selected**, to act on a whole selection at once instead
+of one row at a time. A state you never want cluttering the table (e.g. one that never meaningfully
+changes) can be hidden from Settings.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/live-data-dark.png">
