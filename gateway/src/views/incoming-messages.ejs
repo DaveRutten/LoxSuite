@@ -35,7 +35,16 @@
     <tbody>
       <% topics.forEach(t => { %>
         <tr>
-          <td><code class="truncate" style="max-width:none; width:100%;" title="<%= t.topic %>"><%= t.topic %></code></td>
+          <%
+            // Deliberately no max-width:none override here (an earlier version of this row had
+            // one) — that let a long topic grow the Topic column enough to push Command
+            // Recognition/Actions off the right edge with no visible hint anything was cut off
+            // (this .table-wrap does scroll horizontally, but nothing here signals that it
+            // should). .truncate's own sitewide 320px cap (style.css), the same one every other
+            // free-form column on this page already uses, keeps the whole table fitting by
+            // default instead — the full topic is still one hover away via the title tooltip.
+          %>
+          <td><code class="truncate" title="<%= t.topic %>"><%= t.topic %></code></td>
           <td><strong class="truncate" title="<%= t.value %>"><%= t.value %></strong></td>
           <td>
             <% if (t.previousValue === null) { %>-<% } else { %>
@@ -46,7 +55,14 @@
           <td><%= formatDateTime(t.lastSeen) %></td>
           <td>
             <div style="display:flex; align-items:center; justify-content:space-between; gap:0.35rem;">
-              <code class="recognition-string" style="flex:1; min-width:0; max-width:none;" title="<%= t.recognition %>"><%= t.recognition %></code>
+              <%
+                // max-width:none here would defeat code.recognition-string's own built-in 220px
+                // cap (style.css) — the exact thing that class exists to prevent (see its own
+                // comment: "would otherwise force the whole table to scroll horizontally"). flex:1
+                // still lets it fill whatever room the Copy button next to it leaves, just never
+                // past that cap.
+              %>
+              <code class="recognition-string" style="flex:1; min-width:0;" title="<%= t.recognition %>"><%= t.recognition %></code>
               <button type="button" class="copy-btn btn-soft" style="flex-shrink:0;" data-copy="<%= t.recognition %>" title="Copy Command Recognition string"><%- icon('copy') %> <span class="btn-label">Copy</span></button>
             </div>
           </td>
