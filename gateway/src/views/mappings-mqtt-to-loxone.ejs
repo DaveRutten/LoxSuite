@@ -68,20 +68,6 @@
 
 <div class="filterable-table-card">
   <div class="table-toolbar">
-    <div class="search-combo">
-      <select id="mappings-filter-field">
-        <option value="0">Status</option>
-        <option value="1">Topic</option>
-        <option value="2">Miniserver</option>
-        <option value="3">Transport</option>
-        <option value="4">Target</option>
-        <option value="5">Transform</option>
-      </select>
-      <div class="clearable-input-wrap">
-        <input type="text" id="mappings-filter-query" placeholder="Filter…">
-        <button type="button" id="mappings-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
-      </div>
-    </div>
     <% if (canEdit('mqtt_to_loxone')) { %>
     <% var disabledCount = mappings.filter(m => !m.enabled).length; var enabledCount = mappings.length - disabledCount; %>
     <form method="post" action="/mappings/mqtt-to-loxone/enable-all" style="margin:0;">
@@ -91,85 +77,23 @@
       <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Disable all (<%= enabledCount %>)</button>
     </form>
     <% } %>
+    <div class="columns-menu columns-menu-inline" id="m2l-columns-menu">
+      <button type="button" class="btn-soft" id="m2l-columns-btn"><%- icon('columns') %> Columns</button>
+      <div class="columns-menu-panel" id="m2l-columns-panel" hidden></div>
+    </div>
   </div>
 
   <div class="table-wrap">
-  <table>
-    <thead>
-      <tr><th>Status</th><th>Topic</th><th>Miniserver</th><th>Transport</th><th>Target</th><th>Transform</th><th>Min. interval</th><th>Actions</th></tr>
-    </thead>
-    <tbody>
-      <% mappings.forEach(m => { %>
-        <tr>
-          <td><span class="badge badge-live <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
-          <td><code class="truncate" style="max-width:none; width:100%;" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
-          <td><%= m.miniserver_name %></td>
-          <td><%= m.transport %></td>
-          <td><%= m.target %></td>
-          <td><%= m.value_transform %><% if (m.transform_arg) { %> (<span class="truncate" title="<%= m.transform_arg %>"><%= m.transform_arg %></span>)<% } %></td>
-          <td><%= m.min_interval_ms ? `${m.min_interval_ms} ms` : '-' %></td>
-          <td>
-            <% if (canEdit('mqtt_to_loxone')) { %>
-            <div class="row-actions">
-              <a class="inline" href="/mappings/mqtt-to-loxone/<%= m.id %>/edit"><button type="button" class="btn-edit"><%- icon('edit') %> Edit</button></a>
-              <% if (m.value_transform === 'translation_table') { %>
-                <a class="inline" href="/mappings/mqtt-to-loxone/<%= m.id %>/translations"><button type="button" class="btn-edit"><%- icon('list') %> Translations</button></a>
-              <% } %>
-              <form class="inline" method="post" action="/mappings/mqtt-to-loxone/<%= m.id %>/toggle">
-                <button type="submit" class="btn-edit"><%- icon('power') %> <%= m.enabled ? 'Disable' : 'Enable' %></button>
-              </form>
-              <form class="inline" method="post" action="/mappings/mqtt-to-loxone/<%= m.id %>/delete" data-confirm="Delete this mapping?">
-                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
-              </form>
-            </div>
-            <% } %>
-          </td>
-        </tr>
-      <% }) %>
-      <% if (mappings.length === 0) { %>
-        <tr><td colspan="8" class="empty">No mappings yet.</td></tr>
-      <% } %>
-    </tbody>
-  </table>
+    <div id="m2l-tabulator"></div>
   </div>
 </div>
 
-<script>
-  (function () {
-    var fieldSelect = document.getElementById('mappings-filter-field');
-    var queryInput = document.getElementById('mappings-filter-query');
-    var clearBtn = document.getElementById('mappings-filter-clear');
-    var tbody = document.querySelector('.table-wrap tbody');
-    if (!fieldSelect || !tbody) return;
-
-    function applyFilter() {
-      var colIndex = Number(fieldSelect.value);
-      var q = queryInput.value.trim().toLowerCase();
-      if (clearBtn) clearBtn.hidden = !q;
-      tbody.querySelectorAll('tr').forEach(function (row) {
-        if (!q) { row.style.display = ''; return; }
-        var cell = row.children[colIndex];
-        var text = cell ? cell.textContent.toLowerCase() : '';
-        row.style.display = text.indexOf(q) !== -1 ? '' : 'none';
-      });
-    }
-
-    fieldSelect.addEventListener('change', applyFilter);
-    queryInput.addEventListener('input', applyFilter);
-    if (clearBtn) {
-      clearBtn.addEventListener('click', function () {
-        queryInput.value = '';
-        applyFilter();
-        queryInput.focus();
-      });
-    }
-    queryInput.addEventListener('keydown', function (e) {
-      if (e.key !== 'Escape' || !queryInput.value) return;
-      e.stopPropagation();
-      queryInput.value = '';
-      applyFilter();
-    });
-  })();
-</script>
+<link rel="stylesheet" href="/vendor/tabulator.min.css">
+<link rel="stylesheet" href="/tabulator-theme.css">
+<script src="/vendor/tabulator.min.js"></script>
+<script src="/vendor/floating-ui.core.umd.min.js"></script>
+<script src="/vendor/floating-ui.dom.umd.min.js"></script>
+<script src="/tabulator-table.js"></script>
+<script src="/mappings-mqtt-to-loxone-tabulator.js"></script>
 
 <%- include('partials/foot') %>

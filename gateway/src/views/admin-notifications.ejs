@@ -180,6 +180,30 @@
           </div>
         </div>
 
+        <div class="form-grid rule-fields" data-for="gateway_client_firmware_mismatch" style="margin-top:0.85rem;">
+          <div>
+            <label>Gateway (blank = any Gateway with Clients)</label>
+            <select name="gateway_mismatch_miniserver_id">
+              <option value="">Any Gateway</option>
+              <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
+            </select>
+          </div>
+          <div>
+            <label>Severity</label>
+            <select name="gateway_mismatch_severity">
+              <option value="info">Info</option>
+              <option value="warning" selected>Warning</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint rule-fields" data-for="gateway_client_firmware_mismatch" style="margin-top:0.35rem;">
+          Fires when a Gateway Miniserver's own firmware differs from one of its Client
+          Miniservers' &mdash; both sides need to be confirmed <strong>Running</strong> (not
+          mid-boot/mid-update) for this to fire, so a routine restart on either one doesn't
+          misfire it.
+        </p>
+
         <div class="form-grid rule-fields" data-for="mqtt_client_status" style="margin-top:0.85rem;">
           <div><label>MQTT username (blank = any client)</label><input type="text" name="mqtt_username" placeholder="e.g. shelly-livingroom"></div>
         </div>
@@ -339,6 +363,30 @@
                   </div>
                 </div>
 
+                <div class="form-grid rule-fields" data-for="gateway_client_firmware_mismatch" style="margin-top:0.85rem;">
+                  <div>
+                    <label>Gateway (blank = any Gateway with Clients)</label>
+                    <select name="gateway_mismatch_miniserver_id">
+                      <option value="">Any Gateway</option>
+                      <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Severity</label>
+                    <% const gatewayMismatchSeverity = r.config.severity || 'warning'; %>
+                    <select name="gateway_mismatch_severity">
+                      <option value="info" <%= gatewayMismatchSeverity === 'info' ? 'selected' : '' %>>Info</option>
+                      <option value="warning" <%= gatewayMismatchSeverity === 'warning' ? 'selected' : '' %>>Warning</option>
+                      <option value="critical" <%= gatewayMismatchSeverity === 'critical' ? 'selected' : '' %>>Critical</option>
+                    </select>
+                  </div>
+                </div>
+                <p class="hint rule-fields" data-for="gateway_client_firmware_mismatch" style="margin-top:0.35rem;">
+                  Fires when a Gateway Miniserver's own firmware differs from one of its Client
+                  Miniservers' &mdash; both sides need to be confirmed <strong>Running</strong>
+                  (not mid-boot/mid-update) for this to fire.
+                </p>
+
                 <div class="form-grid rule-fields" data-for="mqtt_client_status" style="margin-top:0.85rem;">
                   <div><label>MQTT username (blank = any client)</label><input type="text" name="mqtt_username" value="<%= r.config.username || '' %>"></div>
                 </div>
@@ -492,6 +540,12 @@
   </form>
 </div>
 
+<!-- Floating UI (vendor/floating-ui.{core,dom}.umd.min.js) — powers attachInlineSuggest's own
+     menu positioning below (see its own comment), the same dependency tabulator-table.js already
+     uses for the Columns menu and row-actions popovers, loaded here directly since this page has
+     no Tabulator table of its own to pull it in via that file. -->
+<script src="/vendor/floating-ui.core.umd.min.js"></script>
+<script src="/vendor/floating-ui.dom.umd.min.js"></script>
 <script>
   // Live preview for the Message templates card above — pure client-side, against the same example
   // data the server embeds (notifications.js's own TEMPLATE_PREVIEW_SAMPLES), so nothing is ever
@@ -564,8 +618,16 @@
       var activeItems = null; // null while browsing the root list; set to a submenu's (e.g. "/" -> Emoji) full item list once entered
       var activeGrid = false; // true once inside a submenu whose category item had grid:true (see EMOJI_ITEMS/SLASH_ITEMS below) — renders emoji-only tiles grouped by item.category instead of the plain text-label rows every other level uses
       var subQueryStart = 0; // length of the trigger-query string at the moment a submenu was entered — only characters typed AFTER that filter the submenu, not whatever was typed to reach it (e.g. "emo" to reach Emoji itself shouldn't count against "fire" typed once inside it)
+      var stopAutoUpdate = null; // set while the menu is open — see reposition()'s own comment
 
-      function close() { menu.hidden = true; matchStart = -1; activeItems = null; activeGrid = false; subQueryStart = 0; }
+      function close() {
+        menu.hidden = true;
+        matchStart = -1;
+        activeItems = null;
+        activeGrid = false;
+        subQueryStart = 0;
+        if (stopAutoUpdate) { stopAutoUpdate(); stopAutoUpdate = null; }
+      }
 
       function setActive(i) {
         activeIndex = i;
@@ -648,6 +710,37 @@
         });
       }
 
+      // Floating UI (vendor/floating-ui.{core,dom}.umd.min.js) replaces what used to be a
+      // hand-rolled flip-up-if-it-won't-fit-below-but-fits-above + manual scroll/resize-listener
+      // reimplementation here — the same fix already applied to every Tabulator popover in this
+      // app (see tabulator-table.js's own comment on positionColumnsPanel/openTabulatorRowActionsPopover
+      // for the category of bug this closes). 'bottom-start' anchors the menu under the field's own
+      // left edge, matching the previous left-aligned-under-the-field placement; flip() swaps to
+      // above when there's no room below, shift() nudges it back onto the viewport rather than
+      // letting it run off an edge. autoUpdate() (started/stopped in open/close below) is what
+      // keeps it visually anchored on scroll (including a nested scrollable ancestor) and resize —
+      // position:fixed doesn't track the field on its own.
+      function reposition() {
+        FloatingUIDOM.computePosition(el, menu, {
+          // .inline-suggest-menu is position:fixed (style.css) — strategy must match or
+          // computePosition returns document-relative coordinates instead of viewport-relative
+          // ones. Those two exactly cancel out on a plain whole-page scroll (the anchor's
+          // viewport-relative rect moves up by the scroll delta, but the default 'absolute'
+          // strategy adds that same delta back to convert to document coordinates), which is what
+          // made the menu appear frozen in place instead of tracking the field while the page
+          // itself scrolled — a real bug, not just a discrepancy from Playwright's headless
+          // Chromium, found by directly instrumenting reposition() and comparing computed style
+          // before/after a scroll rather than trusting a getBoundingClientRect() snapshot alone.
+          strategy: 'fixed',
+          placement: 'bottom-start',
+          middleware: [FloatingUIDOM.offset(4), FloatingUIDOM.flip(), FloatingUIDOM.shift({ padding: 8 })],
+        }).then(function (pos) {
+          menu.style.left = pos.x + 'px';
+          menu.style.top = pos.y + 'px';
+          menu.style.bottom = 'auto';
+        });
+      }
+
       function render(matchedItems) {
         items = matchedItems;
         // Not a full close() on zero matches — keeps matchStart/activeItems intact so backspacing
@@ -660,23 +753,12 @@
         menu.classList.toggle('inline-suggest-grid', activeGrid);
         if (activeGrid) renderGrid(items); else renderList(items);
         setActive(0);
-        // Same flip-up-if-it-won't-fit-below-but-fits-above logic already used for
-        // tables.js's row-actions-popover — measuring menu's own height needs it visible first,
-        // hence hidden=false before reading getBoundingClientRect() rather than after.
         menu.hidden = false;
-        var fieldRect = el.getBoundingClientRect();
-        var menuHeight = menu.getBoundingClientRect().height;
-        var spaceBelow = window.innerHeight - fieldRect.bottom;
-        var spaceAbove = fieldRect.top;
-        var flipUp = menuHeight > spaceBelow && spaceAbove > spaceBelow;
-        menu.style.left = fieldRect.left + 'px';
-        if (flipUp) {
-          menu.style.top = 'auto';
-          menu.style.bottom = (window.innerHeight - fieldRect.top + 4) + 'px';
-        } else {
-          menu.style.bottom = 'auto';
-          menu.style.top = (fieldRect.bottom + 4) + 'px';
-        }
+        reposition();
+        // Started only once per open (not re-started on every keystroke's re-render) — autoUpdate
+        // itself is what keeps tracking the field's position for as long as it runs; close() above
+        // is what stops it once the menu actually closes.
+        if (!stopAutoUpdate) stopAutoUpdate = FloatingUIDOM.autoUpdate(el, menu, reposition);
       }
 
       function check() {
@@ -709,7 +791,9 @@
         else if (e.key === 'Escape') { close(); }
       });
       el.addEventListener('blur', function () { setTimeout(close, 150); }); // lets a mousedown-select land first
-      window.addEventListener('scroll', function (e) { if (e.target !== menu) close(); }, true);
+      // No manual scroll/resize listeners here any more — FloatingUIDOM.autoUpdate (started in
+      // render(), stopped in close()) already re-runs reposition() on scroll (including a nested
+      // scrollable ancestor), resize, and the field/menu's own size changes.
     }
 
     // Telegram doesn't render an actual markdown table, so "table" is left out. The emoji ones

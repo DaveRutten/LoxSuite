@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.12.0-alpha.1] - 2026-08-07
+
+### Changed
+- Miniservers (including the same status table embedded on the shared home Dashboard),
+  Transformations, the two Loxone/MQTT translation-table lookup pages, the admin Backup page, and
+  both Mappings pages (MQTT &rarr; Loxone / Loxone &rarr; MQTT) now run on a shared table engine
+  (Tabulator.js) instead of the old hand-rolled one — the same column show/hide/resize/reorder
+  controls every table already had, now consistent and more reliable across all of them: resizing
+  one column no longer leaves a stray gap on the right once the others no longer add up to the
+  table's own width, and turning a hidden column back on no longer pushes the last column out of
+  view with no way to reach it. The Mappings pages' old combined Status/text filter bar is now
+  Tabulator's own per-column header filters instead. Miniservers additionally gets
+  drag-to-reorder rows built on the table engine's own row-move support, and a row's actions
+  (Edit/Diagnostics/Test now/Delete) collapse into one menu instead of separate always-visible
+  buttons competing for space.
+- A Miniserver's **Diagnostics** (PLC state, CPU load, heap, task count, firmware date, update
+  channel, and the Check for update / Update to latest release / Add to Dashboard / Add to Monitor
+  actions) now opens in a dialog from the row's own actions menu, instead of expanding the row
+  itself.
+- Every popover/menu on these tables — the Columns menu, a row's actions menu, and the
+  notification template's `{{`/`/` autocomplete (Notification Center) — is now positioned by
+  Floating UI instead of hand-rolled placement math: it flips above when there's no room below,
+  stays nudged inside the viewport instead of running off an edge, and now correctly tracks its
+  anchor while the page itself scrolls (a menu could previously "freeze" in place on a whole-page
+  scroll, a bug this surfaced and fixed along the way, not something a released version ever had).
+
 ## [0.11.0-alpha.1] - 2026-08-06
 
 ### Added

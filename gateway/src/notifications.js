@@ -12,6 +12,7 @@ const TRIGGER_TYPES = [
   { key: 'mqtt_client_status', label: 'MQTT client online/offline' },
   { key: 'backup_failed', label: 'Backup failed' },
   { key: 'firmware_changed', label: 'Miniserver firmware changed' },
+  { key: 'gateway_client_firmware_mismatch', label: 'Gateway/Client firmware mismatch' },
   { key: 'loxsuite_update_available', label: 'LoxSuite update available' },
   { key: 'battery_weak', label: 'Loxone device battery weak' },
   { key: 'device_firmware_changed', label: 'Loxone device firmware changed' },
@@ -119,6 +120,12 @@ const TEMPLATE_PREVIEW_SAMPLES = {
     message: 'Miniserver "Miniserver Villa" firmware changed from 15.2.3.1 to 15.3.1.2.',
     severity: 'info',
     fields: [{ label: 'Miniserver', value: 'Miniserver Villa' }, { label: 'Previous version', value: '15.2.3.1' }, { label: 'New version', value: '15.3.1.2' }],
+  },
+  gateway_client_firmware_mismatch: {
+    title: 'Gateway/Client: firmware mismatch',
+    message: 'Gateway "Miniserver Villa" is running 15.3.1.2, Client "Pool House" is running 15.2.3.1 — both are online and running, but their firmware doesn\'t match.',
+    severity: 'warning',
+    fields: [{ label: 'Gateway', value: 'Miniserver Villa (15.3.1.2)' }, { label: 'Client', value: 'Pool House (15.2.3.1)' }],
   },
   loxsuite_update_available: {
     title: 'LoxSuite v0.11.0 available',
@@ -500,6 +507,65 @@ function checkFirmwareChanged(miniserver, newVersion) {
   }
 }
 
+// Called once per healthcheck sweep (see healthcheck.js's checkAllMiniservers), after every
+// Miniserver's own row has already been updated with this cycle's fresh status/firmware_version/
+// plc_state. A Gateway and its Client Miniservers (see the "Gateway Client setup" section on the
+// Miniserver edit page) share one merged Loxone Config project and are expected to run identical
+// firmware — a mismatch usually means one side didn't get updated when the other did. Scoped to
+// pairs where BOTH sides are confirmed PLC state 5 ("Running", see PLC_STATE_LABELS in
+// miniservers.ejs) rather than just "online": a Miniserver mid-boot/mid-update can briefly report
+// a stale or blank firmware_version, which would otherwise misfire this the moment either side
+// restarts — exactly the situation an update is already in progress for, not a real mismatch to
+// alert on. State is tracked per rule (last_state, keyed by Client id) the same way
+// checkMiniserverStatus tracks per-Miniserver status above, so a rule scoped to "any Gateway"
+// still tracks each Gateway/Client pair's own mismatched/not-mismatched flag independently, and a
+// resolved mismatch clears cleanly so a later, genuinely new one can fire again.
+function checkGatewayClientFirmwareMismatch() {
+  const rules = getRulesByTrigger('gateway_client_firmware_mismatch');
+  if (rules.length === 0) return;
+
+  const clients = db.prepare('SELECT * FROM miniservers WHERE gateway_client_of IS NOT NULL').all();
+  const pairs = clients
+    .map((client) => ({ client, gateway: db.prepare('SELECT * FROM miniservers WHERE id = ?').get(client.gateway_client_of) }))
+    .filter((pair) => pair.gateway);
+  if (pairs.length === 0) return;
+
+  for (const rule of rules) {
+    const cfg = JSON.parse(rule.config || '{}');
+    const state = JSON.parse(rule.last_state || '{}');
+    let stateChanged = false;
+
+    for (const { client, gateway } of pairs) {
+      if (cfg.miniserver_id && Number(cfg.miniserver_id) !== gateway.id) continue;
+
+      const bothRunning = gateway.plc_state === '5' && client.plc_state === '5';
+      const mismatched = !!(bothRunning && gateway.firmware_version && client.firmware_version
+        && gateway.firmware_version !== client.firmware_version);
+
+      const key = String(client.id);
+      if (!!state[key] === mismatched) continue; // no transition for this pair
+      state[key] = mismatched;
+      stateChanged = true;
+      if (!mismatched) continue; // silently cleared — no "back in sync" notification
+
+      fireRule(rule, {
+        title: `${gateway.name}/${client.name}: firmware mismatch`,
+        message: `Gateway "${gateway.name}" is running ${gateway.firmware_version}, Client "${client.name}" is running ${client.firmware_version} — both are online and running, but their firmware doesn't match.`,
+        severity: cfg.severity || 'warning',
+        fields: [
+          { label: 'Gateway', value: `${gateway.name} (${gateway.firmware_version})` },
+          { label: 'Client', value: `${client.name} (${client.firmware_version})` },
+        ],
+        sourceId: client.id,
+        sourceLabel: client.name,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (stateChanged) updateRuleState(rule.id, state);
+  }
+}
+
 // Called by versionCheck.js whenever its own daily GitHub tags check finds a latest tag that
 // differs from the version currently running (see that file for why this is a plain string
 // inequality, not real semver ranking). No per-instance scoping needed — there's only ever one
@@ -664,6 +730,7 @@ module.exports = {
   checkThresholdLadderNotify,
   checkMiniserverStatus,
   checkFirmwareChanged,
+  checkGatewayClientFirmwareMismatch,
   checkLoxSuiteUpdate,
   checkMqttClientStatus,
   checkBatteryWeak,

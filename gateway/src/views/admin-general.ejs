@@ -24,17 +24,21 @@
   <p class="hint">
     <span style="display:block;">Installed: <strong style="color:var(--text);">v<%= versionStatus.currentVersion %></strong></span>
     <span style="display:block;">
-      Available:
       <% if (versionStatus.updateAvailable) { %>
-        <strong style="color:var(--text);">v<%= versionStatus.latestVersion %></strong>
+        Available: <strong style="color:var(--text);">v<%= versionStatus.latestVersion %></strong>
       <% } else if (versionStatus.latestVersion) { %>
-        <strong style="color:var(--text);">v<%= versionStatus.latestVersion %></strong> (up to date)
+        <%
+          // Deliberately NOT "Available: vX (up to date)" — that repeats the exact same version
+          // string Installed just showed right above it, which reads as if something's wrong
+          // (two different-looking labels claiming the same number) rather than as reassurance.
+        %>
+        <strong style="color:var(--success);">Up to date</strong>
       <% } else if (versionStatus.lastCheckReached === false) { %>
-        unknown &mdash; could not reach GitHub (offline, timeout, or rate-limited)
+        Available: unknown &mdash; could not reach GitHub (offline, timeout, or rate-limited)
       <% } else if (versionStatus.lastCheckReached === true) { %>
-        unknown &mdash; no release tags found on GitHub yet
+        Available: unknown &mdash; no release tags found on GitHub yet
       <% } else { %>
-        unknown &mdash; not checked yet
+        Available: unknown &mdash; not checked yet
       <% } %>
     </span>
     <% if (versionStatus.checkedAt) { %>

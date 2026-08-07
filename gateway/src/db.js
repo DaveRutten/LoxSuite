@@ -1592,6 +1592,39 @@ function ensureNotificationRulesTriggerTypesV3() {
 
 ensureNotificationRulesTriggerTypesV3();
 
+// Widens notification_rules.trigger_type's CHECK once more, for 'gateway_client_firmware_mismatch'
+// (see notifications.js's TRIGGER_TYPES and checkGatewayClientFirmwareMismatch) — same
+// rebuild-the-table pattern as the V3 migration above, carrying every existing column including
+// owner_user_id.
+function ensureNotificationRulesTriggerTypesV4() {
+  const tableSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notification_rules'"
+  ).get();
+  if (!tableSql || tableSql.sql.includes("'gateway_client_firmware_mismatch'")) return;
+
+  db.exec(`
+    CREATE TABLE notification_rules_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trigger_type TEXT NOT NULL CHECK (trigger_type IN ('monitor_threshold','miniserver_status','mqtt_client_status','backup_failed','firmware_changed','loxsuite_update_available','battery_weak','device_firmware_changed','device_offline','gateway_client_firmware_mismatch')),
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      config TEXT NOT NULL DEFAULT '{}',
+      last_state TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    INSERT INTO notification_rules_new (id, trigger_type, name, enabled, config, last_state, created_at, owner_user_id)
+    SELECT id, trigger_type, name, enabled, config, last_state, created_at, owner_user_id FROM notification_rules;
+
+    DROP TABLE notification_rules;
+    ALTER TABLE notification_rules_new RENAME TO notification_rules;
+  `);
+  console.log("Migrated notification_rules: widened trigger_type CHECK to add 'gateway_client_firmware_mismatch'.");
+}
+
+ensureNotificationRulesTriggerTypesV4();
+
 // Snapshot of every piece of Loxone hardware reported by a Miniserver's own /data/status endpoint
 // (Air/Tree/1-Wire devices, Extensions, third-party Plugin devices, Audioserver zones) — see
 // loxoneHardware.js. Deliberately a CURRENT-STATE table, not an append-only log like log_entries:

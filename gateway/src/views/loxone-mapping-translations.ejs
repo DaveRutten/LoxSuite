@@ -24,32 +24,30 @@
 </details>
 <% } %>
 
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr><th>Value from Loxone</th><th>Becomes</th><th>Actions</th></tr>
-    </thead>
-    <tbody>
-      <% translations.forEach(t => { %>
-        <tr>
-          <td><code><%= t.match_value %></code></td>
-          <td><code><%= t.output_value %></code></td>
-          <td>
-            <% if (canEdit('loxone_to_mqtt')) { %>
-            <form class="inline" method="post" action="/mappings/loxone-to-mqtt/<%= mapping.id %>/translations/<%= t.id %>/delete">
-              <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
-            </form>
-            <% } %>
-          </td>
-        </tr>
-      <% }) %>
-      <% if (translations.length === 0) { %>
-        <tr><td colspan="3" class="empty">No translations yet.</td></tr>
-      <% } %>
-    </tbody>
-  </table>
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <div class="columns-menu columns-menu-inline" id="mt-columns-menu">
+      <button type="button" class="btn-soft" id="mt-columns-btn"><%- icon('columns') %> Columns</button>
+      <div class="columns-menu-panel" id="mt-columns-panel" hidden></div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div id="mt-tabulator"
+      data-delete-base-path="/mappings/loxone-to-mqtt/<%= mapping.id %>/translations"
+      data-value-label="Value from Loxone"
+      data-can-edit="<%= canEdit('loxone_to_mqtt') ? '1' : '' %>"></div>
+  </div>
 </div>
+<script type="application/json" id="mt-rows"><%- JSON.stringify(translations) %></script>
 
 <p><a href="/mappings/loxone-to-mqtt">&larr; Back to mappings</a></p>
+
+<link rel="stylesheet" href="/vendor/tabulator.min.css">
+<link rel="stylesheet" href="/tabulator-theme.css">
+<script src="/vendor/tabulator.min.js"></script>
+<script src="/vendor/floating-ui.core.umd.min.js"></script>
+<script src="/vendor/floating-ui.dom.umd.min.js"></script>
+<script src="/tabulator-table.js"></script>
+<script src="/mapping-translations-tabulator.js"></script>
 
 <%- include('partials/foot') %>

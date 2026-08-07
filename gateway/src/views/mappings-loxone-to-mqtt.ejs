@@ -81,22 +81,6 @@
 
 <div class="filterable-table-card">
   <div class="table-toolbar">
-    <div class="search-combo">
-      <select id="mappings-filter-field">
-        <option value="0">Status</option>
-        <option value="1">MQTT topic</option>
-        <option value="2">Miniserver</option>
-        <option value="3">Transport</option>
-        <option value="4">Transform</option>
-        <option value="7">Token</option>
-        <option value="8">UDP port</option>
-        <option value="9">Connection info</option>
-      </select>
-      <div class="clearable-input-wrap">
-        <input type="text" id="mappings-filter-query" placeholder="Filter…">
-        <button type="button" id="mappings-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
-      </div>
-    </div>
     <% if (canEdit('loxone_to_mqtt')) { %>
     <% var disabledCount = mappings.filter(m => !m.enabled).length; var enabledCount = mappings.length - disabledCount; %>
     <form method="post" action="/mappings/loxone-to-mqtt/enable-all" style="margin:0;">
@@ -106,101 +90,41 @@
       <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Disable all (<%= enabledCount %>)</button>
     </form>
     <% } %>
+    <div class="columns-menu columns-menu-inline" id="l2m-columns-menu">
+      <button type="button" class="btn-soft" id="l2m-columns-btn"><%- icon('columns') %> Columns</button>
+      <div class="columns-menu-panel" id="l2m-columns-panel" hidden></div>
+    </div>
   </div>
 
   <div class="table-wrap">
-  <table>
-    <thead>
-      <tr><th>Status</th><th>MQTT topic</th><th>Miniserver</th><th>Transport</th><th>Transform</th><th>QoS</th><th>Retain</th><th data-default-hidden>Token</th><th data-default-hidden>UDP port</th><th>Connection info</th><th>Actions</th></tr>
-    </thead>
-    <tbody>
-      <% mappings.forEach(m => { %>
-        <tr>
-          <td><span class="badge badge-live <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
-          <td>
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:0.35rem;">
-              <code class="truncate" style="flex:1; min-width:0; max-width:none;" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code>
-              <button type="button" class="copy-btn btn-soft" style="flex-shrink:0;" data-copy="<%= m.mqtt_topic %>" title="Copy the MQTT topic">
-                <%- icon('copy') %> <span class="btn-label">Copy</span>
-              </button>
-            </div>
-          </td>
-          <td><%= m.miniserver_name || '-' %></td>
-          <td><%= m.transport %></td>
-          <td><%= m.value_transform %></td>
-          <td><%= m.qos %></td>
-          <td><%= m.retain ? 'yes' : 'no' %></td>
-          <td>
-            <code class="truncate" title="<%= m.token %>"><%= m.token %></code>
-            <% if (m.transport === 'udp') { %>
-            <div class="hint" style="margin:0.3rem 0 0; display:flex; align-items:center; justify-content:space-between; gap:0.35rem;">
-              <code class="truncate" style="flex:1; min-width:0; max-width:none;" title="UDP message: <%= m.udpMessage %>">UDP message: <%= m.udpMessage %></code>
-              <button type="button" class="copy-btn btn-soft" style="flex-shrink:0;" data-copy="<%= m.udpMessage %>" title="Copy the exact &quot;&lt;token&gt;=&lt;value&gt;&quot; message a Virtual UDP Output should send">
-                <%- icon('copy') %> <span class="btn-label">Copy</span>
-              </button>
-            </div>
-            <% } %>
-          </td>
-          <td><%= m.transport === 'udp' ? m.udpPort : '-' %></td>
-          <td>
-            <div class="hint" style="margin:0; display:flex; align-items:center; justify-content:space-between; gap:0.35rem;">
-              <code class="truncate" style="flex:1; min-width:0; max-width:none;" title="Loxone Command: <%= m.mqtt_topic %> \v">Loxone Command: <%= m.mqtt_topic %> \v</code>
-              <button type="button" class="copy-btn btn-soft" style="flex-shrink:0;" data-copy="<%= m.mqtt_topic %> \v" title="Copy for a native MQTT Virtual Output's Command Recognition field (Loxone Config 12+) — bypasses this HTTP/UDP bridge entirely">
-                <%- icon('copy') %> <span class="btn-label">Copy</span>
-              </button>
-            </div>
-          </td>
-          <td>
-            <% if (canEdit('loxone_to_mqtt')) { %>
-            <div class="row-actions">
-              <a class="inline" href="/mappings/loxone-to-mqtt/<%= m.id %>/edit"><button type="button" class="btn-edit"><%- icon('edit') %> Edit</button></a>
-              <% if (m.value_transform === 'translation_table') { %>
-                <a class="inline" href="/mappings/loxone-to-mqtt/<%= m.id %>/translations"><button type="button" class="btn-edit"><%- icon('list') %> Translations</button></a>
-              <% } %>
-              <form class="inline" method="post" action="/mappings/loxone-to-mqtt/<%= m.id %>/toggle">
-                <button type="submit" class="btn-edit"><%- icon('power') %> <%= m.enabled ? 'Disable' : 'Enable' %></button>
-              </form>
-              <form class="inline" method="post" action="/mappings/loxone-to-mqtt/<%= m.id %>/delete" data-confirm="Delete this mapping?">
-                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
-              </form>
-              <button type="button" class="btn-test" data-toggle-row="test-row-<%= m.id %>"><%- icon('power') %> Test</button>
-            </div>
-            <% } %>
-          </td>
-        </tr>
-        <% if (canEdit('loxone_to_mqtt')) { %>
-        <tr class="expand-row" id="test-row-<%= m.id %>">
-          <td colspan="9">
-            <div style="display:flex; flex-direction:column; gap:0.4rem; margin-top:0.5rem;">
-              <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
-                <label style="margin:0; font-size:0.78rem;">Value to send:</label>
-                <% if (m.translationValues && m.translationValues.length > 0) { %>
-                  <select class="test-value-input" style="max-width:12rem;">
-                    <% m.translationValues.forEach(v => { %><option value="<%= v %>"><%= v %></option><% }) %>
-                  </select>
-                <% } else { %>
-                  <div class="value-suggest-wrap">
-                    <input type="text" class="test-value-input value-suggest-input" autocomplete="off" placeholder="e.g. on" style="max-width:12rem;">
-                    <div class="value-suggest-list" hidden>
-                      <% ['1', '0', 'on', 'off', 'true', 'false'].forEach(v => { %><button type="button" data-value="<%= v %>"><%= v %></button><% }) %>
-                    </div>
-                  </div>
-                <% } %>
-                <button type="button" class="test-send-btn btn-test" style="margin-left:auto;" data-mapping-id="<%= m.id %>"><%- icon('link') %> Send</button>
-              </div>
-              <span class="hint test-result" style="margin:0; font-size:0.78rem;"></span>
-            </div>
-          </td>
-        </tr>
-        <% } %>
-      <% }) %>
-      <% if (mappings.length === 0) { %>
-        <tr><td colspan="9" class="empty">No mappings yet.</td></tr>
-      <% } %>
-    </tbody>
-  </table>
+    <div id="l2m-tabulator"></div>
   </div>
 </div>
+
+<dialog id="l2m-test-dialog" class="update-changelog-dialog">
+  <h2 id="l2m-test-dialog-title">Test</h2>
+  <p class="hint" style="margin-top:0;">
+    Publishes a value on this mapping to check the device reacts, without needing Loxone at all —
+    any value transform (e.g. a translation table) is applied exactly as it would be for a real call.
+  </p>
+  <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+    <label style="margin:0; font-size:0.78rem;">Value to send:</label>
+    <div id="l2m-test-value-wrap"></div>
+    <button type="button" id="l2m-test-send-btn" class="btn-test" style="margin-left:auto;"><%- icon('link') %> Send</button>
+  </div>
+  <span class="hint" id="l2m-test-result" style="display:block; margin-top:0.6rem;"></span>
+  <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
+    <button type="button" class="btn-soft" id="l2m-test-dialog-close">Close</button>
+  </div>
+</dialog>
+
+<link rel="stylesheet" href="/vendor/tabulator.min.css">
+<link rel="stylesheet" href="/tabulator-theme.css">
+<script src="/vendor/tabulator.min.js"></script>
+<script src="/vendor/floating-ui.core.umd.min.js"></script>
+<script src="/vendor/floating-ui.dom.umd.min.js"></script>
+<script src="/tabulator-table.js"></script>
+<script src="/mappings-loxone-to-mqtt-tabulator.js"></script>
 
 <script>
   (function () {
@@ -209,55 +133,6 @@
     if (!select || !modeField) return;
     select.addEventListener('change', function () {
       modeField.style.display = select.value === 'shelly_rgbw' ? '' : 'none';
-    });
-  })();
-</script>
-<script>
-  // Each mapping row is followed by its own Test expand-row sibling (not a data row) — filtering
-  // hides/shows that sibling in lockstep with its mapping row rather than trying to match text in
-  // it, since it's mostly interactive inputs and its rendered text mostly duplicates the row above.
-  (function () {
-    var fieldSelect = document.getElementById('mappings-filter-field');
-    var queryInput = document.getElementById('mappings-filter-query');
-    var clearBtn = document.getElementById('mappings-filter-clear');
-    var tbody = document.querySelector('.table-wrap tbody');
-    if (!fieldSelect || !tbody) return;
-
-    function applyFilter() {
-      var colIndex = Number(fieldSelect.value);
-      var q = queryInput.value.trim().toLowerCase();
-      if (clearBtn) clearBtn.hidden = !q;
-      tbody.querySelectorAll('tr').forEach(function (row) {
-        if (row.classList.contains('expand-row')) return;
-        var next = row.nextElementSibling;
-        var pairedExpandRow = next && next.classList.contains('expand-row') ? next : null;
-        if (!q) {
-          row.style.display = '';
-          if (pairedExpandRow) pairedExpandRow.style.display = '';
-          return;
-        }
-        var cell = row.children[colIndex];
-        var text = cell ? cell.textContent.toLowerCase() : '';
-        var show = text.indexOf(q) !== -1;
-        row.style.display = show ? '' : 'none';
-        if (pairedExpandRow) pairedExpandRow.style.display = show ? '' : 'none';
-      });
-    }
-
-    fieldSelect.addEventListener('change', applyFilter);
-    queryInput.addEventListener('input', applyFilter);
-    if (clearBtn) {
-      clearBtn.addEventListener('click', function () {
-        queryInput.value = '';
-        applyFilter();
-        queryInput.focus();
-      });
-    }
-    queryInput.addEventListener('keydown', function (e) {
-      if (e.key !== 'Escape' || !queryInput.value) return;
-      e.stopPropagation();
-      queryInput.value = '';
-      applyFilter();
     });
   })();
 </script>
@@ -273,99 +148,4 @@
     });
   });
 </script>
-<script>
-  // Delegated (rather than bound per-input) so this keeps working for Test rows toggled open
-  // after this script already ran, same reasoning as the copy-btn handler above.
-  // Driven by real focus transitions (focusin/focusout), not by inspecting click targets — a
-  // click-target-based "close on any click outside the wrap" approach breaks here because opening
-  // a Test row (see foot.ejs's [data-toggle-row] handler) auto-focuses this very input as part of
-  // handling the Test button's own click; that click then keeps bubbling up to document with its
-  // target still the Test button (outside any .value-suggest-wrap), which would immediately close
-  // the list the nested focus() just opened.
-  document.addEventListener('focusin', function (e) {
-    if (!e.target.classList.contains('value-suggest-input')) return;
-    var list = e.target.parentElement.querySelector('.value-suggest-list');
-    if (list) list.hidden = false;
-    // If this whole test panel is living inside a kebab-collapsed row-actions-popover (see
-    // collapseRowActions in tables.js), that popover's own max-height was already capped BEFORE
-    // this dropdown existed to measure (it only reveals on focus, well after the popover itself
-    // opened) — without regrowing it here too, the newly-shown list got clipped by the popover's
-    // own overflow-y:auto instead of just being visible, same fix already applied for opening the
-    // test panel itself.
-    var popover = e.target.closest('.row-actions-popover');
-    if (popover && list) {
-      popover.style.maxHeight = Math.min(popover.scrollHeight, window.innerHeight * 0.85) + 'px';
-      // The list is `position:absolute` (see .value-suggest-list in style.css), so it takes no
-      // part in the popover's own scrollHeight above no matter how far it pokes out below the
-      // popover's actual (shrink-to-fit) box — left as overflow-y:auto, that box clips the list
-      // exactly where its own in-flow content ends, which is what "the dropdown disappears the
-      // moment you click the field" actually was: it opened, then was immediately clipped away.
-      // Switching to visible while it's open trades the popover's own scrollbar (not needed here —
-      // this merged panel's content is short) for actually letting the list show past the box.
-      popover.style.overflowY = 'visible';
-    }
-  });
-  document.addEventListener('focusout', function (e) {
-    if (!e.target.classList.contains('value-suggest-input')) return;
-    var wrap = e.target.closest('.value-suggest-wrap');
-    var list = wrap && wrap.querySelector('.value-suggest-list');
-    if (!list) return;
-    // Delayed so a mousedown on a suggestion button (which blurs the input first) still gets its
-    // click handled — and its own explicit input.focus() re-applied — before this fires.
-    setTimeout(function () {
-      if (wrap.contains(document.activeElement)) return;
-      list.hidden = true;
-      var popover = wrap.closest('.row-actions-popover');
-      if (popover) popover.style.overflowY = ''; // back to the stylesheet's own auto
-    }, 150);
-  });
-  document.addEventListener('click', function (e) {
-    var suggestion = e.target.closest('.value-suggest-list button');
-    if (!suggestion) return;
-    var wrap = suggestion.closest('.value-suggest-wrap');
-    var input = wrap.querySelector('.value-suggest-input');
-    input.value = suggestion.dataset.value;
-    input.focus();
-    wrap.querySelector('.value-suggest-list').hidden = true;
-  });
-</script>
-<script>
-  (function () {
-    document.querySelectorAll('.test-send-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var wrap = btn.closest('tr');
-        var input = wrap.querySelector('.test-value-input');
-        var result = wrap.querySelector('.test-result');
-        var value = input.value.trim();
-        if (!value) {
-          result.textContent = 'Enter a value first.';
-          result.style.color = 'var(--danger)';
-          return;
-        }
-        result.textContent = 'Sending...';
-        result.style.color = '';
-        fetch('/mappings/loxone-to-mqtt/' + btn.dataset.mappingId + '/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ value: value }),
-        })
-          .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
-          .then(function (res) {
-            if (res.ok && res.data.ok) {
-              result.textContent = 'Published "' + res.data.sentValue + '" to ' + res.data.topic + ' (via ' + res.data.via + ')';
-              result.style.color = 'var(--accent)';
-            } else {
-              result.textContent = res.data.error || 'Failed to send.';
-              result.style.color = 'var(--danger)';
-            }
-          })
-          .catch(function () {
-            result.textContent = 'Failed to send.';
-            result.style.color = 'var(--danger)';
-          });
-      });
-    });
-  })();
-</script>
-
 <%- include('partials/foot') %>

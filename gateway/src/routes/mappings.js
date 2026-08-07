@@ -64,6 +64,23 @@ router.get('/mqtt-to-loxone', (req, res) => {
   res.render('mappings-mqtt-to-loxone', { mappings, miniservers, targetSuggestions, error: null, prefillTopic: req.query.topic || '' });
 });
 
+router.get('/mqtt-to-loxone/data.json', (req, res) => {
+  const canEdit = res.locals.canEdit('mqtt_to_loxone');
+  const rows = loadMqttToLoxoneView().map((m) => ({
+    id: m.id,
+    enabled: !!m.enabled,
+    mqttTopic: m.mqtt_topic,
+    miniserverName: m.miniserver_name,
+    transport: m.transport,
+    target: m.target,
+    valueTransform: m.value_transform,
+    transformArg: m.transform_arg,
+    minIntervalMs: m.min_interval_ms,
+    canEdit,
+  }));
+  res.json(rows);
+});
+
 router.post('/mqtt-to-loxone', requirePermission('mqtt_to_loxone', 'edit'), (req, res) => {
   const { miniserver_id, mqtt_topic, transport, target, value_transform, transform_arg, min_interval_ms } = req.body;
   db.prepare(
@@ -253,6 +270,27 @@ router.get('/loxone-to-mqtt', (req, res) => {
     prefillTransport: req.query.transport === 'udp' ? 'udp' : (req.query.transport === 'http' ? 'http' : ''),
     prefillMiniserverId: Number(req.query.miniserver_id) || null,
   });
+});
+
+router.get('/loxone-to-mqtt/data.json', (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const canEdit = res.locals.canEdit('loxone_to_mqtt');
+  const rows = loadLoxoneToMqttView(baseUrl).map((m) => ({
+    id: m.id,
+    enabled: !!m.enabled,
+    mqttTopic: m.mqtt_topic,
+    miniserverName: m.miniserver_name,
+    transport: m.transport,
+    valueTransform: m.value_transform,
+    qos: m.qos,
+    retain: !!m.retain,
+    token: m.token,
+    udpPort: m.udpPort,
+    udpMessage: m.udpMessage,
+    translationValues: m.translationValues,
+    canEdit,
+  }));
+  res.json(rows);
 });
 
 // value_transform for this (Loxone -> MQTT) direction: 'passthrough' (default), 'translation_table'

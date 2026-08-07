@@ -1235,6 +1235,11 @@
      partials/foot.ejs — shared with Monitor detail/Home/Logs, all of which render the same
      rangeField() markup. -->
 
+<!-- SortableJS (vendor/sortable.min.js) — powers threshold-annotation-builder.js's own row
+     drag-to-reorder for the plain threshold/annotation/value-mapping row lists (see that file's
+     own top comment); loaded here, right before its one consumer, same convention as
+     color-picker.js above. -->
+<script src="/vendor/sortable.min.js"></script>
 <script src="/threshold-annotation-builder.js"></script>
 
 <%

@@ -1,7 +1,8 @@
 const express = require('express');
 const db = require('../db');
 const { checkMiniserver, runDetailedCheck } = require('../healthcheck');
-const { miniserverGenerationLabel } = require('../format');
+const { miniserverGenerationLabel, formatHeapStatus, plcStateLabel } = require('../format');
+const { formatDateTime } = require('../dateFormat');
 const { fetchMiniserver } = require('../loxone');
 const { testConnection: testLiveConnection, resetConnection: resetLiveConnection } = require('../loxoneWebSocket');
 const { requirePermission } = require('../middleware/requirePermission');
@@ -49,6 +50,73 @@ router.get('/', (req, res) => {
   });
 
   res.render('miniservers', { miniservers, error: null });
+});
+
+// JSON feed for the Tabulator-backed table (see miniservers.ejs) — Tabulator builds its own DOM
+// from a data array + column defs rather than taking over server-rendered <tr>s, so unlike every
+// plain-<table> page in this app, this one needs an actual data endpoint alongside the page route
+// above (which still renders the page shell/toolbar/scripts, just no <table> HTML of its own).
+// Nested via _children (Tabulator's own dataTree shape) — a Gateway's Clients underneath it,
+// mirroring the same grouping the plain-table version built via clientsByGatewayId/sort_order.
+router.get('/data.json', (req, res) => {
+  const canEdit = res.locals.canEdit('miniservers');
+  const rows = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
+  const nameById = new Map(rows.map((ms) => [ms.id, ms.name]));
+  const clientCountByGatewayId = new Map();
+  rows.forEach((ms) => {
+    if (!ms.gateway_client_of) return;
+    clientCountByGatewayId.set(ms.gateway_client_of, (clientCountByGatewayId.get(ms.gateway_client_of) || 0) + 1);
+  });
+
+  function toRow(ms) {
+    const plc = plcStateLabel(ms.plc_state);
+    return {
+      id: ms.id,
+      status: ms.status,
+      statusLabel: ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown',
+      stateLabel: plc ? plc[0] : null,
+      stateBadgeClass: plc ? plc[1] : null,
+      firmwareVersion: ms.firmware_version,
+      generationLabel: miniserverGenerationLabel(ms.miniserver_type),
+      cpuLoad: ms.cpu_load,
+      heapStatus: formatHeapStatus(ms.heap_status),
+      numTasks: ms.num_tasks,
+      firmwareDate: ms.firmware_date,
+      updateLevel: ms.update_level,
+      name: ms.name,
+      gatewayRole: ms.gateway_client_of ? 'client' : ((clientCountByGatewayId.get(ms.id) || 0) > 0 ? 'gateway' : 'standalone'),
+      gatewayClientOfName: ms.gateway_client_of ? nameById.get(ms.gateway_client_of) || null : null,
+      gatewayClientCount: clientCountByGatewayId.get(ms.id) || 0,
+      host: ms.host,
+      httpPort: ms.http_port,
+      useHttps: !!ms.use_https,
+      udpPort: ms.udp_port,
+      externalUrl: ms.external_url,
+      username: ms.username,
+      lastCheckedAt: ms.last_checked_at ? formatDateTime(ms.last_checked_at) : null,
+      lastSuccessAt: ms.last_success_at ? formatDateTime(ms.last_success_at) : null,
+      lastError: ms.last_error,
+      canEdit,
+    };
+  }
+
+  const clientsByGatewayId = new Map();
+  rows.forEach((ms) => {
+    if (!ms.gateway_client_of) return;
+    if (!clientsByGatewayId.has(ms.gateway_client_of)) clientsByGatewayId.set(ms.gateway_client_of, []);
+    clientsByGatewayId.get(ms.gateway_client_of).push(ms);
+  });
+
+  const tree = [];
+  rows.forEach((ms) => {
+    if (ms.gateway_client_of) return;
+    const row = toRow(ms);
+    const clients = clientsByGatewayId.get(ms.id);
+    if (clients && clients.length) row._children = clients.map(toRow);
+    tree.push(row);
+  });
+
+  res.json(tree);
 });
 
 // Parses the Add-Miniserver form's own clients_json (see miniservers.ejs) — an array of
