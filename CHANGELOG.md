@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.12.1-alpha.1] - 2026-08-07
+
+### Fixed
+- The Live Data (MQTT) table's Topic and Command Recognition columns had no width cap, so a long
+  topic or recognition string could push the Command Recognition/Actions columns off the right
+  edge with no visible hint there was more to scroll to (the table does scroll horizontally, but
+  nothing signaled that it should). Both now respect the truncation caps already built for exactly
+  this — `.truncate`'s sitewide 320px default for Topic, `code.recognition-string`'s own 220px
+  default for Command Recognition — which an inline style on each was overriding. The full value
+  is still one hover away via the title tooltip, and Copy still copies it untruncated.
+
 ## [0.12.0-alpha.1] - 2026-08-07
 
 ### Changed
