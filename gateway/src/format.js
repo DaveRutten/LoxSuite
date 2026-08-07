@@ -60,6 +60,24 @@ function miniserverGenerationLabel(type) {
   return MINISERVER_TYPE_LABELS[type] || `Unknown (type ${type})`;
 }
 
+// jdev/sps/state's own fully-documented 0-8 values — [label, badge class] per code. Was previously
+// duplicated inline in miniservers.ejs; pulled out here once the new Tabulator-backed JSON endpoint
+// (routes/miniservers.js) needed the exact same mapping server-side instead of just EJS-side.
+const PLC_STATE_LABELS = {
+  0: ['No status', 'badge-neutral'],
+  1: ['Booting', 'badge-neutral'],
+  2: ['Program loaded', 'badge-neutral'],
+  3: ['Started', 'badge-neutral'],
+  4: ['Loxone Link started', 'badge-neutral'],
+  5: ['Running', 'badge-ok'],
+  6: ['Change in progress', 'badge-neutral'],
+  7: ['Error', 'badge-off'],
+  8: ['Update occurring', 'badge-neutral'],
+};
+function plcStateLabel(code) {
+  return PLC_STATE_LABELS[code] || null;
+}
+
 // Loxone's /data/status (see loxoneHardware.js) reports a device's own TimeDiff as whole seconds
 // since it was last heard from, rather than a timestamp — converting that back to a wall-clock
 // time and re-diffing against "now" on every page render would just reintroduce clock-skew issues
@@ -75,4 +93,4 @@ function formatDuration(seconds) {
   return `${days}d`;
 }
 
-module.exports = { formatCount, formatHeapStatus, parseHeapStatus, miniserverGenerationLabel, formatDuration };
+module.exports = { formatCount, formatHeapStatus, parseHeapStatus, miniserverGenerationLabel, formatDuration, PLC_STATE_LABELS, plcStateLabel };

@@ -189,9 +189,9 @@
       wrap.innerHTML =
         '<div class="client-row">' +
           '<input type="text" class="client-name" value="' + (client.name || '').replace(/"/g, '&quot;') + '" placeholder="e.g. Upstairs">' +
-          '<input type="text" class="client-host" value="' + (client.host || '').replace(/"/g, '&quot;') + '">' +
-          '<input type="number" class="client-port" value="' + (client.http_port || 80) + '">' +
-          '<label class="switch"><input type="checkbox" class="client-https"' + (client.use_https ? ' checked' : '') + '><span class="switch-track"><span class="switch-thumb"></span></span></label>' +
+          '<input type="text" class="client-host" value="' + (client.host || '').replace(/"/g, '&quot;') + '" placeholder="Host / IP">' +
+          '<input type="number" class="client-port" value="' + (client.http_port || 80) + '" placeholder="HTTP port">' +
+          '<span><span class="client-https-label">HTTPS</span><label class="switch"><input type="checkbox" class="client-https"' + (client.use_https ? ' checked' : '') + '><span class="switch-track"><span class="switch-thumb"></span></span></label></span>' +
           '<button type="button" class="icon-btn icon-btn-danger remove-client-row-btn" title="Remove this Client">' + removeIconSvg + '</button>' +
         '</div>';
       wrap.querySelector('.remove-client-row-btn').addEventListener('click', function () { wrap.remove(); });

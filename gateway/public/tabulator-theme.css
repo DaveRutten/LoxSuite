@@ -1,0 +1,164 @@
+/* Tabulator theme override — maps Tabulator's own class names onto this app's existing CSS custom
+   properties AND its existing plain-<table> values (see style.css's .table-wrap / th,td rules)
+   instead of inventing a separate look — the "modern" reference the Tabulator pilot was checked
+   against turned out to just be this app's own existing table style (e.g. the Hardware page), so
+   this mirrors those exact values.
+
+   !important throughout is deliberate, not sloppy: vendor/tabulator.min.css's own rules are
+   nested 2-5 classes deep (e.g. ".tabulator .tabulator-header .tabulator-col .tabulator-col-
+   content .tabulator-col-sorter .tabulator-arrow") — real CSS specificity that a flat single-class
+   selector here (".tabulator-col-sorter") can never outrank on its own, regardless of load order.
+   This file's only job is reskinning that base stylesheet, so forcing the win is the correct tool
+   here, not a workaround. */
+
+.tabulator {
+  background: var(--surface) !important;
+  border: none !important;
+  border-radius: var(--radius) !important;
+  font-family: inherit !important;
+  font-size: 0.87rem !important;
+  color: var(--text) !important;
+}
+
+.tabulator-header {
+  background: var(--surface-alt) !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+  font-weight: 600 !important;
+}
+
+.tabulator-col {
+  background: var(--surface-alt) !important;
+  border-right: none !important;
+}
+.tabulator-col-content { padding: 0.65rem 1rem !important; }
+
+.tabulator-col-title {
+  color: var(--text-muted) !important;
+  font-weight: 600 !important;
+  font-size: 0.76rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.03em !important;
+}
+
+.tabulator-col.tabulator-sortable.tabulator-col-sorter-element:hover { background: var(--surface-alt) !important; }
+
+.tabulator-col-sorter { opacity: 0.5 !important; transition: opacity 0.15s var(--ease); }
+.tabulator-col.tabulator-sortable:hover .tabulator-col-sorter,
+.tabulator-col[aria-sort="ascending"] .tabulator-col-sorter,
+.tabulator-col[aria-sort="descending"] .tabulator-col-sorter { opacity: 0.9 !important; }
+.tabulator-col-sorter .tabulator-arrow,
+.tabulator-col[aria-sort="none"] .tabulator-col-sorter .tabulator-arrow,
+.tabulator-col[aria-sort="ascending"] .tabulator-col-sorter .tabulator-arrow,
+.tabulator-col[aria-sort="descending"] .tabulator-col-sorter .tabulator-arrow {
+  border-bottom-color: var(--text-muted) !important;
+  border-top-color: var(--text-muted) !important;
+  transform: scale(0.8);
+}
+
+/* Same discoverability fix already made once for the old table system's own resize handle (see
+   .col-resize-handle in style.css: "an invisible 8px hit target with zero visual trace looked, and
+   was reported as, simply not there") — a permanent thin line, not just a hover reveal, so a
+   header's resizable seams are visible without having to first stumble on them. The 6px div stays
+   the full-width hit target (grab-friendly); the visible line is a slim ::after centered inside it. */
+/* Tabulator gives every BODY cell its own resize-handle element too, not just the header one (see
+   vendor/tabulator.min.css) — scoped to .tabulator-header only below, so the permanent line doesn't
+   repeat down every row for a drag affordance that only needs discovering once. */
+.tabulator-col-resize-handle { background: transparent !important; width: 6px !important; }
+.tabulator-header .tabulator-col-resize-handle { position: relative; }
+.tabulator-header .tabulator-col-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  left: 50%;
+  width: 2px;
+  background: var(--border);
+  transform: translateX(-50%);
+  transition: background 0.12s var(--ease);
+}
+.tabulator-header .tabulator-col-resize-handle:hover::after,
+.tabulator-header .tabulator-col-resize-handle:active::after { background: var(--accent); }
+
+/* fitColumns' own width math routinely lands the summed column widths a couple px wider than the
+   holder itself (float rounding across many columns) — real, but already invisible in practice
+   since the outer .tabulator has its own overflow:hidden clipping at the true container edge (see
+   vendor/tabulator.min.css's ".tabulator{overflow:hidden}") one level up. All this scrollbar was
+   doing was surfacing that harmless few-px internal remainder as a visible horizontal scrollbar
+   the table never actually needs. A genuine "columns don't fit even at minWidth" case still shows
+   its own scrollbar one level up, via .table-wrap's own overflow-x:auto (style.css) — untouched
+   here. */
+.tabulator-tableholder { overflow-x: hidden !important; }
+
+.tabulator-row {
+  background: var(--surface) !important;
+  border-bottom: 1px solid var(--border);
+  color: var(--text) !important;
+  min-height: 0 !important;
+  transition: background 0.12s var(--ease);
+}
+.tabulator-row.tabulator-row-even { background: var(--surface) !important; }
+.tabulator-row.tabulator-selectable:hover,
+.tabulator-row:hover { background: var(--surface-alt) !important; cursor: default !important; }
+
+.tabulator-cell {
+  border-right: none !important;
+  padding: 0.65rem 1rem !important;
+  color: var(--text);
+}
+
+/* Tabulator's own base rule is inline-block + vertical-align:middle (see vendor/tabulator.min.css),
+   which only centers the CELL BOX within the row's line box — it does nothing for the cell's own
+   content when a taller sibling cell (e.g. one row mixing a badge with plain text) stretches the
+   row past this cell's natural content height, so shorter content just sits at the top of its own
+   padding box instead of centering in it. inline-flex (NOT flex — plain flex is block-level and
+   made every cell drop to its own full-width line, since the row relies on its children staying
+   inline-level + white-space:nowrap to sit side by side) + align-items:center fixes that directly.
+   Deliberately NOT !important and matched to Tabulator's own ".tabulator-row .tabulator-cell"
+   nesting depth (see tabulator-theme.css's other !important rules' own comment on why a flat
+   single-class selector can't outrank that specificity) — column.hide() toggles a hidden column's
+   cells via an inline style="display:none" per cell, and author !important beats even inline
+   styles in the cascade, so an !important display here was un-hiding every hidden column's cells
+   right back. Matching specificity + loading after tabulator.min.css (source order breaks the tie)
+   is enough to win for the normal case while still letting that inline style win when it's set. */
+.tabulator-row .tabulator-cell {
+  display: inline-flex;
+  align-items: center;
+}
+.tabulator-cell.tabulator-row-header { background: var(--surface-alt) !important; }
+
+.tabulator-data-tree-branch { border-color: var(--border) !important; }
+.tabulator-data-tree-control {
+  border: 1px solid var(--border) !important;
+  background: var(--surface) !important;
+  border-radius: 4px !important;
+}
+.tabulator-data-tree-control:hover { background: var(--surface-alt) !important; }
+.tabulator-data-tree-control-collapse:after,
+.tabulator-data-tree-control-expand,
+.tabulator-data-tree-control-expand:after { background: var(--text-muted) !important; }
+
+.tabulator-footer {
+  background: var(--surface-alt) !important;
+  border-top: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+.tabulator-menu {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow-md) !important;
+  color: var(--text) !important;
+}
+.tabulator-menu-item:hover { background: var(--surface-alt) !important; }
+.tabulator-menu-separator { border-color: var(--border) !important; }
+
+.tabulator-placeholder-contents { color: var(--text-muted) !important; font-size: 0.9rem !important; font-weight: 400 !important; }
+
+/* .table-wrap keeps its own standard card chrome (border/shadow/radius — see style.css) exactly
+   like it does around a plain <table>; the .tabulator element inside stays visually flat above so
+   there's only ONE border/shadow, not two nested ones. */
+.table-wrap:has(.tabulator) {
+  overflow: hidden;
+}

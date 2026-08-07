@@ -226,6 +226,17 @@ async function pollMiniserver(miniserver) {
     });
     applyAll();
 
+    // A Gateway Client setup means the Gateway's own /data/status already reports every one of its
+    // Clients' hardware too (see routes/hardware.js's own dedup comment — confirmed against a real
+    // installation, not just Audioservers/zones) — so polling a Client Miniserver sees the exact
+    // same devices its Gateway already saw (or is about to see) in its own, independent poll.
+    // Logging still happens unconditionally below (each Miniserver's own Loxone log should read as
+    // a complete, honest record of what it itself reported), but firing a notification from BOTH
+    // copies of one physical transition would mean two separate alerts for the same real event —
+    // suppressed here in favor of the Gateway's own poll, the same "prefer the Gateway's copy"
+    // choice routes/hardware.js's display-side dedup already makes.
+    const skipNotify = !!miniserver.gateway_client_of;
+
     // Transition-only, same reasoning as checkFirmwareChanged's own !miniserver.firmware_version
     // guard — a device seen for the first time ever (no `prev` row) has nothing to have "changed"
     // from, so it never fires here.
@@ -236,21 +247,21 @@ async function pollMiniserver(miniserver) {
 
       if (item.version && prev.version && item.version !== prev.version) {
         insertLogLine.run('loxone', miniserver.id, miniserver.name, `Hardware: "${label}" firmware changed from ${prev.version} to ${item.version}.`, now);
-        checkDeviceFirmwareChanged(miniserver, item, prev.version);
+        if (!skipNotify) checkDeviceFirmwareChanged(miniserver, item, prev.version);
       }
 
       const wasWeak = !!prev.batt_weak || !!prev.bat_too_weak_for_update;
       const isWeak = item.battWeak || item.batTooWeakForUpdate;
       if (isWeak && !wasWeak) {
         insertLogLine.run('loxone', miniserver.id, miniserver.name, `Hardware: "${label}" battery weak${item.battery != null ? ` (${item.battery}%)` : ''}.`, now);
-        checkBatteryWeak(miniserver, item);
+        if (!skipNotify) checkBatteryWeak(miniserver, item);
       }
 
       // null on either side means "this category never reports Online at all" (Audioserver/Zone/
       // some Plugins) — not a genuine transition to detect.
       if (item.online !== null && prev.online !== null && Number(prev.online) !== (item.online ? 1 : 0)) {
         insertLogLine.run('loxone', miniserver.id, miniserver.name, `Hardware: "${label}" is now ${item.online ? 'online' : 'offline'}.`, now);
-        checkDeviceOffline(miniserver, item, item.online);
+        if (!skipNotify) checkDeviceOffline(miniserver, item, item.online);
       }
     }
   } catch (err) {

@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-notifications', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/notifications', topbarRangeValue: range, topbarRangeExtra: { q: query.q, severity: query.severity } }) %>
+<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-notifications', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/notifications', topbarRangeValue: range, topbarRangeExtra: { q: query.q, severity: query.severity, category: query.category } }) %>
 
 <p class="hint">
   Every notification fired by a rule (<a href="/admin/notifications">Notifications settings</a>) or
@@ -27,6 +27,15 @@
       <option value="critical" <%= query.severity === 'critical' ? 'selected' : '' %>>Critical</option>
     </select>
   </div>
+  <div>
+    <label>Category</label>
+    <select name="category" data-auto-submit-form>
+      <option value="">Any</option>
+      <% categories.forEach(c => { %>
+        <option value="<%= c.key %>" <%= query.category === c.key ? 'selected' : '' %>><%= c.label %></option>
+      <% }) %>
+    </select>
+  </div>
 </form>
 
 <div class="filterable-table-card">
@@ -35,6 +44,7 @@
       <select class="log-search-field">
         <option value="time">Time</option>
         <option value="severity">Severity</option>
+        <option value="category">Category</option>
         <option value="title">Title</option>
         <option value="message" selected>Message</option>
         <option value="source">Source</option>
@@ -56,7 +66,7 @@
     <thead>
       <tr>
         <th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th>
-        <th data-filter-key="time">Time</th><th data-filter-key="severity">Severity</th><th data-filter-key="title">Title</th><th data-filter-key="message">Message</th><th data-filter-key="source">Source</th>
+        <th data-filter-key="time">Time</th><th data-filter-key="severity">Severity</th><th data-filter-key="category">Category</th><th data-filter-key="title">Title</th><th data-filter-key="message">Message</th><th data-filter-key="source">Source</th>
       </tr>
     </thead>
     <tbody>
@@ -66,13 +76,14 @@
           <td class="col-select"><input type="checkbox"></td>
           <td><%= formatDateTime(r.createdAt) %></td>
           <td><span class="badge <%= r.severity === 'critical' ? 'badge-off' : r.severity === 'warning' ? 'badge-warning' : 'badge-ok' %>"><%= r.severity %></span></td>
+          <td><%= categoryLabel(r.eventType) %></td>
           <td><%= r.title %></td>
           <td class="log-line"><%= r.message %></td>
           <td><% if (sourceLink) { %><a href="<%= sourceLink %>"><%= r.sourceLabel %></a><% } else { %><%= r.sourceLabel || '' %><% } %></td>
         </tr>
       <% }) %>
       <% if (rows.length === 0) { %>
-        <tr><td colspan="6" class="empty">No notifications recorded yet.</td></tr>
+        <tr><td colspan="7" class="empty">No notifications recorded yet.</td></tr>
       <% } %>
     </tbody>
   </table>

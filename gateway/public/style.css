@@ -195,6 +195,11 @@ button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-bt
   position: sticky;
   top: 0;
   height: 100vh;
+  /* Without this, a nav list taller than the viewport (every section expanded, or just a short
+     window/small phone) has no way to reach whatever runs past the bottom edge — position:sticky
+     doesn't grant its own scroll region for free the way overflow:auto does. Harmless on a sidebar
+     that already fits: no scrollbar appears, nothing else changes. */
+  overflow-y: auto;
   border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -1277,20 +1282,29 @@ td .row-actions {
    panel and foot.ejs's confirm-bar-popover already do. */
 .row-actions-toggle { flex-shrink: 0; }
 /* Undoes the Actions-column .row-actions rule above — the popover itself grows to fit its content
-   width (see .row-actions-popover's own width:max-content below) up to a generous cap rather than
-   being squeezed into one table column, so this stays a single row of buttons. Wrap (rather than
-   nowrap) so a page with a longer action list still wraps sanely instead of overflowing the
-   popover's own width cap. */
+   width (see .row-actions-popover's own width:max-content below), so this stays a single row of
+   buttons. NOT flex-wrap:wrap: a popover with enough actions (5+, e.g. My Dashboards' Open/
+   Favorite/Rename/Share/Delete) wrapped onto a cramped second line well before it ran out of
+   actual room — the previous 28rem width cap was the thing actually forcing that, not a lack of
+   space; removing the cap (see .row-actions-popover below) and keeping every action on one row
+   reads far better than wrapping ever did. */
 .row-actions.row-actions-expanded {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
+  /* Roomier than the base .row-actions' own 0.4rem below — that gap is tuned for a normal table
+     cell, where every row already has its own visual separation; here, all of a row's actions sit
+     right on top of each other in one popover with nothing else around them, so the same tight gap
+     just reads as cramped. */
+  gap: 0.6rem;
 }
 
 /* Same trigger-plus-fixed-panel shape as .columns-menu-panel — position set inline by
-   collapseRowActions() from the toggle button's own getBoundingClientRect(), flipping to open
-   upward near the bottom of the viewport the same way that one does. width:max-content (capped)
-   lets it grow as wide as its own buttons + any result text actually need, rather than a fixed
-   width that forced them to wrap past it. */
+   collapseRowActions() (or openTabulatorRowActionsPopover for a Tabulator-backed table) from the
+   toggle button's own getBoundingClientRect(), flipping to open upward near the bottom of the
+   viewport the same way that one does. width:max-content lets it grow as wide as its own buttons +
+   any result text actually need; capped only by the viewport itself (95vw), not an arbitrary fixed
+   ceiling — a 28rem cap was quietly forcing a wrap onto a second, cramped line for any row with
+   enough actions (5+) well before the popover was anywhere near the actual edge of the screen. */
 .row-actions-popover {
   position: fixed;
   z-index: 20;
@@ -1298,11 +1312,33 @@ td .row-actions {
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow);
-  padding: 0.6rem 0.7rem;
+  padding: 0.75rem 0.9rem;
   width: max-content;
   min-width: 160px;
-  max-width: min(28rem, 92vw);
+  max-width: 95vw;
   overflow-y: auto;
+  overflow-x: auto;
+}
+
+/* The merged sub-panel a row-actions-popover shows once one of its own buttons is a
+   [data-toggle-row] (e.g. My Dashboards' Rename/Share, a mapping's own Test — see
+   collapseRowActions in tables.js) — moved straight in with no styling of its own before, so it
+   sat flush against the button row above it with no visual separation at all. */
+.row-actions-popover-extra {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+/* Delete's own data-confirm bar (see foot.ejs) takes a different path into the same popover —
+   it stays a plain in-flow .confirm-bar (not .confirm-bar-popover, see that class's own comment
+   for why) dropped in as a flex sibling right after the Delete button — but visually it's the
+   exact same "extra content below the button row" situation .row-actions-popover-extra above
+   handles, so it gets the identical divider + spacing instead of just the bare 0.5rem margin-top
+   .confirm-bar.open normally gets on its own. */
+.row-actions-popover .confirm-bar.open:not(.confirm-bar-popover) {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
 }
 
 .row-actions {
@@ -2275,6 +2311,42 @@ summary.btn-edit::-webkit-details-marker, summary.btn-test::-webkit-details-mark
   box-shadow: var(--shadow);
 }
 .update-changelog-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+
+/* Miniservers' own diagnostics dialog (see miniservers.ejs) reuses .update-changelog-dialog's card
+   chrome but needs more room than a changelog text popup — its .ms-diagnostics stat grid (up to 8
+   boxes, see below) wraps down to 2-3 per row at 32rem, leaving a tall, narrow, hard-to-scan
+   dialog. A dedicated modifier here (not raising the base class's own max-width) so the plain
+   changelog popup stays exactly as narrow as it always was. 60rem (up from an initial 52rem) fits
+   all 5 stats of the grid's first row (state/firmware/generation/CPU/heap) across one line with
+   even side padding, instead of straggling the 5th item onto a mostly-empty second row. Padding
+   and the stat grid's own gap/item width are bumped to match — a wider dialog with the same tight
+   spacing just reads as more empty margin, not more room. */
+.ms-diag-dialog-wide { max-width: 60rem; padding: 1.6rem 2rem; }
+.ms-diag-dialog-wide .ms-diagnostics { gap: 2rem; }
+.ms-diag-dialog-wide .ms-diagnostics > div { min-width: 9.5rem; }
+.ms-diag-dialog-wide .ms-diagnostics-card { padding: 1.1rem 1.3rem; }
+
+/* Miniservers' own top-level rows (miniservers-tabulator.js, movableRows:true) are whole-row
+   draggable — without this, the mousedown-then-move a drag starts with is indistinguishable from
+   a click-drag text selection to the browser, so finishing a drag left the row's own text (name/
+   host/etc.) highlighted as a side effect. Only applied to the draggable rows themselves, not the
+   whole table, so cell text in a non-draggable Client row can still be selected normally.
+   Vendor-prefixed the same way vendor/tabulator.min.css's own header/menu rules already are
+   (grep it for "user-select") — the plain unprefixed property alone (first attempt at this fix)
+   still let a real click-drag select text on release in the browser actually used to test it,
+   even though it reads as applied in a computed-style check; the prefixed forms are what
+   Tabulator's own authors reach for everywhere they truly need this to hold, so matching that
+   instead of trusting the unprefixed property alone. Also targets every descendant explicitly
+   (not just relying on inheritance) since a couple of this row's own cells are badges/spans built
+   by their own formatter functions, not guaranteed to inherit cleanly through Tabulator's own
+   inline-flex cell wrapper in every browser. */
+.ms-toplevel-row,
+.ms-toplevel-row * {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
 .update-changelog-body {
   font-size: 0.85rem;
   max-height: 60vh;
@@ -2504,6 +2576,11 @@ main > p.hint:first-of-type { margin-top: 0; }
 .client-row { padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
 .client-row:last-child { border-bottom: none; }
 .client-row .remove-client-row-btn { justify-self: start; }
+/* Only meaningful once the grid layout below collapses to one column on mobile — the shared
+   .client-rows-header (Client Name/Host/Port/HTTPS) no longer lines up with anything at that
+   point, so the HTTPS switch specifically needs its own inline label; the text inputs already
+   carry that meaning via their own placeholders instead. */
+.client-https-label { display: none; font-size: 0.82rem; color: var(--text-muted); margin-right: 0.5rem; }
 /* Same [hidden]-vs-author-display specificity clash as .table-pager/.dash-range-custom above —
    .btn-soft's own display:inline-flex and .form-grid's own display:grid both tie the browser's
    `[hidden] { display: none }` UA rule on specificity and win on source order, so the [hidden]
@@ -3176,6 +3253,14 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
   letter-spacing: 0.03em;
 }
 
+/* .row-actions' own flex-wrap:wrap (see its base rule) is right for a table cell that can end up
+   with many actions, but wrong here: .dash-panel-head's flex-shrink squeezes it as the title grows
+   (a long one, e.g. "Actual Power Boost", wraps across two lines on its own — expected), and wrap
+   let the 3 edit/duplicate/delete buttons split across rows instead of just staying put while the
+   title next to them does the wrapping. Locked to one line, full natural width, so the title is
+   always the one that gives way, never the buttons. */
+.dash-panel-head .row-actions { flex-wrap: nowrap; flex-shrink: 0; }
+
 /* A group_header panel: a slim full-width divider/section-collapse bar, not a card — rendered as
    a plain block-flow sibling BETWEEN two ".grid-stack" zones (see panel-grid.ejs's render loop),
    never as a grid-stack-item itself, so it's naturally only as tall as its own content with no
@@ -3718,6 +3803,12 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
   transition: opacity 0.2s var(--ease);
 }
 
+/* Set on <body> while the off-canvas mobile sidebar (or its backdrop) is open — see foot.ejs's
+   toggle script. Without it, a touch-drag over either one scrolls the page underneath instead of,
+   or as well as, whatever's on top, since nothing else stops the body itself from scrolling while
+   this panel covers it. */
+body.no-scroll { overflow: hidden; }
+
 @media (max-width: 768px) {
   .mobile-nav-toggle { display: inline-flex; }
 
@@ -3760,4 +3851,16 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
      grid-init script to match this exact breakpoint), the same "stay exactly as saved, only how
      it's PRESENTED changes" behavior the old inline grid-column/grid-row !important override
      used to force by hand against CSS Grid's per-panel inline styles. */
+
+  /* .client-row's fixed `1fr 1fr 6rem 4.5rem 2.4rem` (see its base rule) doesn't shrink the way
+     .form-grid's own auto-fit/minmax columns do — on a narrow screen the two 1fr text inputs get
+     squeezed down to nothing while the ~13rem of fixed-width columns hold their ground, pushing
+     the row wider than the viewport instead of wrapping. Collapsed to one column here instead;
+     the header's column labels no longer line up with anything once that happens, so it's hidden
+     and the HTTPS switch gets its own inline label (the text inputs already carry that meaning
+     via their own placeholders). */
+  .client-rows-header { display: none; }
+  .client-row { grid-template-columns: 1fr; gap: 0.5rem; }
+  .client-row .remove-client-row-btn { justify-self: end; }
+  .client-https-label { display: inline; }
 }

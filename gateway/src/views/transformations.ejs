@@ -9,48 +9,37 @@
 </p>
 
 <h2>MQTT &rarr; Loxone</h2>
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr><th>Topic</th><th>Miniserver</th><th>Target</th><th>Translations</th><th>Actions</th></tr>
-    </thead>
-    <tbody>
-      <% mqttToLoxone.forEach(m => { %>
-        <tr>
-          <td><code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
-          <td><%= m.miniserver_name %></td>
-          <td><%= m.target %></td>
-          <td><%= m.translation_count %></td>
-          <td><a class="inline" href="/mappings/mqtt-to-loxone/<%= m.id %>/translations"><button type="button" class="btn-edit"><%- icon('list') %> Manage</button></a></td>
-        </tr>
-      <% }) %>
-      <% if (mqttToLoxone.length === 0) { %>
-        <tr><td colspan="5" class="empty">No MQTT &rarr; Loxone mappings use a translation table yet.</td></tr>
-      <% } %>
-    </tbody>
-  </table>
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <div class="columns-menu columns-menu-inline" id="tf-m2l-columns-menu">
+      <button type="button" class="btn-soft" id="tf-m2l-columns-btn"><%- icon('columns') %> Columns</button>
+      <div class="columns-menu-panel" id="tf-m2l-columns-panel" hidden></div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div id="tf-m2l-tabulator"></div>
+  </div>
 </div>
 
 <h2>Loxone &rarr; MQTT</h2>
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr><th>Topic</th><th>Miniserver</th><th>Translations</th><th>Actions</th></tr>
-    </thead>
-    <tbody>
-      <% loxoneToMqtt.forEach(m => { %>
-        <tr>
-          <td><code class="truncate" title="<%= m.mqtt_topic %>"><%= m.mqtt_topic %></code></td>
-          <td><%= m.miniserver_name || '-' %></td>
-          <td><%= m.translation_count %></td>
-          <td><a class="inline" href="/mappings/loxone-to-mqtt/<%= m.id %>/translations"><button type="button" class="btn-edit"><%- icon('list') %> Manage</button></a></td>
-        </tr>
-      <% }) %>
-      <% if (loxoneToMqtt.length === 0) { %>
-        <tr><td colspan="4" class="empty">No Loxone &rarr; MQTT mappings use a translation table yet.</td></tr>
-      <% } %>
-    </tbody>
-  </table>
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <div class="columns-menu columns-menu-inline" id="tf-l2m-columns-menu">
+      <button type="button" class="btn-soft" id="tf-l2m-columns-btn"><%- icon('columns') %> Columns</button>
+      <div class="columns-menu-panel" id="tf-l2m-columns-panel" hidden></div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div id="tf-l2m-tabulator"></div>
+  </div>
 </div>
+
+<link rel="stylesheet" href="/vendor/tabulator.min.css">
+<link rel="stylesheet" href="/tabulator-theme.css">
+<script src="/vendor/tabulator.min.js"></script>
+<script src="/vendor/floating-ui.core.umd.min.js"></script>
+<script src="/vendor/floating-ui.dom.umd.min.js"></script>
+<script src="/tabulator-table.js"></script>
+<script src="/transformations-tabulator.js"></script>
 
 <%- include('partials/foot') %>

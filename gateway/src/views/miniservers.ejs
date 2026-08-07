@@ -81,82 +81,48 @@
 <% } %>
 
 <%
-  // jdev/sps/state's own fully-documented 0-8 values (see healthcheck.js's fetchPlcState) —
-  // label + badge color per state, 5 (running) the only "everything's fine" green, 7 (error) the
-  // only red, everything else a neutral in-between/transitional state.
-  const PLC_STATE_LABELS = {
-    '0': ['No status', 'badge-neutral'],
-    '1': ['Booting', 'badge-neutral'],
-    '2': ['Program loaded', 'badge-neutral'],
-    '3': ['Started', 'badge-neutral'],
-    '4': ['Loxone Link started', 'badge-neutral'],
-    '5': ['Running', 'badge-ok'],
-    '6': ['Change in progress', 'badge-neutral'],
-    '7': ['Error', 'badge-off'],
-    '8': ['Update occurring', 'badge-neutral'],
-  };
+  // PILOT: this table is backed by Tabulator (vendor/tabulator.min.js) instead of the plain
+  // <table> + tables.js every other table in this app still uses — see routes/miniservers.js's
+  // own /data.json for why that means a real JSON endpoint feeds it rather than server-rendered
+  // <tr>s. Column resize/reorder/show-hide/fit-to-width are Tabulator's own built-in behavior;
+  // the "Columns" button below reuses the exact same .columns-menu/.columns-menu-panel CSS every
+  // other table's own Columns button already uses, just driven by Tabulator's column API instead
+  // of tables.js. Row drag-reorder (the old .ms-drag-handle/POST /miniservers/reorder) is NOT
+  // reimplemented in this pilot — deliberately out of scope for now, see the chat for why.
 %>
-<%
-  // A plain .table-toolbar (no search bar needed here) — tables.js recognizes this exact class on
-  // .table-wrap's immediately preceding sibling and appends its own Columns button into it
-  // instead of building a second, separately-boxed strip of its own (see that file's own
-  // buildColumnsMenu comment) — same mechanism Client Activity/Monitor/Logs already rely on to
-  // put Columns next to their own toolbar buttons.
-%>
-<div class="table-toolbar">
-  <button type="button" id="ms-collapse-all-btn" class="btn-soft" data-expanded="false" title="Show/hide every Gateway's Client Miniservers at once"><%- icon('sitemap') %> Expand all clients</button>
-</div>
-<div class="table-wrap">
-  <table class="table-compact">
-    <thead>
-      <tr><% if (canEdit('miniservers')) { %><th data-no-controls></th><% } %><th data-no-controls></th><th>Status</th><th>Name</th><th>Gateway Client</th><th>Host</th><th>HTTP port</th><th>HTTPS</th><th data-default-hidden>UDP port</th><th data-default-hidden>External URL</th><th>User</th><th>Last checked</th><th>Actions</th></tr>
-    </thead>
-    <tbody id="miniservers-tbody">
-      <% miniservers.forEach((ms) => { %>
-        <%- include('partials/miniserver-row', { ms, PLC_STATE_LABELS }) %>
-      <% }) %>
-      <% if (miniservers.length === 0) { %>
-        <tr><td colspan="11" class="empty">No miniservers added yet.</td></tr>
-      <% } %>
-    </tbody>
-  </table>
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <button type="button" class="btn-soft" id="ms-collapse-all-btn" hidden></button>
+    <div class="columns-menu columns-menu-inline" id="ms-columns-menu">
+      <button type="button" class="btn-soft" id="ms-columns-btn"><%- icon('columns') %> Columns</button>
+      <div class="columns-menu-panel" id="ms-columns-panel" hidden></div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div id="ms-tabulator"></div>
+  </div>
 </div>
 
-<script>
-  // A Gateway's own "Gateway · N clients" badge (data-toggle-clients="<id>") shows/hides every
-  // Client row (and that Client's own diagnostics row) belonging to it as one group — see
-  // partials/miniserver-row.ejs and style.css's own .ms-client-row comment for why this is a
-  // dedicated .group-visible class rather than reusing the generic single-id [data-toggle-row].
-  (function () {
-    document.addEventListener('click', function (e) {
-      var btn = e.target.closest('[data-toggle-clients]');
-      if (!btn) return;
-      var gatewayId = btn.dataset.toggleClients;
-      var rows = document.querySelectorAll('.ms-client-row[data-gateway-id="' + gatewayId + '"]');
-      var opening = rows.length && !rows[0].classList.contains('group-visible');
-      rows.forEach(function (row) { row.classList.toggle('group-visible', opening); });
-    });
-  })();
-</script>
+<dialog id="ms-diag-dialog" class="update-changelog-dialog ms-diag-dialog-wide">
+  <h2 id="ms-diag-dialog-title">Diagnostics</h2>
+  <div class="ms-diagnostics-card" style="border-width:1px;">
+    <div class="ms-diagnostics" id="ms-diag-dialog-stats"></div>
+  </div>
+  <div class="ms-update-actions" id="ms-diag-dialog-actions"></div>
+  <div class="ms-update-result" id="ms-diag-dialog-result" style="margin-top:0.6rem;"></div>
+  <p class="hint" id="ms-diag-dialog-hint" style="margin-top:0.6rem; margin-bottom:0;"></p>
+  <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
+    <button type="button" class="btn-soft" id="ms-diag-dialog-close">Close</button>
+  </div>
+</dialog>
 
-<script>
-  // Expand/Collapse all Client groups — a single toggle rather than two separate buttons, since
-  // "collapse every group" and "reveal every group" are opposite ends of the exact same state,
-  // never something you'd want simultaneously. Deliberately only the Client-group visibility, not
-  // every diagnostics row too (top-level or per-Client) — those stay exactly whatever state each
-  // one's own chevron already left them in.
-  (function () {
-    var btn = document.getElementById('ms-collapse-all-btn');
-    var tbody = document.getElementById('miniservers-tbody');
-    if (!btn || !tbody) return;
-    btn.addEventListener('click', function () {
-      var expanding = btn.dataset.expanded !== 'true';
-      tbody.querySelectorAll('.ms-client-row').forEach(function (row) { row.classList.toggle('group-visible', expanding); });
-      btn.dataset.expanded = expanding ? 'true' : 'false';
-      btn.innerHTML = '<%- icon('sitemap') %> ' + (expanding ? 'Collapse all clients' : 'Expand all clients');
-    });
-  })();
-</script>
+<link rel="stylesheet" href="/vendor/tabulator.min.css">
+<link rel="stylesheet" href="/tabulator-theme.css">
+<script src="/vendor/tabulator.min.js"></script>
+<script src="/vendor/floating-ui.core.umd.min.js"></script>
+<script src="/vendor/floating-ui.dom.umd.min.js"></script>
+<script src="/tabulator-table.js"></script>
+<script src="/miniservers-tabulator.js"></script>
 
 <script>
   (function () {
@@ -234,9 +200,9 @@
       wrap.innerHTML =
         '<div class="client-row">' +
           '<input type="text" class="client-name" placeholder="e.g. Upstairs">' +
-          '<input type="text" class="client-host">' +
-          '<input type="number" class="client-port" value="80">' +
-          '<label class="switch"><input type="checkbox" class="client-https"><span class="switch-track"><span class="switch-thumb"></span></span></label>' +
+          '<input type="text" class="client-host" placeholder="Host / IP">' +
+          '<input type="number" class="client-port" value="80" placeholder="HTTP port">' +
+          '<span><span class="client-https-label">HTTPS</span><label class="switch"><input type="checkbox" class="client-https"><span class="switch-track"><span class="switch-thumb"></span></span></label></span>' +
           '<button type="button" class="icon-btn icon-btn-danger remove-client-row-btn" title="Remove this Client">' + removeIconSvg + '</button>' +
         '</div>' +
         '<div class="add-ms-client-test-result" style="margin:0.3rem 0 0.5rem;"></div>';
@@ -311,8 +277,11 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.error) { resultEl.textContent = data.error; return; }
-          var levelEl = document.querySelector('[data-ms-update-level-id="' + msId + '"]');
-          if (levelEl && data.updateLevel) levelEl.textContent = data.updateLevel;
+          // Two elements now share this attribute — the main table's own (default-hidden) Update
+          // channel column, and the diagnostics panel's copy — both get the same fresh value.
+          document.querySelectorAll('[data-ms-update-level-id="' + msId + '"]').forEach(function (el) {
+            if (data.updateLevel) el.textContent = data.updateLevel;
+          });
           resultEl.textContent = 'Release channel: ' + (data.updateLevel || 'unknown') + '. Loxone doesn\'t expose a plain "update available" flag over HTTP — open Loxone Config to see if a new release is actually offered.';
           // Unlocks the Update button — see the comment on it in the template for why this is a
           // "you looked before triggering" gate, not a real availability check.

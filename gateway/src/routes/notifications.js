@@ -122,6 +122,11 @@ function buildRuleConfig(triggerType, body) {
     // groups would still both submit and collide on which one "wins" in req.body.
     case 'firmware_changed':
       return { miniserver_id: body.firmware_miniserver_id ? Number(body.firmware_miniserver_id) : null };
+    case 'gateway_client_firmware_mismatch':
+      return {
+        miniserver_id: body.gateway_mismatch_miniserver_id ? Number(body.gateway_mismatch_miniserver_id) : null,
+        severity: SEVERITIES.includes(body.gateway_mismatch_severity) ? body.gateway_mismatch_severity : 'warning',
+      };
     case 'mqtt_client_status':
       return { username: (body.mqtt_username || '').trim() || null };
     case 'battery_weak':

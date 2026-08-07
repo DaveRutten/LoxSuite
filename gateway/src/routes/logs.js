@@ -4,6 +4,16 @@ const { requirePermission } = require('../middleware/requirePermission');
 const { classifyLogLevel } = require('../logLevel');
 const { resolveRange, rangeToWindow } = require('./monitor');
 const mqttClient = require('../mqttClient');
+const { TRIGGER_TYPES } = require('../notifications');
+
+// notification_events.event_type covers every rule-engine trigger type (see TRIGGER_TYPES) PLUS
+// 'threshold_ladder' — the one path that writes here directly, with no rule behind it at all (a
+// ladder rung's own "Notify" checkbox, see thresholdLadder.js/notifications.js's
+// checkThresholdLadderNotify), so it isn't in TRIGGER_TYPES and needs its own label here.
+const NOTIFICATION_CATEGORIES = [...TRIGGER_TYPES, { key: 'threshold_ladder', label: 'Threshold ladder crossed' }];
+function categoryLabel(eventType) {
+  return (NOTIFICATION_CATEGORIES.find((c) => c.key === eventType) || {}).label || eventType;
+}
 
 const router = express.Router();
 
@@ -93,6 +103,7 @@ function parseNotificationFilters(query) {
     from: since,
     to: until,
     severity: ['info', 'warning', 'critical'].includes(query.severity) ? query.severity : '',
+    category: NOTIFICATION_CATEGORIES.some((c) => c.key === query.category) ? query.category : '',
     q: (query.q || '').trim(),
   };
 }
@@ -111,6 +122,7 @@ function queryNotificationEvents(filters) {
     params.push(`%${filters.q}%`, `%${filters.q}%`);
   }
   if (filters.severity) { conditions.push('severity = ?'); params.push(filters.severity); }
+  if (filters.category) { conditions.push('event_type = ?'); params.push(filters.category); }
 
   return db.prepare(
     `SELECT id, event_type AS eventType, severity, title, message, source_label AS sourceLabel,
@@ -239,16 +251,19 @@ router.get('/notifications', requirePermission('logs_notifications', 'view'), (r
   const filters = parseNotificationFilters(req.query);
   const rows = queryNotificationEvents(filters);
   const settings = db.prepare('SELECT notification_retention_days FROM gateway_settings WHERE id = 1').get();
-  res.render('logs-notifications', { rows, query: req.query, range: filters.range, retentionDays: settings.notification_retention_days });
+  res.render('logs-notifications', {
+    rows, query: req.query, range: filters.range, retentionDays: settings.notification_retention_days,
+    categories: NOTIFICATION_CATEGORIES, categoryLabel,
+  });
 });
 
 router.get('/notifications/export.txt', requirePermission('logs_notifications', 'edit'), (req, res) => {
   const rows = db.prepare(
-    'SELECT created_at AS createdAt, severity, title, message, source_label AS sourceLabel FROM notification_events ORDER BY id ASC'
+    'SELECT created_at AS createdAt, event_type AS eventType, severity, title, message, source_label AS sourceLabel FROM notification_events ORDER BY id ASC'
   ).all();
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="notifications.log"');
-  res.send(rows.map((r) => `${r.createdAt}\t${r.severity}\t${r.title}\t${r.message}\t${r.sourceLabel || ''}`).join('\n'));
+  res.send(rows.map((r) => `${r.createdAt}\t${categoryLabel(r.eventType)}\t${r.severity}\t${r.title}\t${r.message}\t${r.sourceLabel || ''}`).join('\n'));
 });
 
 module.exports = router;

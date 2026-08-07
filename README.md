@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.11.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.12.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -297,26 +297,27 @@ password — leave the field blank to keep it, or type a new one to change it.
 
 Sparse or rarely-needed columns (Generation, UDP port, External URL) start hidden and can be
 switched back on from the same **Columns** button every table has (see Other UI features below).
-Drag a row by its handle to reorder Miniservers — this order isn't just cosmetic here: it's the one
-shared, authoritative order every other page that lists Miniservers (Logs, Mappings, Monitor,
-Notifications, Hardware, Live Data, ...) now queries by too, instead of each picking its own.
+Drag any standalone or Gateway row to reorder Miniservers (a Client stays fixed under its own
+Gateway) — this order isn't just cosmetic here: it's the one shared, authoritative order every
+other page that lists Miniservers (Logs, Mappings, Monitor, Notifications, Hardware, Live Data,
+...) now queries by too, instead of each picking its own.
 
-Click the arrow on any row to expand a **diagnostics** panel: PLC run state (Loxone's own
-documented 0–8 values, e.g. "Running"), CPU load, heap usage, task count, firmware date, and
-update channel — all read via a handful of Miniserver HTTP commands that aren't in Loxone's
-official API reference but were individually verified to work on real firmware. **Check for
-update** reads the current release channel (Loxone doesn't expose a plain yes/no "update
-available" flag over HTTP, so this can't tell you for certain whether you're already current) and
-unlocks **Update to latest release**, which sends a real update command — an actual firmware
-update and reboot on that Miniserver, with a confirmation dialog spelling out the consequences.
-**Add to Dashboard** / **Add to Monitor** pin CPU load, heap, and task count as history-tracking
-monitors in one click — the former also adds each as a widget on the shared home Dashboard, the
-latter only starts recording history without pinning anything. All four actions are disabled
-(visible, not clickable) while a Miniserver is offline.
+Open a row's actions menu and pick **Diagnostics** to see PLC run state (Loxone's own documented 0–8
+values, e.g. "Running"), CPU load, heap usage, task count, firmware date, and update channel — all
+read via a handful of Miniserver HTTP commands that aren't in Loxone's official API reference but
+were individually verified to work on real firmware. **Check for update** reads the current
+release channel (Loxone doesn't expose a plain yes/no "update available" flag over HTTP, so this
+can't tell you for certain whether you're already current) and unlocks **Update to latest
+release**, which sends a real update command — an actual firmware update and reboot on that
+Miniserver, with a confirmation dialog spelling out the consequences. **Add to Dashboard** / **Add
+to Monitor** pin CPU load, heap, and task count as history-tracking monitors in one click — the
+former also adds each as a widget on the shared home Dashboard, the latter only starts recording
+history without pinning anything. All four actions are disabled (visible, not clickable) while a
+Miniserver is offline.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/miniservers-diag-dark.png">
-  <img src="docs/screenshots/miniservers-diag-light.png" alt="A Miniserver row expanded to show its diagnostics panel: PLC state, CPU load, heap, task count, firmware date and update channel, with Check for update, Update to latest release, Add to Dashboard and Add to Monitor buttons">
+  <img src="docs/screenshots/miniservers-diag-light.png" alt="A Miniserver's Diagnostics dialog: PLC state, CPU load, heap, task count, firmware date and update channel, with Check for update, Update to latest release, Add to Dashboard and Add to Monitor buttons">
 </picture>
 
 *(Demo data.)*

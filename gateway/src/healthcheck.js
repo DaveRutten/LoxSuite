@@ -1,6 +1,6 @@
 const db = require('./db');
 const { fetchMiniserver, miniserverBaseUrl, insecureAgent } = require('./loxone');
-const { checkMiniserverStatus, checkFirmwareChanged } = require('./notifications');
+const { checkMiniserverStatus, checkFirmwareChanged, checkGatewayClientFirmwareMismatch } = require('./notifications');
 const { decrypt } = require('./secretCrypto');
 const { recordMiniserverDiagValue } = require('./monitorCollector');
 const { parseHeapStatus } = require('./format');
@@ -199,6 +199,10 @@ async function checkMiniserver(miniserver) {
 async function checkAllMiniservers() {
   const miniservers = db.prepare('SELECT * FROM miniservers').all();
   await Promise.all(miniservers.map(checkMiniserver));
+  // After every Miniserver's own row has this cycle's fresh firmware_version/plc_state — needs
+  // the whole set settled first, since it compares pairs across two independent per-Miniserver
+  // checks above rather than reacting to any single one's own result.
+  checkGatewayClientFirmwareMismatch();
 }
 
 // Recursive setTimeout, not setInterval — re-reads gateway_settings.healthcheck_interval_seconds

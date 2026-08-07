@@ -64,40 +64,24 @@ Logged in as <strong><%= username %></strong>
   <h2>Miniservers</h2><%- icon('chevron') %>
 </button>
 <div class="section-body" <%= isCollapsed('home-miniservers') ? 'hidden' : '' %> style="margin-bottom:1.5rem;">
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Status</th><th>Name</th><th>Gateway Client</th><th>Host</th><th>Last successful call</th><th>Last error</th></tr>
-      </thead>
-      <tbody>
-        <% miniservers.forEach(ms => { %>
-          <tr>
-            <td>
-              <% const badgeClass = ms.status === 'online' ? 'badge-ok' : ms.status === 'offline' ? 'badge-off' : 'badge-neutral'; %>
-              <% const badgeText = ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown'; %>
-              <span class="badge badge-live <%= badgeClass %>"><%= badgeText %></span>
-            </td>
-            <td><%= ms.name %></td>
-            <td>
-              <% if (ms.gatewayClientCount > 0) { %>
-                <span class="badge badge-purple" title="Manages <%= ms.gatewayClientCount %> Client Miniserver<%= ms.gatewayClientCount === 1 ? '' : 's' %> that share its merged Loxone Config project">Gateway &middot; <%= ms.gatewayClientCount %> client<%= ms.gatewayClientCount === 1 ? '' : 's' %></span>
-              <% } else if (ms.gatewayClientOfName) { %>
-                <span class="badge badge-purple" title="Shares <%= ms.gatewayClientOfName %>'s own merged Loxone Config project rather than running a separate one of its own">Client &ndash; <%= ms.gatewayClientOfName %></span>
-              <% } else { %>
-                <span class="badge badge-neutral" title="Not part of a Gateway Client group — runs its own separate Loxone Config project">Standalone</span>
-              <% } %>
-            </td>
-            <td><%= ms.host %>:<%= ms.http_port %></td>
-            <td><%= ms.last_success_at ? formatDateTime(ms.last_success_at) : '-' %></td>
-            <td><% if (ms.last_error) { %><span class="truncate" title="<%= ms.last_error %>"><%= ms.last_error %></span><% } else { %>-<% } %></td>
-          </tr>
-        <% }) %>
-        <% if (miniservers.length === 0) { %>
-          <tr><td colspan="6" class="empty">No miniservers added yet. Go to <a href="/miniservers">Miniservers</a>.</td></tr>
-        <% } %>
-      </tbody>
-    </table>
+  <div class="filterable-table-card">
+    <div class="table-toolbar">
+      <div class="columns-menu columns-menu-inline" id="home-ms-columns-menu">
+        <button type="button" class="btn-soft" id="home-ms-columns-btn"><%- icon('columns') %> Columns</button>
+        <div class="columns-menu-panel" id="home-ms-columns-panel" hidden></div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <div id="home-ms-tabulator"></div>
+    </div>
   </div>
+  <link rel="stylesheet" href="/vendor/tabulator.min.css">
+  <link rel="stylesheet" href="/tabulator-theme.css">
+  <script src="/vendor/tabulator.min.js"></script>
+  <script src="/vendor/floating-ui.core.umd.min.js"></script>
+  <script src="/vendor/floating-ui.dom.umd.min.js"></script>
+  <script src="/tabulator-table.js"></script>
+  <script src="/dashboard-miniservers-tabulator.js"></script>
 </div>
 
 <button type="button" class="section-toggle" data-nav-section="home-panels" aria-expanded="<%= isCollapsed('home-panels') ? 'false' : 'true' %>">

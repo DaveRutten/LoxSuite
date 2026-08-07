@@ -47,6 +47,21 @@
     <span class="badge badge-live <%= badgeClass %>"><%= badgeText %></span>
   </td>
   <td>
+    <% const plc = PLC_STATE_LABELS[ms.plc_state]; %>
+    <% if (plc) { %>
+      <span class="badge <%= plc[1] %>" title="Miniserver's own PLC run state (jdev/sps/state), code <%= ms.plc_state %>."><%= plc[0] %></span>
+    <% } else { %>
+      -
+    <% } %>
+  </td>
+  <td><%= ms.firmware_version || '-' %></td>
+  <td <% if (ms.miniserver_type !== null && ms.miniserver_type !== undefined) { %>title="Reported by this Miniserver itself (msInfo.miniserverType)."<% } %>><%= miniserverGenerationLabel(ms.miniserver_type) || '-' %></td>
+  <td><%= ms.cpu_load || '-' %></td>
+  <td title="<%= ms.heap_status || '' %>"><%= formatHeapStatus(ms.heap_status) || '-' %></td>
+  <td><%= ms.num_tasks || '-' %></td>
+  <td><%= ms.firmware_date || '-' %></td>
+  <td data-ms-update-level-id="<%= ms.id %>"><%= ms.update_level || '-' %></td>
+  <td>
     <span class="truncate" style="max-width:220px;" title="<%= ms.name %>"><%= ms.name %></span>
   </td>
   <td>
@@ -82,5 +97,5 @@
   </td>
 </tr>
 <tr class="expand-row<%= isClientRow ? ' ms-client-row' : '' %>" id="ms-diag-<%= ms.id %>"<%- gatewayAttr %>>
-  <td colspan="11"><%- include('miniserver-diagnostics', { ms, PLC_STATE_LABELS }) %></td>
+  <td colspan="21"><%- include('miniserver-diagnostics', { ms, PLC_STATE_LABELS }) %></td>
 </tr>

@@ -310,37 +310,24 @@
   </script>
 </div>
 
-<div class="table-wrap">
-  <table>
-    <thead><tr><th>Created</th><th>Size</th><th>Contents</th><th>Actions</th></tr></thead>
-    <tbody>
-      <% backups.forEach(b => { %>
-        <tr>
-          <td><%= formatDateTime(b.createdAt) %></td>
-          <td><%= (b.size / 1024).toFixed(1) %> KB</td>
-          <td>
-            <span class="badge badge-neutral">gateway.db</span>
-            <% if (b.includesMqttConfig) { %><span class="badge badge-neutral">MQTT config</span><% } %>
-          </td>
-          <td>
-            <div class="row-actions">
-              <a class="inline" href="/admin/backup/<%= b.filename %>/download"><button type="button" class="btn-soft"><%- icon('download') %> Download</button></a>
-              <form class="inline" method="post" action="/admin/backup/<%= b.filename %>/restore" data-confirm="Stage this backup for restore? It replaces the current database next time the gateway container restarts.">
-                <button type="submit" class="primary"><%- icon('upload') %> Restore</button>
-              </form>
-              <form class="inline" method="post" action="/admin/backup/<%= b.filename %>/delete" data-confirm="Delete this backup?">
-                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
-              </form>
-            </div>
-          </td>
-        </tr>
-      <% }) %>
-      <% if (backups.length === 0) { %>
-        <tr><td colspan="4" class="empty">No backups yet &mdash; run one manually above or enable the schedule.</td></tr>
-      <% } %>
-    </tbody>
-  </table>
+<div class="filterable-table-card">
+  <div class="table-toolbar">
+    <div class="columns-menu columns-menu-inline" id="backup-columns-menu">
+      <button type="button" class="btn-soft" id="backup-columns-btn"><%- icon('columns') %> Columns</button>
+      <div class="columns-menu-panel" id="backup-columns-panel" hidden></div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div id="backup-tabulator"></div>
+  </div>
 </div>
+<script type="application/json" id="backup-rows"><%- JSON.stringify(backups.map(b => ({
+  filename: b.filename,
+  createdAt: formatDateTime(b.createdAt),
+  size: b.size,
+  includesMqttConfig: b.includesMqttConfig,
+  reason: b.reason,
+}))) %></script>
 
 <details class="add-panel">
   <summary>Restore from a backup</summary>
@@ -356,5 +343,13 @@
     </form>
   </div>
 </details>
+
+<link rel="stylesheet" href="/vendor/tabulator.min.css">
+<link rel="stylesheet" href="/tabulator-theme.css">
+<script src="/vendor/tabulator.min.js"></script>
+<script src="/vendor/floating-ui.core.umd.min.js"></script>
+<script src="/vendor/floating-ui.dom.umd.min.js"></script>
+<script src="/tabulator-table.js"></script>
+<script src="/admin-backup-tabulator.js"></script>
 
 <%- include('partials/foot') %>

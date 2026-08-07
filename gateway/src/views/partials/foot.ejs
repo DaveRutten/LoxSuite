@@ -387,11 +387,17 @@
     function closeSidebar() {
       sidebar.classList.remove('open');
       backdrop.classList.remove('open');
+      document.body.classList.remove('no-scroll');
     }
 
     toggle.addEventListener('click', function () {
       sidebar.classList.add('open');
       backdrop.classList.add('open');
+      // Without this, a touch-drag over the backdrop (or the sidebar's own now-scrollable nav
+      // list, see .sidebar's overflow-y in style.css) scrolls the PAGE underneath instead of —
+      // or as well as — whatever's on top, since nothing stops the body from still being
+      // scrollable while this off-canvas panel covers it.
+      document.body.classList.add('no-scroll');
     });
     backdrop.addEventListener('click', closeSidebar);
     // A nav link tap navigates immediately (full page load), so there's no visible close

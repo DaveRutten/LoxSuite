@@ -15,30 +15,96 @@
 // foot.ejs's own value-mapping-builder script is a separate <script> block from this file, loaded
 // afterward — see panel-grid.ejs/monitor-detail.ejs's own <script src> order for why this file's
 // top-level code is guaranteed to have already run by the time that one calls in.
-// Pointer-based (mousedown/move/up), not native HTML5 drag-and-drop — tried native drag first
-// (draggable=true + dragstart/dragover/drop + an explicit small setDragImage to avoid the
-// browser's own oversized default ghost) but a translucent-layer rendering artifact still showed
-// during the drag regardless, almost certainly Chromium flattening the whole position:fixed
-// .panel-settings-form drawer into a compositing layer for the drag operation because of its own
-// CSS transform (the same mechanism that drawer's slide-in animation uses). A plain pointer-driven
-// reorder — the same technique the panel-resize-handle elsewhere in this app already uses — never
-// starts a native drag operation at all, so that whole rendering path never gets involved.
 //
-// A GridStack-based rewrite of this (reusing the same engine as the dashboard panel grid) was
-// tried and reverted — dragging never reliably registered via dragHandle scoping inside the
-// .panel-settings-form drawer's own fixed-position/transformed layout, and a failed drag left the
-// grid's internal state inconsistent enough to also break the color picker and delete on the SAME
-// row afterward. This hand-rolled version has none of that: it never asks GridStack to track
-// anything happening inside a drawer at all.
+// Two implementations behind the same attachRow/removeRow API, picked by opts.dropIndicator:
+//  - The plain row lists (threshold/annotation/value-mapping — this file's own three builders
+//    below, plus foot.ejs's value-mapping-builder) now use SortableJS (vendor/sortable.min.js,
+//    already vendored for an earlier Miniservers pilot — reverted THERE only because Tabulator's
+//    own internal mousedown handlers ate the event before Sortable's own listener ever saw it, see
+//    miniservers-tabulator.js's own comment; nothing here is inside a Tabulator table, so that
+//    conflict doesn't apply). See attachRowSortable below for why forceFallback:true and
+//    body.lox-row-reordering are still both needed despite switching libraries.
+//  - The dashboard group-reorder (panel-grid.ejs, opts.dropIndicator:true — whole variable-height
+//    GROUP units, each hosting its own nested GridStack grid) stays on the original hand-rolled
+//    pointer-drag below (attachRowLegacy) unchanged. That's the one consumer a from-scratch
+//    GridStack-based rewrite already proved fragile against (dragging never reliably registered,
+//    and a failed drag left GridStack's own internal state inconsistent enough to also break the
+//    color picker and delete on the SAME row) — not something to risk a second library swap on
+//    when it's never actually had a reported bug of its own, and the live drop-zone box it uses has
+//    no equivalent built into the SortableJS path.
 window.LoxRowReorder = (function () {
   var GRIP_SVG = '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></svg>';
 
-  // Call once per newly-built row, right after it's appended to its own container. opts.handle
-  // lets a caller supply its OWN pre-existing element as the drag trigger (e.g. a dashboard
-  // group's header bar already has its own grip icon in a specific spot) instead of always
-  // getting a freshly-created, auto-prepended one — every existing caller omits it and gets the
-  // original behavior unchanged.
-  function attachRow(row, container, onReorder, opts) {
+  // SortableJS path — see the shared drag-to-reorder comment above. Only ONE Sortable instance is
+  // ever created per container (guarded by dataset.loxSortableInit), the first time a row is added
+  // to it; every later row just needs its own grip handle, since Sortable's own `handle` option is
+  // a CSS selector matched fresh at drag-time against whatever's currently inside the container —
+  // one shared class covers every row already/still-to-be added, no per-row Sortable API calls
+  // needed. onReorder is likewise only captured once, from the container's first row — every
+  // existing caller passes a fresh-but-functionally-identical closure per row (it always just
+  // re-serializes the container's current DOM order), so reusing the first one is safe.
+  function attachRowSortable(row, container, onReorder) {
+    var handle = document.createElement('span');
+    handle.className = 'row-drag-handle';
+    handle.title = 'Drag to reorder';
+    handle.innerHTML = GRIP_SVG;
+    handle.setAttribute('draggable', 'false'); // belt-and-suspenders, see attachRowLegacy's own note on native drag
+    row.insertBefore(handle, row.firstChild);
+
+    if (container.dataset.loxSortableInit) return;
+    container.dataset.loxSortableInit = '1';
+    Sortable.create(container, {
+      handle: '.row-drag-handle',
+      animation: 150,
+      // Keeps this off NATIVE HTML5 drag-and-drop specifically — a native drag starting anywhere
+      // inside this same .panel-settings-form drawer is exactly what caused the "see-through
+      // drawer" compositing glitch documented on attachRowLegacy below (Chromium flattening the
+      // drawer's own position:fixed + CSS-transform box into its own layer for the drag). Sortable's
+      // fallback mode drives the drag with plain mouse/touch events instead, so that browser
+      // mechanism never gets involved — the same reason the original hand-rolled version avoided
+      // native drag entirely.
+      forceFallback: true,
+      // Reuses the existing "lifted" look (style.css) already built for this exact row-dragging
+      // state, so switching engines doesn't change how a drag actually looks.
+      chosenClass: 'row-dragging',
+      // Same body-level class the legacy path below still toggles for its own drag, and the SAME
+      // CSS rule it exists for (style.css: body.lox-row-reordering .panel-settings-form.open —
+      // strips the drawer's transform for the drag's duration, pulling it out of its own
+      // compositing layer). That fix is about the drawer's own transform, not about which code is
+      // doing the reordering — Sortable's live DOM-reflow-during-drag is a different mechanism than
+      // the legacy path's defer-until-drop approach, so this isn't assumed to be automatically
+      // immune to the same glitch just because it's a different library; toggled here for the same
+      // protection regardless.
+      onStart: function () { document.body.classList.add('lox-row-reordering'); },
+      onEnd: function () {
+        document.body.classList.remove('lox-row-reordering');
+        onReorder();
+      },
+    });
+  }
+
+  // Legacy hand-rolled pointer-drag — kept only for the dashboard group-reorder consumer
+  // (opts.dropIndicator:true, see the shared comment above for why). Call once per newly-built
+  // row, right after it's appended to its own container. opts.handle lets a caller supply its OWN
+  // pre-existing element as the drag trigger (e.g. a dashboard group's header bar already has its
+  // own grip icon in a specific spot) instead of always getting a freshly-created, auto-prepended
+  // one.
+  // Pointer-based (mousedown/move/up), not native HTML5 drag-and-drop — tried native drag first
+  // (draggable=true + dragstart/dragover/drop + an explicit small setDragImage to avoid the
+  // browser's own oversized default ghost) but a translucent-layer rendering artifact still showed
+  // during the drag regardless, almost certainly Chromium flattening the whole position:fixed
+  // .panel-settings-form drawer into a compositing layer for the drag operation because of its own
+  // CSS transform (the same mechanism that drawer's slide-in animation uses). A plain pointer-driven
+  // reorder — the same technique the panel-resize-handle elsewhere in this app already uses — never
+  // starts a native drag operation at all, so that whole rendering path never gets involved.
+  //
+  // A GridStack-based rewrite of this (reusing the same engine as the dashboard panel grid) was
+  // tried and reverted — dragging never reliably registered via dragHandle scoping inside the
+  // .panel-settings-form drawer's own fixed-position/transformed layout, and a failed drag left the
+  // grid's internal state inconsistent enough to also break the color picker and delete on the SAME
+  // row afterward. This hand-rolled version has none of that: it never asks GridStack to track
+  // anything happening inside a drawer at all.
+  function attachRowLegacy(row, container, onReorder, opts) {
     var handle = opts && opts.handle;
     if (!handle) {
       handle = document.createElement('span');
@@ -201,10 +267,17 @@ window.LoxRowReorder = (function () {
     });
   }
 
-  // The counterpart to attachRow — a plain row.remove() covers this hand-rolled version's own
-  // needs entirely (no wrapper shell to clean up the way the reverted GridStack version needed),
-  // kept as its own named function anyway so the two callers (threshold/annotation builders here,
-  // value-mapping in foot.ejs) don't need to know which implementation is behind it.
+  // Public entry point — dispatches to whichever implementation opts.dropIndicator calls for (see
+  // the shared comment at the top of this module).
+  function attachRow(row, container, onReorder, opts) {
+    if (opts && opts.dropIndicator) attachRowLegacy(row, container, onReorder, opts);
+    else attachRowSortable(row, container, onReorder);
+  }
+
+  // The counterpart to attachRow — a plain row.remove() covers both implementations' own needs
+  // entirely (Sortable operates on live DOM queries, no per-row unregistration needed; the legacy
+  // path never had a wrapper shell to clean up either), kept as its own named function anyway so
+  // callers don't need to know which implementation is behind it.
   function removeRow(row) {
     row.remove();
   }

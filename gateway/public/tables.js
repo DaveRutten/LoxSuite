@@ -331,61 +331,67 @@
       });
     }
 
+    // Opens downward by default; a short table (few rows, e.g. right after creating one) can
+    // leave less room below the button than this panel actually needs, running the bottom of
+    // the checkbox list off the page instead of just scrolling it into view like a taller
+    // table's page would. Flips to open upward whenever there's more room above the button
+    // than below it and the panel doesn't actually fit in what's below — measured fresh on
+    // every call since the viewport (and how many columns/rows exist) can change between opens,
+    // and this same function also re-runs on scroll/resize while the panel stays open (see below).
+    function reposition() {
+      panel.style.maxHeight = ''; // clear any previous cap before measuring this open's natural height
+      var buttonRect = button.getBoundingClientRect();
+      var panelHeight = panel.getBoundingClientRect().height;
+      var spaceBelow = window.innerHeight - buttonRect.bottom;
+      var spaceAbove = buttonRect.top;
+      var flipUp = panelHeight > spaceBelow && spaceAbove > spaceBelow;
+      panel.classList.toggle('columns-menu-panel-flip-up', flipUp);
+
+      // position:fixed (see .columns-menu-panel's own comment for why) has no positioned
+      // ancestor to anchor a CSS top/right percentage against any more — set viewport-relative
+      // coordinates here instead, right-aligned to the button's own right edge either way, with
+      // only top vs. bottom flipping between the two open directions.
+      panel.style.left = 'auto';
+      panel.style.right = (window.innerWidth - buttonRect.right) + 'px';
+      if (flipUp) {
+        panel.style.top = 'auto';
+        panel.style.bottom = (window.innerHeight - buttonRect.top + 6) + 'px';
+      } else {
+        panel.style.top = (buttonRect.bottom + 6) + 'px';
+        panel.style.bottom = 'auto';
+      }
+
+      // A flat 70vh (the CSS default, see .columns-menu-panel) assumes the button sits roughly
+      // mid-viewport — near the TOP of a long page (this toolbar, right under the page header)
+      // there's nowhere near that much room below before hitting the viewport edge, on either
+      // side. Capping to whatever's actually available in the direction it just opened toward
+      // (with a little breathing room, and a sane floor so it's never squashed to nothing) is
+      // what actually keeps every option reachable via the panel's own scroll instead of running
+      // off the visible page.
+      var available = (flipUp ? spaceAbove : spaceBelow) - 12;
+      panel.style.maxHeight = Math.max(120, Math.min(available, window.innerHeight * 0.7)) + 'px';
+    }
+
     button.addEventListener('click', function (e) {
       e.stopPropagation();
       var wasHidden = panel.hidden;
       panel.hidden = !wasHidden;
-      if (wasHidden) {
-        // Opens downward by default; a short table (few rows, e.g. right after creating one) can
-        // leave less room below the button than this panel actually needs, running the bottom of
-        // the checkbox list off the page instead of just scrolling it into view like a taller
-        // table's page would. Flips to open upward whenever there's more room above the button
-        // than below it and the panel doesn't actually fit in what's below — measured fresh on
-        // every open since the viewport (and how many columns/rows exist) can change between opens.
-        panel.style.maxHeight = ''; // clear any previous cap before measuring this open's natural height
-        var buttonRect = button.getBoundingClientRect();
-        var panelHeight = panel.getBoundingClientRect().height;
-        var spaceBelow = window.innerHeight - buttonRect.bottom;
-        var spaceAbove = buttonRect.top;
-        var flipUp = panelHeight > spaceBelow && spaceAbove > spaceBelow;
-        panel.classList.toggle('columns-menu-panel-flip-up', flipUp);
-
-        // position:fixed (see .columns-menu-panel's own comment for why) has no positioned
-        // ancestor to anchor a CSS top/right percentage against any more — set viewport-relative
-        // coordinates here instead, right-aligned to the button's own right edge either way, with
-        // only top vs. bottom flipping between the two open directions.
-        panel.style.left = 'auto';
-        panel.style.right = (window.innerWidth - buttonRect.right) + 'px';
-        if (flipUp) {
-          panel.style.top = 'auto';
-          panel.style.bottom = (window.innerHeight - buttonRect.top + 6) + 'px';
-        } else {
-          panel.style.top = (buttonRect.bottom + 6) + 'px';
-          panel.style.bottom = 'auto';
-        }
-
-        // A flat 70vh (the CSS default, see .columns-menu-panel) assumes the button sits roughly
-        // mid-viewport — near the TOP of a long page (this toolbar, right under the page header)
-        // there's nowhere near that much room below before hitting the viewport edge, on either
-        // side. Capping to whatever's actually available in the direction it just opened toward
-        // (with a little breathing room, and a sane floor so it's never squashed to nothing) is
-        // what actually keeps every option reachable via the panel's own scroll instead of running
-        // off the visible page.
-        var available = (flipUp ? spaceAbove : spaceBelow) - 12;
-        panel.style.maxHeight = Math.max(120, Math.min(available, window.innerHeight * 0.7)) + 'px';
-      }
+      if (wasHidden) reposition();
     });
     document.addEventListener('click', function () { panel.hidden = true; });
-    // Fixed positioning no longer scrolls together with the button/table beneath it the way the
-    // old absolute-inside-a-positioned-ancestor panel did — without this, scrolling the page while
-    // the menu is open leaves it visually stranded, floating over whatever content scrolled up
-    // underneath it instead of tracking the button it belongs to. Excludes scrolls that originate
-    // from the panel's own checkbox list (its overflow-y:auto, see .columns-menu-panel) — otherwise
-    // scrolling through a long column list to find one to toggle would close the menu on itself.
+    // Recomputes rather than closing on scroll (including the panel's own checkbox list's own
+    // overflow-y:auto scroll, caught here via the capture phase along with everything else, and
+    // deliberately NOT skipped — repositioning is a no-op if the button hasn't moved, so there's no
+    // real cost to re-running it) — position:fixed doesn't move with the page on its own, so
+    // without this the panel visually detaches from the button the moment the page scrolls at all,
+    // which read as the menu unexpectedly "springing away" mid-use rather than closing gracefully.
     window.addEventListener('scroll', function (e) {
-      if (e.target === panel) return;
-      panel.hidden = true;
+      if (panel.hidden || e.target === panel) return;
+      reposition();
     }, true);
+    window.addEventListener('resize', function () {
+      if (!panel.hidden) reposition();
+    });
 
     container.appendChild(panel);
     if (existingToolbar) existingToolbar.appendChild(container);
@@ -486,13 +492,7 @@
 
       document.body.appendChild(panel);
 
-      toggle.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var wasHidden = panel.hidden;
-        // Only one of these open at a time, same as a native context menu.
-        document.querySelectorAll('.row-actions-popover').forEach(function (p) { if (p !== panel) p.hidden = true; });
-        panel.hidden = !wasHidden;
-        if (panel.hidden) return;
+      function reposition() {
         panel.style.maxHeight = '';
         var rect = toggle.getBoundingClientRect();
         var panelHeight = panel.getBoundingClientRect().height;
@@ -510,6 +510,16 @@
         }
         var available = (flipUp ? spaceAbove : spaceBelow) - 12;
         panel.style.maxHeight = Math.max(120, Math.min(available, window.innerHeight * 0.7)) + 'px';
+      }
+
+      toggle.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var wasHidden = panel.hidden;
+        // Only one of these open at a time, same as a native context menu.
+        document.querySelectorAll('.row-actions-popover').forEach(function (p) { if (p !== panel) p.hidden = true; });
+        panel.hidden = !wasHidden;
+        if (panel.hidden) return;
+        reposition();
       });
       // NOT a blanket panel.addEventListener('click', stopPropagation) — that would also stop the
       // click from ever reaching OTHER document-level delegated handlers a moved action button
@@ -521,12 +531,17 @@
         if (panel.contains(e.target)) return;
         panel.hidden = true;
       });
-      // Same "don't close on the panel's own scroll" exclusion as buildColumnsMenu's own panel —
-      // wrapping (multiple buttons on a narrow popover) can make this one tall enough to scroll.
+      // Recomputes rather than closing on scroll (same reasoning as buildColumnsMenu's own panel
+      // above) — still skips the panel's own internal overflow-y:auto scroll (wrapping onto
+      // several buttons can make this one tall enough to need it), since repositioning would be a
+      // pointless no-op there anyway (the toggle button hasn't moved).
       window.addEventListener('scroll', function (e) {
-        if (e.target === panel || panel.contains(e.target)) return;
-        panel.hidden = true;
+        if (panel.hidden || e.target === panel || panel.contains(e.target)) return;
+        reposition();
       }, true);
+      window.addEventListener('resize', function () {
+        if (!panel.hidden) reposition();
+      });
     });
   }
 
