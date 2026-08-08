@@ -1,20 +1,23 @@
 #!/usr/bin/env node
-// One-time SQLite -> Postgres data transfer CLI — the thing that makes Postgres support actually
-// usable to an existing user, not just to a brand-new install (see the project's own db-backend
-// plan, Phase 4b: "without this, Postgres support is unusable to every existing user").
+// One-time SQLite -> Postgres/MySQL data transfer CLI — the thing that makes an external-database
+// backend actually usable to an existing user, not just to a brand-new install (see the project's
+// own db-backend plan, Phase 4b: "without this, Postgres support is unusable to every existing
+// user" — the same reasoning applies to Phase 5's MySQL/MariaDB support).
 //
 // Usage (matches the plan's own example):
 //   node src/db/transfer.js --from-sqlite /data/gateway.db --to "postgres://user:pass@host:5432/db" [options]
+//   node src/db/transfer.js --from-sqlite /data/gateway.db --to "mysql://user:pass@host:3306/db" --backend mysql [options]
 //
 // Options:
 //   --from-sqlite <path>   Source SQLite file. Falls back to DB_PATH / .env if omitted.
-//   --to <url>             Target Postgres DATABASE_URL. Falls back to DATABASE_URL / .env if omitted.
+//   --to <url>             Target DATABASE_URL. Falls back to DATABASE_URL / .env if omitted.
+//   --backend <name>       Target backend: "postgres" (default) or "mysql".
 //   --dry-run              Report what WOULD happen (row counts, orphan scan) without touching the
 //                          target at all — no connection to it is even required to be reachable yet.
-//   --prune-orphans        Skip rows that would violate a foreign key Postgres enforces unconditionally
-//                          but SQLite never has (see db/migrations/001_baseline.js's own comment on
-//                          this). Without this flag, ANY orphan found aborts the transfer — silently
-//                          dropping someone's data is never the default.
+//   --prune-orphans        Skip rows that would violate a foreign key the target backend enforces
+//                          unconditionally but SQLite never has (see db/migrations/001_baseline.js's
+//                          own comment on this). Without this flag, ANY orphan found aborts the
+//                          transfer — silently dropping someone's data is never the default.
 //   --force                Required if the target already has non-default data in it (see
 //                          assertTargetIsBlank below) — this tool overwrites, not merges.
 //
@@ -124,12 +127,15 @@ const FOREIGN_KEYS = [
 // driver/parameter limits, memory). Arbitrary but generous middle ground.
 const BATCH_SIZE = 500;
 
+const TARGET_BACKENDS = ['postgres', 'mysql'];
+
 function parseArgs(argv) {
-  const args = { dryRun: false, pruneOrphans: false, force: false };
+  const args = { dryRun: false, pruneOrphans: false, force: false, backend: 'postgres' };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--from-sqlite') args.fromSqlite = argv[++i];
     else if (arg === '--to') args.to = argv[++i];
+    else if (arg === '--backend') args.backend = argv[++i];
     else if (arg === '--dry-run') args.dryRun = true;
     else if (arg === '--prune-orphans') args.pruneOrphans = true;
     else if (arg === '--force') args.force = true;
@@ -139,22 +145,27 @@ function parseArgs(argv) {
       process.exit(1);
     }
   }
+  if (!TARGET_BACKENDS.includes(args.backend)) {
+    console.error(`--backend must be one of ${TARGET_BACKENDS.map((b) => `"${b}"`).join(', ')} — got "${args.backend}".`);
+    process.exit(1);
+  }
   return args;
 }
 
 function printHelp() {
   console.log(`
-SQLite -> Postgres data transfer
+SQLite -> Postgres/MySQL data transfer
 
 Usage:
-  node src/db/transfer.js --from-sqlite <path> --to <postgres-url> [--dry-run] [--prune-orphans] [--force]
+  node src/db/transfer.js --from-sqlite <path> --to <url> [--backend postgres|mysql] [--dry-run] [--prune-orphans] [--force]
 
 Options:
   --from-sqlite <path>   Source SQLite file (default: DB_PATH from the environment)
-  --to <url>             Target Postgres DATABASE_URL (default: DATABASE_URL from the environment)
+  --to <url>             Target DATABASE_URL (default: DATABASE_URL from the environment)
+  --backend <name>       Target backend: "postgres" (default) or "mysql"
   --dry-run              Report row counts and orphan-row findings; touches only the source
-  --prune-orphans        Skip rows that would violate a Postgres-enforced foreign key instead of
-                          aborting the transfer when any are found
+  --prune-orphans        Skip rows that would violate a foreign key the target backend enforces
+                          instead of aborting the transfer when any are found
   --force                Proceed even though the target already has non-default data in it
   --help                 Show this message
 `);
@@ -205,25 +216,39 @@ function rowViolatesAnyFk(table, row, idSets) {
 // Refuses to silently overwrite a target that already looks "lived in" — the migration's own
 // seedFreshInstall() always creates exactly 2 access_roles (Administrator/Viewer) and 1
 // custom_dashboards row (the shared home Dashboard) on a truly fresh install; more than that means
-// someone has actually used this Postgres database already. --force overrides (e.g. re-running a
-// transfer deliberately, onto a target already migrated by a previous attempt of this same tool).
-async function assertTargetIsBlank(targetKnex, force) {
+// someone has actually used this database already. --force overrides (e.g. re-running a transfer
+// deliberately, onto a target already migrated by a previous attempt of this same tool).
+async function assertTargetIsBlank(targetKnex, force, backendLabel) {
   const [{ count: roleCount }] = await targetKnex('access_roles').count({ count: '*' });
   const [{ count: userCount }] = await targetKnex('users').count({ count: '*' });
   const looksUsed = Number(roleCount) > 2 || Number(userCount) > 0;
   if (looksUsed && !force) {
     throw new Error(
-      'The target Postgres database already has non-default data in it (more than the default ' +
-      'Administrator/Viewer roles, or an existing user). Refusing to overwrite it — pass --force if ' +
-      'this is intentional (e.g. re-running a previous transfer attempt).'
+      `The target ${backendLabel} database already has non-default data in it (more than the ` +
+      'default Administrator/Viewer roles, or an existing user). Refusing to overwrite it — pass ' +
+      '--force if this is intentional (e.g. re-running a previous transfer attempt).'
     );
   }
 }
 
-async function truncateAllTables(targetKnex) {
-  // TRUNCATE ... RESTART IDENTITY CASCADE in one statement per table: RESTART IDENTITY resets every
-  // serial sequence back to 1 (harmless no-op on the singleton/join tables that don't have one),
-  // CASCADE follows FKs so table order doesn't matter here the way it does for the inserts below.
+// TRUNCATE's own FK-safety story genuinely differs per backend: Postgres's TRUNCATE ... CASCADE
+// follows foreign keys itself, so table order doesn't matter. MySQL/MariaDB's plain TRUNCATE
+// refuses outright to touch a table any OTHER table's foreign key points at — CASCADE isn't a
+// TRUNCATE option there at all — so foreign_key_checks is disabled for the duration instead (the
+// same approach mysqldump's own generated restore scripts use), truncating in any order and
+// re-enabling checks afterward. RESTART IDENTITY (Postgres) resets every serial sequence back to 1
+// as part of the same statement; MySQL's AUTO_INCREMENT resets to 1 on TRUNCATE automatically, no
+// separate clause needed.
+async function truncateAllTables(targetKnex, backend) {
+  if (backend === 'mysql') {
+    await targetKnex.raw('SET FOREIGN_KEY_CHECKS = 0');
+    try {
+      for (const table of TABLES) await targetKnex.raw('TRUNCATE TABLE ??', [table.name]);
+    } finally {
+      await targetKnex.raw('SET FOREIGN_KEY_CHECKS = 1');
+    }
+    return;
+  }
   for (const table of TABLES) {
     await targetKnex.raw(`TRUNCATE TABLE ?? RESTART IDENTITY CASCADE`, [table.name]);
   }
@@ -262,15 +287,26 @@ async function copyTable(sourceKnex, targetKnex, table, idSets) {
 
 // The step the plan's own risk-ranking explicitly calls out as easy to miss: rows were just inserted
 // WITH explicit ids (preserving the source's own primary keys, so every FK reference elsewhere stays
-// correct), which never touches a SERIAL column's sequence — the sequence only advances on inserts
-// that let Postgres pick the id. Left alone, the very first ordinary app-level insert after this
-// transfer (which does NOT specify an id) starts back at 1 and collides with a row this transfer
-// just created. `pg_get_serial_sequence` finds the sequence Postgres actually attached to this
-// column (rather than assuming a naming convention), and `setval(..., MAX(id), true)` advances it to
-// start handing out MAX(id)+1 next; the `COALESCE(MAX(id), 1)` + `false` fallback for an empty table
-// avoids advancing an unused sequence at all (setval's own "is_called" argument).
-async function resetSequences(targetKnex) {
+// correct), which never touches an auto-increment column's own counter — that counter only advances
+// on inserts that let the DB pick the id. Left alone, the very first ordinary app-level insert after
+// this transfer (which does NOT specify an id) starts back at 1 and collides with a row this
+// transfer just created. Postgres and MySQL/MariaDB track this counter completely differently, so
+// the fix is backend-specific: Postgres's `pg_get_serial_sequence` finds the sequence actually
+// attached to this column (rather than assuming a naming convention), and `setval(..., MAX(id),
+// true)` advances it to start handing out MAX(id)+1 next — the `COALESCE(MAX(id), 1)` + `false`
+// fallback for an empty table avoids advancing an unused sequence at all (setval's own "is_called"
+// argument). MySQL/MariaDB has no separate sequence object at all — AUTO_INCREMENT is a per-table
+// property set directly via `ALTER TABLE ... AUTO_INCREMENT = N`, where N is the NEXT value to hand
+// out (MAX(id)+1, not MAX(id) itself — no "is_called" equivalent needed; an empty table's
+// AUTO_INCREMENT is already 1 immediately after TRUNCATE, so this only needs to run when there's
+// actually a MAX(id) to advance past).
+async function resetSequences(targetKnex, backend) {
   for (const table of TABLES.filter((t) => t.hasSerialId)) {
+    if (backend === 'mysql') {
+      const [{ maxId }] = await targetKnex(table.name).max({ maxId: 'id' });
+      if (maxId !== null) await targetKnex.raw('ALTER TABLE ?? AUTO_INCREMENT = ?', [table.name, maxId + 1]);
+      continue;
+    }
     await targetKnex.raw(
       `SELECT setval(pg_get_serial_sequence(?, 'id'), COALESCE((SELECT MAX(id) FROM ??), 1), (SELECT MAX(id) FROM ??) IS NOT NULL)`,
       [table.name, table.name, table.name]
@@ -298,15 +334,15 @@ async function main() {
   // Reuses db/config.js's own validation (unknown scheme, missing host/db, bad DB_SSL, ...) instead
   // of re-implementing it — --to just overrides DATABASE_URL for the duration of this process before
   // calling the same resolveDbConfig() the server itself boots with, and forces the backend to
-  // postgres regardless of whatever DB_BACKEND happens to already be set to (this tool's whole job
-  // is producing a postgres target; a stray DB_BACKEND=sqlite left in the environment shouldn't
-  // silently make it validate the wrong thing).
+  // whatever --backend says regardless of whatever DB_BACKEND happens to already be set to (this
+  // tool's whole job is producing that target; a stray DB_BACKEND=sqlite left in the environment
+  // shouldn't silently make it validate the wrong thing).
   if (args.to) process.env.DATABASE_URL = args.to;
-  process.env.DB_BACKEND = 'postgres';
+  process.env.DB_BACKEND = args.backend;
   const targetConfig = resolveDbConfig();
 
   console.log(`Source (SQLite): ${fromSqlitePath}`);
-  console.log(`Target (Postgres): ${describeConfig(targetConfig)}`);
+  console.log(`Target (${args.backend}): ${describeConfig(targetConfig)}`);
   if (args.dryRun) console.log('DRY RUN — the target will not be touched.');
   console.log('');
 
@@ -365,10 +401,10 @@ async function main() {
     // access_roles/users table to even query yet; migrate.latest() creates them (seeded with the
     // same default rows every fresh install gets) and is a no-op if the schema's already there.
     await targetKnex.migrate.latest();
-    await assertTargetIsBlank(targetKnex, args.force);
+    await assertTargetIsBlank(targetKnex, args.force, args.backend);
 
     console.log('Clearing default-seeded data from the target so the source data replaces it...');
-    await truncateAllTables(targetKnex);
+    await truncateAllTables(targetKnex, args.backend);
 
     console.log('');
     console.log('Copying tables...');
@@ -380,8 +416,8 @@ async function main() {
     }
 
     console.log('');
-    console.log('Resetting Postgres sequences past the highest transferred id...');
-    await resetSequences(targetKnex);
+    console.log(args.backend === 'mysql' ? 'Resetting AUTO_INCREMENT counters past the highest transferred id...' : 'Resetting Postgres sequences past the highest transferred id...');
+    await resetSequences(targetKnex, args.backend);
 
     console.log('');
     console.log('Verifying row counts on target...');
@@ -397,10 +433,10 @@ async function main() {
     console.log('');
     if (mismatch) {
       console.log('Transfer finished with row-count mismatches — see above. Do not switch DB_BACKEND to');
-      console.log('postgres for the running app until this is investigated.');
+      console.log(`${args.backend} for the running app until this is investigated.`);
       process.exitCode = 1;
     } else {
-      console.log('Transfer complete. Set DB_BACKEND=postgres (and DATABASE_URL/DB_* as used above) and');
+      console.log(`Transfer complete. Set DB_BACKEND=${args.backend} (and DATABASE_URL/DB_* as used above) and`);
       console.log('restart LoxSuite to switch over.');
     }
   } finally {

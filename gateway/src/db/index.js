@@ -50,11 +50,16 @@ async function execTimed(executor, sql, params) {
 }
 
 // Normalizes each driver's own raw response shape into a plain row array. SQLite (via Knex's
-// better-sqlite3 dialect): a SELECT's raw() result IS already a plain array. Postgres (`pg`): the
-// raw driver result object, rows under `.rows` — both verified directly against the installed
-// driver, not assumed (see the project's own db-backend plan, Phase 4). MySQL's own `raw[0]` shape
-// lands here in Phase 5.
+// better-sqlite3 dialect): a SELECT's raw() result IS already a plain array of row objects.
+// Postgres (`pg`): the raw driver result object, rows under `.rows`. MySQL/MariaDB (`mysql2`): raw()
+// always returns a 2-element `[rowsOrResultHeader, fieldsMetaOrNull]` tuple — for a SELECT,
+// element 0 is itself the rows array (checked via Array.isArray so this never collides with
+// SQLite's own bare-rows-array shape, whose first element is always a plain row object, never an
+// array). All three verified directly against the installed driver, not assumed (see the project's
+// own db-backend plan, Phases 4/5). This is only ever fed a SELECT's raw() result in practice —
+// makeStatement's own .all()/.get() are for SELECT, .run() (below) handles INSERT/UPDATE/DELETE.
 function normalizeRows(raw) {
+  if (Array.isArray(raw) && raw.length === 2 && Array.isArray(raw[0])) return raw[0];
   if (Array.isArray(raw)) return raw;
   if (raw && Array.isArray(raw.rows)) return raw.rows;
   return [];
@@ -64,11 +69,16 @@ function normalizeRows(raw) {
 // Knex's better-sqlite3 dialect): raw() already returns better-sqlite3's own { changes,
 // lastInsertRowid } object directly. Postgres has no lastInsertRowid concept at all (needs
 // `RETURNING id`, see insertReturningId below) and counts affected rows as `.rowCount` instead of
-// `.changes` — lastInsertRowid stays `undefined` there; every real call site that needs an id uses
-// insertReturningId()/tx.insertReturningId() instead (enforced by test/sqlDialect.test.js's own
-// source scan, so nothing in application code actually reads this field for a Postgres-backed
-// install). MySQL's `result.insertId` shape lands here in Phase 5.
+// `.changes` — lastInsertRowid stays `undefined` there. MySQL/MariaDB's raw() returns
+// `[ResultSetHeader, null]` for INSERT/UPDATE/DELETE — affected rows live at `[0].affectedRows`;
+// lastInsertRowid stays `undefined` here too (MySQL has no RETURNING at all, MariaDB only ≥10.5 —
+// don't rely on it) — every real call site that needs an id uses insertReturningId()/
+// tx.insertReturningId() instead (enforced by test/sqlDialect.test.js's own source scan, so nothing
+// in application code actually reads this field on any backend).
 function normalizeWriteResult(raw) {
+  if (Array.isArray(raw) && raw.length === 2 && raw[0] && typeof raw[0].affectedRows === 'number') {
+    return { changes: raw[0].affectedRows, lastInsertRowid: undefined };
+  }
   if (raw && typeof raw.rowCount === 'number') return { changes: raw.rowCount, lastInsertRowid: undefined };
   return { changes: raw.changes, lastInsertRowid: raw.lastInsertRowid };
 }
@@ -111,16 +121,24 @@ function prepare(sql) {
 }
 
 // db.insertReturningId(sql, params) — replaces reading `.lastInsertRowid` off a `.run()` result,
-// which was a better-sqlite3-specific property with no Postgres equivalent. Appends ` RETURNING id`
-// to the given SQL and reads `rows[0].id` back via normalizeRows() — verified empirically that this
-// exact clause produces the identical `[{id: N}]` shape on SQLite (3.35+, which better-sqlite3
-// bundles) and Postgres alike via Knex's raw(), so one code path covers both rather than branching
-// per backend. Every real call site is a plain `INSERT INTO t (...) VALUES (...)` with nothing
-// after it (no trailing semicolon, no ON CONFLICT) — confirmed when these were converted (Phase 3),
-// so appending the clause is always syntactically safe. Takes an executor (knex itself, or a
-// transaction's own trx) so transaction() below can expose the exact same helper scoped to `tx`
-// instead of the outer `db` — see its own comment for why using the wrong one matters.
+// which was a better-sqlite3-specific property with no Postgres/MySQL equivalent. On SQLite/
+// Postgres, appends ` RETURNING id` to the given SQL and reads `rows[0].id` back via
+// normalizeRows() — verified empirically that this exact clause produces the identical `[{id: N}]`
+// shape on SQLite (3.35+, which better-sqlite3 bundles) and Postgres alike via Knex's raw(), so one
+// code path covers both rather than branching per backend. Every real call site is a plain `INSERT
+// INTO t (...) VALUES (...)` with nothing after it (no trailing semicolon, no ON CONFLICT) —
+// confirmed when these were converted (Phase 3), so appending the clause is always syntactically
+// safe. MySQL/MariaDB genuinely has no equivalent at all to rely on (MySQL: none, ever; MariaDB:
+// only ≥10.5 — see the project's own db-backend plan) — instead reads `.insertId` straight off
+// mysql2's own `[ResultSetHeader, null]` raw() result, verified empirically against a real MariaDB
+// server. Takes an executor (knex itself, or a transaction's own trx) so transaction() below can
+// expose the exact same helper scoped to `tx` instead of the outer `db` — see its own comment for
+// why using the wrong one matters.
 async function insertReturningIdVia(executor, sql, params) {
+  if (getBackend() === 'mysql') {
+    const raw = await execTimed(executor, sql, params);
+    return raw[0].insertId;
+  }
   const rows = normalizeRows(await execTimed(executor, `${sql} RETURNING id`, params));
   return rows[0].id;
 }
@@ -205,6 +223,19 @@ async function getInfo() {
     return {
       backend: 'postgres',
       version: rows[0]?.server_version || null,
+      host: dbConfig.connection.host,
+      port: dbConfig.connection.port,
+      database: dbConfig.connection.database,
+    };
+  }
+  if (dbConfig.backend === 'mysql') {
+    // Reports as e.g. "11.8.8-MariaDB-ubu2404" on MariaDB or "8.4.2" on MySQL — shown as-is (not
+    // parsed into a bare number) since the "-MariaDB-..." suffix is itself useful information on
+    // this page, same reasoning as Postgres's own SHOW server_version above.
+    const rows = normalizeRows(await knex.raw('SELECT VERSION() AS v'));
+    return {
+      backend: 'mysql',
+      version: rows[0]?.v || null,
       host: dbConfig.connection.host,
       port: dbConfig.connection.port,
       database: dbConfig.connection.database,
@@ -383,12 +414,62 @@ async function initPostgres(config) {
   await knex.migrate.latest();
 }
 
+// Same reasoning as waitForPostgresReady() above, generalized: MySQL/MariaDB never had a
+// pre-migration-framework install to upgrade FROM either (this backend didn't exist before
+// 001_baseline.js did), and a real network database frequently isn't listening yet the instant
+// this container starts.
+async function waitForMysqlReady(config) {
+  const deadlineMs = Date.now() + config.connectTimeoutMs * config.connectRetries;
+  let attempt = 0;
+  for (;;) {
+    attempt += 1;
+    try {
+      await knex.raw('SELECT 1');
+      if (attempt > 1) console.log(`Connected to MySQL/MariaDB after ${attempt} attempt(s).`);
+      return;
+    } catch (err) {
+      if (Date.now() >= deadlineMs || attempt >= config.connectRetries) {
+        console.error('='.repeat(78));
+        console.error(`Could not connect to MySQL/MariaDB after ${attempt} attempt(s): ${err.message}`);
+        console.error(`Tried: ${describeConfig(config)}`);
+        console.error('='.repeat(78));
+        throw err;
+      }
+      console.warn(`MySQL/MariaDB not reachable yet (attempt ${attempt}/${config.connectRetries}): ${err.message} — retrying in ${Math.round(config.connectTimeoutMs / 1000)}s.`);
+      await new Promise((resolve) => setTimeout(resolve, config.connectTimeoutMs));
+    }
+  }
+}
+
+// Mirrors pendingPostgresRestorePath() above — see its own comment for why this is a second
+// independent formula rather than a shared import with backup.js.
+function pendingMysqlRestorePath() {
+  const dbPath = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data', 'gateway.db');
+  return path.join(path.dirname(dbPath), 'backups', '.pending-restore.sql');
+}
+
+// Mirrors applyPendingPostgresRestore() above — same require-cycle reasoning (backup.js requires
+// this module, so this module requires the engine directly instead of going back through backup.js).
+async function applyPendingMysqlRestore() {
+  // eslint-disable-next-line global-require -- see the comment above.
+  const mysqlEngine = require('../backup/engines/mysql');
+  await mysqlEngine.applyPendingRestoreAtBoot(pendingMysqlRestorePath());
+}
+
+async function initMysql(config) {
+  knex = createKnex(config);
+  await waitForMysqlReady(config);
+  await applyPendingMysqlRestore();
+  await knex.migrate.latest();
+}
+
 // Opens the database and brings its schema up to date. Must be awaited before anything else in the
 // app touches the DB — see server.js's own async bootstrap.
 async function init() {
   dbConfig = resolveDbConfig();
   console.log(`Database backend: ${describeConfig(dbConfig)}`);
   if (dbConfig.backend === 'postgres') await initPostgres(dbConfig);
+  else if (dbConfig.backend === 'mysql') await initMysql(dbConfig);
   else await initSqlite(dbConfig);
 }
 

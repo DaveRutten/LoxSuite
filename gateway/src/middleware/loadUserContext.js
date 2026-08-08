@@ -14,6 +14,15 @@ function makeHelpers(user) {
   };
 }
 
+// SQLite and Postgres both accept the SQL-standard `CAST(x AS INTEGER)`; MySQL (unlike MariaDB,
+// which happens to accept INTEGER as an alias too — confirmed empirically, not assumed) rejects it
+// outright with a syntax error and needs `CAST(x AS SIGNED)` instead. Same reasoning/pattern as
+// routes/monitor.js's own GROUP_CONCAT/STRING_AGG dispatch: a genuine per-dialect keyword
+// difference, not just punctuation, so it's branched inline rather than papered over.
+function nullableIntegerCastExpr() {
+  return db.getBackend() === 'mysql' ? 'CAST(? AS SIGNED)' : 'CAST(? AS INTEGER)';
+}
+
 // Every dashboard this user has starred (dashboard_favorites) AND can still actually reach —
 // favoriting doesn't survive losing access, so a dashboard un-shared with them (or whose owner
 // left) just quietly stops appearing here instead of leaving a dead link in the sidebar. Mirrors
@@ -29,7 +38,7 @@ async function loadFavoriteDashboards(userId, roleId) {
       AND (
         custom_dashboards.user_id = ?
         OR EXISTS (SELECT 1 FROM dashboard_shares WHERE dashboard_shares.dashboard_id = custom_dashboards.id AND dashboard_shares.user_id = ?)
-        OR (CAST(? AS INTEGER) IS NOT NULL AND EXISTS (SELECT 1 FROM dashboard_role_shares WHERE dashboard_role_shares.dashboard_id = custom_dashboards.id AND dashboard_role_shares.role_id = ?))
+        OR (${nullableIntegerCastExpr()} IS NOT NULL AND EXISTS (SELECT 1 FROM dashboard_role_shares WHERE dashboard_role_shares.dashboard_id = custom_dashboards.id AND dashboard_role_shares.role_id = ?))
       )
     ORDER BY custom_dashboards.name
   `).all(userId, userId, userId, roleId, roleId);

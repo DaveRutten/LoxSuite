@@ -492,7 +492,9 @@ router.post('/quick-add-topic', asyncHandler(async (req, res) => {
   let monitorId = monitor?.id;
   if (!monitorId) {
     monitorId = await db.insertReturningId(
-      "INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at) VALUES ('mqtt', ?, ?, 1, ?)",
+      // config passed explicitly ('{}') — MySQL/MariaDB can't declare a DEFAULT on a TEXT column
+      // at all (see 001_baseline.js's own comment), unlike SQLite/Postgres.
+      "INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at, config) VALUES ('mqtt', ?, ?, 1, ?, '{}')",
       [humanizeTopic(topic), topic, new Date().toISOString()]
     );
     await reloadMqttMonitors(); // start recording this topic's history immediately, not just from the next gateway restart
@@ -524,7 +526,8 @@ router.post('/quick-add-loxone', asyncHandler(async (req, res) => {
   let monitorId = monitor?.id;
   if (!monitorId) {
     monitorId = await db.insertReturningId(
-      "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, 10000, 1, ?)",
+      // config passed explicitly ('{}') — see the quick-add-topic route above for why.
+      "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at, config) VALUES ('loxone', ?, ?, ?, 10000, 1, ?, '{}')",
       [label || uuid, miniserverId, uuid, new Date().toISOString()]
     );
   }

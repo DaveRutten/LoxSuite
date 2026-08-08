@@ -285,8 +285,10 @@ router.post('/', requirePermission('monitor', 'edit'), asyncHandler(async (req, 
     if (source_type === 'mqtt') {
       if (!topic) throw new Error('MQTT topic is required.');
       await db.prepare(
-        `INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at)
-         VALUES ('mqtt', ?, ?, 1, ?)`
+        // config passed explicitly ('{}') — MySQL/MariaDB can't declare a DEFAULT on a TEXT column
+        // at all (see 001_baseline.js's own comment), unlike SQLite/Postgres.
+        `INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at, config)
+         VALUES ('mqtt', ?, ?, 1, ?, '{}')`
       ).run(label || humanizeTopic(topic), topic, new Date().toISOString());
       await reloadMqttMonitors();
     } else if (source_type === 'loxone') {
@@ -301,8 +303,9 @@ router.post('/', requirePermission('monitor', 'edit'), asyncHandler(async (req, 
       }
 
       await db.prepare(
-        `INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at)
-         VALUES ('loxone', ?, ?, ?, ?, 1, ?)`
+        // config passed explicitly ('{}') — see the mqtt branch above for why.
+        `INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at, config)
+         VALUES ('loxone', ?, ?, ?, ?, 1, ?, '{}')`
       ).run(resolvedLabel, miniserver_id, loxone_uuid, Number(poll_interval_ms) || 10000, new Date().toISOString());
     } else if (source_type === 'miniserver_diag') {
       if (!miniserver_id || !diag_field) throw new Error('Miniserver and diagnostic field are required.');

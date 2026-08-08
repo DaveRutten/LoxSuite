@@ -18,24 +18,59 @@
 // (even though SQLite has never enforced foreign keys here — see below) as a belt-and-suspenders
 // duplicate of the app-level validation every write site already does before it ever reaches SQL;
 // checkConstraints.test.js verifies each one functionally.
+//
+// Every FK-referencing `.integer(col)` column below also carries `.unsigned()` — found the hard
+// way running this against real MariaDB (Phase 5): `t.increments('id')` produces `INT UNSIGNED
+// AUTO_INCREMENT` on MySQL/MariaDB specifically (not on SQLite/Postgres, neither of which has an
+// unsigned integer type at all), and MySQL/MariaDB require an FK's referencing column to match the
+// referenced column's exact type — a plain signed `.integer()` FK against that unsigned PK fails
+// with "errno: 150, Foreign key constraint is incorrectly formed" at table-creation time.
+// `.unsigned()` is a verified no-op on SQLite/Postgres (Knex quietly ignores it there — confirmed
+// directly, not assumed), so this one qualifier is what makes the exact same migration file create
+// a working schema on all three backends without branching.
+//
+// Also found running against real MariaDB, two related but distinct problems, both MySQL/MariaDB-
+// only: (1) any column that's part of a PRIMARY KEY, UNIQUE, or plain INDEX must be VARCHAR, never
+// TEXT/BLOB — MySQL/MariaDB refuse to build a key over one at all ("BLOB/TEXT column used in key
+// specification without a key length"); (2) any TEXT/BLOB column with a schema-level `.defaultTo()`
+// fails just as hard ("Field '...' doesn't have a default value" the moment a row omits it) — MySQL/
+// MariaDB simply can't declare a DEFAULT on TEXT/BLOB, full stop. SQLite/Postgres have neither
+// restriction; the frozen legacy SQLite path (see stringOnMysql() below) declares every one of
+// these same columns as plain TEXT, and schemaParity.test.js requires this file to match that
+// EXACTLY on SQLite — so the fix can't be "just change these to VARCHAR here", it has to be
+// backend-conditional. Every genuinely unbounded column that ALSO needs an explicit default and
+// isn't safe to bound at all (JSON blobs like gateway_settings.notification_templates) instead gets
+// its default supplied explicitly by seedFreshInstall() below (its only insert site) or by the
+// handful of application-level INSERTs into `monitors` that used to rely on its own schema default
+// (see monitorCollector.js/routes/dashboards.js/routes/monitor.js/routes/liveData.js) — MySQL forced
+// those to become explicit too, matching what this comment already required Postgres/SQLite writers
+// to do for any column without one.
 const bcrypt = require('bcryptjs');
 const { AREAS } = require('../../permissionAreas');
 const { encrypt } = require('../../secretCrypto');
 
+// See the top-of-file comment above for why this exists at all: keeps SQLite (and Postgres, which
+// has always tolerated plain TEXT here fine) on the exact same TEXT declaration the frozen legacy
+// SQLite path uses for these columns — required for schemaParity.test.js — while MySQL/MariaDB
+// specifically gets the bounded VARCHAR form its own key/default restrictions actually require.
+function stringOnMysql(t, knex, col) {
+  return knex.client.config.client === 'mysql2' ? t.string(col) : t.text(col);
+}
+
 exports.up = async function up(knex) {
   await knex.schema.createTable('access_roles', (t) => {
     t.increments('id');
-    t.text('name').notNullable().unique();
+    stringOnMysql(t, knex, 'name').notNullable().unique();
     t.integer('is_admin').notNullable().defaultTo(0);
   });
 
   await knex.schema.createTable('users', (t) => {
     t.increments('id');
-    t.text('username').notNullable().unique();
+    stringOnMysql(t, knex, 'username').notNullable().unique();
     t.text('password_hash');
-    t.integer('role_id').references('id').inTable('access_roles').onDelete('SET NULL');
-    t.text('auth_provider').notNullable().defaultTo('local');
-    t.text('sso_subject').unique();
+    t.integer('role_id').unsigned().references('id').inTable('access_roles').onDelete('SET NULL');
+    stringOnMysql(t, knex, 'auth_provider').notNullable().defaultTo('local');
+    stringOnMysql(t, knex, 'sso_subject').unique();
     t.text('email');
     t.text('display_name');
     t.text('avatar_url');
@@ -48,8 +83,8 @@ exports.up = async function up(knex) {
   });
 
   await knex.schema.createTable('access_role_permissions', (t) => {
-    t.integer('role_id').notNullable().references('id').inTable('access_roles').onDelete('CASCADE');
-    t.text('area').notNullable();
+    t.integer('role_id').unsigned().notNullable().references('id').inTable('access_roles').onDelete('CASCADE');
+    stringOnMysql(t, knex, 'area').notNullable();
     t.integer('can_view').notNullable().defaultTo(0);
     t.integer('can_edit').notNullable().defaultTo(0);
     t.primary(['role_id', 'area']);
@@ -65,7 +100,7 @@ exports.up = async function up(knex) {
     t.text('password').notNullable();
     t.text('last_success_at');
     t.text('last_error');
-    t.text('status').notNullable().defaultTo('unknown');
+    stringOnMysql(t, knex, 'status').notNullable().defaultTo('unknown');
     t.text('last_checked_at');
     t.integer('use_https').notNullable().defaultTo(0);
     t.text('external_url');
@@ -79,7 +114,7 @@ exports.up = async function up(knex) {
     t.text('update_level');
     t.integer('miniserver_type');
     t.integer('sort_order').notNullable().defaultTo(0);
-    t.integer('gateway_client_of').references('id').inTable('miniservers').onDelete('SET NULL');
+    t.integer('gateway_client_of').unsigned().references('id').inTable('miniservers').onDelete('SET NULL');
     t.text('logbook_error');
   });
 
@@ -103,11 +138,11 @@ exports.up = async function up(knex) {
     t.integer('healthcheck_interval_seconds').notNullable().defaultTo(60);
     t.integer('dashboard_suggestions_enabled').notNullable().defaultTo(1);
     t.integer('setup_wizard_completed').notNullable().defaultTo(0);
-    t.text('display_timezone').notNullable().defaultTo('UTC');
+    stringOnMysql(t, knex, 'display_timezone').notNullable().defaultTo('UTC');
     t.integer('default_panel_decimals').notNullable().defaultTo(2);
     t.integer('login_rate_limit_max').notNullable().defaultTo(10);
     t.integer('login_rate_limit_window_minutes').notNullable().defaultTo(15);
-    t.text('setup_wizard_visited_steps').notNullable().defaultTo('');
+    stringOnMysql(t, knex, 'setup_wizard_visited_steps').notNullable().defaultTo('');
     t.text('monitor_chart_default_config').notNullable().defaultTo('{}');
     t.integer('notification_retention_days').notNullable().defaultTo(90);
     t.integer('auto_scope_device_roles').notNullable().defaultTo(0);
@@ -121,8 +156,8 @@ exports.up = async function up(knex) {
     t.text('issuer_url');
     t.text('client_id');
     t.text('client_secret');
-    t.integer('default_role_id').references('id').inTable('access_roles').onDelete('SET NULL');
-    t.text('button_label').notNullable().defaultTo('Pocket ID');
+    t.integer('default_role_id').unsigned().references('id').inTable('access_roles').onDelete('SET NULL');
+    stringOnMysql(t, knex, 'button_label').notNullable().defaultTo('Pocket ID');
     t.integer('local_login_disabled').notNullable().defaultTo(0);
     t.check('?? = 1', ['id'], 'chk_sso_settings_singleton');
   });
@@ -130,7 +165,7 @@ exports.up = async function up(knex) {
   await knex.schema.createTable('backup_settings', (t) => {
     t.integer('id').primary();
     t.integer('enabled').notNullable().defaultTo(0);
-    t.text('schedule_cron').notNullable().defaultTo('0 3 * * *');
+    stringOnMysql(t, knex, 'schedule_cron').notNullable().defaultTo('0 3 * * *');
     t.integer('retention_count').notNullable().defaultTo(14);
     t.integer('include_mqtt_config').notNullable().defaultTo(1);
     t.text('last_run_at');
@@ -155,11 +190,11 @@ exports.up = async function up(knex) {
 
   await knex.schema.createTable('mappings_mqtt_to_loxone', (t) => {
     t.increments('id');
-    t.integer('miniserver_id').notNullable().references('id').inTable('miniservers').onDelete('CASCADE');
+    t.integer('miniserver_id').unsigned().notNullable().references('id').inTable('miniservers').onDelete('CASCADE');
     t.text('mqtt_topic').notNullable();
-    t.text('transport').notNullable().defaultTo('http');
+    stringOnMysql(t, knex, 'transport').notNullable().defaultTo('http');
     t.text('target').notNullable();
-    t.text('value_transform').notNullable().defaultTo('passthrough');
+    stringOnMysql(t, knex, 'value_transform').notNullable().defaultTo('passthrough');
     t.text('transform_arg');
     t.integer('min_interval_ms').notNullable().defaultTo(0);
     t.integer('enabled').notNullable().defaultTo(1);
@@ -169,37 +204,37 @@ exports.up = async function up(knex) {
 
   await knex.schema.createTable('mapping_translations', (t) => {
     t.increments('id');
-    t.integer('mapping_id').notNullable().references('id').inTable('mappings_mqtt_to_loxone').onDelete('CASCADE');
-    t.text('match_value').notNullable();
+    t.integer('mapping_id').unsigned().notNullable().references('id').inTable('mappings_mqtt_to_loxone').onDelete('CASCADE');
+    stringOnMysql(t, knex, 'match_value').notNullable();
     t.text('output_value').notNullable();
     t.unique(['mapping_id', 'match_value']);
   });
 
   await knex.schema.createTable('mappings_loxone_to_mqtt', (t) => {
     t.increments('id');
-    t.integer('miniserver_id').references('id').inTable('miniservers').onDelete('SET NULL');
-    t.text('token').notNullable().unique();
+    t.integer('miniserver_id').unsigned().references('id').inTable('miniservers').onDelete('SET NULL');
+    stringOnMysql(t, knex, 'token').notNullable().unique();
     t.text('mqtt_topic').notNullable();
     t.integer('qos').notNullable().defaultTo(0);
     t.integer('retain').notNullable().defaultTo(0);
     t.integer('enabled').notNullable().defaultTo(1);
-    t.text('transport').notNullable().defaultTo('http');
-    t.text('value_transform').notNullable().defaultTo('passthrough');
+    stringOnMysql(t, knex, 'transport').notNullable().defaultTo('http');
+    stringOnMysql(t, knex, 'value_transform').notNullable().defaultTo('passthrough');
     t.text('transform_arg');
     t.check('?? IN (?, ?, ?)', ['qos', 0, 1, 2], 'chk_loxone_to_mqtt_qos');
   });
 
   await knex.schema.createTable('loxone_mapping_translations', (t) => {
     t.increments('id');
-    t.integer('mapping_id').notNullable().references('id').inTable('mappings_loxone_to_mqtt').onDelete('CASCADE');
-    t.text('match_value').notNullable();
+    t.integer('mapping_id').unsigned().notNullable().references('id').inTable('mappings_loxone_to_mqtt').onDelete('CASCADE');
+    stringOnMysql(t, knex, 'match_value').notNullable();
     t.text('output_value').notNullable();
     t.unique(['mapping_id', 'match_value']);
   });
 
   await knex.schema.createTable('user_table_prefs', (t) => {
-    t.integer('user_id').notNullable().references('id').inTable('users').onDelete('CASCADE');
-    t.text('table_key').notNullable();
+    t.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
+    stringOnMysql(t, knex, 'table_key').notNullable();
     t.text('column_order');
     t.text('hidden_columns');
     t.text('column_widths');
@@ -207,8 +242,8 @@ exports.up = async function up(knex) {
   });
 
   await knex.schema.createTable('user_nav_prefs', (t) => {
-    t.integer('user_id').notNullable().references('id').inTable('users').onDelete('CASCADE');
-    t.text('section_key').notNullable();
+    t.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
+    stringOnMysql(t, knex, 'section_key').notNullable();
     t.integer('collapsed').notNullable().defaultTo(0);
     t.primary(['user_id', 'section_key']);
   });
@@ -218,7 +253,7 @@ exports.up = async function up(knex) {
     t.text('source_type').notNullable();
     t.text('label').notNullable();
     t.text('mqtt_topic');
-    t.integer('miniserver_id').references('id').inTable('miniservers').onDelete('CASCADE');
+    t.integer('miniserver_id').unsigned().references('id').inTable('miniservers').onDelete('CASCADE');
     t.text('loxone_uuid');
     t.text('diag_field');
     t.integer('poll_interval_ms').notNullable().defaultTo(10000);
@@ -231,8 +266,8 @@ exports.up = async function up(knex) {
 
   await knex.schema.createTable('monitor_history', (t) => {
     t.increments('id');
-    t.integer('monitor_id').notNullable().references('id').inTable('monitors').onDelete('CASCADE');
-    t.text('recorded_at').notNullable();
+    t.integer('monitor_id').unsigned().notNullable().references('id').inTable('monitors').onDelete('CASCADE');
+    stringOnMysql(t, knex, 'recorded_at').notNullable();
     t.text('value').notNullable();
     t.specificType('numeric_value', 'REAL');
     t.index(['monitor_id', 'recorded_at'], 'idx_monitor_history_monitor_time');
@@ -241,7 +276,7 @@ exports.up = async function up(knex) {
 
   await knex.schema.createTable('custom_dashboards', (t) => {
     t.increments('id');
-    t.integer('user_id').references('id').inTable('users').onDelete('CASCADE');
+    t.integer('user_id').unsigned().references('id').inTable('users').onDelete('CASCADE');
     t.text('name').notNullable();
     t.integer('position').notNullable().defaultTo(0);
     t.text('created_at').notNullable();
@@ -249,10 +284,10 @@ exports.up = async function up(knex) {
 
   await knex.schema.createTable('dashboard_panels', (t) => {
     t.increments('id');
-    t.integer('dashboard_id').notNullable().references('id').inTable('custom_dashboards').onDelete('CASCADE');
+    t.integer('dashboard_id').unsigned().notNullable().references('id').inTable('custom_dashboards').onDelete('CASCADE');
     t.text('panel_type').notNullable();
     t.text('title');
-    t.text('range').notNullable().defaultTo('24h');
+    stringOnMysql(t, knex, 'range').notNullable().defaultTo('24h');
     t.text('config').notNullable().defaultTo('{}');
     t.integer('col_span').notNullable().defaultTo(4);
     t.integer('row_span').notNullable().defaultTo(3);
@@ -263,47 +298,47 @@ exports.up = async function up(knex) {
   });
 
   await knex.schema.createTable('dashboard_panel_monitors', (t) => {
-    t.integer('panel_id').notNullable().references('id').inTable('dashboard_panels').onDelete('CASCADE');
-    t.integer('monitor_id').notNullable().references('id').inTable('monitors').onDelete('CASCADE');
+    t.integer('panel_id').unsigned().notNullable().references('id').inTable('dashboard_panels').onDelete('CASCADE');
+    t.integer('monitor_id').unsigned().notNullable().references('id').inTable('monitors').onDelete('CASCADE');
     t.integer('position').notNullable().defaultTo(0);
     t.primary(['panel_id', 'monitor_id']);
   });
 
   await knex.schema.createTable('panel_type_defaults', (t) => {
-    t.integer('dashboard_id').notNullable().references('id').inTable('custom_dashboards').onDelete('CASCADE');
-    t.text('panel_type').notNullable();
+    t.integer('dashboard_id').unsigned().notNullable().references('id').inTable('custom_dashboards').onDelete('CASCADE');
+    stringOnMysql(t, knex, 'panel_type').notNullable();
     t.text('config').notNullable();
     t.text('updated_at').notNullable();
     t.primary(['dashboard_id', 'panel_type']);
   });
 
   await knex.schema.createTable('dashboard_shares', (t) => {
-    t.integer('dashboard_id').notNullable().references('id').inTable('custom_dashboards').onDelete('CASCADE');
-    t.integer('user_id').notNullable().references('id').inTable('users').onDelete('CASCADE');
+    t.integer('dashboard_id').unsigned().notNullable().references('id').inTable('custom_dashboards').onDelete('CASCADE');
+    t.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
     t.integer('can_edit').notNullable().defaultTo(0);
     t.primary(['dashboard_id', 'user_id']);
   });
 
   await knex.schema.createTable('dashboard_role_shares', (t) => {
-    t.integer('dashboard_id').notNullable().references('id').inTable('custom_dashboards').onDelete('CASCADE');
-    t.integer('role_id').notNullable().references('id').inTable('access_roles').onDelete('CASCADE');
+    t.integer('dashboard_id').unsigned().notNullable().references('id').inTable('custom_dashboards').onDelete('CASCADE');
+    t.integer('role_id').unsigned().notNullable().references('id').inTable('access_roles').onDelete('CASCADE');
     t.integer('can_edit').notNullable().defaultTo(0);
     t.primary(['dashboard_id', 'role_id']);
   });
 
   await knex.schema.createTable('dashboard_favorites', (t) => {
-    t.integer('user_id').notNullable().references('id').inTable('users').onDelete('CASCADE');
-    t.integer('dashboard_id').notNullable().references('id').inTable('custom_dashboards').onDelete('CASCADE');
+    t.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
+    t.integer('dashboard_id').unsigned().notNullable().references('id').inTable('custom_dashboards').onDelete('CASCADE');
     t.primary(['user_id', 'dashboard_id']);
   });
 
   await knex.schema.createTable('log_entries', (t) => {
     t.increments('id');
-    t.text('source').notNullable();
+    stringOnMysql(t, knex, 'source').notNullable();
     t.integer('source_id');
     t.text('source_label');
     t.text('line').notNullable();
-    t.text('recorded_at').notNullable();
+    stringOnMysql(t, knex, 'recorded_at').notNullable();
     t.text('command_topic');
     t.text('value_from');
     t.text('value_to');
@@ -329,7 +364,7 @@ exports.up = async function up(knex) {
     t.text('config').notNullable().defaultTo('{}');
     t.text('last_state').notNullable().defaultTo('{}');
     t.text('created_at').notNullable();
-    t.integer('owner_user_id').references('id').inTable('users').onDelete('CASCADE');
+    t.integer('owner_user_id').unsigned().references('id').inTable('users').onDelete('CASCADE');
     t.check(
       '?? IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ['trigger_type', 'monitor_threshold', 'miniserver_status', 'mqtt_client_status', 'backup_failed', 'firmware_changed', 'loxsuite_update_available', 'battery_weak', 'device_firmware_changed', 'device_offline', 'gateway_client_firmware_mismatch'],
@@ -338,14 +373,14 @@ exports.up = async function up(knex) {
   });
 
   await knex.schema.createTable('notification_rule_channels', (t) => {
-    t.integer('rule_id').notNullable().references('id').inTable('notification_rules').onDelete('CASCADE');
-    t.integer('channel_id').notNullable().references('id').inTable('notification_channels').onDelete('CASCADE');
+    t.integer('rule_id').unsigned().notNullable().references('id').inTable('notification_rules').onDelete('CASCADE');
+    t.integer('channel_id').unsigned().notNullable().references('id').inTable('notification_channels').onDelete('CASCADE');
     t.primary(['rule_id', 'channel_id']);
   });
 
   await knex.schema.createTable('notification_rule_subscribers', (t) => {
-    t.integer('rule_id').notNullable().references('id').inTable('notification_rules').onDelete('CASCADE');
-    t.integer('user_id').notNullable().references('id').inTable('users').onDelete('CASCADE');
+    t.integer('rule_id').unsigned().notNullable().references('id').inTable('notification_rules').onDelete('CASCADE');
+    t.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
     t.primary(['rule_id', 'user_id']);
   });
 
@@ -356,18 +391,18 @@ exports.up = async function up(knex) {
   await knex.schema.createTable('notification_events', (t) => {
     t.increments('id');
     t.text('event_type').notNullable();
-    t.text('severity').notNullable().defaultTo('info');
+    stringOnMysql(t, knex, 'severity').notNullable().defaultTo('info');
     t.text('title').notNullable();
     t.text('message').notNullable();
     t.integer('source_id');
     t.text('source_label');
     t.integer('rule_id');
-    t.text('created_at').notNullable();
+    stringOnMysql(t, knex, 'created_at').notNullable();
     t.index(['created_at'], 'idx_notification_events_created');
   });
 
   await knex.schema.createTable('notification_dismissals', (t) => {
-    t.integer('user_id').notNullable().references('id').inTable('users').onDelete('CASCADE');
+    t.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
     t.integer('notification_event_id').notNullable();
     t.text('dismissed_at').notNullable();
     t.primary(['user_id', 'notification_event_id']);
@@ -375,8 +410,8 @@ exports.up = async function up(knex) {
 
   await knex.schema.createTable('loxone_hardware_devices', (t) => {
     t.increments('id');
-    t.integer('miniserver_id').notNullable().references('id').inTable('miniservers').onDelete('CASCADE');
-    t.text('device_key').notNullable();
+    t.integer('miniserver_id').unsigned().notNullable().references('id').inTable('miniservers').onDelete('CASCADE');
+    stringOnMysql(t, knex, 'device_key').notNullable();
     t.text('category').notNullable();
     t.text('type');
     t.text('name');
@@ -418,7 +453,11 @@ async function seedFreshInstall(knex) {
     await knex('access_role_permissions').insert({ role_id: viewerRoleId, area: key, can_view: 1, can_edit: 0 });
   }
 
-  await knex('gateway_settings').insert({ id: 1 });
+  // live_data_hidden_states/monitor_chart_default_config/notification_templates are passed
+  // explicitly rather than left to their own column defaults — MySQL/MariaDB can't declare a
+  // DEFAULT on a TEXT column at all (see this file's own top-of-file comment), and gateway_settings
+  // is a singleton only ever inserted here, so this is the one and only place that matters.
+  await knex('gateway_settings').insert({ id: 1, live_data_hidden_states: '[]', monitor_chart_default_config: '{}', notification_templates: '{}' });
   await knex('sso_settings').insert({ id: 1 });
   await knex('backup_settings').insert({ id: 1 });
 
@@ -463,11 +502,22 @@ async function seedFreshInstall(knex) {
 // RAW pg driver result object on Postgres (verified empirically — NOT an array, so a naive
 // `Array.isArray(result) ? result[0] : result` silently returns that whole object instead of an id
 // on Postgres, corrupting the very next insert that uses it as a foreign key). `.returning('id')`
-// instead produces the identical `[{id: N}]` shape on both, matching db/index.js's own
-// insertReturningId() (kept as its own tiny local helper here rather than reusing that one, since
-// this runs against a migration's own bare `knex` argument, a distinct instance/connection from the
-// app's runtime facade).
+// instead produces the identical `[{id: N}]` shape on both. MySQL/MariaDB has no RETURNING at all
+// (MariaDB only ≥10.5 — don't rely on it, see the project's own db-backend plan) — Knex silently
+// no-ops `.returning()` there (just a console warning, not an error) rather than failing, which
+// means the OTHER two backends' own `result[0].id` reads `.id` off a bare NUMBER and gets
+// `undefined`, corrupting the next FK insert exactly like the Postgres case above — caught the same
+// way, empirically, running this against a real MariaDB server. mysql2's own plain `.insert(row)`
+// (no `.returning()` at all) conveniently already returns the identical bare-array-of-ids shape
+// SQLite's own plain insert does (verified directly), so mysql only needs the `.returning()` call
+// skipped entirely, not a different read path. Kept as its own tiny local helper here rather than
+// reusing db/index.js's own insertReturningId(), since this runs against a migration's own bare
+// `knex` argument, a distinct instance/connection from the app's runtime facade.
 async function insertReturningId(knex, table, row) {
+  if (knex.client.config.client === 'mysql2') {
+    const result = await knex(table).insert(row);
+    return result[0];
+  }
   const result = await knex(table).insert(row).returning('id');
   return result[0].id;
 }

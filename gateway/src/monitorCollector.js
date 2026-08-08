@@ -103,7 +103,10 @@ async function findOrCreateDiagMonitor(miniserver, diagField, labelOverride) {
 
   const label = labelOverride || `${miniserver.name} - ${DIAG_FIELD_LABELS[diagField]}`;
   const monitorId = await db.insertReturningId(
-    "INSERT INTO monitors (source_type, label, miniserver_id, diag_field, enabled, created_at) VALUES ('miniserver_diag', ?, ?, ?, 1, ?)",
+    // config is passed explicitly ('{}') rather than left to the column's own schema default —
+    // MySQL/MariaDB can't declare a DEFAULT on a TEXT column at all (see 001_baseline.js's own
+    // comment on this), so every INSERT into monitors needs to supply it itself.
+    "INSERT INTO monitors (source_type, label, miniserver_id, diag_field, enabled, created_at, config) VALUES ('miniserver_diag', ?, ?, ?, 1, ?, '{}')",
     [label, miniserver.id, diagField, new Date().toISOString()]
   );
 
