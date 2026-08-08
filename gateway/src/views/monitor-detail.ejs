@@ -318,6 +318,15 @@
       // PREVIOUS call's own inline width is still applied would just measure that stale value back.
       function centerChart() {
         if (!chartWrap) return;
+        // Same mobile branch as panel-grid.ejs's own centerEditingPanel() — below the drawer's own
+        // mobile breakpoint (style.css) .panel-settings-form is a bottom sheet, not a right-side
+        // drawer eating horizontal space, so the fixed-position/shrink math below (built specifically
+        // to dodge a right-side drawer) has nothing to act on. Scrolling the chart to the top of the
+        // viewport is enough on its own to keep it visible above the sheet.
+        if (window.matchMedia('(max-width: 768px)').matches) {
+          chartWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
         var drawerWidth = form.classList.contains('open') ? form.getBoundingClientRect().width : 0;
         // `left` below is relative to the VIEWPORT (position:fixed), not to .content — has to
         // start past the sidebar's own right edge, or a chart on a wide-enough viewport ends up

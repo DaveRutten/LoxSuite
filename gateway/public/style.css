@@ -934,6 +934,16 @@ h2 {
    independently doing to the same row. */
 .pg-off-page { display: none !important; }
 
+/* A single plain search box (no field-select) that still grows to fill the toolbar and still gets
+   the small "x" clear button — for a Tabulator table matching several columns against one query
+   at once (see initTabulatorTable's own searchInput/searchFields) rather than either a per-column
+   header-filter row or the field-select combo below. position:relative here (not on a nested
+   .clearable-input-wrap the way .search-combo needs, see below) since there's no select sibling
+   to share the wrapper with — the input's own default full corner-radius/border already looks
+   right on its own. */
+.search-single { display: flex; flex: 1; min-width: 12rem; position: relative; }
+.search-single input[type="text"] { flex: 1; min-width: 0; padding-right: 2rem; }
+
 /* A <select> + <input> pair that reads as one seamless control (a "topic: [search]" combo)
    instead of two separate boxes glued together — shared border, no gap or radius at the seam,
    only the outer corners rounded. Grows to fill the toolbar's available width, right up to
@@ -3815,6 +3825,18 @@ body.no-scroll { overflow: hidden; }
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
+    /* The base rule's own height:100vh (further up this file) isn't cleared by inset's top/bottom
+       0 alone — a fixed element with top, bottom, AND an explicit height all set uses that height
+       verbatim rather than stretching between top/bottom, so without this override the sidebar
+       stayed exactly 100vh tall regardless. On a phone that's taller than the actually-visible
+       viewport the moment the page loads (100vh is calculated including the space the browser's
+       own address bar chrome still occupies, before it collapses on scroll) — the bottom of the
+       nav list ends up below the fold with no way to reach it, since this panel's own
+       overflow-y:auto scrolls its CONTENT, not its own box past whatever's actually visible. 100dvh
+       (dynamic viewport height, tracks the real visible area as the browser chrome shows/hides)
+       is what the desktop rule can't use — it'd fight the sticky+overflow-y trick there — but is
+       exactly right for this fixed off-canvas panel with no such conflict. */
+    height: 100dvh;
     z-index: 999;
     transform: translateX(-100%);
     transition: transform 0.2s var(--ease);
@@ -3863,4 +3885,31 @@ body.no-scroll { overflow: hidden; }
   .client-row { grid-template-columns: 1fr; gap: 0.5rem; }
   .client-row .remove-client-row-btn { justify-self: end; }
   .client-https-label { display: inline; }
+
+  /* .panel-settings-form (a dashboard panel's own Edit drawer, and — same shared class — Monitor
+     detail's chart-settings drawer) slides in from the right at up to 92vw wide on desktop, which
+     on a phone is effectively the ENTIRE screen — the whole point of this drawer (edit a panel
+     while still seeing it react live, see centerEditingPanel()'s own comment in panel-grid.ejs) is
+     lost once it covers the panel entirely. A bottom sheet instead: capped to roughly half the
+     screen height, leaving the panel/chart itself visible above it (scrolled into that top area by
+     centerEditingPanel()/centerChart()'s own mobile branch — see their comments in panel-grid.ejs/
+     monitor-detail.ejs). dvh, not vh, for the same "real visible viewport, not the address-bar-
+     inclusive one" reason as the sidebar override above. */
+  .panel-settings-form {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 60dvh;
+    border-radius: 1rem 1rem 0 0;
+    transform: translateY(100%);
+  }
+  .panel-settings-form.open { transform: translateY(0); }
+
+  /* Only meaningful for the right-edge drag-to-resize this drawer uses on desktop (see
+     panel-drawer-resize.js) — there's no equivalent affordance for a bottom sheet's own top edge
+     yet, so this stays hidden here rather than sitting uselessly along the drawer's now-irrelevant
+     left edge. */
+  .panel-settings-form.open + .panel-drawer-resize-handle { display: none; }
 }

@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.12.2-alpha.1] - 2026-08-08
+
+### Fixed
+- On a phone-width screen, the off-canvas sidebar menu was cut off partway down with no way to
+  reach whatever ran past the bottom edge (`height: 100vh` on a fixed mobile overlay includes the
+  space still occupied by the browser's own address-bar chrome before it collapses, which is taller
+  than what's actually visible on first load). Now `100dvh`, which tracks the real visible
+  viewport.
+- A dashboard panel's Edit drawer (and Monitor detail's own chart-settings drawer, same shared
+  component) opened as a right-side panel up to 92vw wide on a phone — effectively the whole
+  screen, hiding the very panel it was supposed to let you keep watching while you edit it. It's
+  now a bottom sheet capped at roughly 60% of the screen height on narrow screens, and the panel
+  being edited scrolls to the top of the remaining space instead of trying to squeeze in beside a
+  drawer that no longer has room next to it. A very tall panel (e.g. a large chart) can still have
+  its lower portion sit behind the sheet — a genuine small-screen limit, not something a layout
+  change alone fixes.
+
+### Changed
+- The MQTT &rarr; Loxone and Loxone &rarr; MQTT mapping tables had a small filter box under every
+  filterable column's own header — replaced with the one search box each table had before the
+  Tabulator conversion (0.12.0-alpha.1), now matching Topic/Miniserver/Transport/Target/Transform
+  (plus Token on Loxone &rarr; MQTT) all at once instead of one column at a time.
+
 ## [0.12.1-alpha.1] - 2026-08-07
 
 ### Fixed

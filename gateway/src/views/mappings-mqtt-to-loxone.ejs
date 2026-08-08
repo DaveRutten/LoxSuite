@@ -68,6 +68,10 @@
 
 <div class="filterable-table-card">
   <div class="table-toolbar">
+    <div class="search-single">
+      <input type="text" id="m2l-search" placeholder="Filter&hellip;">
+      <button type="button" id="m2l-search-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+    </div>
     <% if (canEdit('mqtt_to_loxone')) { %>
     <% var disabledCount = mappings.filter(m => !m.enabled).length; var enabledCount = mappings.length - disabledCount; %>
     <form method="post" action="/mappings/mqtt-to-loxone/enable-all" style="margin:0;">

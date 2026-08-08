@@ -1,7 +1,9 @@
 // MQTT → Loxone mappings table, driven by the shared gateway/public/tabulator-table.js.
-// Replaces the old page's own field-select + text "Filter…" combo with Tabulator's own built-in
-// per-column header filters (headerFilter:'input') on every text column that combo used to cover —
-// arguably better (every column filterable at once, not one-at-a-time) rather than a straight port.
+// Replaces the old page's own field-select + text "Filter…" combo with a single search box (see
+// initTabulatorTable's own searchInput/searchFields) matching Topic/Miniserver/Transport/Target/
+// Transform at once — a per-column headerFilter row (one small box under every column) was tried
+// first here but read as visual clutter; one search bar per page, same as every other table.js
+// table already has, was the actual preference.
 (function () {
   var container = document.getElementById('m2l-tabulator');
   if (!container) return;
@@ -131,11 +133,11 @@
     tableKey: '/mappings/mqtt-to-loxone',
     columns: [
       { title: 'Status', field: 'enabled', formatter: statusFormatter, headerSort: true, sorter: 'boolean' },
-      { title: 'Topic', field: 'mqttTopic', formatter: topicFormatter, headerSort: true, sorter: 'string', headerFilter: 'input', minWidth: 220 },
-      { title: 'Miniserver', field: 'miniserverName', headerSort: true, sorter: 'string', headerFilter: 'input' },
-      { title: 'Transport', field: 'transport', headerSort: true, sorter: 'string', headerFilter: 'input' },
-      { title: 'Target', field: 'target', headerSort: true, sorter: 'string', headerFilter: 'input' },
-      { title: 'Transform', field: 'valueTransform', formatter: transformFormatter, headerSort: true, sorter: 'string', headerFilter: 'input' },
+      { title: 'Topic', field: 'mqttTopic', formatter: topicFormatter, headerSort: true, sorter: 'string', minWidth: 220 },
+      { title: 'Miniserver', field: 'miniserverName', headerSort: true, sorter: 'string' },
+      { title: 'Transport', field: 'transport', headerSort: true, sorter: 'string' },
+      { title: 'Target', field: 'target', headerSort: true, sorter: 'string' },
+      { title: 'Transform', field: 'valueTransform', formatter: transformFormatter, headerSort: true, sorter: 'string' },
       { title: 'Min. interval', field: 'minIntervalMs', formatter: intervalFormatter, headerSort: true, sorter: 'number', hozAlign: 'left' },
       { title: 'Actions', field: 'actions', formatter: actionsFormatter, headerSort: false, resizable: false, width: 90 },
     ],
@@ -144,5 +146,8 @@
     noControls: ['actions'],
     columnsBtn: 'm2l-columns-btn',
     columnsPanel: 'm2l-columns-panel',
+    searchInput: 'm2l-search',
+    searchClear: 'm2l-search-clear',
+    searchFields: ['mqttTopic', 'miniserverName', 'transport', 'target', 'valueTransform'],
   });
 })();

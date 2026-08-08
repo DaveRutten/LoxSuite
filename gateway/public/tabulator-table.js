@@ -261,6 +261,46 @@ function initTabulatorTable(opts) {
         table.redraw(true);
       });
 
+      // ---- Optional single search box (opts.searchInput + opts.searchFields) — one plain text
+      // box that matches against several columns at once via Tabulator's own custom filter
+      // function, instead of Tabulator's built-in per-column headerFilter (a small input under
+      // EVERY searchable column's own header) some pages started with. Functionally the same
+      // "narrow the rows down by typing" outcome, but reads as one clear search box instead of a
+      // row of little boxes cluttering the header — the same one-search-bar shape every other
+      // table.js-driven page on this site already uses. opts.searchClear (optional) is a "x"
+      // button that clears the box and re-focuses it, matching live-data.ejs's own clearable
+      // filter input.
+      var searchInput = resolveEl(opts.searchInput);
+      var searchClear = resolveEl(opts.searchClear);
+      if (searchInput && opts.searchFields && opts.searchFields.length) {
+        var searchTimer = null;
+        function applySearch() {
+          var q = searchInput.value.trim().toLowerCase();
+          if (searchClear) searchClear.hidden = !q;
+          if (!q) { table.clearFilter(); return; }
+          table.setFilter(function (data) {
+            return opts.searchFields.some(function (field) {
+              var v = data[field];
+              return v != null && String(v).toLowerCase().indexOf(q) !== -1;
+            });
+          });
+        }
+        // Debounced the same way live-data.ejs's own filter input already is — re-filtering on
+        // every single keystroke is wasted work for a table that's never more than a few hundred
+        // rows, but still adds up to a visible stutter while actively typing.
+        searchInput.addEventListener('input', function () {
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(applySearch, 200);
+        });
+        if (searchClear) {
+          searchClear.addEventListener('click', function () {
+            searchInput.value = '';
+            applySearch();
+            searchInput.focus();
+          });
+        }
+      }
+
       return table;
     });
 }
