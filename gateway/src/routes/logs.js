@@ -5,6 +5,7 @@ const { classifyLogLevel } = require('../logLevel');
 const { resolveRange, rangeToWindow } = require('./monitor');
 const mqttClient = require('../mqttClient');
 const { TRIGGER_TYPES } = require('../notifications');
+const asyncHandler = require('../middleware/asyncHandler');
 
 // notification_events.event_type covers every rule-engine trigger type (see TRIGGER_TYPES) PLUS
 // 'threshold_ladder' — the one path that writes here directly, with no rule behind it at all (a
@@ -48,7 +49,7 @@ function parseFilters(query) {
 // Builds the WHERE/params shared by every log query, then fetches and classifies rows. Filtering
 // by level happens after classification, so when it's active a larger candidate pool is pulled
 // (see FILTER_CANDIDATE_ROWS) to avoid the level filter thinning out an already-limited result.
-function queryLogs({ source, sourceId, filters }) {
+async function queryLogs({ source, sourceId, filters }) {
   const conditions = ['source = ?'];
   const params = [source];
   if (sourceId) {
@@ -72,13 +73,14 @@ function queryLogs({ source, sourceId, filters }) {
   }
 
   const limit = filters.level ? FILTER_CANDIDATE_ROWS : MAX_ROWS;
-  const rows = db.prepare(
+  const rawRows = await db.prepare(
     `SELECT line, source_label AS sourceLabel, recorded_at AS recordedAt,
             command_topic AS commandTopic, value_from AS valueFrom, value_to AS valueTo,
             source_id AS sourceMiniserverId, transport
      FROM log_entries
      WHERE ${conditions.join(' AND ')} ORDER BY id DESC LIMIT ?`
-  ).all(...params, limit).map((r) => ({ ...r, level: classifyLogLevel(r.line) }));
+  ).all(...params, limit);
+  const rows = rawRows.map((r) => ({ ...r, level: classifyLogLevel(r.line) }));
 
   const filtered = filters.level ? rows.filter((r) => r.level === filters.level) : rows;
   return filtered.slice(0, MAX_ROWS);
@@ -112,7 +114,7 @@ function parseNotificationFilters(query) {
 // — unlike the other four tabs, which only ever have a free-text `line` and need classifyLogLevel's
 // regex guesswork, this can filter directly with WHERE severity = ?, and title/message are its own
 // columns rather than one opaque string to search inside.
-function queryNotificationEvents(filters) {
+async function queryNotificationEvents(filters) {
   const conditions = ['1=1'];
   const params = [];
   if (filters.from) { conditions.push('created_at >= ?'); params.push(filters.from); }
@@ -136,10 +138,10 @@ router.get('/', (req, res) => {
   res.redirect(area ? LOG_TAB_PATHS[area] : '/logs/mqtt');
 });
 
-router.get('/mqtt', requirePermission('logs_mqtt', 'view'), (req, res) => {
+router.get('/mqtt', requirePermission('logs_mqtt', 'view'), asyncHandler(async (req, res) => {
   const filters = parseFilters(req.query);
-  const rows = queryLogs({ source: 'mqtt', filters });
-  const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
+  const rows = await queryLogs({ source: 'mqtt', filters });
+  const settings = await db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
   // Same blur+notice treatment as /logs/loxone's own permission gate, different underlying cause:
   // there's no separate poller error to check here since mosquittoLog.js reads the broker's OWN
   // log file locally (not over MQTT), which keeps working fine even while the broker itself is
@@ -147,14 +149,14 @@ router.get('/mqtt', requirePermission('logs_mqtt', 'view'), (req, res) => {
   // broker means nothing NEW is arriving to eventually show up here either way.
   const brokerOffline = !mqttClient.state.connected;
   res.render('logs-mqtt', { rows, query: req.query, range: filters.range, retentionDays: settings.log_retention_days, brokerOffline });
-});
+}));
 
-router.get('/mqtt/export.txt', requirePermission('logs_mqtt', 'edit'), (req, res) => {
-  const rows = db.prepare('SELECT recorded_at AS recordedAt, line FROM log_entries WHERE source = ? ORDER BY id ASC').all('mqtt');
+router.get('/mqtt/export.txt', requirePermission('logs_mqtt', 'edit'), asyncHandler(async (req, res) => {
+  const rows = await db.prepare('SELECT recorded_at AS recordedAt, line FROM log_entries WHERE source = ? ORDER BY id ASC').all('mqtt');
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="mqtt.log"');
   res.send(rows.map((r) => r.line).join('\n'));
-});
+}));
 
 // def.log lines each carry their own "YYYY-MM-DD HH:MM:SS.mmm;" prefix from the Miniserver — the
 // gateway's own recorded_at is only when it happened to be *fetched*, which can be much later for
@@ -163,12 +165,12 @@ router.get('/mqtt/export.txt', requirePermission('logs_mqtt', 'edit'), (req, res
 // events that all appear to have happened in the same instant.
 const LOXONE_LINE_TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3});/;
 
-router.get('/loxone', requirePermission('logs_loxone', 'view'), (req, res) => {
-  const miniservers = db.prepare('SELECT id, name, logbook_error FROM miniservers ORDER BY sort_order, id').all();
+router.get('/loxone', requirePermission('logs_loxone', 'view'), asyncHandler(async (req, res) => {
+  const miniservers = await db.prepare('SELECT id, name, logbook_error FROM miniservers ORDER BY sort_order, id').all();
   const miniserverId = req.query.miniserver_id ? Number(req.query.miniserver_id) : null;
   const filters = parseFilters(req.query);
 
-  const rows = queryLogs({ source: 'loxone', sourceId: miniserverId, filters })
+  const rows = (await queryLogs({ source: 'loxone', sourceId: miniserverId, filters }))
     .map((r) => {
       const match = r.line.match(LOXONE_LINE_TIMESTAMP_RE);
       return { ...r, miniserverName: r.sourceLabel, displayTime: match ? match[1] : null };
@@ -191,7 +193,7 @@ router.get('/loxone', requirePermission('logs_loxone', 'view'), (req, res) => {
         : `Every configured Miniserver is failing to fetch its Logbook. Most recent error (${miniservers[0].name}): ${miniservers[0].logbook_error}`)
       : null;
 
-  const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
+  const settings = await db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
   res.render('logs-loxone', {
     rows,
     miniservers,
@@ -202,28 +204,28 @@ router.get('/loxone', requirePermission('logs_loxone', 'view'), (req, res) => {
     range: filters.range,
     retentionDays: settings.log_retention_days,
   });
-});
+}));
 
-router.get('/loxone/export.txt', requirePermission('logs_loxone', 'edit'), (req, res) => {
+router.get('/loxone/export.txt', requirePermission('logs_loxone', 'edit'), asyncHandler(async (req, res) => {
   const miniserverId = req.query.miniserver_id ? Number(req.query.miniserver_id) : null;
   const rows = miniserverId
-    ? db.prepare('SELECT line FROM log_entries WHERE source = ? AND source_id = ? ORDER BY id ASC').all('loxone', miniserverId)
-    : db.prepare('SELECT line FROM log_entries WHERE source = ? ORDER BY id ASC').all('loxone');
+    ? await db.prepare('SELECT line FROM log_entries WHERE source = ? AND source_id = ? ORDER BY id ASC').all('loxone', miniserverId)
+    : await db.prepare('SELECT line FROM log_entries WHERE source = ? ORDER BY id ASC').all('loxone');
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="loxone.log"');
   res.send(rows.map((r) => r.line).join('\n'));
-});
+}));
 
-router.get('/loxone-commands', requirePermission('logs_loxone_commands', 'view'), (req, res) => {
+router.get('/loxone-commands', requirePermission('logs_loxone_commands', 'view'), asyncHandler(async (req, res) => {
   const filters = parseFilters(req.query);
-  const rows = queryLogs({ source: 'loxone_commands', filters });
-  const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
+  const rows = await queryLogs({ source: 'loxone_commands', filters });
+  const settings = await db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
   res.render('logs-loxone-commands', { rows, query: req.query, range: filters.range, retentionDays: settings.log_retention_days });
-});
+}));
 
-router.get('/loxone-commands/export.txt', requirePermission('logs_loxone_commands', 'edit'), (req, res) => {
-  const rows = db.prepare(
+router.get('/loxone-commands/export.txt', requirePermission('logs_loxone_commands', 'edit'), asyncHandler(async (req, res) => {
+  const rows = await db.prepare(
     `SELECT recorded_at AS recordedAt, source_label AS sourceLabel, line,
             command_topic AS commandTopic, value_from AS valueFrom, value_to AS valueTo
      FROM log_entries WHERE source = 'loxone_commands' ORDER BY id ASC`
@@ -231,39 +233,39 @@ router.get('/loxone-commands/export.txt', requirePermission('logs_loxone_command
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="loxone-commands.log"');
   res.send(rows.map((r) => `${r.recordedAt}\t${r.sourceLabel || ''}\t${r.commandTopic || ''}\t${r.valueFrom ?? ''}\t${r.valueTo ?? ''}\t${r.line}`).join('\n'));
-});
+}));
 
-router.get('/system', requirePermission('logs_system', 'view'), (req, res) => {
+router.get('/system', requirePermission('logs_system', 'view'), asyncHandler(async (req, res) => {
   const filters = parseFilters(req.query);
-  const rows = queryLogs({ source: 'system', filters });
-  const settings = db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
+  const rows = await queryLogs({ source: 'system', filters });
+  const settings = await db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
   res.render('logs-system', { rows, query: req.query, range: filters.range, retentionDays: settings.log_retention_days });
-});
+}));
 
-router.get('/system/export.txt', requirePermission('logs_system', 'edit'), (req, res) => {
-  const rows = db.prepare('SELECT line FROM log_entries WHERE source = ? ORDER BY id ASC').all('system');
+router.get('/system/export.txt', requirePermission('logs_system', 'edit'), asyncHandler(async (req, res) => {
+  const rows = await db.prepare('SELECT line FROM log_entries WHERE source = ? ORDER BY id ASC').all('system');
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="system.log"');
   res.send(rows.map((r) => r.line).join('\n'));
-});
+}));
 
-router.get('/notifications', requirePermission('logs_notifications', 'view'), (req, res) => {
+router.get('/notifications', requirePermission('logs_notifications', 'view'), asyncHandler(async (req, res) => {
   const filters = parseNotificationFilters(req.query);
-  const rows = queryNotificationEvents(filters);
-  const settings = db.prepare('SELECT notification_retention_days FROM gateway_settings WHERE id = 1').get();
+  const rows = await queryNotificationEvents(filters);
+  const settings = await db.prepare('SELECT notification_retention_days FROM gateway_settings WHERE id = 1').get();
   res.render('logs-notifications', {
     rows, query: req.query, range: filters.range, retentionDays: settings.notification_retention_days,
     categories: NOTIFICATION_CATEGORIES, categoryLabel,
   });
-});
+}));
 
-router.get('/notifications/export.txt', requirePermission('logs_notifications', 'edit'), (req, res) => {
-  const rows = db.prepare(
+router.get('/notifications/export.txt', requirePermission('logs_notifications', 'edit'), asyncHandler(async (req, res) => {
+  const rows = await db.prepare(
     'SELECT created_at AS createdAt, event_type AS eventType, severity, title, message, source_label AS sourceLabel FROM notification_events ORDER BY id ASC'
   ).all();
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="notifications.log"');
   res.send(rows.map((r) => `${r.createdAt}\t${categoryLabel(r.eventType)}\t${r.severity}\t${r.title}\t${r.message}\t${r.sourceLabel || ''}`).join('\n'));
-});
+}));
 
 module.exports = router;

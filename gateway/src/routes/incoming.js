@@ -5,6 +5,7 @@ const { getClients, clearClients } = require('../mosquittoLog');
 const { commandRecognitionString } = require('../loxone');
 const { discoverDevices, resolveTopicPrefix } = require('../deviceDiscovery');
 const { requirePermission } = require('../middleware/requirePermission');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ function isSystemClient(clientId) {
   return clientId.startsWith('loxsuite-');
 }
 
-router.get('/clients', (req, res) => {
+router.get('/clients', asyncHandler(async (req, res) => {
   const { allDevices, deviceFamily } = discoverDevices();
   const allClients = getClients().map((c) => {
     const prefix = resolveTopicPrefix(c.clientId, allDevices);
@@ -37,7 +38,7 @@ router.get('/clients', (req, res) => {
   const deviceClients = allClients.filter((c) => !isSystemClient(c.clientId));
   const systemClients = allClients.filter((c) => isSystemClient(c.clientId));
   const tab = req.query.tab === 'system' ? 'system' : 'device';
-  const settings = db.prepare('SELECT client_retention_hours FROM gateway_settings WHERE id = 1').get();
+  const settings = await db.prepare('SELECT client_retention_hours FROM gateway_settings WHERE id = 1').get();
   res.render('incoming-clients', {
     clients: tab === 'system' ? systemClients : deviceClients,
     deviceCount: deviceClients.length,
@@ -52,21 +53,21 @@ router.get('/clients', (req, res) => {
     // which already knows the real answer from which topicPrefixPattern actually matched.
     deviceFamily,
   });
-});
+}));
 
 router.post('/clients/clear', requirePermission('incoming', 'edit'), (req, res) => {
   clearClients();
   res.redirect('/incoming/clients');
 });
 
-router.post('/clients/settings', requirePermission('incoming', 'edit'), (req, res) => {
+router.post('/clients/settings', requirePermission('incoming', 'edit'), asyncHandler(async (req, res) => {
   const hours = Number(req.body.client_retention_hours);
   if (Number.isFinite(hours) && hours > 0) {
-    db.prepare('UPDATE gateway_settings SET client_retention_hours = ? WHERE id = 1').run(Math.round(hours));
+    await db.prepare('UPDATE gateway_settings SET client_retention_hours = ? WHERE id = 1').run(Math.round(hours));
   }
   // Referer-based (not a fixed '/incoming/clients') since this form now lives on the Settings
   // page — same pattern already used by /logs/settings.
   res.redirect(req.get('referer') || '/incoming/clients');
-});
+}));
 
 module.exports = router;

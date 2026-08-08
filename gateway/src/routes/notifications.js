@@ -4,39 +4,40 @@ const {
   TRIGGER_TYPES, sendTestMessage, sendTemplateTestMessage, getNotificationTemplates, saveNotificationTemplates, TEMPLATE_PREVIEW_SAMPLES,
 } = require('../notifications');
 const { logSystemEvent } = require('../auditLog');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
-function listChannels() {
+async function listChannels() {
   return db.prepare('SELECT * FROM notification_channels ORDER BY name').all();
 }
 
 // Admin-wide rules only — a user's own personal rule (owner_user_id set, see
 // migrateNotificationRulesOwner in db.js) is managed entirely from their own Profile page instead
 // (routes/profile.js), not shown or editable here.
-function listRules() {
-  const rules = db.prepare('SELECT * FROM notification_rules WHERE owner_user_id IS NULL ORDER BY name').all();
+async function listRules() {
+  const rules = await db.prepare('SELECT * FROM notification_rules WHERE owner_user_id IS NULL ORDER BY name').all();
   const channelStmt = db.prepare(`
     SELECT nc.id, nc.name FROM notification_channels nc
     JOIN notification_rule_channels nrc ON nrc.channel_id = nc.id
     WHERE nrc.rule_id = ? ORDER BY nc.name
   `);
-  return rules.map((rule) => ({
+  return Promise.all(rules.map(async (rule) => ({
     ...rule,
     config: JSON.parse(rule.config || '{}'),
-    channels: channelStmt.all(rule.id),
-    channelIds: channelStmt.all(rule.id).map((c) => c.id),
-  }));
+    channels: await channelStmt.all(rule.id),
+    channelIds: (await channelStmt.all(rule.id)).map((c) => c.id),
+  })));
 }
 
 async function renderPage(res, extra = {}) {
   res.render('admin-notifications', {
-    channels: listChannels(),
-    rules: listRules(),
+    channels: await listChannels(),
+    rules: await listRules(),
     triggerTypes: TRIGGER_TYPES,
-    monitors: db.prepare('SELECT id, label FROM monitors ORDER BY label').all(),
-    miniservers: db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all(),
-    templates: getNotificationTemplates(),
+    monitors: await db.prepare('SELECT id, label FROM monitors ORDER BY label').all(),
+    miniservers: await db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all(),
+    templates: await getNotificationTemplates(),
     templatePreviewSamples: TEMPLATE_PREVIEW_SAMPLES,
     error: null,
     testResult: null,
@@ -49,50 +50,50 @@ async function renderPage(res, extra = {}) {
 // ?trigger_type=battery_weak (see hardware.ejs's own link) pre-selects that trigger and opens the
 // "Add rule" panel straight away — otherwise landing here means guessing which of the trigger
 // dropdown's many options is the right one before you can even see its fields.
-router.get('/', (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const presetTrigger = TRIGGER_TYPES.some((t) => t.key === req.query.trigger_type) ? req.query.trigger_type : '';
-  renderPage(res, { presetTrigger });
-});
+  await renderPage(res, { presetTrigger });
+}));
 
 // ---- Channels ----
 
-router.post('/channels', (req, res) => {
+router.post('/channels', asyncHandler(async (req, res) => {
   const { name, url } = req.body;
   if (!name || !url) return renderPage(res, { error: 'Channel name and Apprise URL are both required.' });
-  db.prepare('INSERT INTO notification_channels (name, url, enabled, created_at) VALUES (?, ?, 1, ?)')
+  await db.prepare('INSERT INTO notification_channels (name, url, enabled, created_at) VALUES (?, ?, 1, ?)')
     .run(name.trim(), url.trim(), new Date().toISOString());
-  logSystemEvent(`"${req.user.username}" added notification channel "${name}".`);
+  await logSystemEvent(`"${req.user.username}" added notification channel "${name}".`);
   res.redirect('/admin/notifications');
-});
+}));
 
-router.post('/channels/:id/update', (req, res) => {
+router.post('/channels/:id/update', asyncHandler(async (req, res) => {
   const { name, url, enabled } = req.body;
   if (!name || !url) return renderPage(res, { error: 'Channel name and Apprise URL are both required.' });
-  db.prepare('UPDATE notification_channels SET name = ?, url = ?, enabled = ? WHERE id = ?')
+  await db.prepare('UPDATE notification_channels SET name = ?, url = ?, enabled = ? WHERE id = ?')
     .run(name.trim(), url.trim(), enabled ? 1 : 0, req.params.id);
   res.redirect('/admin/notifications');
-});
+}));
 
-router.post('/channels/:id/delete', (req, res) => {
-  const channel = db.prepare('SELECT name FROM notification_channels WHERE id = ?').get(req.params.id);
+router.post('/channels/:id/delete', asyncHandler(async (req, res) => {
+  const channel = await db.prepare('SELECT name FROM notification_channels WHERE id = ?').get(req.params.id);
   // No PRAGMA foreign_keys enforcement in this DB (see db.js) — the join rows have to be cleaned
   // up explicitly rather than relying on the schema's own ON DELETE CASCADE to do it.
-  db.prepare('DELETE FROM notification_rule_channels WHERE channel_id = ?').run(req.params.id);
-  db.prepare('DELETE FROM notification_channels WHERE id = ?').run(req.params.id);
-  if (channel) logSystemEvent(`"${req.user.username}" deleted notification channel "${channel.name}".`);
+  await db.prepare('DELETE FROM notification_rule_channels WHERE channel_id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM notification_channels WHERE id = ?').run(req.params.id);
+  if (channel) await logSystemEvent(`"${req.user.username}" deleted notification channel "${channel.name}".`);
   res.redirect('/admin/notifications');
-});
+}));
 
-router.post('/channels/:id/test', async (req, res) => {
-  const channel = db.prepare('SELECT * FROM notification_channels WHERE id = ?').get(req.params.id);
+router.post('/channels/:id/test', asyncHandler(async (req, res) => {
+  const channel = await db.prepare('SELECT * FROM notification_channels WHERE id = ?').get(req.params.id);
   if (!channel) return renderPage(res, { error: 'Channel not found.' });
   try {
     await sendTestMessage(channel);
-    renderPage(res, { testResult: { channelId: channel.id, ok: true } });
+    await renderPage(res, { testResult: { channelId: channel.id, ok: true } });
   } catch (err) {
-    renderPage(res, { testResult: { channelId: channel.id, ok: false, error: err.message } });
+    await renderPage(res, { testResult: { channelId: channel.id, ok: false, error: err.message } });
   }
-});
+}));
 
 // ---- Rules ----
 
@@ -164,25 +165,25 @@ const HARDWARE_QUICK_RULES = [
   { triggerType: 'device_offline', name: 'Device online/offline', severity: 'warning' },
 ];
 
-router.post('/rules/toggle-hardware', (req, res) => {
+router.post('/rules/toggle-hardware', asyncHandler(async (req, res) => {
   const info = HARDWARE_QUICK_RULES.find((r) => r.triggerType === req.body.trigger_type);
   if (!info) return res.redirect(req.body.return_to === 'hardware' ? '/hardware' : '/admin/notifications');
 
-  const existing = db.prepare('SELECT id, enabled FROM notification_rules WHERE trigger_type = ? ORDER BY id LIMIT 1').get(info.triggerType);
+  const existing = await db.prepare('SELECT id, enabled FROM notification_rules WHERE trigger_type = ? ORDER BY id LIMIT 1').get(info.triggerType);
   if (!existing) {
-    db.prepare('INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at) VALUES (?, ?, 1, ?, \'{}\', ?)')
+    await db.prepare('INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at) VALUES (?, ?, 1, ?, \'{}\', ?)')
       .run(info.triggerType, info.name, JSON.stringify({ miniserver_id: null, severity: info.severity }), new Date().toISOString());
-    logSystemEvent(`"${req.user.username}" quick-enabled notification rule "${info.name}".`);
+    await logSystemEvent(`"${req.user.username}" quick-enabled notification rule "${info.name}".`);
   } else {
     const newEnabled = existing.enabled ? 0 : 1;
-    db.prepare('UPDATE notification_rules SET enabled = ? WHERE id = ?').run(newEnabled, existing.id);
-    logSystemEvent(`"${req.user.username}" ${newEnabled ? 're-enabled' : 'disabled'} notification rule "${info.name}".`);
+    await db.prepare('UPDATE notification_rules SET enabled = ? WHERE id = ?').run(newEnabled, existing.id);
+    await logSystemEvent(`"${req.user.username}" ${newEnabled ? 're-enabled' : 'disabled'} notification rule "${info.name}".`);
   }
 
   res.redirect(req.body.return_to === 'hardware' ? '/hardware' : '/admin/notifications');
-});
+}));
 
-router.post('/rules', (req, res) => {
+router.post('/rules', asyncHandler(async (req, res) => {
   const { name, trigger_type: triggerType, channel_ids: channelIds } = req.body;
   if (!name || !TRIGGER_TYPES.some((t) => t.key === triggerType)) {
     return renderPage(res, { error: 'Rule name and a valid trigger type are both required.' });
@@ -192,18 +193,19 @@ router.post('/rules', (req, res) => {
   }
 
   const config = buildRuleConfig(triggerType, req.body);
-  const result = db.prepare('INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at) VALUES (?, ?, 1, ?, \'{}\', ?)')
+  const result = await db.prepare('INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at) VALUES (?, ?, 1, ?, \'{}\', ?)')
     .run(triggerType, name.trim(), JSON.stringify(config), new Date().toISOString());
 
   const ids = [].concat(channelIds || []).map(Number).filter(Boolean);
-  const insertLink = db.prepare('INSERT OR IGNORE INTO notification_rule_channels (rule_id, channel_id) VALUES (?, ?)');
-  for (const channelId of ids) insertLink.run(result.lastInsertRowid, channelId);
+  for (const channelId of ids) {
+    await db.prepare('INSERT OR IGNORE INTO notification_rule_channels (rule_id, channel_id) VALUES (?, ?)').run(result.lastInsertRowid, channelId);
+  }
 
-  logSystemEvent(`"${req.user.username}" added notification rule "${name}".`);
+  await logSystemEvent(`"${req.user.username}" added notification rule "${name}".`);
   res.redirect('/admin/notifications');
-});
+}));
 
-router.post('/rules/:id/update', (req, res) => {
+router.post('/rules/:id/update', asyncHandler(async (req, res) => {
   const { name, trigger_type: triggerType, enabled, channel_ids: channelIds } = req.body;
   if (!name || !TRIGGER_TYPES.some((t) => t.key === triggerType)) {
     return renderPage(res, { error: 'Rule name and a valid trigger type are both required.' });
@@ -217,26 +219,27 @@ router.post('/rules/:id/update', (req, res) => {
   // AND owner_user_id IS NULL — this form only ever has admin-wide rules to pick from (see
   // listRules), so a stale/tampered id pointing at someone's personal rule just no-ops here
   // instead of an admin's own form silently touching it.
-  db.prepare('UPDATE notification_rules SET trigger_type = ?, name = ?, enabled = ?, config = ?, last_state = \'{}\' WHERE id = ? AND owner_user_id IS NULL')
+  await db.prepare('UPDATE notification_rules SET trigger_type = ?, name = ?, enabled = ?, config = ?, last_state = \'{}\' WHERE id = ? AND owner_user_id IS NULL')
     .run(triggerType, name.trim(), enabled ? 1 : 0, JSON.stringify(config), req.params.id);
 
-  db.prepare('DELETE FROM notification_rule_channels WHERE rule_id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM notification_rule_channels WHERE rule_id = ?').run(req.params.id);
   const ids = [].concat(channelIds || []).map(Number).filter(Boolean);
-  const insertLink = db.prepare('INSERT OR IGNORE INTO notification_rule_channels (rule_id, channel_id) VALUES (?, ?)');
-  for (const channelId of ids) insertLink.run(req.params.id, channelId);
+  for (const channelId of ids) {
+    await db.prepare('INSERT OR IGNORE INTO notification_rule_channels (rule_id, channel_id) VALUES (?, ?)').run(req.params.id, channelId);
+  }
 
   res.redirect('/admin/notifications');
-});
+}));
 
-router.post('/rules/:id/delete', (req, res) => {
-  const rule = db.prepare('SELECT name FROM notification_rules WHERE id = ? AND owner_user_id IS NULL').get(req.params.id);
+router.post('/rules/:id/delete', asyncHandler(async (req, res) => {
+  const rule = await db.prepare('SELECT name FROM notification_rules WHERE id = ? AND owner_user_id IS NULL').get(req.params.id);
   if (!rule) return res.redirect('/admin/notifications'); // no such admin-wide rule (already gone, or it's someone's personal one)
-  db.prepare('DELETE FROM notification_rule_channels WHERE rule_id = ?').run(req.params.id);
-  db.prepare('DELETE FROM notification_rule_subscribers WHERE rule_id = ?').run(req.params.id);
-  db.prepare('DELETE FROM notification_rules WHERE id = ?').run(req.params.id);
-  if (rule) logSystemEvent(`"${req.user.username}" deleted notification rule "${rule.name}".`);
+  await db.prepare('DELETE FROM notification_rule_channels WHERE rule_id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM notification_rule_subscribers WHERE rule_id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM notification_rules WHERE id = ?').run(req.params.id);
+  if (rule) await logSystemEvent(`"${req.user.username}" deleted notification rule "${rule.name}".`);
   res.redirect('/admin/notifications');
-});
+}));
 
 // ---- Message templates ----
 
@@ -244,27 +247,27 @@ router.post('/rules/:id/delete', (req, res) => {
 // rather than a save button per type — simpler than 9 separate forms/routes for what's still one
 // conceptual "Message templates" setting. A blank pair for a given type clears its override, back
 // to that type's own hardcoded default (see notifications.js's applyTemplate).
-router.post('/templates', (req, res) => {
+router.post('/templates', asyncHandler(async (req, res) => {
   const templates = {};
   TRIGGER_TYPES.forEach((t) => {
     const title = (req.body[`template_title_${t.key}`] || '').trim();
     const body = (req.body[`template_body_${t.key}`] || '').trim();
     if (title || body) templates[t.key] = { title: title || null, body: body || null };
   });
-  saveNotificationTemplates(templates);
-  logSystemEvent(`"${req.user.username}" updated notification message templates.`);
+  await saveNotificationTemplates(templates);
+  await logSystemEvent(`"${req.user.username}" updated notification message templates.`);
   res.redirect('/admin/notifications');
-});
+}));
 
 // JSON in, JSON out — the "Send test" control below each template lives inside the templates
 // card's own big <form> (Save templates), so it can't be a real nested <form> of its own (invalid
 // HTML, unreliable which one actually submits). A plain fetch() from admin-notifications.ejs's own
 // script instead, updating just that one template's own result line in place rather than a full
 // page reload/re-render.
-router.post('/templates/:key/test', async (req, res) => {
+router.post('/templates/:key/test', asyncHandler(async (req, res) => {
   const triggerType = req.params.key;
   if (!TRIGGER_TYPES.some((t) => t.key === triggerType)) return res.status(400).json({ ok: false, error: 'Unknown trigger type.' });
-  const channel = db.prepare('SELECT * FROM notification_channels WHERE id = ?').get(req.body.channel_id);
+  const channel = await db.prepare('SELECT * FROM notification_channels WHERE id = ?').get(req.body.channel_id);
   if (!channel) return res.status(400).json({ ok: false, error: 'Choose a channel to send the test to.' });
   try {
     await sendTemplateTestMessage(channel, triggerType);
@@ -272,7 +275,7 @@ router.post('/templates/:key/test', async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
-});
+}));
 
 module.exports = router;
 // Reused by routes/profile.js for the "My rules" personal-rule form — same trigger-type-to-config

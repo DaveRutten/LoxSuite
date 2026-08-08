@@ -1,10 +1,11 @@
 const express = require('express');
 const db = require('../db');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
-router.get('/:tableKey', (req, res) => {
-  const row = db
+router.get('/:tableKey', asyncHandler(async (req, res) => {
+  const row = await db
     .prepare('SELECT * FROM user_table_prefs WHERE user_id = ? AND table_key = ?')
     .get(req.session.userId, req.params.tableKey);
 
@@ -13,19 +14,19 @@ router.get('/:tableKey', (req, res) => {
     hidden: row?.hidden_columns ? JSON.parse(row.hidden_columns) : [],
     widths: row?.column_widths ? JSON.parse(row.column_widths) : {},
   });
-});
+}));
 
-router.delete('/:tableKey', (req, res) => {
-  db.prepare('DELETE FROM user_table_prefs WHERE user_id = ? AND table_key = ?').run(req.session.userId, req.params.tableKey);
+router.delete('/:tableKey', asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM user_table_prefs WHERE user_id = ? AND table_key = ?').run(req.session.userId, req.params.tableKey);
   res.json({ ok: true });
-});
+}));
 
-router.post('/:tableKey', (req, res) => {
+router.post('/:tableKey', asyncHandler(async (req, res) => {
   const order = Array.isArray(req.body.order) ? req.body.order : [];
   const hidden = Array.isArray(req.body.hidden) ? req.body.hidden : [];
   const widths = req.body.widths && typeof req.body.widths === 'object' ? req.body.widths : {};
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO user_table_prefs (user_id, table_key, column_order, hidden_columns, column_widths)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(user_id, table_key) DO UPDATE SET
@@ -33,6 +34,6 @@ router.post('/:tableKey', (req, res) => {
   ).run(req.session.userId, req.params.tableKey, JSON.stringify(order), JSON.stringify(hidden), JSON.stringify(widths));
 
   res.json({ ok: true });
-});
+}));
 
 module.exports = router;

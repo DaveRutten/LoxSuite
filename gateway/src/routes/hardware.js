@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
@@ -25,12 +26,12 @@ const CATEGORY_LABELS = {
 };
 const CATEGORY_ORDER = ['miniserver', 'extension', 'audio_server', 'audio_zone', 'tree', 'air', 'onewire', 'plugin', 'gendev'];
 
-router.get('/', (req, res) => {
-  const miniservers = db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all();
+router.get('/', asyncHandler(async (req, res) => {
+  const miniservers = await db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all();
   const miniserverId = req.query.miniserver_id ? Number(req.query.miniserver_id) : null;
 
   const msQuery = `SELECT id, name, firmware_version, status FROM miniservers${miniserverId ? ' WHERE id = ?' : ''} ORDER BY sort_order, id`;
-  const msRows = miniserverId ? db.prepare(msQuery).all(miniserverId) : db.prepare(msQuery).all();
+  const msRows = miniserverId ? await db.prepare(msQuery).all(miniserverId) : await db.prepare(msQuery).all();
   // The Miniserver itself, presented as just another row in the same list — its firmware/online
   // status already exists (healthcheck.js), just never alongside the hardware attached to it.
   const miniserverRows = msRows.map((ms) => ({
@@ -57,7 +58,7 @@ router.get('/', (req, res) => {
     ${miniserverId ? 'WHERE h.miniserver_id = ?' : ''}
     ORDER BY (m.gateway_client_of IS NOT NULL), m.sort_order, m.id
   `;
-  const hwRows = miniserverId ? db.prepare(hwQuery).all(miniserverId) : db.prepare(hwQuery).all();
+  const hwRows = miniserverId ? await db.prepare(hwQuery).all(miniserverId) : await db.prepare(hwQuery).all();
   // A device's MAC and Serial are often the exact same underlying identifier in Loxone's own data
   // (a Tree/Air device's Serial is frequently its MAC), just formatted differently — colon-separated
   // hex for MAC, plain hex for Serial. Stripped/lowercased here so the two columns visually match
@@ -116,13 +117,13 @@ router.get('/', (req, res) => {
   // (the toggle route makes the same "first by id" choice, so this always matches what a click
   // actually affects).
   const hardwareRuleStates = new Map();
-  for (const r of db.prepare(
+  for (const r of await db.prepare(
     "SELECT trigger_type, enabled FROM notification_rules WHERE trigger_type IN ('battery_weak','device_firmware_changed','device_offline') ORDER BY id"
   ).all()) {
     if (!hardwareRuleStates.has(r.trigger_type)) hardwareRuleStates.set(r.trigger_type, !!r.enabled);
   }
 
   res.render('hardware', { devices, miniservers, miniserverId, categories, hardwareRuleStates });
-});
+}));
 
 module.exports = router;

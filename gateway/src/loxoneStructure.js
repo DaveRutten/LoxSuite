@@ -6,8 +6,8 @@ const db = require('./db');
 // room/category tree, and which ones qualify varies a lot by installation, so there's no fixed
 // list to bake in. Matched against the state's own key (stateName), not the control's name/label —
 // exact, case-insensitive.
-function getHiddenStateNames() {
-  const row = db.prepare('SELECT live_data_hidden_states FROM gateway_settings WHERE id = 1').get();
+async function getHiddenStateNames() {
+  const row = await db.prepare('SELECT live_data_hidden_states FROM gateway_settings WHERE id = 1').get();
   try {
     const names = JSON.parse(row?.live_data_hidden_states || '[]');
     return new Set(names.map((n) => String(n).toLowerCase()));
@@ -58,10 +58,10 @@ function collectStateGroups(control) {
 // Flattens every control's (and subControl's, see collectStateGroups above) "states" map (state
 // name -> value-memory uuid) into one pickable list, since that per-state uuid is what
 // /jdev/sps/io/<uuid> accepts for reading a live value.
-function flattenStates(structure) {
+async function flattenStates(structure) {
   const rooms = structure.rooms || {};
   const controls = structure.controls || {};
-  const hiddenNames = getHiddenStateNames();
+  const hiddenNames = await getHiddenStateNames();
   const states = [];
 
   for (const control of Object.values(controls)) {
@@ -85,7 +85,7 @@ function flattenStates(structure) {
 
 async function getMonitorableStates(miniserver, { forceRefresh } = {}) {
   const structure = await getStructure(miniserver, { forceRefresh });
-  return flattenStates(structure);
+  return await flattenStates(structure);
 }
 
 // Groups every control with at least one readable state by room, then by category — the same
@@ -95,11 +95,11 @@ async function getMonitorableStates(miniserver, { forceRefresh } = {}) {
 // drill-down; live values themselves are fetched separately, per category, only once expanded —
 // a structure file can have hundreds of controls, so eagerly reading every one of them up front
 // would mean hundreds of Miniserver requests just to open the page.
-function buildRoomCategoryTree(structure) {
+async function buildRoomCategoryTree(structure) {
   const rooms = structure.rooms || {};
   const cats = structure.cats || {};
   const controls = structure.controls || {};
-  const hiddenNames = getHiddenStateNames();
+  const hiddenNames = await getHiddenStateNames();
 
   const roomMap = new Map();
 
@@ -146,7 +146,7 @@ function buildRoomCategoryTree(structure) {
 
 async function getRoomCategoryTree(miniserver, { forceRefresh } = {}) {
   const structure = await getStructure(miniserver, { forceRefresh });
-  return buildRoomCategoryTree(structure);
+  return await buildRoomCategoryTree(structure);
 }
 
 // Just enough to render the initial room list — name and a couple of counts, nothing per-category

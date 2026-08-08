@@ -5,20 +5,32 @@
 // correct, just possibly not locally convenient) until set otherwise.
 const db = require('./db');
 
-let cachedTimezone = null;
+// UTC until loadTimezoneCache() below has actually run once — matches the same "default to UTC"
+// behavior this always had, just as an explicit starting value now instead of an implicit "haven't
+// looked yet" null.
+let cachedTimezone = 'UTC';
+
+// Populated eagerly, once, right after db.init() resolves — see server.js's own async bootstrap.
+// getDisplayTimezone() below is called SYNCHRONOUSLY from EJS template rendering (formatDateTime,
+// wired up as app.locals.formatDateTime — every view uses it) and from server.js's own res.locals
+// middleware, neither of which can await a DB call; the old version's own lazy-fetch-on-first-call
+// approach doesn't work anymore now that a DB read is async, so the fetch has to happen ahead of
+// time instead of on demand.
+async function loadTimezoneCache() {
+  const row = await db.prepare('SELECT display_timezone FROM gateway_settings WHERE id = 1').get();
+  cachedTimezone = row?.display_timezone || 'UTC';
+}
 
 function getDisplayTimezone() {
-  if (cachedTimezone === null) {
-    const row = db.prepare('SELECT display_timezone FROM gateway_settings WHERE id = 1').get();
-    cachedTimezone = row?.display_timezone || 'UTC';
-  }
   return cachedTimezone;
 }
 
 // Called after Settings saves a new value — otherwise the old timezone would keep being used
-// (from this module-level cache) until the next gateway restart.
-function invalidateTimezoneCache() {
-  cachedTimezone = null;
+// (from this module-level cache) until the next gateway restart. Now does the actual re-fetch
+// itself (async) rather than just nulling the cache for the next read to lazily refill, since
+// there's no more lazy-read path for it to fall back on.
+async function invalidateTimezoneCache() {
+  await loadTimezoneCache();
 }
 
 // Matches the DD/MM/YYYY, HH:MM:SS shape every view already used via toLocaleString('en-GB'),
@@ -72,4 +84,4 @@ function parseInTimezone(year, month, day, hour, minute, second, tz) {
   return guessMs - (seenAsUtc - guessMs);
 }
 
-module.exports = { getDisplayTimezone, invalidateTimezoneCache, formatDateTime, parseInTimezone };
+module.exports = { getDisplayTimezone, invalidateTimezoneCache, formatDateTime, parseInTimezone, loadTimezoneCache };

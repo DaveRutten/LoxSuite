@@ -6,7 +6,6 @@ const { fetchMiniserver } = require('./loxone');
 // real, documented endpoint (not guessed): GET /dev/fsget/log/def.log, Basic Auth.
 const BACKFILL_LINES = 500;
 
-const insertLogEntry = db.prepare('INSERT INTO log_entries (source, source_id, source_label, line, recorded_at) VALUES (?, ?, ?, ?, ?)');
 const updateLogbookError = db.prepare('UPDATE miniservers SET logbook_error = ? WHERE id = ?');
 
 // miniserver_id -> full def.log text last seen, so the next poll can diff against it instead of
@@ -24,7 +23,7 @@ const selectLastStoredLine = db.prepare(
 // starting point from what's already in the database rather than blindly re-backfilling — a plain
 // restart used to re-insert up to BACKFILL_LINES duplicate rows every single time (confirmed: one
 // real deployment accumulated a 15x duplication factor from routine restarts alone).
-function newLines(miniserverId, fullText) {
+async function newLines(miniserverId, fullText) {
   const previous = lastContent.get(miniserverId);
   lastContent.set(miniserverId, fullText);
 
@@ -33,7 +32,7 @@ function newLines(miniserverId, fullText) {
     // before (an earlier run, before this restart), find the last one we already have and only
     // take what comes after it — otherwise fall back to a bounded tail, for genuinely first-ever
     // contact or if the log rotated far enough that our last-known line isn't in it anymore.
-    const lastStored = selectLastStoredLine.get(miniserverId);
+    const lastStored = await selectLastStoredLine.get(miniserverId);
     if (lastStored) {
       const idx = fullText.lastIndexOf(lastStored.line);
       if (idx !== -1) return fullText.slice(idx + lastStored.line.length).split('\n').filter(Boolean);
@@ -53,25 +52,29 @@ async function pollMiniserver(miniserver) {
     const res = await fetchMiniserver(miniserver, '/dev/fsget/log/def.log', { timeoutMs: 15000 });
     if (!res.ok) throw new Error(`Miniserver responded with HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' — this Miniserver\'s Loxone user account likely lacks permission to read the Logbook' : ''}`);
     const text = await res.text();
-    if (miniserver.logbook_error) updateLogbookError.run(null, miniserver.id);
+    if (miniserver.logbook_error) await updateLogbookError.run(null, miniserver.id);
 
-    const lines = newLines(miniserver.id, text);
+    const lines = await newLines(miniserver.id, text);
     if (lines.length === 0) return;
 
     const now = new Date().toISOString();
-    const insertAll = db.transaction(() => {
-      for (const line of lines) insertLogEntry.run('loxone', miniserver.id, miniserver.name, line, now);
+    // tx.prepare(...), not the module-level insertLogEntry above — a statement prepared against
+    // the outer db escapes this transaction (see db/knex.js's own comment on why the SQLite pool
+    // is pinned to one connection: using the wrong handle here would deadlock immediately and
+    // loudly against that single connection instead of silently running outside the transaction).
+    await db.transaction(async (tx) => {
+      const insert = tx.prepare('INSERT INTO log_entries (source, source_id, source_label, line, recorded_at) VALUES (?, ?, ?, ?, ?)');
+      for (const line of lines) await insert.run('loxone', miniserver.id, miniserver.name, line, now);
     });
-    insertAll();
   } catch (err) {
     console.error(`Failed to fetch Loxone log for miniserver ${miniserver.id} (${miniserver.name}):`, err.message);
-    updateLogbookError.run(err.message, miniserver.id);
+    await updateLogbookError.run(err.message, miniserver.id);
   }
 }
 
-function pollAllMiniservers() {
-  const miniservers = db.prepare('SELECT * FROM miniservers').all();
-  miniservers.forEach(pollMiniserver);
+async function pollAllMiniservers() {
+  const miniservers = await db.prepare('SELECT * FROM miniservers').all();
+  await Promise.all(miniservers.map((ms) => pollMiniserver(ms)));
 }
 
 module.exports = { pollAllMiniservers };

@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
@@ -13,7 +14,7 @@ const router = express.Router();
 // Shared with middleware/loadUserContext.js (the initial page-load render) so the popover's list
 // is never a second, drifting copy of this query — this file owns it since it's also what the
 // /recent poll below re-runs on every fetch.
-function loadRecentNotifications(userId) {
+async function loadRecentNotifications(userId) {
   return db.prepare(`
     SELECT * FROM notification_events
     WHERE id NOT IN (SELECT notification_event_id FROM notification_dismissals WHERE user_id = ?)
@@ -28,66 +29,66 @@ function loadRecentNotifications(userId) {
 // mark just that one without the watermark bump also sweeping in every other item at or below its
 // id — confirmed as a real bug (two unread events, clicking the newer one's source cleared the
 // badge to 0 even though the older one had never been looked at).
-router.get('/unread-count', (req, res) => {
+router.get('/unread-count', asyncHandler(async (req, res) => {
   // req.user (loadUserContext.js) doesn't carry last_seen_notification_id — re-read it directly
   // rather than widening that object for a value nothing else currently needs.
-  const user = db.prepare('SELECT last_seen_notification_id FROM users WHERE id = ?').get(req.user.id);
-  const row = db.prepare(`
+  const user = await db.prepare('SELECT last_seen_notification_id FROM users WHERE id = ?').get(req.user.id);
+  const row = await db.prepare(`
     SELECT COUNT(*) AS n FROM notification_events
     WHERE id > ? AND id NOT IN (SELECT notification_event_id FROM notification_dismissals WHERE user_id = ?)
   `).get(user.last_seen_notification_id, req.user.id);
   res.json({ count: row.n });
-});
+}));
 
 // Re-renders the popover's own item list — polled alongside /unread-count (see foot.ejs) so the
 // LIST catches up to a newly-arrived notification too, not just the badge count. Before this
 // existed, the list was whatever got baked into the page at its last full load; the badge could
 // already show "1" while the popover's own content still didn't include that new item at all,
 // until an actual navigation or F5 re-rendered the page from scratch.
-router.get('/recent', (req, res) => {
-  res.render('partials/notification-center-items', { recentNotifications: loadRecentNotifications(req.user.id) });
-});
+router.get('/recent', asyncHandler(async (req, res) => {
+  res.render('partials/notification-center-items', { recentNotifications: await loadRecentNotifications(req.user.id) });
+}));
 
-router.post('/mark-read', (req, res) => {
-  db.prepare('UPDATE users SET last_seen_notification_id = (SELECT COALESCE(MAX(id), 0) FROM notification_events) WHERE id = ?').run(req.user.id);
+router.post('/mark-read', asyncHandler(async (req, res) => {
+  await db.prepare('UPDATE users SET last_seen_notification_id = (SELECT COALESCE(MAX(id), 0) FROM notification_events) WHERE id = ?').run(req.user.id);
   res.json({ ok: true });
-});
+}));
 
 // Fired when the popover's own item link is clicked (see foot.ejs), i.e. the user actually
 // navigated to that event's source rather than just glancing at the popover — an explicit
 // per-item acknowledgement, same INSERT OR IGNORE into notification_dismissals as the "x" button
 // below (NOT a watermark bump — see unread-count's own comment for why that used to incorrectly
 // also mark OTHER, never-looked-at items as read).
-router.post('/:id/mark-read', (req, res) => {
+router.post('/:id/mark-read', asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid notification id.' });
-  db.prepare('INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at) VALUES (?, ?, ?)')
+  await db.prepare('INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at) VALUES (?, ?, ?)')
     .run(req.user.id, id, new Date().toISOString());
   res.json({ ok: true });
-});
+}));
 
 // Removes one event from THIS user's own popover list (see loadUserContext.js's own dismissed
 // filter) — not a delete, so Logs > Notifications and every other user's popover are unaffected.
 // INSERT OR IGNORE: clicking "x" twice on the same item (a slow connection, a double click before
 // the DOM removal below finishes) is a no-op the second time, not an error.
-router.post('/:id/dismiss', (req, res) => {
+router.post('/:id/dismiss', asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid notification id.' });
-  db.prepare('INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at) VALUES (?, ?, ?)')
+  await db.prepare('INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at) VALUES (?, ?, ?)')
     .run(req.user.id, id, new Date().toISOString());
   res.json({ ok: true });
-});
+}));
 
 // "Clear all" in the popover footer — dismisses every event currently in this user's own list in
 // one round trip, rather than the client firing one /dismiss call per visible item.
-router.post('/dismiss-all', (req, res) => {
+router.post('/dismiss-all', asyncHandler(async (req, res) => {
   const now = new Date().toISOString();
-  db.prepare(`
+  await db.prepare(`
     INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at)
     SELECT ?, id, ? FROM notification_events
   `).run(req.user.id, now);
   res.json({ ok: true });
-});
+}));
 
 module.exports = router;
 module.exports.loadRecentNotifications = loadRecentNotifications;

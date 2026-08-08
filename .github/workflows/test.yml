@@ -1,0 +1,31 @@
+name: Test
+
+# Runs the gateway's own test/ suite (unit tests + the async db-facade regression guards —
+# noSyncDbCalls.test.js, and the real-boot httpSmoke.test.js) on every push/PR. Doesn't exist
+# alongside docker-publish.yml until now — that one only ever builds/publishes the image, it never
+# actually ran anything inside it.
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # better-sqlite3 needs to compile its native binding from source on install.
+      - run: sudo apt-get update && sudo apt-get install -y python3 make g++
+
+      - run: npm ci
+
+      - run: npm test

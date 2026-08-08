@@ -144,8 +144,8 @@ async function createDeviceScopedRole(topicPrefix) {
 // anywhere in LoxSuite (dynsec only ever receives it, never returns it) — so there is no
 // "re-test this saved user" equivalent to the Miniservers page's per-row "Test now" button; testing
 // only ever makes sense in the same request the credential was just set.
-function testClientConnection(username, password, timeoutMs = 5000) {
-  const settings = db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
+async function testClientConnection(username, password, timeoutMs = 5000) {
+  const settings = await db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
   const protocol = settings.use_tls ? 'mqtts' : 'mqtt';
 
   return new Promise((resolve) => {

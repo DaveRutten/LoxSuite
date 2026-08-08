@@ -1,5 +1,6 @@
 const db = require('../db');
 const { loadRecentNotifications } = require('../routes/notificationCenter');
+const asyncHandler = require('./asyncHandler');
 
 // Mounted right after requireAuth on every route. Loads the logged-in user's role and permissions
 // fresh from the DB on every request (never cached in the session cookie) so a role change made by
@@ -19,7 +20,7 @@ function makeHelpers(user) {
 // loadAccessibleDashboard's own three ways in (owner, direct share, role share) rather than
 // importing it from routes/dashboards.js, since that module in turn requires this one indirectly
 // (server.js wiring) — pulling it in here would risk a require cycle for a handful of lines of SQL.
-function loadFavoriteDashboards(userId, roleId) {
+async function loadFavoriteDashboards(userId, roleId) {
   return db.prepare(`
     SELECT custom_dashboards.id, custom_dashboards.name
     FROM dashboard_favorites
@@ -34,7 +35,7 @@ function loadFavoriteDashboards(userId, roleId) {
   `).all(userId, userId, userId, roleId, roleId);
 }
 
-module.exports = function loadUserContext(req, res, next) {
+module.exports = asyncHandler(async function loadUserContext(req, res, next) {
   res.locals.currentUser = null; // always defined so every view can safely reference it
   res.locals.collapsedSections = []; // ditto — which sidebar sections (see partials/head.ejs) this user has collapsed
   res.locals.favoriteDashboards = []; // ditto — this user's starred dashboards (see partials/head.ejs's sidebar)
@@ -45,12 +46,12 @@ module.exports = function loadUserContext(req, res, next) {
 
   if (!req.session || !req.session.userId) return next();
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
   if (!user) return next();
 
-  const role = user.role_id ? db.prepare('SELECT * FROM access_roles WHERE id = ?').get(user.role_id) : null;
+  const role = user.role_id ? await db.prepare('SELECT * FROM access_roles WHERE id = ?').get(user.role_id) : null;
   const permissionRows = role
-    ? db.prepare('SELECT area, can_view, can_edit FROM access_role_permissions WHERE role_id = ?').all(role.id)
+    ? await db.prepare('SELECT area, can_view, can_edit FROM access_role_permissions WHERE role_id = ?').all(role.id)
     : [];
 
   const permissions = {};
@@ -72,9 +73,9 @@ module.exports = function loadUserContext(req, res, next) {
   };
   res.locals.currentUser = req.user;
   Object.assign(res.locals, makeHelpers(req.user));
-  res.locals.collapsedSections = db.prepare('SELECT section_key FROM user_nav_prefs WHERE user_id = ? AND collapsed = 1')
-    .all(user.id).map((r) => r.section_key);
-  res.locals.favoriteDashboards = loadFavoriteDashboards(user.id, req.user.roleId);
+  res.locals.collapsedSections = (await db.prepare('SELECT section_key FROM user_nav_prefs WHERE user_id = ? AND collapsed = 1')
+    .all(user.id)).map((r) => r.section_key);
+  res.locals.favoriteDashboards = await loadFavoriteDashboards(user.id, req.user.roleId);
   // Computed fresh per-request like everything else here (no session caching) — correct on first
   // paint with zero extra round-trip; the topbar's own periodic poll (see foot.ejs) only has to
   // catch events that land while the user sits on one page without navigating.
@@ -83,15 +84,15 @@ module.exports = function loadUserContext(req, res, next) {
   // acknowledgement — clicking through to one event's source, or its own "x" — must not also
   // silently mark every OTHER older, never-looked-at event as read the way a watermark-only check
   // used to).
-  res.locals.unreadNotificationCount = db.prepare(`
+  res.locals.unreadNotificationCount = (await db.prepare(`
     SELECT COUNT(*) AS n FROM notification_events
     WHERE id > ? AND id NOT IN (SELECT notification_event_id FROM notification_dismissals WHERE user_id = ?)
-  `).get(user.last_seen_notification_id, user.id).n;
+  `).get(user.last_seen_notification_id, user.id)).n;
   // Shared query (not repeated here) with that same file's own /recent endpoint, which foot.ejs
   // polls to keep this list from going stale between full page loads — see that endpoint's own
   // comment for why that's needed.
-  res.locals.recentNotifications = loadRecentNotifications(user.id);
+  res.locals.recentNotifications = await loadRecentNotifications(user.id);
   res.locals.tablePageSize = user.table_page_size || 25;
 
   next();
-};
+});

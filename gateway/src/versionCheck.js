@@ -113,7 +113,7 @@ async function checkForUpdate() {
       // finding: checkLoxSuiteUpdate's own last_state dedupe only actually fires a rule once per
       // distinct tag.
       if (state.updateAvailable) {
-        checkLoxSuiteUpdate(normalize(state.currentVersion), latest);
+        await checkLoxSuiteUpdate(normalize(state.currentVersion), latest);
         // Only re-fetched the first time THIS particular version is seen as available, not on
         // every daily re-check while it's still the latest — same dedupe shape as
         // checkLoxSuiteUpdate's own last_state, just keyed on the changelog cache instead.

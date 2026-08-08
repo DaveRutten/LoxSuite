@@ -28,8 +28,8 @@ const lastPublishedValue = new Map();
 // the Miniserver's own name (matched by IP against the Miniservers page) is far more useful than
 // a bare IP:port once more than one is configured — falls back to "<transport> <address>" when
 // the sender's IP doesn't match any configured Miniserver's Host.
-function describeClient(transport, address, port) {
-  const miniserver = address ? findMiniserverByHost.get(address) : null;
+async function describeClient(transport, address, port) {
+  const miniserver = address ? await findMiniserverByHost.get(address) : null;
   const location = port ? `${address}:${port}` : address || 'unknown';
   const label = miniserver ? `${miniserver.name} (${location})` : `${transport} ${location}`;
   // The composed label above drops the transport entirely once a Miniserver name is matched (it
@@ -39,20 +39,20 @@ function describeClient(transport, address, port) {
   return { label, miniserverId: miniserver ? miniserver.id : null };
 }
 
-function logAccepted({ transport, address, port, topic, value, mappingId }) {
-  const { label, miniserverId } = describeClient(transport, address, port);
+async function logAccepted({ transport, address, port, topic, value, mappingId }) {
+  const { label, miniserverId } = await describeClient(transport, address, port);
   // Falls back to topic when no mappingId is given (defensive only — both real call sites always
   // have a mapping in hand by the time they log success) rather than making this required and
   // risking an uncaught throw on a code path Loxone itself depends on.
   const historyKey = mappingId != null ? `mapping:${mappingId}` : topic;
   const from = lastPublishedValue.has(historyKey) ? lastPublishedValue.get(historyKey) : null;
   lastPublishedValue.set(historyKey, value);
-  insertLogEntry.run(label, 'OK', topic, from, value, miniserverId, transport, new Date().toISOString());
+  await insertLogEntry.run(label, 'OK', topic, from, value, miniserverId, transport, new Date().toISOString());
 }
 
-function logRejected({ transport, address, port, topic, attemptedValue, reason }) {
-  const { label, miniserverId } = describeClient(transport, address, port);
-  insertLogEntry.run(label, `Rejected: ${reason}`, topic ?? null, null, attemptedValue ?? null, miniserverId, transport, new Date().toISOString());
+async function logRejected({ transport, address, port, topic, attemptedValue, reason }) {
+  const { label, miniserverId } = await describeClient(transport, address, port);
+  await insertLogEntry.run(label, `Rejected: ${reason}`, topic ?? null, null, attemptedValue ?? null, miniserverId, transport, new Date().toISOString());
 }
 
 module.exports = { logAccepted, logRejected };

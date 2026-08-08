@@ -7,15 +7,15 @@ const { decrypt } = require('./secretCrypto');
 // fetch() TLS verification would reject every request to a use_https=1 server.
 const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
-function applyTranslationTable(mappingId, value) {
-  const row = db
+async function applyTranslationTable(mappingId, value) {
+  const row = await db
     .prepare('SELECT output_value FROM mapping_translations WHERE mapping_id = ? AND match_value = ?')
     .get(mappingId, value);
   // No match: pass the original value through unchanged rather than failing the mapping.
   return row ? row.output_value : value;
 }
 
-function applyTransform(rawValue, mapping) {
+async function applyTransform(rawValue, mapping) {
   const value = rawValue.toString().trim();
 
   if (mapping.value_transform === 'bool_on_off') {
@@ -241,10 +241,10 @@ function applyShellyRgbwTransform(mode, rawValue, topic) {
 
 // For the Loxone -> MQTT direction (e.g. Loxone sends a raw 0/1, but a Shelly
 // command topic expects the text "off"/"on").
-function applyLoxoneToMqttTransform(mapping, rawValue) {
+async function applyLoxoneToMqttTransform(mapping, rawValue) {
   const value = rawValue.toString().trim();
   if (mapping.value_transform === 'translation_table') {
-    const row = db
+    const row = await db
       .prepare('SELECT output_value FROM loxone_mapping_translations WHERE mapping_id = ? AND match_value = ?')
       .get(mapping.id, value);
     return row ? row.output_value : value;
@@ -263,20 +263,20 @@ function applyLoxoneToMqttTransform(mapping, rawValue) {
 // MQTT topic and a new passthrough mapping is created for it on the fly — this
 // remains opt-in and off by default, since a mistyped token would otherwise
 // silently spawn a mapping instead of failing loudly.
-function findOrAutoCreateLoxoneMapping(token, transport) {
-  const existing = db.prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE token = ? AND enabled = 1').get(token);
+async function findOrAutoCreateLoxoneMapping(token, transport) {
+  const existing = await db.prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE token = ? AND enabled = 1').get(token);
   if (existing) return existing;
 
-  const byTopic = db
+  const byTopic = await db
     .prepare('SELECT * FROM mappings_loxone_to_mqtt WHERE mqtt_topic = ? AND transport = ? AND enabled = 1')
     .get(token, transport);
   if (byTopic) return byTopic;
 
-  const settings = db.prepare('SELECT * FROM gateway_settings WHERE id = 1').get();
+  const settings = await db.prepare('SELECT * FROM gateway_settings WHERE id = 1').get();
   if (!settings || !settings.auto_create_loxone_mappings) return null;
 
   try {
-    db.prepare(
+    await db.prepare(
       `INSERT INTO mappings_loxone_to_mqtt (miniserver_id, token, mqtt_topic, qos, retain, transport, value_transform)
        VALUES (NULL, ?, ?, 0, 0, ?, 'passthrough')`
     ).run(token, token, transport);
@@ -299,9 +299,9 @@ function findOrAutoCreateLoxoneMapping(token, transport) {
 // Falls back to the plain first-"="-then-first-space heuristic when nothing matches
 // a known token/topic yet — e.g. the very first message for a topic, before
 // auto-create (see findOrAutoCreateLoxoneMapping) has had a chance to register it.
-function splitUdpMessage(text, transport) {
-  const tokens = db.prepare('SELECT token FROM mappings_loxone_to_mqtt WHERE enabled = 1').all();
-  const topics = db
+async function splitUdpMessage(text, transport) {
+  const tokens = await db.prepare('SELECT token FROM mappings_loxone_to_mqtt WHERE enabled = 1').all();
+  const topics = await db
     .prepare('SELECT mqtt_topic FROM mappings_loxone_to_mqtt WHERE enabled = 1 AND transport = ?')
     .all(transport);
   const candidates = [...tokens.map((r) => r.token), ...topics.map((r) => r.mqtt_topic)]
@@ -328,12 +328,12 @@ function splitUdpMessage(text, transport) {
 }
 
 async function forwardToLoxone(mapping, rawValue, actualTopic) {
-  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(mapping.miniserver_id);
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(mapping.miniserver_id);
   if (!miniserver) {
     throw new Error(`Miniserver ${mapping.miniserver_id} not found`);
   }
 
-  const value = applyTransform(rawValue, mapping);
+  const value = await applyTransform(rawValue, mapping);
 
   if (mapping.transport === 'udp') {
     await sendUdpVirtualInput(miniserver, actualTopic || mapping.mqtt_topic, value);
@@ -341,7 +341,7 @@ async function forwardToLoxone(mapping, rawValue, actualTopic) {
     await sendHttpVirtualInput(miniserver, mapping.target, value);
   }
 
-  db.prepare('UPDATE miniservers SET last_success_at = ?, last_error = NULL WHERE id = ?')
+  await db.prepare('UPDATE miniservers SET last_success_at = ?, last_error = NULL WHERE id = ?')
     .run(new Date().toISOString(), miniserver.id);
 }
 

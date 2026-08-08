@@ -15,10 +15,9 @@ function defaultsKey(panelType, config) {
   return panelType === 'chart' ? `chart:${config.chartType || 'line'}` : panelType;
 }
 
-function getPanelMonitorIdsInOrder(panelId) {
-  return db.prepare('SELECT monitor_id FROM dashboard_panel_monitors WHERE panel_id = ? ORDER BY position')
-    .all(panelId)
-    .map((r) => r.monitor_id);
+async function getPanelMonitorIdsInOrder(panelId) {
+  const rows = await db.prepare('SELECT monitor_id FROM dashboard_panel_monitors WHERE panel_id = ? ORDER BY position').all(panelId);
+  return rows.map((r) => r.monitor_id);
 }
 
 // A panel's own `series` is keyed by monitor id, which a reusable template can't know in advance
@@ -51,14 +50,14 @@ function fromPositional(config, monitorIds) {
 // dashboard panelId lives on — a chart's "look" on the home Dashboard doesn't have to match one on
 // someone's personal board. One row per (dashboard, panel_type), overwriting whatever was saved
 // before for that same pair.
-function saveAsDefault(panelId) {
-  const panel = db.prepare('SELECT dashboard_id, panel_type, config FROM dashboard_panels WHERE id = ?').get(panelId);
+async function saveAsDefault(panelId) {
+  const panel = await db.prepare('SELECT dashboard_id, panel_type, config FROM dashboard_panels WHERE id = ?').get(panelId);
   if (!panel) return false;
   const config = JSON.parse(panel.config || '{}');
   const template = SERIES_KEYED_TYPES.includes(panel.panel_type)
-    ? toPositional(config, getPanelMonitorIdsInOrder(panelId))
+    ? toPositional(config, await getPanelMonitorIdsInOrder(panelId))
     : config;
-  db.prepare(
+  await db.prepare(
     `INSERT INTO panel_type_defaults (dashboard_id, panel_type, config, updated_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(dashboard_id, panel_type) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`
   ).run(panel.dashboard_id, defaultsKey(panel.panel_type, config), JSON.stringify(template), new Date().toISOString());
@@ -68,27 +67,27 @@ function saveAsDefault(panelId) {
 // Applies the saved house style for panelId's (dashboard, panel_type) pair back onto panelId —
 // false (no-op) if nothing's ever been saved for that pair yet. Only touches `config`;
 // title/range/monitor selection are panel-instance identity, not style, and are left alone.
-function resetToDefault(panelId) {
-  const panel = db.prepare('SELECT dashboard_id, panel_type, config FROM dashboard_panels WHERE id = ?').get(panelId);
+async function resetToDefault(panelId) {
+  const panel = await db.prepare('SELECT dashboard_id, panel_type, config FROM dashboard_panels WHERE id = ?').get(panelId);
   if (!panel) return false;
   const currentConfig = JSON.parse(panel.config || '{}');
-  const row = db.prepare('SELECT config FROM panel_type_defaults WHERE dashboard_id = ? AND panel_type = ?')
+  const row = await db.prepare('SELECT config FROM panel_type_defaults WHERE dashboard_id = ? AND panel_type = ?')
     .get(panel.dashboard_id, defaultsKey(panel.panel_type, currentConfig));
   if (!row) return false;
 
   const template = JSON.parse(row.config);
   const config = SERIES_KEYED_TYPES.includes(panel.panel_type)
-    ? fromPositional(template, getPanelMonitorIdsInOrder(panelId))
+    ? fromPositional(template, await getPanelMonitorIdsInOrder(panelId))
     : template;
-  db.prepare('UPDATE dashboard_panels SET config = ? WHERE id = ?').run(JSON.stringify(config), panelId);
+  await db.prepare('UPDATE dashboard_panels SET config = ? WHERE id = ?').run(JSON.stringify(config), panelId);
   return true;
 }
 
 // panel_type -> true, for every type that currently has a saved default ON THIS dashboard —
 // panel-grid.ejs uses this to decide whether a given panel's "Reset to default" button is worth
 // showing at all (nothing to reset to otherwise).
-function listDefaultTypes(dashboardId) {
-  const rows = db.prepare('SELECT panel_type FROM panel_type_defaults WHERE dashboard_id = ?').all(dashboardId);
+async function listDefaultTypes(dashboardId) {
+  const rows = await db.prepare('SELECT panel_type FROM panel_type_defaults WHERE dashboard_id = ?').all(dashboardId);
   return Object.fromEntries(rows.map((r) => [r.panel_type, true]));
 }
 

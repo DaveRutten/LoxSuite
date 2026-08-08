@@ -159,7 +159,16 @@ function flattenStatus(parsed) {
 const selectExisting = db.prepare(
   'SELECT device_key, version, online, batt_weak, bat_too_weak_for_update FROM loxone_hardware_devices WHERE miniserver_id = ?'
 );
-const deleteForMiniserver = db.prepare('DELETE FROM loxone_hardware_devices WHERE miniserver_id = ?');
+// The delete+reinsert pair below live inside pollMiniserver's own transaction, prepared fresh
+// against its tx handle rather than cached here at module level — see db/knex.js's own comment on
+// why a statement prepared against the outer db can't be used inside a transaction. Positional (?)
+// placeholders for the insert, not better-sqlite3's own @name object-binding style this used to
+// use — the async facade routes every query through Knex's raw(), whose own named-binding syntax
+// is :name (colon, not @), so keeping the named style would need special-casing object-vs-array
+// bindings in the facade for the sake of two files (see notifications.js's own version of this same
+// change) — matching the plain ?-positional style every other query in the app already uses
+// instead is simpler.
+//
 // Same log_entries table logs-loxone.ejs already reads from (source='loxone') — every hardware
 // transition below is written here UNCONDITIONALLY, regardless of whether any notification rule
 // exists for it, so the Loxone log stays the complete record and alerting stays a separate,
@@ -168,14 +177,6 @@ const deleteForMiniserver = db.prepare('DELETE FROM loxone_hardware_devices WHER
 const insertLogLine = db.prepare(
   'INSERT INTO log_entries (source, source_id, source_label, line, recorded_at) VALUES (?, ?, ?, ?, ?)'
 );
-const insertDevice = db.prepare(`
-  INSERT INTO loxone_hardware_devices
-    (miniserver_id, device_key, category, type, name, place, serial, version, min_version, hw_version,
-     online, battery, batt_weak, bat_too_weak_for_update, quality_ext, quality_dev, hops, time_diff, mac, updated_at)
-  VALUES
-    (@miniserverId, @deviceKey, @category, @type, @name, @place, @serial, @version, @minVersion, @hwVersion,
-     @online, @battery, @battWeak, @batTooWeakForUpdate, @qualityExt, @qualityDev, @hops, @timeDiff, @mac, @updatedAt)
-`);
 
 async function pollMiniserver(miniserver) {
   // Skip entirely while the Miniserver itself is known to be offline (per healthcheck.js's own
@@ -194,37 +195,42 @@ async function pollMiniserver(miniserver) {
 
     // Read before this poll's own delete+reinsert overwrites them — the only way to know what
     // "changed since last time" actually means for battery/firmware transitions below.
-    const previous = new Map(selectExisting.all(miniserver.id).map((r) => [r.device_key, r]));
+    const previous = new Map((await selectExisting.all(miniserver.id)).map((r) => [r.device_key, r]));
     const now = new Date().toISOString();
 
-    const applyAll = db.transaction(() => {
-      deleteForMiniserver.run(miniserver.id);
+    await db.transaction(async (tx) => {
+      await tx.prepare('DELETE FROM loxone_hardware_devices WHERE miniserver_id = ?').run(miniserver.id);
+      const insert = tx.prepare(`
+        INSERT INTO loxone_hardware_devices
+          (miniserver_id, device_key, category, type, name, place, serial, version, min_version, hw_version,
+           online, battery, batt_weak, bat_too_weak_for_update, quality_ext, quality_dev, hops, time_diff, mac, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
       for (const item of items) {
-        insertDevice.run({
-          miniserverId: miniserver.id,
-          deviceKey: item.deviceKey,
-          category: item.category,
-          type: item.type || null,
-          name: item.name || null,
-          place: item.place || null,
-          serial: item.serial || null,
-          version: item.version || null,
-          minVersion: item.minVersion || null,
-          hwVersion: item.hwVersion || null,
-          online: item.online === null ? null : (item.online ? 1 : 0),
-          battery: item.battery,
-          battWeak: item.battWeak ? 1 : 0,
-          batTooWeakForUpdate: item.batTooWeakForUpdate ? 1 : 0,
-          qualityExt: item.qualityExt,
-          qualityDev: item.qualityDev,
-          hops: item.hops,
-          timeDiff: item.timeDiff,
-          mac: item.mac || null,
-          updatedAt: now,
-        });
+        await insert.run(
+          miniserver.id,
+          item.deviceKey,
+          item.category,
+          item.type || null,
+          item.name || null,
+          item.place || null,
+          item.serial || null,
+          item.version || null,
+          item.minVersion || null,
+          item.hwVersion || null,
+          item.online === null ? null : (item.online ? 1 : 0),
+          item.battery,
+          item.battWeak ? 1 : 0,
+          item.batTooWeakForUpdate ? 1 : 0,
+          item.qualityExt,
+          item.qualityDev,
+          item.hops,
+          item.timeDiff,
+          item.mac || null,
+          now
+        );
       }
     });
-    applyAll();
 
     // A Gateway Client setup means the Gateway's own /data/status already reports every one of its
     // Clients' hardware too (see routes/hardware.js's own dedup comment — confirmed against a real
@@ -246,22 +252,22 @@ async function pollMiniserver(miniserver) {
       const label = item.name || item.type || item.deviceKey;
 
       if (item.version && prev.version && item.version !== prev.version) {
-        insertLogLine.run('loxone', miniserver.id, miniserver.name, `Hardware: "${label}" firmware changed from ${prev.version} to ${item.version}.`, now);
-        if (!skipNotify) checkDeviceFirmwareChanged(miniserver, item, prev.version);
+        await insertLogLine.run('loxone', miniserver.id, miniserver.name, `Hardware: "${label}" firmware changed from ${prev.version} to ${item.version}.`, now);
+        if (!skipNotify) await checkDeviceFirmwareChanged(miniserver, item, prev.version);
       }
 
       const wasWeak = !!prev.batt_weak || !!prev.bat_too_weak_for_update;
       const isWeak = item.battWeak || item.batTooWeakForUpdate;
       if (isWeak && !wasWeak) {
-        insertLogLine.run('loxone', miniserver.id, miniserver.name, `Hardware: "${label}" battery weak${item.battery != null ? ` (${item.battery}%)` : ''}.`, now);
-        if (!skipNotify) checkBatteryWeak(miniserver, item);
+        await insertLogLine.run('loxone', miniserver.id, miniserver.name, `Hardware: "${label}" battery weak${item.battery != null ? ` (${item.battery}%)` : ''}.`, now);
+        if (!skipNotify) await checkBatteryWeak(miniserver, item);
       }
 
       // null on either side means "this category never reports Online at all" (Audioserver/Zone/
       // some Plugins) — not a genuine transition to detect.
       if (item.online !== null && prev.online !== null && Number(prev.online) !== (item.online ? 1 : 0)) {
-        insertLogLine.run('loxone', miniserver.id, miniserver.name, `Hardware: "${label}" is now ${item.online ? 'online' : 'offline'}.`, now);
-        if (!skipNotify) checkDeviceOffline(miniserver, item, item.online);
+        await insertLogLine.run('loxone', miniserver.id, miniserver.name, `Hardware: "${label}" is now ${item.online ? 'online' : 'offline'}.`, now);
+        if (!skipNotify) await checkDeviceOffline(miniserver, item, item.online);
       }
     }
   } catch (err) {
@@ -269,9 +275,9 @@ async function pollMiniserver(miniserver) {
   }
 }
 
-function pollAllMiniservers() {
-  const miniservers = db.prepare('SELECT * FROM miniservers').all();
-  miniservers.forEach(pollMiniserver);
+async function pollAllMiniservers() {
+  const miniservers = await db.prepare('SELECT * FROM miniservers').all();
+  await Promise.all(miniservers.map((ms) => pollMiniserver(ms)));
 }
 
 function startHardwarePolling() {
