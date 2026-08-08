@@ -241,13 +241,13 @@
     tableKey: '/mappings/loxone-to-mqtt',
     columns: [
       { title: 'Status', field: 'enabled', formatter: statusFormatter, headerSort: true, sorter: 'boolean' },
-      { title: 'MQTT topic', field: 'mqttTopic', formatter: topicFormatter, headerSort: true, sorter: 'string', headerFilter: 'input', minWidth: 220 },
-      { title: 'Miniserver', field: 'miniserverName', formatter: function (cell) { return cell.getValue() || '-'; }, headerSort: true, sorter: 'string', headerFilter: 'input' },
-      { title: 'Transport', field: 'transport', headerSort: true, sorter: 'string', headerFilter: 'input' },
-      { title: 'Transform', field: 'valueTransform', headerSort: true, sorter: 'string', headerFilter: 'input' },
+      { title: 'MQTT topic', field: 'mqttTopic', formatter: topicFormatter, headerSort: true, sorter: 'string', minWidth: 220 },
+      { title: 'Miniserver', field: 'miniserverName', formatter: function (cell) { return cell.getValue() || '-'; }, headerSort: true, sorter: 'string' },
+      { title: 'Transport', field: 'transport', headerSort: true, sorter: 'string' },
+      { title: 'Transform', field: 'valueTransform', headerSort: true, sorter: 'string' },
       { title: 'QoS', field: 'qos', hozAlign: 'left' },
       { title: 'Retain', field: 'retain', formatter: function (cell) { return cell.getValue() ? 'yes' : 'no'; } },
-      { title: 'Token', field: 'token', formatter: tokenFormatter, headerFilter: 'input' },
+      { title: 'Token', field: 'token', formatter: tokenFormatter },
       { title: 'UDP port', field: 'udpPort', formatter: function (cell) { var v = cell.getRow().getData(); return v.transport === 'udp' ? cell.getValue() : '-'; } },
       { title: 'Connection info', field: 'mqttTopic2', formatter: connectionInfoFormatter, headerSort: false },
       { title: 'Actions', field: 'actions', formatter: actionsFormatter, headerSort: false, resizable: false, width: 90 },
@@ -258,5 +258,8 @@
     noControls: ['actions', 'mqttTopic2'],
     columnsBtn: 'l2m-columns-btn',
     columnsPanel: 'l2m-columns-panel',
+    searchInput: 'l2m-search',
+    searchClear: 'l2m-search-clear',
+    searchFields: ['mqttTopic', 'miniserverName', 'transport', 'valueTransform', 'token'],
   });
 })();
