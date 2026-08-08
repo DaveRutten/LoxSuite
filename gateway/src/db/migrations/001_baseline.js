@@ -459,15 +459,17 @@ async function seedFreshInstall(knex) {
   }
 }
 
-// SQLite's own `.returning('id')` support in Knex only surfaces the LAST inserted row's id for a
-// multi-row insert, and doesn't work at all on some other backends without a real RETURNING clause
-// — for a single-row insert like every seed call above, `.then((ids) => ids[0])` is what Knex's own
-// better-sqlite3 dialect already returns from a plain (non-.returning) insert, kept as a tiny local
-// helper rather than reusing db/index.js's own insertReturningId (that one talks to the app's
-// runtime facade, not a migration's own `knex` argument, which is a distinct Knex instance/connection).
+// Plain `.insert(row)` with no `.returning()` returns a bare array of ids on SQLite (`[1]`) but the
+// RAW pg driver result object on Postgres (verified empirically — NOT an array, so a naive
+// `Array.isArray(result) ? result[0] : result` silently returns that whole object instead of an id
+// on Postgres, corrupting the very next insert that uses it as a foreign key). `.returning('id')`
+// instead produces the identical `[{id: N}]` shape on both, matching db/index.js's own
+// insertReturningId() (kept as its own tiny local helper here rather than reusing that one, since
+// this runs against a migration's own bare `knex` argument, a distinct instance/connection from the
+// app's runtime facade).
 async function insertReturningId(knex, table, row) {
-  const result = await knex(table).insert(row);
-  return Array.isArray(result) ? result[0] : result;
+  const result = await knex(table).insert(row).returning('id');
+  return result[0].id;
 }
 
 exports.down = async function down(knex) {

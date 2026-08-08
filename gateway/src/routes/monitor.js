@@ -199,6 +199,17 @@ async function loadMonitor(id) {
     .get(id);
 }
 
+// SQLite/MySQL call this GROUP_CONCAT(...); Postgres has no such function at all — its own
+// equivalent is STRING_AGG(expr, separator), with the separator a required explicit argument
+// rather than an implicit default. A genuine function-NAME difference (not just punctuation), so
+// unlike every other dialect fix in this app it can't be papered over with one shared SQL string —
+// this is the one call site in the whole app that needs it.
+function dashboardPairsExpr() {
+  return db.getBackend() === 'postgres'
+    ? "STRING_AGG(DISTINCT custom_dashboards.id || ':' || custom_dashboards.name, ',')"
+    : "GROUP_CONCAT(DISTINCT custom_dashboards.id || ':' || custom_dashboards.name)";
+}
+
 router.get('/', asyncHandler(async (req, res) => {
   const { listAccessibleDashboardIds } = require('./dashboards');
   const accessibleDashboardIds = await listAccessibleDashboardIds(req.session.userId, req.user && req.user.roleId);
@@ -206,13 +217,13 @@ router.get('/', asyncHandler(async (req, res) => {
     .prepare(
       `SELECT monitors.*, miniservers.name AS miniserver_name,
               COUNT(DISTINCT dashboard_panel_monitors.panel_id) AS panelCount,
-              GROUP_CONCAT(DISTINCT custom_dashboards.id || ':' || custom_dashboards.name) AS dashboardPairs
+              ${dashboardPairsExpr()} AS dashboardPairs
        FROM monitors
        LEFT JOIN miniservers ON miniservers.id = monitors.miniserver_id
        LEFT JOIN dashboard_panel_monitors ON dashboard_panel_monitors.monitor_id = monitors.id
        LEFT JOIN dashboard_panels ON dashboard_panels.id = dashboard_panel_monitors.panel_id
        LEFT JOIN custom_dashboards ON custom_dashboards.id = dashboard_panels.dashboard_id
-       GROUP BY monitors.id
+       GROUP BY monitors.id, miniservers.name
        ORDER BY monitors.label`
     )
     .all();

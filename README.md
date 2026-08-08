@@ -722,8 +722,25 @@ whatever channel(s) they already send to.
 ## Data and persistence
 
 - Mosquitto data/logs and its dynamic-security state live in Docker volumes / `./mosquitto/config`.
-- All mappings, Miniserver configuration, users, and sessions live in one SQLite file at
-  `./data/gateway.db` (bind-mounted, so it's easy to back up).
+- By default, all mappings, Miniserver configuration, users, and sessions live in one SQLite file
+  at `./data/gateway.db` (bind-mounted, so it's easy to back up). No setup required — this is the
+  default for a reason and is fine for the vast majority of installs.
+- **Optional: external PostgreSQL.** If you'd rather point LoxSuite at a Postgres server you
+  already run (e.g. alongside other self-hosted services), set `DB_BACKEND=postgres` and either
+  `DATABASE_URL` or the discrete `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` vars — see
+  the commented-out example in `docker-compose.yml`/`.env.example`. This is read once at boot
+  (restart required to change), not a live Settings-page toggle. Administration &rarr; General
+  shows which backend is active. MySQL/MariaDB is planned but not available yet.
+  - **Moving an existing SQLite install over**: `docker compose exec loxsuite node
+    src/db/transfer.js --from-sqlite /data/gateway.db --to "$DATABASE_URL"` builds the schema on
+    the target, copies every table over, and resets Postgres's own sequences afterward. Run it with
+    `--dry-run` first to see a row-count report and check for orphaned rows (SQLite never enforced
+    foreign keys the way Postgres does) without touching the target at all; `--prune-orphans` skips
+    any such rows instead of aborting. Requires the target database to already exist and be empty
+    (or pass `--force` to overwrite one this tool already populated).
+  - **Backups/restore** work the same either way from the Backups page — a SQLite install backs up
+    via an online file copy, a Postgres install via `pg_dump`/`pg_restore`; a backup made under one
+    backend can't be restored into an install running the other (use the transfer tool instead).
 - Common Commands/Data device templates (built-in examples plus any of your own) live as plain
   `.json`/`.xml` files under `./device-templates` — see that folder's own `README.md`.
 
@@ -735,7 +752,12 @@ whatever channel(s) they already send to.
 | `MQTT_ADMIN_USERNAME` / `MQTT_ADMIN_PASSWORD` | Break-glass dynamic-security admin account, used once on first boot to bootstrap the `client` role and the gateway's own account. Keep the password somewhere safe. |
 | `SESSION_SECRET` | Random long string used to sign session cookies *and* to derive the key that encrypts Miniserver/MQTT/SSO/rclone secrets at rest — set it once, keep it the same afterward (see Security above). |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Web UI admin account, created on first boot if the `users` table is empty. |
-| `DB_PATH` | SQLite database path (set in `docker-compose.yml`, rarely needs changing). |
+| `DB_PATH` | SQLite database path (set in `docker-compose.yml`, rarely needs changing). Ignored when `DB_BACKEND=postgres`. |
+| `DB_BACKEND` | `sqlite` (default) or `postgres` — see Data and persistence above. |
+| `DATABASE_URL` | Postgres connection URL (`postgres://user:pass@host:5432/db`), only used when `DB_BACKEND=postgres`. Alternative to the discrete `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` vars below. |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | Discrete Postgres connection settings, used if `DATABASE_URL` isn't set. |
+| `DB_SSL` | `false` (default), `require`, or `verify-full` — Postgres TLS mode. |
+| `DB_POOL_MAX` / `DB_CONNECT_TIMEOUT_MS` / `DB_CONNECT_RETRIES` | Postgres connection pool size and boot-time connectivity retry/backoff settings. |
 | `LOXONE_UDP_PORT` | UDP port the gateway listens on for Loxone &rarr; MQTT UDP mappings (default 11884). |
 | `DEVICE_TEMPLATES_PATH` | Directory the gateway reads Common Commands/Data device template files from at startup (set in `docker-compose.yml`, rarely needs changing). |
 
