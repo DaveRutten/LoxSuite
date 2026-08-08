@@ -106,12 +106,19 @@ function resolveDbConfig() {
   }
 
   if (rawBackend === 'mysql') {
-    // mysql2 is already a dependency and knex.js already has a client:'mysql2' shape ready for
-    // this (see its own comment) — MySQL/MariaDB support itself is Phase 5 of the project's own
-    // db-backend plan and just hasn't been wired up end to end yet. Fails loud rather than silently
-    // trying (and confusingly half-working, or hitting an untested baseline-migration edge case)
-    // against a backend nothing has actually verified yet.
-    fail('DB_BACKEND=mysql is not supported yet (MySQL/MariaDB support is planned for a future release) — use "sqlite" or "postgres" for now.');
+    // Works against MySQL or MariaDB servers alike — mysql2 (the driver) and mariadb-client (the
+    // CLI tools backup/engines/mysql.js shells out to) both speak either wire protocol; nothing in
+    // this app distinguishes which one is actually on the other end. DATABASE_URL accepts either
+    // scheme for the same reason.
+    const connection = resolveNetworkConnection('mysql', 3306, ['mysql', 'mariadb']);
+    const ssl = parseSsl(process.env.DB_SSL);
+    return {
+      backend: 'mysql',
+      connection: { ...connection, ssl },
+      poolMax: positiveIntOr(process.env.DB_POOL_MAX, 10, 'DB_POOL_MAX'),
+      connectTimeoutMs: positiveIntOr(process.env.DB_CONNECT_TIMEOUT_MS, 10000, 'DB_CONNECT_TIMEOUT_MS'),
+      connectRetries: positiveIntOr(process.env.DB_CONNECT_RETRIES, 30, 'DB_CONNECT_RETRIES'),
+    };
   }
 
   // backend === 'postgres'
@@ -131,7 +138,7 @@ function resolveDbConfig() {
 function describeConfig(config) {
   if (config.backend === 'sqlite') return `sqlite (${config.dbPath})`;
   const c = config.connection;
-  return `postgres (${c.user}@${c.host}:${c.port}/${c.database}${c.ssl ? ', ssl' : ''})`;
+  return `${config.backend} (${c.user}@${c.host}:${c.port}/${c.database}${c.ssl ? ', ssl' : ''})`;
 }
 
 module.exports = { resolveDbConfig, describeConfig, SUPPORTED_BACKENDS };

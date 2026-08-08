@@ -32,6 +32,10 @@
     The database half is a <code>pg_dump</code> archive here (PostgreSQL backend) rather than a
     <code>gateway.db</code> file &mdash; a backup only restores into another install running the
     same backend; see Administration &gt; General for what this install is currently set to.
+  <% } else if (dbInfo.backend === 'mysql') { %>
+    The database half is a <code>mysqldump</code> SQL script here (MySQL/MariaDB backend) rather
+    than a <code>gateway.db</code> file &mdash; a backup only restores into another install running
+    the same backend; see Administration &gt; General for what this install is currently set to.
   <% } %>
 </p>
 

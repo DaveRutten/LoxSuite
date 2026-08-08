@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.0-alpha.1] - 2026-08-08
+
+### Added
+- **Optional external database support** — LoxSuite can now run against an external PostgreSQL or
+  MySQL/MariaDB server instead of its built-in SQLite file. SQLite stays the zero-config default;
+  nothing changes for existing installs unless you opt in. Set `DB_BACKEND=postgres` or
+  `DB_BACKEND=mysql` and either `DATABASE_URL` or the discrete `DB_HOST`/`DB_PORT`/`DB_NAME`/
+  `DB_USER`/`DB_PASSWORD` env vars — see the commented-out example in `docker-compose.yml`/
+  `.env.example` and the README's own Data and persistence section. Administration &rarr; General
+  shows which backend is active.
+- **Transfer tool** for moving an existing SQLite install's data to Postgres or MySQL/MariaDB:
+  `docker compose exec loxsuite node src/db/transfer.js --from-sqlite /data/gateway.db --to
+  "$DATABASE_URL" [--backend mysql]`. Supports `--dry-run` (row-count report, orphaned-row scan,
+  touches nothing), `--prune-orphans` (skip rows SQLite never enforced foreign keys on instead of
+  aborting), and resets the target's sequences/AUTO_INCREMENT counters afterward so the next
+  ordinary insert doesn't collide with a transferred row.
+- **Backups and restore** now work the same way regardless of backend — a SQLite install still
+  backs up via an online file copy, Postgres via `pg_dump`/`pg_restore`, MySQL/MariaDB via
+  `mysqldump`/`mysql`. A backup made under one backend is rejected (with a clear message) if you
+  try to restore it into an install running a different one — use the transfer tool instead.
+
 ## [0.12.2-alpha.1] - 2026-08-08
 
 ### Fixed

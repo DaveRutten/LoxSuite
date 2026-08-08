@@ -9,6 +9,7 @@ const { notifyBackupFailed } = require('./notifications');
 const { encrypt, decrypt } = require('./secretCrypto');
 const sqliteEngine = require('./backup/engines/sqlite');
 const postgresEngine = require('./backup/engines/postgres');
+const mysqlEngine = require('./backup/engines/mysql');
 
 // Recomputed independently rather than imported from db.js, same convention already used by
 // mosquittoLog.js/loxone.js for their own env-configured paths (see MOSQUITTO_LOG_PATH there) —
@@ -23,13 +24,14 @@ const BACKUP_DIR = path.join(path.dirname(DB_PATH), 'backups');
 // anything opens that path); the Postgres one has no such file to sit next to, so it just lives
 // under BACKUP_DIR like everything else this module manages.
 const PENDING_RESTORE_PATH = `${DB_PATH}.restore`; // mirrors db/index.js's own constant, see its comment
-// Mirrors db/index.js's own pendingPostgresRestorePath() — keep the '.pending-restore.pgdump' name
-// in sync between the two if this ever changes; see that function's own comment for why it's a
-// second independent formula rather than a shared import.
+// Mirrors db/index.js's own pendingPostgresRestorePath()/pendingMysqlRestorePath() — keep these
+// filenames in sync between the two if they ever change; see those functions' own comments for why
+// each is a second independent formula rather than a shared import.
 const PENDING_POSTGRES_RESTORE_PATH = path.join(BACKUP_DIR, '.pending-restore.pgdump');
+const PENDING_MYSQL_RESTORE_PATH = path.join(BACKUP_DIR, '.pending-restore.sql');
 
-const ENGINES = { sqlite: sqliteEngine, postgres: postgresEngine };
-const PENDING_RESTORE_PATHS = { sqlite: PENDING_RESTORE_PATH, postgres: PENDING_POSTGRES_RESTORE_PATH };
+const ENGINES = { sqlite: sqliteEngine, postgres: postgresEngine, mysql: mysqlEngine };
+const PENDING_RESTORE_PATHS = { sqlite: PENDING_RESTORE_PATH, postgres: PENDING_POSTGRES_RESTORE_PATH, mysql: PENDING_MYSQL_RESTORE_PATH };
 function currentEngine() {
   return ENGINES[db.getBackend()];
 }

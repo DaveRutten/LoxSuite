@@ -1,10 +1,9 @@
 // Builds the Knex instance for whichever backend is configured (see db/config.js's own
 // resolveDbConfig() for how DB_BACKEND/DATABASE_URL/DB_* env vars turn into the `config` object
 // every function here takes). SQLite (via the `better-sqlite3` dialect — the same driver this app
-// always used, so the file format/WAL mode/location are unchanged) and Postgres (via `pg`, a pure
-// JS driver, no native compile step) are both wired up; MySQL/MariaDB (`client: 'mysql2'`) is
-// Phase 5 of the project's own db-backend plan and isn't reachable yet — db/config.js's own
-// resolveDbConfig() already refuses DB_BACKEND=mysql before anything here would need to care.
+// always used, so the file format/WAL mode/location are unchanged), Postgres (via `pg`, a pure JS
+// driver, no native compile step), and MySQL/MariaDB (via `mysql2`, works against either server)
+// are all wired up here.
 const path = require('path');
 const Knex = require('knex');
 
@@ -71,12 +70,39 @@ function buildPostgresKnexConfig(config) {
   };
 }
 
+function buildMysqlKnexConfig(config) {
+  return {
+    client: 'mysql2',
+    connection: {
+      host: config.connection.host,
+      port: config.connection.port,
+      database: config.connection.database,
+      user: config.connection.user,
+      password: config.connection.password,
+      ssl: config.connection.ssl,
+      // utf8mb4, not MySQL's own default utf8 (which only supports up to 3-byte characters — real
+      // 4-byte emoji/astral-plane text silently mangles). timezone 'Z' stores/reads DATETIME as
+      // UTC through the driver rather than the server's own local timezone setting, matching this
+      // app's own convention everywhere else (every timestamp column is ISO-8601 UTC text — see
+      // 001_baseline.js's own comment on why booleans/timestamps stay backend-neutral primitives).
+      charset: 'utf8mb4',
+      timezone: 'Z',
+    },
+    migrations: {
+      directory: MIGRATIONS_DIR,
+    },
+    pool: { min: 1, max: config.poolMax },
+  };
+}
+
 // Accepts either a plain dbPath string (SQLite — the shape every existing caller/test already
 // uses, kept working unchanged) or a full config object from db/config.js's resolveDbConfig()
-// (either backend, `{ backend: 'sqlite', dbPath }` or `{ backend: 'postgres', connection, ... }`).
+// (any backend: `{ backend: 'sqlite', dbPath }`, `{ backend: 'postgres', connection, ... }`, or
+// `{ backend: 'mysql', connection, ... }`).
 function buildKnexConfig(configOrDbPath) {
   const config = typeof configOrDbPath === 'string' ? { backend: 'sqlite', dbPath: configOrDbPath } : configOrDbPath;
   if (config.backend === 'postgres') return buildPostgresKnexConfig(config);
+  if (config.backend === 'mysql') return buildMysqlKnexConfig(config);
   return buildSqliteKnexConfig(config.dbPath);
 }
 

@@ -222,7 +222,9 @@ router.post('/suggest', requirePermission('monitor', 'edit'), asyncHandler(async
         const monitorId = existing
           ? existing.id
           : await tx.insertReturningId(
-              "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, ?, 1, ?)",
+              // config passed explicitly ('{}') — MySQL/MariaDB can't declare a DEFAULT on a TEXT
+              // column at all (see 001_baseline.js's own comment), unlike SQLite/Postgres.
+              "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at, config) VALUES ('loxone', ?, ?, ?, ?, 1, ?, '{}')",
               [item.label, miniserver.id, item.uuid, pollIntervalMs, new Date().toISOString()]
             );
 

@@ -1,12 +1,13 @@
-// Fast, SQLite-only regression guard for the SQLite -> Postgres transfer CLI (gateway/src/db/
-// transfer.js, Phase 4b of the project's own db-backend plan). The end-to-end transfer itself
-// (real Postgres target, dry-run/orphan-scan/--prune-orphans/sequence-reset/--force behavior) was
-// verified manually against a real Postgres container — see that phase's own notes — and belongs
-// in the slow/CI container loop per the plan's own testing strategy, not here. What CAN run fast,
-// without any DB at all, is checked here: that TABLES/FOREIGN_KEYS stay a faithful, internally
-// consistent mirror of db/migrations/001_baseline.js's own schema (the single biggest risk of
-// hand-maintaining this list, per that file's own comment, is it silently drifting out of sync
-// with a future schema change), and that the CLI's own flag parsing behaves.
+// Fast, SQLite-only regression guard for the SQLite -> Postgres/MySQL transfer CLI (gateway/src/db/
+// transfer.js, Phases 4b/5 of the project's own db-backend plan). The end-to-end transfer itself
+// (real Postgres/MySQL targets, dry-run/orphan-scan/--prune-orphans/sequence-or-auto_increment-
+// reset/--force behavior) was verified manually against real containers of both — see those
+// phases' own notes — and belongs in the slow/CI container loop per the plan's own testing
+// strategy, not here. What CAN run fast, without any DB at all, is checked here: that TABLES/
+// FOREIGN_KEYS stay a faithful, internally consistent mirror of db/migrations/001_baseline.js's own
+// schema (the single biggest risk of hand-maintaining this list, per that file's own comment, is it
+// silently drifting out of sync with a future schema change), and that the CLI's own flag parsing
+// behaves.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { TABLES, FOREIGN_KEYS, parseArgs } = require('../src/db/transfer');
@@ -39,13 +40,31 @@ test('FOREIGN_KEYS has no duplicate (table, column) pairs', () => {
   assert.deepEqual(keys, [...new Set(keys)]);
 });
 
-test('parseArgs reads --from-sqlite/--to and defaults the boolean flags off', () => {
+test('parseArgs reads --from-sqlite/--to, defaults --backend to postgres, and defaults the boolean flags off', () => {
   const args = parseArgs(['--from-sqlite', '/data/gateway.db', '--to', 'postgres://x']);
   assert.equal(args.fromSqlite, '/data/gateway.db');
   assert.equal(args.to, 'postgres://x');
+  assert.equal(args.backend, 'postgres');
   assert.equal(args.dryRun, false);
   assert.equal(args.pruneOrphans, false);
   assert.equal(args.force, false);
+});
+
+test('parseArgs accepts --backend mysql', () => {
+  const args = parseArgs(['--backend', 'mysql']);
+  assert.equal(args.backend, 'mysql');
+});
+
+test('parseArgs rejects an unknown --backend value', () => {
+  const originalExit = process.exit;
+  let exitCode;
+  process.exit = (code) => { exitCode = code; throw new Error('__process_exit__'); };
+  try {
+    assert.throws(() => parseArgs(['--backend', 'sqlite']), /__process_exit__/);
+    assert.equal(exitCode, 1);
+  } finally {
+    process.exit = originalExit;
+  }
 });
 
 test('parseArgs recognizes --dry-run/--prune-orphans/--force', () => {

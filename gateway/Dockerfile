@@ -29,6 +29,13 @@ RUN apk add --no-cache rclone
 # path tolerates exactly that class of warning rather than failing the whole restore over it.
 RUN apk add --no-cache postgresql18-client
 
+# Backs MySQL/MariaDB backup/restore (see backup/engines/mysql.js) — mysqldump/mysql, same
+# philosophy as the Postgres client above. Alpine's mariadb-client package works against both
+# MySQL and MariaDB servers, and provides `mysql`/`mysqldump` themselves as symlinks to
+# `mariadb`/`mariadb-dump` (verified directly, not assumed) — this app's own code shells out to the
+# `mysql`/`mysqldump` names either way, so it doesn't matter which server flavor is on the other end.
+RUN apk add --no-cache mariadb-client
+
 # Backs the Notifications feature's Teams/Slack/Telegram/Email sending (see notifications.js) —
 # same reasoning as rclone above: apprise already speaks 100+ notification services' own APIs
 # correctly, shelled out to as a CLI rather than reimplemented per service here. Alpine's Python

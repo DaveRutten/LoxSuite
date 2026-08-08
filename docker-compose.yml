@@ -19,13 +19,15 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       DB_PATH: /data/gateway.db
       # SQLite (above) is the zero-config default — nothing else below is needed for it. To point
-      # LoxSuite at an external PostgreSQL server instead, set DB_BACKEND to postgres and either
-      # DATABASE_URL or the discrete DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD vars (DB_PATH above
-      # is simply ignored then). See .env.example for the full list (DB_SSL, DB_POOL_MAX,
-      # DB_CONNECT_TIMEOUT_MS/DB_CONNECT_RETRIES) and gateway/src/db/transfer.js for moving an
-      # existing SQLite install's data over first.
+      # LoxSuite at an external PostgreSQL or MySQL/MariaDB server instead, set DB_BACKEND to
+      # postgres or mysql and either DATABASE_URL or the discrete DB_HOST/DB_PORT/DB_NAME/DB_USER/
+      # DB_PASSWORD vars (DB_PATH above is simply ignored then). See .env.example for the full list
+      # (DB_SSL, DB_POOL_MAX, DB_CONNECT_TIMEOUT_MS/DB_CONNECT_RETRIES) and gateway/src/db/
+      # transfer.js for moving an existing SQLite install's data over first.
       # DB_BACKEND: postgres
       # DATABASE_URL: postgres://loxsuite:changeme@postgres-host:5432/loxsuite
+      # DB_BACKEND: mysql
+      # DATABASE_URL: mysql://loxsuite:changeme@mysql-host:3306/loxsuite
       MOSQUITTO_LOG_PATH: /mosquitto/log/mosquitto.log
       MOSQUITTO_CONFIG_PATH: /mosquitto/config
       LOXONE_UDP_PORT: 11885

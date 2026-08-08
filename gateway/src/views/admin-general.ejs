@@ -85,8 +85,14 @@
 <div class="card">
   <h2>Database</h2>
   <p class="hint">
-    <span style="display:block;">Backend: <strong style="color:var(--text);"><%= dbInfo.backend === 'postgres' ? 'PostgreSQL' : 'SQLite' %></strong><% if (dbInfo.version) { %> (v<%= dbInfo.version %>)<% } %></span>
-    <% if (dbInfo.backend === 'postgres') { %>
+    <%
+      // Postgres and MySQL/MariaDB are both real network servers (Server: host:port/db); only
+      // SQLite is a local file (File: path) — everything non-sqlite takes the network-server
+      // branch, so this doesn't need a third arm added if/when another backend ever lands.
+      const dbBackendLabels = { postgres: 'PostgreSQL', mysql: 'MySQL/MariaDB', sqlite: 'SQLite' };
+    %>
+    <span style="display:block;">Backend: <strong style="color:var(--text);"><%= dbBackendLabels[dbInfo.backend] || dbInfo.backend %></strong><% if (dbInfo.version) { %> (v<%= dbInfo.version %>)<% } %></span>
+    <% if (dbInfo.backend !== 'sqlite') { %>
       <span style="display:block;">Server: <strong style="color:var(--text);"><%= dbInfo.host %>:<%= dbInfo.port %>/<%= dbInfo.database %></strong></span>
     <% } else { %>
       <span style="display:block;">File: <strong style="color:var(--text);"><%= dbInfo.dbPath %></strong></span>
