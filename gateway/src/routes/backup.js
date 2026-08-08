@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const multer = require('multer');
 const backup = require('../backup');
+const db = require('../db');
 const { notifyBackupFailed } = require('../notifications');
 const { verifyCsrfToken } = require('../middleware/csrf');
 const asyncHandler = require('../middleware/asyncHandler');
@@ -14,6 +15,10 @@ async function renderPage(res, extra = {}) {
     settings: await backup.getSettings(),
     backups: backup.listBackups(),
     mqttConfigMounted: fs.existsSync(backup.MOSQUITTO_CONFIG_DIR),
+    // Same read-only "which backend" info admin-general.ejs's own Database card shows — surfaced
+    // here too since it directly determines what a backup on this page actually contains
+    // (gateway.db vs. a pg_dump archive) and which other install a restore can come from.
+    dbInfo: await db.getInfo(),
     error: null,
     restored: null,
     rcloneTestResult: null,
@@ -128,7 +133,7 @@ router.post('/restore', upload.single('file'), verifyCsrfToken, asyncHandler(asy
   if (!req.file) return renderPage(res, { error: 'Choose a backup .zip file to upload first.' });
 
   try {
-    const result = backup.stageRestore(req.file.buffer);
+    const result = await backup.stageRestore(req.file.buffer);
     await renderPage(res, { restored: result });
   } catch (err) {
     await renderPage(res, { error: `Restore failed: ${err.message}` });
@@ -141,7 +146,7 @@ router.post('/restore', upload.single('file'), verifyCsrfToken, asyncHandler(asy
 router.post('/:filename/restore', asyncHandler(async (req, res) => {
   try {
     const buffer = fs.readFileSync(backup.getBackupPath(req.params.filename));
-    const result = backup.stageRestore(buffer);
+    const result = await backup.stageRestore(buffer);
     await renderPage(res, { restored: result });
   } catch (err) {
     await renderPage(res, { error: `Restore failed: ${err.message}` });

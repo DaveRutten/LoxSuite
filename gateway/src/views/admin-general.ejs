@@ -83,6 +83,22 @@
 <% } %>
 
 <div class="card">
+  <h2>Database</h2>
+  <p class="hint">
+    <span style="display:block;">Backend: <strong style="color:var(--text);"><%= dbInfo.backend === 'postgres' ? 'PostgreSQL' : 'SQLite' %></strong><% if (dbInfo.version) { %> (v<%= dbInfo.version %>)<% } %></span>
+    <% if (dbInfo.backend === 'postgres') { %>
+      <span style="display:block;">Server: <strong style="color:var(--text);"><%= dbInfo.host %>:<%= dbInfo.port %>/<%= dbInfo.database %></strong></span>
+    <% } else { %>
+      <span style="display:block;">File: <strong style="color:var(--text);"><%= dbInfo.dbPath %></strong></span>
+    <% } %>
+    <span style="display:block; margin-top:0.2rem;">
+      Set via the <code>DB_BACKEND</code>/<code>DATABASE_URL</code> (or <code>DB_HOST</code>/<code>DB_NAME</code>/<code>DB_USER</code>/...) environment
+      variables — restart required to change, not a setting on this page.
+    </span>
+  </p>
+</div>
+
+<div class="card">
   <h2>Setup wizard</h2>
   <p class="hint">
     The guided first-run setup (admin password, timezone, Miniserver, MQTT broker, SSO, backups,

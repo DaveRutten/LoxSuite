@@ -29,7 +29,7 @@ async function loadFavoriteDashboards(userId, roleId) {
       AND (
         custom_dashboards.user_id = ?
         OR EXISTS (SELECT 1 FROM dashboard_shares WHERE dashboard_shares.dashboard_id = custom_dashboards.id AND dashboard_shares.user_id = ?)
-        OR (? IS NOT NULL AND EXISTS (SELECT 1 FROM dashboard_role_shares WHERE dashboard_role_shares.dashboard_id = custom_dashboards.id AND dashboard_role_shares.role_id = ?))
+        OR (CAST(? AS INTEGER) IS NOT NULL AND EXISTS (SELECT 1 FROM dashboard_role_shares WHERE dashboard_role_shares.dashboard_id = custom_dashboards.id AND dashboard_role_shares.role_id = ?))
       )
     ORDER BY custom_dashboards.name
   `).all(userId, userId, userId, roleId, roleId);

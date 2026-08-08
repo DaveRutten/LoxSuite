@@ -50,9 +50,9 @@ async function isLastAdmin(userId) {
 
 router.get('/', (req, res) => res.redirect('/admin/general'));
 
-router.get('/general', (req, res) => {
-  res.render('admin-general', { error: null, justChecked: false });
-});
+router.get('/general', asyncHandler(async (req, res) => {
+  res.render('admin-general', { error: null, justChecked: false, dbInfo: await db.getInfo() });
+}));
 
 // On-demand version of the same check startVersionCheck() already runs once at boot and every 24h
 // (see versionCheck.js) — getVersionStatus() alone (already available in every view via
@@ -60,7 +60,7 @@ router.get('/general', (req, res) => {
 // call itself, so a "Check now" button needs this instead.
 router.post('/check-update', asyncHandler(async (req, res) => {
   await checkForUpdate();
-  res.render('admin-general', { error: null, justChecked: true });
+  res.render('admin-general', { error: null, justChecked: true, dbInfo: await db.getInfo() });
 }));
 
 router.get('/users', asyncHandler(async (req, res) => {

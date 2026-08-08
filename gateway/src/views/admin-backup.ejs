@@ -28,6 +28,11 @@
   and <code>mosquitto.conf</code> itself (listener, persistence, logging, any custom tuning) &mdash;
   into one downloadable <code>.zip</code>. Restoring always requires restarting the affected
   container(s) &mdash; neither half can be swapped into a running process safely.
+  <% if (dbInfo.backend === 'postgres') { %>
+    The database half is a <code>pg_dump</code> archive here (PostgreSQL backend) rather than a
+    <code>gateway.db</code> file &mdash; a backup only restores into another install running the
+    same backend; see Administration &gt; General for what this install is currently set to.
+  <% } %>
 </p>
 
 <div class="card">

@@ -864,7 +864,12 @@ async function listSharedWithMe(userId, roleId) {
          JOIN users ON users.id = custom_dashboards.user_id
          WHERE dashboard_role_shares.role_id = ?
        ) d
-       GROUP BY d.id ORDER BY d.name`
+       GROUP BY d.id, d.name, d.ownerName ORDER BY d.name`
+      // SQLite tolerates selecting d.name/d.ownerName ungrouped (it just picks a row per d.id's
+      // own group without complaint); Postgres requires every selected column to be in the GROUP
+      // BY or wrapped in an aggregate. Safe to add both here — they're derived from the exact same
+      // custom_dashboards/users join in both UNION halves, so they can never actually differ for
+      // the same d.id regardless of which branch contributed it.
     )
     .all(userId, roleId || 0);
 }

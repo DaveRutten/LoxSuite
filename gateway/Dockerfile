@@ -16,6 +16,19 @@ ENV NODE_ENV=production
 # our own to maintain.
 RUN apk add --no-cache rclone
 
+# Backs Postgres backup/restore (see backup/engines/postgres.js) — pg_dump/pg_restore, shelled out
+# to rather than reimplemented, same philosophy as rclone/apprise here. pg_dump refuses to dump a
+# server NEWER than itself, so this installs the newest client Alpine currently packages. If the
+# newest available package here is ever older than a server an install actually runs, that
+# combination isn't supported. One known wrinkle, verified empirically and handled in
+# backup/engines/postgres.js rather than by picking an older client: pg_dump 17+'s own dump
+# preamble always includes `SET transaction_timeout = 0;` (that GUC didn't exist before Postgres
+# 17) regardless of which server version it dumped FROM, so restoring that same archive back into
+# a pre-17 server hits one "unrecognized configuration parameter" error on that line — pg_restore
+# itself already treats this as non-fatal ("errors ignored on restore"), and the app's own restore
+# path tolerates exactly that class of warning rather than failing the whole restore over it.
+RUN apk add --no-cache postgresql18-client
+
 # Backs the Notifications feature's Teams/Slack/Telegram/Email sending (see notifications.js) —
 # same reasoning as rclone above: apprise already speaks 100+ notification services' own APIs
 # correctly, shelled out to as a CLI rather than reimplemented per service here. Alpine's Python

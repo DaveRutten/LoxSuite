@@ -2,19 +2,37 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { execFile } = require('child_process');
-const Database = require('better-sqlite3');
 const AdmZip = require('adm-zip');
 const cronParser = require('cron-parser');
 const db = require('./db');
 const { notifyBackupFailed } = require('./notifications');
 const { encrypt, decrypt } = require('./secretCrypto');
+const sqliteEngine = require('./backup/engines/sqlite');
+const postgresEngine = require('./backup/engines/postgres');
 
 // Recomputed independently rather than imported from db.js, same convention already used by
 // mosquittoLog.js/loxone.js for their own env-configured paths (see MOSQUITTO_LOG_PATH there) —
-// db.js exports the open Database instance itself, not its path.
+// db.js exports the open Database instance itself, not its path. Stays meaningful even on Postgres,
+// where there's no gateway.db file at all: BACKUP_DIR (everything under it) is still exactly where
+// backups/staged restores live either way.
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'gateway.db');
 const BACKUP_DIR = path.join(path.dirname(DB_PATH), 'backups');
-const PENDING_RESTORE_PATH = `${DB_PATH}.restore`; // mirrors db.js's own constant, see its comment
+// One pending-restore staging path per backend — see each engine's own validateAndStage()/db/
+// index.js's initSqlite()/initPostgres() for how each side of the handoff picks the matching one.
+// The SQLite one has to sit next to the live db FILE (db/index.js's initSqlite() swaps it in before
+// anything opens that path); the Postgres one has no such file to sit next to, so it just lives
+// under BACKUP_DIR like everything else this module manages.
+const PENDING_RESTORE_PATH = `${DB_PATH}.restore`; // mirrors db/index.js's own constant, see its comment
+// Mirrors db/index.js's own pendingPostgresRestorePath() — keep the '.pending-restore.pgdump' name
+// in sync between the two if this ever changes; see that function's own comment for why it's a
+// second independent formula rather than a shared import.
+const PENDING_POSTGRES_RESTORE_PATH = path.join(BACKUP_DIR, '.pending-restore.pgdump');
+
+const ENGINES = { sqlite: sqliteEngine, postgres: postgresEngine };
+const PENDING_RESTORE_PATHS = { sqlite: PENDING_RESTORE_PATH, postgres: PENDING_POSTGRES_RESTORE_PATH };
+function currentEngine() {
+  return ENGINES[db.getBackend()];
+}
 
 // Only present when the docker-compose mosquitto config volume is mounted (see
 // docker-compose.yml) — absent, "include MQTT config" backups/restores just skip that half
@@ -72,24 +90,19 @@ async function updateSettings(fields) {
   return getSettings();
 }
 
-// Online backup via better-sqlite3's own .backup() (safe under WAL, unlike copying the file's
-// bytes directly while it's open) — enforces retention afterward so this can't be called
-// unboundedly (manual "Backup now" clicks included) without the backups directory growing forever.
+// Produces the DB payload via whichever engine matches the current backend (SQLite's own online
+// .backup(), or Postgres's pg_dump — see backup/engines/*.js) — everything else here (mosquitto
+// config bundling, manifest, retention, offsite copy) is identical either way, which is exactly why
+// only that one step is backend-dispatched instead of splitting this whole function per backend.
 async function createBackup({ includeMqttConfig = true, reason = 'manual' } = {}) {
   ensureBackupDir();
   const now = new Date();
   const stamp = timestampForFilename(now);
-  const tmpDbPath = path.join(BACKUP_DIR, `.tmp-${stamp}.db`);
   const finalPath = path.join(BACKUP_DIR, `backup-${stamp}.zip`);
-
-  // Online backup via better-sqlite3's own .backup() — the one thing that needs the real driver
-  // object rather than a SQL string, so it goes through the facade's withRawConnection escape
-  // hatch (same pooled connection prepare()/transaction() use, acquired then released back, never
-  // a second independent one) instead of a db.backup() method the facade doesn't have.
-  await db.withRawConnection((conn) => conn.backup(tmpDbPath));
+  const backend = db.getBackend();
 
   const zip = new AdmZip();
-  zip.addLocalFile(tmpDbPath, '', 'gateway.db');
+  await currentEngine().addPayloadToZip(zip, BACKUP_DIR);
 
   let mqttConfigIncluded = false;
   if (includeMqttConfig) {
@@ -110,10 +123,13 @@ async function createBackup({ includeMqttConfig = true, reason = 'manual' } = {}
 
   zip.addFile(
     'manifest.json',
-    Buffer.from(JSON.stringify({ createdAt: now.toISOString(), reason, includesMqttConfig: mqttConfigIncluded }, null, 2))
+    // dbBackend lets stageRestore() below reject restoring a backup made under one backend into an
+    // install now running the other — a Postgres pg_dump archive means nothing to SQLite's
+    // quick_check and vice versa. Backups made before this field existed have no dbBackend at all;
+    // stageRestore() treats a missing one as 'sqlite' (every backup was SQLite-only until now).
+    Buffer.from(JSON.stringify({ createdAt: now.toISOString(), reason, includesMqttConfig: mqttConfigIncluded, dbBackend: backend }, null, 2))
   );
   zip.writeZip(finalPath);
-  fs.rmSync(tmpDbPath, { force: true });
 
   await enforceRetention();
 
@@ -180,8 +196,11 @@ function getBackupPath(filename) {
 }
 
 // Stages an uploaded backup for restore. Neither half is applied live:
-//  - gateway.db can't be hot-swapped out from under this process's already-open connection (see
-//    db.js), so the validated file is dropped next to it and picked up on the next boot.
+//  - The DB payload can't be hot-applied against this process's own already-open connection (see
+//    each engine's own comment — a hot-swapped SQLite file and a live-restored Postgres database
+//    are different problems, but neither is safe to do out from under a running connection), so the
+//    validated payload is staged and picked up on the next boot (db/index.js's initSqlite()/
+//    initPostgres(), or this file's own applyPendingPostgresRestoreAtBoot() below for Postgres).
 //  - dynamic-security.json IS written immediately (mosquitto has no equivalent "swap this out from
 //    under me" problem the way an open SQLite connection does), but mosquitto only reads its
 //    dynamic-security file at startup and otherwise treats its in-memory state as the source of
@@ -189,36 +208,28 @@ function getBackupPath(filename) {
 //    restarts too, which this function has no way to trigger directly (no docker socket access,
 //    on purpose). Both processes share one container now, so one container restart covers both;
 //    the caller still surfaces that restart requirement to the admin.
-function stageRestore(zipBuffer) {
+async function stageRestore(zipBuffer) {
   ensureBackupDir();
   const zip = new AdmZip(zipBuffer);
 
   const manifestEntry = zip.getEntry('manifest.json');
   if (!manifestEntry) throw new Error('Not a LoxSuite backup — missing manifest.json.');
-  JSON.parse(zip.readAsText(manifestEntry)); // throws if not valid JSON
+  const manifest = JSON.parse(zip.readAsText(manifestEntry)); // throws if not valid JSON
 
-  const dbEntry = zip.getEntry('gateway.db');
-  if (!dbEntry) throw new Error('Backup does not contain gateway.db.');
-
-  const checkPath = path.join(BACKUP_DIR, `.restore-check-${Date.now()}.db`);
-  fs.writeFileSync(checkPath, zip.readFile(dbEntry));
-  try {
-    const check = new Database(checkPath, { readonly: true, fileMustExist: true });
-    const result = check.pragma('quick_check', { simple: true });
-    check.close();
-    if (result !== 'ok') throw new Error(`Database failed integrity check: ${result}`);
-  } catch (err) {
-    fs.rmSync(checkPath, { force: true });
-    throw new Error(`Uploaded gateway.db is not valid: ${err.message}`);
-  } finally {
-    // Opening even a read-only connection can leave WAL-mode sidecar files behind (the backed-up
-    // file still carries its original journal_mode header) — these aren't part of checkPath itself
-    // so the renames below wouldn't carry them along, and they'd otherwise litter BACKUP_DIR.
-    fs.rmSync(`${checkPath}-shm`, { force: true });
-    fs.rmSync(`${checkPath}-wal`, { force: true });
+  // Every backup made before this field existed was SQLite-only (Postgres support, and this field
+  // along with it, didn't exist yet) — a missing dbBackend defaults to 'sqlite' rather than being
+  // treated as unknown/rejected outright, so old backups keep restoring exactly as they always have.
+  const backupBackend = manifest.dbBackend || 'sqlite';
+  const currentBackend = db.getBackend();
+  if (backupBackend !== currentBackend) {
+    throw new Error(
+      `This backup was made from a ${backupBackend} install, but this install is currently running ` +
+      `${currentBackend} — restoring across database backends isn't supported here. Use the transfer ` +
+      'tool (src/db/transfer.js) to move data between backends instead.'
+    );
   }
 
-  fs.renameSync(checkPath, PENDING_RESTORE_PATH);
+  await ENGINES[currentBackend].validateAndStage(zip, PENDING_RESTORE_PATHS[currentBackend]);
 
   // Both mosquitto and the gateway live in this one container, so there's only ever one target
   // to restart — kept as an array/name (rather than a plain boolean) since admin-backup.ejs

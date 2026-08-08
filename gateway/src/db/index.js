@@ -7,26 +7,17 @@
 // are inherently async against a real connection pool; `.lastInsertRowid` isn't portable — see
 // their own comments below).
 //
-// SQLite only, for now. `getBackend()` always returns 'sqlite' until the multi-backend config
-// module (Phase 4/5 of the db-backend plan) exists — every other function here is already written
-// against the Knex abstraction, not against better-sqlite3 directly, so adding Postgres/MySQL later
-// is additive (a `client:'pg'/'mysql2'` branch in knex.js, a per-backend `insertReturningId`/
-// row-normalization branch here), not a rewrite of this file.
+// SQLite and Postgres are both wired up (see db/config.js's resolveDbConfig() for how DB_BACKEND
+// picks one); MySQL/MariaDB is Phase 5 of the project's own db-backend plan and isn't reachable —
+// resolveDbConfig() itself refuses DB_BACKEND=mysql before anything here has to care.
 const path = require('path');
 const fs = require('fs');
-const Database = require('better-sqlite3');
 const { createKnex } = require('./knex');
+const { resolveDbConfig, describeConfig } = require('./config');
 const runLegacySqliteSchema = require('./legacy-sqlite-schema');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data', 'gateway.db');
-// A restore staged via the Administration > Backups page (see backup.js's stageRestore()) can't
-// swap the live database out from under an already-open connection, so it just drops the
-// replacement file next to it and waits — this is the other half of that handoff, applied once at
-// startup before anything opens DB_PATH for real. Same restart-to-apply model as the MQTT
-// dynamic-security.json restore, which mosquitto only re-reads on its own restart.
-const PENDING_RESTORE_PATH = `${DB_PATH}.restore`;
-
 let knex = null;
+let dbConfig = null;
 
 // Logs any query taking longer than this to the System log — "sometimes slow" reports (e.g. on
 // Unraid, where a query can stall on array spin-up or shfs overhead depending on how appdata is
@@ -59,20 +50,26 @@ async function execTimed(executor, sql, params) {
 }
 
 // Normalizes each driver's own raw response shape into a plain row array. SQLite (via Knex's
-// better-sqlite3 dialect): a SELECT's raw() result IS already a plain array — verified directly
-// against the installed driver, not assumed. Postgres (`raw.rows`) / MySQL (`raw[0]`) branches land
-// here once those backends exist (Phase 4/5 of the db-backend plan).
+// better-sqlite3 dialect): a SELECT's raw() result IS already a plain array. Postgres (`pg`): the
+// raw driver result object, rows under `.rows` — both verified directly against the installed
+// driver, not assumed (see the project's own db-backend plan, Phase 4). MySQL's own `raw[0]` shape
+// lands here in Phase 5.
 function normalizeRows(raw) {
   if (Array.isArray(raw)) return raw;
+  if (raw && Array.isArray(raw.rows)) return raw.rows;
   return [];
 }
 
 // Normalizes each driver's own write-result shape into { changes, lastInsertRowid }. SQLite (via
 // Knex's better-sqlite3 dialect): raw() already returns better-sqlite3's own { changes,
-// lastInsertRowid } object directly — verified directly against the installed driver. Postgres has
-// no lastInsertRowid concept at all (needs `RETURNING id`, see insertReturningId below); MySQL's
-// `result.insertId` has a different name/shape. Those branches land here in Phase 4/5.
+// lastInsertRowid } object directly. Postgres has no lastInsertRowid concept at all (needs
+// `RETURNING id`, see insertReturningId below) and counts affected rows as `.rowCount` instead of
+// `.changes` — lastInsertRowid stays `undefined` there; every real call site that needs an id uses
+// insertReturningId()/tx.insertReturningId() instead (enforced by test/sqlDialect.test.js's own
+// source scan, so nothing in application code actually reads this field for a Postgres-backed
+// install). MySQL's `result.insertId` shape lands here in Phase 5.
 function normalizeWriteResult(raw) {
+  if (raw && typeof raw.rowCount === 'number') return { changes: raw.rowCount, lastInsertRowid: undefined };
   return { changes: raw.changes, lastInsertRowid: raw.lastInsertRowid };
 }
 
@@ -114,16 +111,18 @@ function prepare(sql) {
 }
 
 // db.insertReturningId(sql, params) — replaces reading `.lastInsertRowid` off a `.run()` result,
-// which was a better-sqlite3-specific property with no Postgres equivalent (needs `RETURNING id`)
-// and a different shape on MySQL (`result.insertId`). SQLite: identical to today, just async and a
-// named result field. Postgres/MySQL branches land here in Phase 4/5 of the db-backend plan —
-// documented here now so every call site that needs it converts to this helper once, up front,
-// rather than needing a second pass later. Takes an executor (knex itself, or a transaction's own
-// trx) so transaction() below can expose the exact same helper scoped to `tx` instead of the outer
-// `db` — see its own comment for why using the wrong one matters.
+// which was a better-sqlite3-specific property with no Postgres equivalent. Appends ` RETURNING id`
+// to the given SQL and reads `rows[0].id` back via normalizeRows() — verified empirically that this
+// exact clause produces the identical `[{id: N}]` shape on SQLite (3.35+, which better-sqlite3
+// bundles) and Postgres alike via Knex's raw(), so one code path covers both rather than branching
+// per backend. Every real call site is a plain `INSERT INTO t (...) VALUES (...)` with nothing
+// after it (no trailing semicolon, no ON CONFLICT) — confirmed when these were converted (Phase 3),
+// so appending the clause is always syntactically safe. Takes an executor (knex itself, or a
+// transaction's own trx) so transaction() below can expose the exact same helper scoped to `tx`
+// instead of the outer `db` — see its own comment for why using the wrong one matters.
 async function insertReturningIdVia(executor, sql, params) {
-  const result = await makeStatement(executor, sql).run(...(params || []));
-  return result.lastInsertRowid;
+  const rows = normalizeRows(await execTimed(executor, `${sql} RETURNING id`, params));
+  return rows[0].id;
 }
 async function insertReturningId(sql, params) {
   return insertReturningIdVia(knex, sql, params);
@@ -134,8 +133,9 @@ async function insertReturningId(sql, params) {
 // converting to this MUST do: use the `tx` passed into the callback for every query inside it, not
 // the outer `db` — see knex.js's own comment on why the SQLite pool is pinned to exactly one
 // connection, which is what turns a missed rebind into an immediate, loud deadlock instead of a
-// silent correctness bug. `tx.insertReturningId`/`tx.upsert`/`tx.insertIgnore` mirror the
-// top-level db.* helpers of the same name, scoped to this same transaction connection.
+// silent correctness bug (Postgres's own real pool doesn't have that same safety net — see knex.js
+// again). `tx.insertReturningId`/`tx.upsert`/`tx.insertIgnore` mirror the top-level db.* helpers of
+// the same name, scoped to this same transaction connection.
 async function transaction(fn) {
   return knex.transaction((trx) => fn({
     prepare: (sql) => makeStatement(trx, sql),
@@ -191,7 +191,27 @@ async function raw(sql, params) {
 }
 
 function getBackend() {
-  return 'sqlite';
+  return dbConfig ? dbConfig.backend : 'sqlite';
+}
+
+// Powers Administration > General's own read-only "Database" row — backend, server version,
+// host/database name. Deliberately never the password, and deliberately read-only in the UI (see
+// that page's own copy) — changing DB_BACKEND/DATABASE_URL/DB_* is a restart, not a live toggle
+// (the connection is opened before any settings row can even be read — see the project's own
+// db-backend plan for why this could never be a live Settings-page control).
+async function getInfo() {
+  if (dbConfig.backend === 'postgres') {
+    const rows = normalizeRows(await knex.raw('SHOW server_version'));
+    return {
+      backend: 'postgres',
+      version: rows[0]?.server_version || null,
+      host: dbConfig.connection.host,
+      port: dbConfig.connection.port,
+      database: dbConfig.connection.database,
+    };
+  }
+  const rows = normalizeRows(await knex.raw('SELECT sqlite_version() AS v'));
+  return { backend: 'sqlite', version: rows[0]?.v || null, dbPath: dbConfig.dbPath };
 }
 
 // Narrow escape hatch for the one caller that genuinely needs the underlying Knex instance itself
@@ -206,11 +226,14 @@ function getKnex() {
 // The other narrow escape hatch: hands a caller the SAME live raw connection prepare()/transaction()
 // use (acquired from the pool, released back afterward — never a second, independent connection),
 // for the one thing that needs the actual driver object rather than a SQL string: backup.js's own
-// `await conn.backup(tmpPath)` (better-sqlite3's online hot-copy API, see that file). SQLite only —
-// this is exactly the kind of driver-specific escape hatch that gets its own per-backend
-// implementation once Postgres/MySQL backups exist (Phase 4/5 of the db-backend plan), not extended
-// here.
+// SQLite engine (`await conn.backup(tmpPath)`, better-sqlite3's online hot-copy API). SQLite only —
+// Postgres has its own backup engine that shells out to pg_dump/pg_restore instead (see backup/
+// engines/postgres.js), which needs this database's own CONNECTION PARAMETERS to build that command
+// line, not a raw driver handle, so it never calls this at all.
 async function withRawConnection(fn) {
+  if (dbConfig.backend !== 'sqlite') {
+    throw new Error(`withRawConnection() is SQLite-only; the current backend is "${dbConfig.backend}".`);
+  }
   const conn = await knex.client.acquireConnection();
   try {
     return await fn(conn);
@@ -226,6 +249,8 @@ async function withRawConnection(fn) {
 // upgrading SQLite install that just walked the legacy path (see runLegacySqliteSchema above): from
 // this point on, every future boot sees knex_migrations already present and goes straight to the
 // knex.migrate.latest() call below, running only whatever numbered migration comes after this one.
+// SQLite-only — Postgres never had a legacy (pre-migration-framework) install to upgrade FROM in the
+// first place, so it never needs this handoff at all (see initSqlite/initPostgres below).
 function stampBaselineAsApplied(conn) {
   conn.exec('CREATE TABLE `knex_migrations` (`id` integer not null primary key autoincrement, `name` varchar(255), `batch` integer, `migration_time` datetime)');
   conn.exec('CREATE TABLE `knex_migrations_lock` (`index` integer not null primary key autoincrement, `is_locked` integer)');
@@ -233,11 +258,8 @@ function stampBaselineAsApplied(conn) {
   conn.prepare('INSERT INTO knex_migrations (name, batch, migration_time) VALUES (?, 1, ?)').run('001_baseline.js', new Date().toISOString());
 }
 
-// Opens the database and brings its schema up to date. Must be awaited before anything else in the
-// app touches the DB — see server.js's own async bootstrap.
-//
-// Three possible states, told apart by what's already in sqlite_master (see the project's own
-// db-backend plan, Phase 2, for the full reasoning):
+// Three possible states for a SQLite database, told apart by what's already in sqlite_master (see
+// the project's own db-backend plan, Phase 2, for the full reasoning):
 //  1. Genuinely fresh (no app tables at all — a brand new file, or ':memory:') — nothing to do here;
 //     knex.migrate.latest() below creates knex's own bookkeeping tables AND runs 001_baseline.js for
 //     real, building the whole schema (and seeding roles/settings/the shared Dashboard/the first
@@ -248,18 +270,26 @@ function stampBaselineAsApplied(conn) {
 //  3. Has app tables (e.g. `users`) but no `knex_migrations` — an upgrading SQLite install that
 //     predates this migration framework entirely. Walks the full frozen legacy path exactly as
 //     every boot always has, then gets stamped into state 2 so every FUTURE boot skips it.
-async function init() {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+async function initSqlite(config) {
+  fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 
-  if (fs.existsSync(PENDING_RESTORE_PATH)) {
-    fs.renameSync(PENDING_RESTORE_PATH, DB_PATH);
-    console.log(`Applied a staged database restore from ${PENDING_RESTORE_PATH}.`);
+  // A restore staged via the Administration > Backups page (see backup.js's stageRestore()) can't
+  // swap the live database out from under an already-open connection, so it just drops the
+  // replacement file next to it and waits — this is the other half of that handoff, applied once at
+  // startup before anything opens the real path. Same restart-to-apply model as the MQTT
+  // dynamic-security.json restore, which mosquitto only re-reads on its own restart. File-based, so
+  // SQLite-only — Postgres's own restore flow (Phase 4c) uses a different staging mechanism, since
+  // there's no local file to swap.
+  const pendingRestorePath = `${config.dbPath}.restore`;
+  if (fs.existsSync(pendingRestorePath)) {
+    fs.renameSync(pendingRestorePath, config.dbPath);
+    console.log(`Applied a staged database restore from ${pendingRestorePath}.`);
   }
 
-  knex = createKnex(DB_PATH);
+  knex = createKnex(config);
 
   // Acquires Knex's OWN pooled connection (released back afterward, never destroyed) rather than
-  // opening-then-closing an independent `new Database(DB_PATH)` handle — that distinction only
+  // opening-then-closing an independent `new Database(dbPath)` handle — that distinction only
   // matters for `:memory:` (used by the test suite): a second, independently-opened `:memory:`
   // connection is a WHOLE DIFFERENT empty database, not the same one, so closing the first would
   // silently throw away everything just migrated. Reusing Knex's own connection sidesteps that
@@ -271,7 +301,7 @@ async function init() {
     if (!hasKnexMigrations) {
       const hasLegacyAppTables = conn.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
       if (hasLegacyAppTables) {
-        runLegacySqliteSchema(conn, DB_PATH);
+        runLegacySqliteSchema(conn, config.dbPath);
         stampBaselineAsApplied(conn);
         upgradedFromLegacy = true;
       }
@@ -286,9 +316,85 @@ async function init() {
   }
 }
 
+// Postgres never had a pre-migration-framework install to upgrade FROM — this backend didn't exist
+// before 001_baseline.js did — so every Postgres boot is either genuinely fresh (migrate.latest()
+// runs 001_baseline.js for real) or already-migrated (a no-op unless something after it has since
+// been added). No legacy path, no stamping. It DOES have its own restore-staging file to check for
+// (see applyPendingPostgresRestore() below) — just not a local db FILE to swap the way SQLite's
+// own initSqlite() does, since a pg_dump archive gets applied via pg_restore against the live
+// connection instead. A real network database also frequently isn't listening yet the instant this
+// container starts (Docker's own `depends_on` has no built-in "wait until actually ready" without
+// an explicit healthcheck) — the connectivity preflight below retries a plain `SELECT 1` with
+// backoff instead of letting the very first real query fail with a raw, unhelpful "connection
+// refused".
+async function waitForPostgresReady(config) {
+  const deadlineMs = Date.now() + config.connectTimeoutMs * config.connectRetries;
+  let attempt = 0;
+  for (;;) {
+    attempt += 1;
+    try {
+      await knex.raw('SELECT 1');
+      if (attempt > 1) console.log(`Connected to Postgres after ${attempt} attempt(s).`);
+      return;
+    } catch (err) {
+      if (Date.now() >= deadlineMs || attempt >= config.connectRetries) {
+        console.error('='.repeat(78));
+        console.error(`Could not connect to Postgres after ${attempt} attempt(s): ${err.message}`);
+        console.error(`Tried: ${describeConfig(config)}`);
+        console.error('='.repeat(78));
+        throw err;
+      }
+      console.warn(`Postgres not reachable yet (attempt ${attempt}/${config.connectRetries}): ${err.message} — retrying in ${Math.round(config.connectTimeoutMs / 1000)}s.`);
+      await new Promise((resolve) => setTimeout(resolve, config.connectTimeoutMs));
+    }
+  }
+}
+
+// Same path formula backup.js's own PENDING_POSTGRES_RESTORE_PATH uses — recomputed independently
+// here rather than imported, same "don't create a cross-module coupling for one shared constant"
+// convention this codebase already uses for the SQLite equivalent (initSqlite's own
+// `${config.dbPath}.restore`, and see backup.js's own comment on DB_PATH for the same reasoning).
+// Postgres has no local db FILE to derive a path from, so this still anchors on DB_PATH purely as
+// "wherever backups/ lives" — meaningful even though DB_PATH itself is otherwise unused on this
+// backend.
+function pendingPostgresRestorePath() {
+  const dbPath = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data', 'gateway.db');
+  return path.join(path.dirname(dbPath), 'backups', '.pending-restore.pgdump');
+}
+
+// Applies a restore staged via Administration > Backups (see backup/engines/postgres.js's own
+// validateAndStage()) before anything else touches this connection — pg_restore --clean drops and
+// recreates every object the dump contains, so doing this before migrate.latest() below avoids
+// migrate.latest() building a fresh baseline schema this immediately throws away again. Delegates
+// to backup/engines/postgres.js directly (not backup.js) — backup.js itself requires this module,
+// so requiring it back from here would be a cycle; the engine module has no such dependency (see
+// its own comment).
+async function applyPendingPostgresRestore() {
+  // eslint-disable-next-line global-require -- see the comment above on why this can't be a
+  // top-level require alongside knex.js/config.js's own.
+  const postgresEngine = require('../backup/engines/postgres');
+  await postgresEngine.applyPendingRestoreAtBoot(pendingPostgresRestorePath());
+}
+
+async function initPostgres(config) {
+  knex = createKnex(config);
+  await waitForPostgresReady(config);
+  await applyPendingPostgresRestore();
+  await knex.migrate.latest();
+}
+
+// Opens the database and brings its schema up to date. Must be awaited before anything else in the
+// app touches the DB — see server.js's own async bootstrap.
+async function init() {
+  dbConfig = resolveDbConfig();
+  console.log(`Database backend: ${describeConfig(dbConfig)}`);
+  if (dbConfig.backend === 'postgres') await initPostgres(dbConfig);
+  else await initSqlite(dbConfig);
+}
+
 async function close() {
   if (knex) await knex.destroy();
   knex = null;
 }
 
-module.exports = { init, close, prepare, transaction, insertReturningId, upsert, insertIgnore, raw, getBackend, getKnex, withRawConnection };
+module.exports = { init, close, prepare, transaction, insertReturningId, upsert, insertIgnore, raw, getBackend, getInfo, getKnex, withRawConnection };
