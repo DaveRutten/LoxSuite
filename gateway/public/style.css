@@ -3636,6 +3636,14 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
      going smaller still a scroll instead of an overlap if it ever does. */
   overflow-y: auto;
 }
+/* Single-monitor panels (see panel-grid.ejs's stateBarHasLabels): no label column is rendered at
+   all, so there's nothing left to size a max-content first column FROM — falling back to the
+   2-column template here would auto-place the lone .state-bar-track into that now-contentless
+   first column instead of the 1fr one, shrinking it to its own min-width instead of filling the
+   row. */
+.state-bar-panel-single {
+  grid-template-columns: 1fr;
+}
 .state-bar-row {
   display: contents;
 }
@@ -3655,7 +3663,10 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
 }
 .state-bar-track {
   position: relative;
-  height: 1.6rem;
+  /* Trimmed from 1.6rem — plenty of room for the 0.68rem segment label at this height, and it
+     directly shrinks applyMinSizes()'s per-row content floor (panel-grid.ejs), so a state_bar
+     panel with just one or two monitors no longer has to stay taller than its own content needs. */
+  height: 1.3rem;
   min-width: 2.5rem;
   background: var(--surface-alt);
   border-radius: 6px;

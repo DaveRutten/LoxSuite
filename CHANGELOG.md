@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.1-alpha.1] - 2026-08-08
+
+### Fixed
+- A State panel showing just a single monitor rendered its bar shrunk to a sliver instead of
+  filling the row — the shared label/bar grid still expected a label column even though a
+  single-monitor panel skips rendering one, so the bar auto-placed into that now-empty column and
+  shrank to its own minimum width. Single-monitor panels now use a one-column layout instead.
+- The State panel's own bar track was taller than its label text needed — trimmed down, which also
+  lets a panel with just one or two monitors size itself to its actual content instead of staying
+  taller than necessary.
+
 ## [0.13.0-alpha.1] - 2026-08-08
 
 ### Added

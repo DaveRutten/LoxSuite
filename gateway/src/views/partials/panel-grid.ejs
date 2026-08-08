@@ -981,10 +981,18 @@
           var stateBarTotalMs = p.rangeEndMs - p.rangeStartMs;
           function stateBarPct(ms) { return stateBarTotalMs > 0 ? ((ms - p.rangeStartMs) / stateBarTotalMs) * 100 : 0; }
         %>
-        <div class="state-bar-panel" data-live-id="panel-<%= p.id %>-body">
+        <%
+          // Single-monitor panels skip the row label below (nothing to distinguish it from), which
+          // also means .state-bar-row never emits its FIRST grid child — with the shared 2-column
+          // grid-template-columns:max-content 1fr, the lone .state-bar-track would then land in that
+          // first (max-content) column via auto-placement and shrink to its own min-width instead of
+          // filling the row, so it switches to a single 1fr column instead.
+          var stateBarHasLabels = p.bars.length > 1;
+        %>
+        <div class="state-bar-panel<%= stateBarHasLabels ? '' : ' state-bar-panel-single' %>" data-live-id="panel-<%= p.id %>-body">
           <% p.bars.forEach(function (bar) { %>
             <div class="state-bar-row">
-              <% if (p.bars.length > 1) { %><div class="state-bar-label truncate" title="<%= bar.monitor.label %>"><%= bar.monitor.label %></div><% } %>
+              <% if (stateBarHasLabels) { %><div class="state-bar-label truncate" title="<%= bar.monitor.label %>"><%= bar.monitor.label %></div><% } %>
               <div class="state-bar-track">
                 <% if (bar.segments.length === 0) { %>
                   <div class="state-bar-segment state-bar-segment-nodata" style="left:0; width:100%;" title="No data in this range"></div>
