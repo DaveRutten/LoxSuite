@@ -168,8 +168,35 @@ async function withRawConnection(fn) {
   }
 }
 
+// Hand-creates Knex's own two bookkeeping tables (verified empirically against this exact
+// better-sqlite3 dialect/Knex version — see the project's own db-backend plan) and records
+// 001_baseline.js as already applied, batch 1, WITHOUT actually running it — its schema-creation
+// half would fail outright against tables that already exist. This is the one-time handoff for an
+// upgrading SQLite install that just walked the legacy path (see runLegacySqliteSchema above): from
+// this point on, every future boot sees knex_migrations already present and goes straight to the
+// knex.migrate.latest() call below, running only whatever numbered migration comes after this one.
+function stampBaselineAsApplied(conn) {
+  conn.exec('CREATE TABLE `knex_migrations` (`id` integer not null primary key autoincrement, `name` varchar(255), `batch` integer, `migration_time` datetime)');
+  conn.exec('CREATE TABLE `knex_migrations_lock` (`index` integer not null primary key autoincrement, `is_locked` integer)');
+  conn.prepare('INSERT INTO knex_migrations_lock (is_locked) VALUES (0)').run();
+  conn.prepare('INSERT INTO knex_migrations (name, batch, migration_time) VALUES (?, 1, ?)').run('001_baseline.js', new Date().toISOString());
+}
+
 // Opens the database and brings its schema up to date. Must be awaited before anything else in the
 // app touches the DB — see server.js's own async bootstrap.
+//
+// Three possible states, told apart by what's already in sqlite_master (see the project's own
+// db-backend plan, Phase 2, for the full reasoning):
+//  1. Genuinely fresh (no app tables at all — a brand new file, or ':memory:') — nothing to do here;
+//     knex.migrate.latest() below creates knex's own bookkeeping tables AND runs 001_baseline.js for
+//     real, building the whole schema (and seeding roles/settings/the shared Dashboard/the first
+//     admin user) from scratch.
+//  2. Already has `knex_migrations` — this database has been through this exact handoff (or a fresh
+//     install) before; knex.migrate.latest() below is a no-op unless a numbered migration after
+//     001_baseline.js has since been added.
+//  3. Has app tables (e.g. `users`) but no `knex_migrations` — an upgrading SQLite install that
+//     predates this migration framework entirely. Walks the full frozen legacy path exactly as
+//     every boot always has, then gets stamped into state 2 so every FUTURE boot skips it.
 async function init() {
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
@@ -180,18 +207,31 @@ async function init() {
 
   knex = createKnex(DB_PATH);
 
-  // Runs the legacy schema/migrations through the SAME single pooled connection Knex itself uses
-  // afterward (acquired directly, then released back — not a second, separate connection), rather
-  // than opening-then-closing an independent `new Database(DB_PATH)` handle. That distinction only
+  // Acquires Knex's OWN pooled connection (released back afterward, never destroyed) rather than
+  // opening-then-closing an independent `new Database(DB_PATH)` handle — that distinction only
   // matters for `:memory:` (used by the test suite): a second, independently-opened `:memory:`
-  // connection is a WHOLE DIFFERENT empty database, not the same one — closing the first would
-  // silently throw away every table this just created. Reusing Knex's own connection sidesteps that
+  // connection is a WHOLE DIFFERENT empty database, not the same one, so closing the first would
+  // silently throw away everything just migrated. Reusing Knex's own connection sidesteps that
   // entirely, for a file-backed DB and `:memory:` alike.
   const conn = await knex.client.acquireConnection();
+  let upgradedFromLegacy = false;
   try {
-    runLegacySqliteSchema(conn, DB_PATH);
+    const hasKnexMigrations = conn.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'knex_migrations'").get();
+    if (!hasKnexMigrations) {
+      const hasLegacyAppTables = conn.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
+      if (hasLegacyAppTables) {
+        runLegacySqliteSchema(conn, DB_PATH);
+        stampBaselineAsApplied(conn);
+        upgradedFromLegacy = true;
+      }
+    }
   } finally {
     knex.client.releaseConnection(conn);
+  }
+
+  await knex.migrate.latest();
+  if (upgradedFromLegacy) {
+    console.log('Brought an existing SQLite database up to date via the legacy migration path; future schema changes apply via Knex migrations from here on.');
   }
 }
 
