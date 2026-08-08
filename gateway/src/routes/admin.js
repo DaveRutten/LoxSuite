@@ -205,10 +205,7 @@ router.post('/roles/:id/permissions', asyncHandler(async (req, res) => {
     for (const { key } of AREAS) {
       const edit = req.body.perm?.[key]?.edit ? 1 : 0;
       const view = edit || req.body.perm?.[key]?.view ? 1 : 0; // edit implies view
-      await tx.prepare(
-        `INSERT INTO access_role_permissions (role_id, area, can_view, can_edit) VALUES (?, ?, ?, ?)
-         ON CONFLICT(role_id, area) DO UPDATE SET can_view = excluded.can_view, can_edit = excluded.can_edit`
-      ).run(roleId, key, view, edit);
+      await tx.upsert('access_role_permissions', { role_id: roleId, area: key, can_view: view, can_edit: edit }, ['role_id', 'area']);
     }
   });
 

@@ -138,7 +138,7 @@ router.post('/notifications/subscriptions', asyncHandler(async (req, res) => {
     // below), which this checklist never lists or lets them touch in the first place.
     await tx.prepare('DELETE FROM notification_rule_subscribers WHERE user_id = ? AND rule_id IN (SELECT id FROM notification_rules WHERE owner_user_id IS NULL)').run(req.user.id);
     for (const ruleId of ruleIds) {
-      await tx.prepare('INSERT OR IGNORE INTO notification_rule_subscribers (rule_id, user_id) VALUES (?, ?)').run(ruleId, req.user.id);
+      await tx.insertIgnore('notification_rule_subscribers', { rule_id: ruleId, user_id: req.user.id }, ['rule_id', 'user_id']);
     }
   });
   await renderPage(res, req.user.id, { tab: 'notifications', saved: true });
@@ -156,17 +156,17 @@ router.post('/notifications/rules', asyncHandler(async (req, res) => {
   }
 
   const config = buildRuleConfig(triggerType, req.body);
-  // db.transaction()'s tx doesn't expose insertReturningId directly (it's a top-level facade
-  // helper) — the insert + read-back-the-id + subscribe both happen against the SAME tx connection
-  // instead, using .run()'s own lastInsertRowid, exactly like every other in-transaction insert.
   await db.transaction(async (tx) => {
-    const result = await tx.prepare(
-      'INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at, owner_user_id) VALUES (?, ?, 1, ?, \'{}\', ?, ?)'
-    ).run(triggerType, name.trim(), JSON.stringify(config), new Date().toISOString(), req.user.id);
+    const ruleId = await tx.insertReturningId(
+      'INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at, owner_user_id) VALUES (?, ?, 1, ?, \'{}\', ?, ?)',
+      [triggerType, name.trim(), JSON.stringify(config), new Date().toISOString(), req.user.id]
+    );
     // Auto-subscribed to their own new rule — reuses the exact same delivery path an admin-wide
     // rule's own subscription would (see fireRule in notifications.js), rather than this needing a
-    // second "personal rule's own channel" concept of its own.
-    await tx.prepare('INSERT INTO notification_rule_subscribers (rule_id, user_id) VALUES (?, ?)').run(result.lastInsertRowid, req.user.id);
+    // second "personal rule's own channel" concept of its own. Plain INSERT (not insertIgnore) is
+    // deliberate — ruleId was just created above, so no existing (rule_id, user_id) row could
+    // possibly conflict with it.
+    await tx.prepare('INSERT INTO notification_rule_subscribers (rule_id, user_id) VALUES (?, ?)').run(ruleId, req.user.id);
   });
 
   await renderPage(res, req.user.id, { tab: 'notifications', saved: true });

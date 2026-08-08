@@ -193,12 +193,14 @@ router.post('/rules', asyncHandler(async (req, res) => {
   }
 
   const config = buildRuleConfig(triggerType, req.body);
-  const result = await db.prepare('INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at) VALUES (?, ?, 1, ?, \'{}\', ?)')
-    .run(triggerType, name.trim(), JSON.stringify(config), new Date().toISOString());
+  const ruleId = await db.insertReturningId(
+    'INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at) VALUES (?, ?, 1, ?, \'{}\', ?)',
+    [triggerType, name.trim(), JSON.stringify(config), new Date().toISOString()]
+  );
 
   const ids = [].concat(channelIds || []).map(Number).filter(Boolean);
   for (const channelId of ids) {
-    await db.prepare('INSERT OR IGNORE INTO notification_rule_channels (rule_id, channel_id) VALUES (?, ?)').run(result.lastInsertRowid, channelId);
+    await db.insertIgnore('notification_rule_channels', { rule_id: ruleId, channel_id: channelId }, ['rule_id', 'channel_id']);
   }
 
   await logSystemEvent(`"${req.user.username}" added notification rule "${name}".`);
@@ -225,7 +227,7 @@ router.post('/rules/:id/update', asyncHandler(async (req, res) => {
   await db.prepare('DELETE FROM notification_rule_channels WHERE rule_id = ?').run(req.params.id);
   const ids = [].concat(channelIds || []).map(Number).filter(Boolean);
   for (const channelId of ids) {
-    await db.prepare('INSERT OR IGNORE INTO notification_rule_channels (rule_id, channel_id) VALUES (?, ?)').run(req.params.id, channelId);
+    await db.insertIgnore('notification_rule_channels', { rule_id: req.params.id, channel_id: channelId }, ['rule_id', 'channel_id']);
   }
 
   res.redirect('/admin/notifications');

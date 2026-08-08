@@ -57,10 +57,12 @@ async function saveAsDefault(panelId) {
   const template = SERIES_KEYED_TYPES.includes(panel.panel_type)
     ? toPositional(config, await getPanelMonitorIdsInOrder(panelId))
     : config;
-  await db.prepare(
-    `INSERT INTO panel_type_defaults (dashboard_id, panel_type, config, updated_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT(dashboard_id, panel_type) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`
-  ).run(panel.dashboard_id, defaultsKey(panel.panel_type, config), JSON.stringify(template), new Date().toISOString());
+  await db.upsert('panel_type_defaults', {
+    dashboard_id: panel.dashboard_id,
+    panel_type: defaultsKey(panel.panel_type, config),
+    config: JSON.stringify(template),
+    updated_at: new Date().toISOString(),
+  }, ['dashboard_id', 'panel_type']);
   return true;
 }
 

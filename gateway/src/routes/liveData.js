@@ -221,9 +221,10 @@ router.post('/suggest', requirePermission('monitor', 'edit'), asyncHandler(async
         ).get(miniserver.id, item.uuid);
         const monitorId = existing
           ? existing.id
-          : (await tx.prepare(
-              "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, ?, 1, ?)"
-            ).run(item.label, miniserver.id, item.uuid, pollIntervalMs, new Date().toISOString())).lastInsertRowid;
+          : await tx.insertReturningId(
+              "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, ?, 1, ?)",
+              [item.label, miniserver.id, item.uuid, pollIntervalMs, new Date().toISOString()]
+            );
 
         if (!existing) {
           const liveValue = getLiveValue(miniserver.id, item.uuid);

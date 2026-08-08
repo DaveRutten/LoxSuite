@@ -56,26 +56,24 @@ router.post('/mark-read', asyncHandler(async (req, res) => {
 
 // Fired when the popover's own item link is clicked (see foot.ejs), i.e. the user actually
 // navigated to that event's source rather than just glancing at the popover — an explicit
-// per-item acknowledgement, same INSERT OR IGNORE into notification_dismissals as the "x" button
+// per-item acknowledgement, same insertIgnore into notification_dismissals as the "x" button
 // below (NOT a watermark bump — see unread-count's own comment for why that used to incorrectly
 // also mark OTHER, never-looked-at items as read).
 router.post('/:id/mark-read', asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid notification id.' });
-  await db.prepare('INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at) VALUES (?, ?, ?)')
-    .run(req.user.id, id, new Date().toISOString());
+  await db.insertIgnore('notification_dismissals', { user_id: req.user.id, notification_event_id: id, dismissed_at: new Date().toISOString() }, ['user_id', 'notification_event_id']);
   res.json({ ok: true });
 }));
 
 // Removes one event from THIS user's own popover list (see loadUserContext.js's own dismissed
 // filter) — not a delete, so Logs > Notifications and every other user's popover are unaffected.
-// INSERT OR IGNORE: clicking "x" twice on the same item (a slow connection, a double click before
+// insertIgnore: clicking "x" twice on the same item (a slow connection, a double click before
 // the DOM removal below finishes) is a no-op the second time, not an error.
 router.post('/:id/dismiss', asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid notification id.' });
-  await db.prepare('INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at) VALUES (?, ?, ?)')
-    .run(req.user.id, id, new Date().toISOString());
+  await db.insertIgnore('notification_dismissals', { user_id: req.user.id, notification_event_id: id, dismissed_at: new Date().toISOString() }, ['user_id', 'notification_event_id']);
   res.json({ ok: true });
 }));
 
@@ -83,9 +81,18 @@ router.post('/:id/dismiss', asyncHandler(async (req, res) => {
 // one round trip, rather than the client firing one /dismiss call per visible item.
 router.post('/dismiss-all', asyncHandler(async (req, res) => {
   const now = new Date().toISOString();
+  // A bulk INSERT ... SELECT ... ON CONFLICT DO NOTHING — not a shape Knex's own object-based
+  // .insert().onConflict() builder covers, so this stays raw SQL, but in the SQL-standard `ON
+  // CONFLICT (cols) DO NOTHING` form (valid on SQLite and Postgres unchanged) instead of SQLite's
+  // own proprietary `INSERT OR IGNORE` keyword, which Postgres doesn't have at all. The `WHERE 1=1`
+  // is required, not decorative: SQLite's own parser treats a bare `FROM notification_events ON
+  // CONFLICT` as ambiguous with a JOIN's own `ON` keyword and rejects it outright (verified
+  // directly — this is a real grammar quirk, not a typo) unless something legal comes between the
+  // FROM clause and the ON CONFLICT clause; harmless everywhere else, including Postgres.
   await db.prepare(`
-    INSERT OR IGNORE INTO notification_dismissals (user_id, notification_event_id, dismissed_at)
-    SELECT ?, id, ? FROM notification_events
+    INSERT INTO notification_dismissals (user_id, notification_event_id, dismissed_at)
+    SELECT ?, id, ? FROM notification_events WHERE 1=1
+    ON CONFLICT (user_id, notification_event_id) DO NOTHING
   `).run(req.user.id, now);
   res.json({ ok: true });
 }));

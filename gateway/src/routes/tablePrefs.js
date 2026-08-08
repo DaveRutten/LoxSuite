@@ -26,12 +26,13 @@ router.post('/:tableKey', asyncHandler(async (req, res) => {
   const hidden = Array.isArray(req.body.hidden) ? req.body.hidden : [];
   const widths = req.body.widths && typeof req.body.widths === 'object' ? req.body.widths : {};
 
-  await db.prepare(
-    `INSERT INTO user_table_prefs (user_id, table_key, column_order, hidden_columns, column_widths)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(user_id, table_key) DO UPDATE SET
-       column_order = excluded.column_order, hidden_columns = excluded.hidden_columns, column_widths = excluded.column_widths`
-  ).run(req.session.userId, req.params.tableKey, JSON.stringify(order), JSON.stringify(hidden), JSON.stringify(widths));
+  await db.upsert('user_table_prefs', {
+    user_id: req.session.userId,
+    table_key: req.params.tableKey,
+    column_order: JSON.stringify(order),
+    hidden_columns: JSON.stringify(hidden),
+    column_widths: JSON.stringify(widths),
+  }, ['user_id', 'table_key']);
 
   res.json({ ok: true });
 }));

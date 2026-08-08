@@ -985,7 +985,7 @@ router.post('/:id/favorite', asyncHandler(async (req, res) => {
   const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
 
-  await db.prepare('INSERT OR IGNORE INTO dashboard_favorites (user_id, dashboard_id) VALUES (?, ?)').run(req.session.userId, dashboard.id);
+  await db.insertIgnore('dashboard_favorites', { user_id: req.session.userId, dashboard_id: dashboard.id }, ['user_id', 'dashboard_id']);
   res.redirect(safeDashboardRedirect(dashboard, req.body.redirect_to));
 }));
 
@@ -1024,10 +1024,7 @@ router.post('/:id/share', asyncHandler(async (req, res) => {
   const ids = rawIds.map(Number).filter((id) => Number.isInteger(id) && id !== dashboard.user_id);
   for (const id of ids) {
     if (!(await existsUser.get(id))) continue;
-    await db.prepare(
-      `INSERT INTO dashboard_shares (dashboard_id, user_id, can_edit) VALUES (?, ?, ?)
-       ON CONFLICT(dashboard_id, user_id) DO UPDATE SET can_edit = excluded.can_edit`
-    ).run(dashboard.id, id, canEdit);
+    await db.upsert('dashboard_shares', { dashboard_id: dashboard.id, user_id: id, can_edit: canEdit }, ['dashboard_id', 'user_id']);
   }
   res.redirect('/dashboards');
 }));
@@ -1059,10 +1056,7 @@ router.post('/:id/share-role', asyncHandler(async (req, res) => {
   const ids = rawIds.map(Number).filter((id) => Number.isInteger(id));
   for (const id of ids) {
     if (!(await existsRole.get(id))) continue;
-    await db.prepare(
-      `INSERT INTO dashboard_role_shares (dashboard_id, role_id, can_edit) VALUES (?, ?, ?)
-       ON CONFLICT(dashboard_id, role_id) DO UPDATE SET can_edit = excluded.can_edit`
-    ).run(dashboard.id, id, canEdit);
+    await db.upsert('dashboard_role_shares', { dashboard_id: dashboard.id, role_id: id, can_edit: canEdit }, ['dashboard_id', 'role_id']);
   }
   res.redirect('/dashboards');
 }));
@@ -1136,10 +1130,10 @@ router.post('/:id/panels', asyncHandler(async (req, res) => {
   const initialRowSpan = panelType === 'group_header' ? 1 : 3;
 
   await db.transaction(async (tx) => {
-    const result = await tx
-      .prepare('INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position, col_span, row_span) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(dashboard.id, panelType, req.body.title || null, range, config, maxPos + 1, initialColSpan, initialRowSpan);
-    const panelId = result.lastInsertRowid;
+    const panelId = await tx.insertReturningId(
+      'INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position, col_span, row_span) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [dashboard.id, panelType, req.body.title || null, range, config, maxPos + 1, initialColSpan, initialRowSpan]
+    );
     for (let index = 0; index < monitorIds.length; index++) {
       await tx.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)').run(panelId, monitorIds[index], index);
     }
@@ -1189,10 +1183,10 @@ router.post('/:id/panels/:panelId/duplicate', asyncHandler(async (req, res) => {
 
   await db.transaction(async (tx) => {
     const maxPos = (await tx.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(dashboard.id)).m;
-    const result = await tx
-      .prepare('INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position, col_span, row_span) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(dashboard.id, panel.panel_type, panel.title ? `${panel.title} (copy)` : null, panel.range, panel.config, maxPos + 1, panel.col_span, panel.row_span);
-    const newPanelId = result.lastInsertRowid;
+    const newPanelId = await tx.insertReturningId(
+      'INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position, col_span, row_span) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [dashboard.id, panel.panel_type, panel.title ? `${panel.title} (copy)` : null, panel.range, panel.config, maxPos + 1, panel.col_span, panel.row_span]
+    );
     for (let index = 0; index < monitorIds.length; index++) {
       await tx.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)').run(newPanelId, monitorIds[index], index);
     }
