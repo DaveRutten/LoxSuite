@@ -2,28 +2,29 @@ const express = require('express');
 const { getClient } = require('../mqttClient');
 const { applyLoxoneToMqttTransform, findOrAutoCreateLoxoneMapping } = require('../loxone');
 const { logAccepted, logRejected } = require('../loxoneCommandLog');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
 // A wildcard route (not just ":token") so that when auto-create is enabled and
 // Loxone sends a real MQTT topic (which contains slashes) instead of a short
 // pre-registered token, the full path still reaches this handler.
-router.get('/*', (req, res) => {
+router.get('/*', asyncHandler(async (req, res) => {
   const token = req.params[0];
-  const mapping = findOrAutoCreateLoxoneMapping(token, 'http');
+  const mapping = await findOrAutoCreateLoxoneMapping(token, 'http');
 
   if (!mapping) {
-    logRejected({ transport: 'HTTP', address: req.ip, topic: token, reason: 'no matching Loxone → MQTT mapping' });
+    await logRejected({ transport: 'HTTP', address: req.ip, topic: token, reason: 'no matching Loxone → MQTT mapping' });
     return res.status(404).send('Unknown or disabled mapping');
   }
 
   const rawValue = req.query.value;
   if (rawValue === undefined) {
-    logRejected({ transport: 'HTTP', address: req.ip, topic: mapping.mqtt_topic, reason: 'missing "value" query parameter' });
+    await logRejected({ transport: 'HTTP', address: req.ip, topic: mapping.mqtt_topic, reason: 'missing "value" query parameter' });
     return res.status(400).send('Missing "value" query parameter');
   }
 
-  const value = applyLoxoneToMqttTransform(mapping, rawValue);
+  const value = await applyLoxoneToMqttTransform(mapping, rawValue);
 
   getClient().publish(mapping.mqtt_topic, String(value), { qos: mapping.qos, retain: !!mapping.retain }, (err) => {
     if (err) {
@@ -37,6 +38,6 @@ router.get('/*', (req, res) => {
     // show what actually got published — JSON body costs Loxone nothing since it never reads it.
     res.status(200).json({ ok: true, topic: mapping.mqtt_topic, value: String(value) });
   });
-});
+}));
 
 module.exports = router;

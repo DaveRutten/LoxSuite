@@ -164,45 +164,45 @@ async function checkMiniserver(miniserver) {
     // COALESCE keeps whatever was last successfully read if this particular sweep's fetch failed
     // — a hiccup reading any one of these shouldn't flip an otherwise-successful check's columns
     // back to unknown.
-    db.prepare(
+    await db.prepare(
       `UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = NULL,
        firmware_version = COALESCE(?, firmware_version), plc_state = COALESCE(?, plc_state),
        cpu_load = COALESCE(?, cpu_load), heap_status = COALESCE(?, heap_status), num_tasks = COALESCE(?, num_tasks),
        firmware_date = COALESCE(?, firmware_date), miniserver_type = COALESCE(?, miniserver_type)
        WHERE id = ?`
     ).run('online', now, firmwareVersion, plcState, cpuLoad, heapStatus, numTasks, firmwareDate, miniserverType, miniserver.id);
-    checkMiniserverStatus(miniserver, 'online');
+    await checkMiniserverStatus(miniserver, 'online');
     // miniserver.firmware_version here is still this sweep's PRE-update value (miniserver is the
     // in-memory row checkAllMiniservers passed in, never mutated in place) — firmwareVersion above
     // is the freshly-fetched one, so this is exactly the before/after pair a change check needs.
-    checkFirmwareChanged(miniserver, firmwareVersion);
+    await checkFirmwareChanged(miniserver, firmwareVersion);
 
     // Feeds any Monitor tracking one of these fields (source_type 'miniserver_diag') — a no-op
     // query if none exist for this Miniserver. Fed from THIS cycle's own fresh readings, not the
     // COALESCE'd fallback values just written above — a cycle that failed to read e.g. cpu_load
     // shouldn't re-feed a monitor with an unchanged reading it's already seen, just skip that one
     // field this time (recordMiniserverDiagValue no-ops on null/undefined already).
-    recordMiniserverDiagValue(miniserver.id, 'cpu_load', cpuLoad !== null ? parseFloat(cpuLoad) : null);
-    recordMiniserverDiagValue(miniserver.id, 'num_tasks', numTasks);
+    await recordMiniserverDiagValue(miniserver.id, 'cpu_load', cpuLoad !== null ? parseFloat(cpuLoad) : null);
+    await recordMiniserverDiagValue(miniserver.id, 'num_tasks', numTasks);
     const heap = parseHeapStatus(heapStatus);
     if (heap) {
-      recordMiniserverDiagValue(miniserver.id, 'heap_value_kb', heap.firstKb);
-      recordMiniserverDiagValue(miniserver.id, 'heap_total_kb', heap.totalKb);
+      await recordMiniserverDiagValue(miniserver.id, 'heap_value_kb', heap.firstKb);
+      await recordMiniserverDiagValue(miniserver.id, 'heap_total_kb', heap.totalKb);
     }
   } catch (err) {
-    db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = ? WHERE id = ?')
+    await db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = ? WHERE id = ?')
       .run('offline', now, err.message, miniserver.id);
-    checkMiniserverStatus(miniserver, 'offline');
+    await checkMiniserverStatus(miniserver, 'offline');
   }
 }
 
 async function checkAllMiniservers() {
-  const miniservers = db.prepare('SELECT * FROM miniservers').all();
+  const miniservers = await db.prepare('SELECT * FROM miniservers').all();
   await Promise.all(miniservers.map(checkMiniserver));
   // After every Miniserver's own row has this cycle's fresh firmware_version/plc_state — needs
   // the whole set settled first, since it compares pairs across two independent per-Miniserver
   // checks above rather than reacting to any single one's own result.
-  checkGatewayClientFirmwareMismatch();
+  await checkGatewayClientFirmwareMismatch();
 }
 
 // Recursive setTimeout, not setInterval — re-reads gateway_settings.healthcheck_interval_seconds
@@ -214,7 +214,7 @@ function startHealthchecks() {
   async function tick() {
     await checkAllMiniservers();
     if (cancelled) return;
-    const settings = db.prepare('SELECT healthcheck_interval_seconds FROM gateway_settings WHERE id = 1').get();
+    const settings = await db.prepare('SELECT healthcheck_interval_seconds FROM gateway_settings WHERE id = 1').get();
     const seconds = settings?.healthcheck_interval_seconds > 0 ? settings.healthcheck_interval_seconds : 60;
     setTimeout(tick, seconds * 1000);
   }

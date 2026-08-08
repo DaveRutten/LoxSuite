@@ -39,7 +39,7 @@ process.on('uncaughtException', (err) => {
 
 const express = require('express');
 const session = require('express-session');
-const SqliteStore = require('better-sqlite3-session-store')(session);
+const KnexSessionStore = require('connect-session-knex')(session);
 const path = require('path');
 
 const db = require('./db');
@@ -56,6 +56,7 @@ const requireAuth = require('./middleware/requireAuth');
 const loadUserContext = require('./middleware/loadUserContext');
 const { requirePermission, requireAdmin } = require('./middleware/requirePermission');
 const { attachCsrfToken, verifyCsrfToken } = require('./middleware/csrf');
+const asyncHandler = require('./middleware/asyncHandler');
 
 const authRoutes = require('./routes/auth');
 const miniserverRoutes = require('./routes/miniservers');
@@ -89,185 +90,226 @@ const avatarRoutes = require('./routes/avatar');
 const { icon } = require('./icons');
 const { toggleSwitch } = require('./toggleSwitch');
 const backup = require('./backup');
-const { formatDateTime, getDisplayTimezone } = require('./dateFormat');
+const { formatDateTime, getDisplayTimezone, loadTimezoneCache } = require('./dateFormat');
 const { formatCount, formatHeapStatus, miniserverGenerationLabel, formatDuration, PLC_STATE_LABELS, plcStateLabel } = require('./format');
 const panelTypeDefaults = require('./panelTypeDefaults');
 const { getVersionStatus, startVersionCheck } = require('./versionCheck');
 const { notificationSourceLink } = require('./notificationLinks');
 
-const app = express();
+// Everything from here down used to run at plain module-load time — safe when the DB was a
+// synchronous, already-open better-sqlite3 handle, but the async facade (db.js) needs an awaited
+// db.init() to run first: it opens the connection, applies the schema/migrations, and only then is
+// it safe for the session store (which needs a live Knex instance) or any route/background worker
+// to touch the database at all. Wrapped in one async main() so that ordering is explicit and
+// enforced, rather than relying on every module happening to not need the DB at require time (only
+// one place in the whole app ever did — see mosquittoLog.js's own comment on lastPersistedAt).
+async function main() {
+  await db.init();
+  // Eagerly, once — getDisplayTimezone() (formatDateTime, res.locals.displayTimezone below) is
+  // called synchronously all over template rendering and can't itself await a DB read. See
+  // dateFormat.js's own comment on loadTimezoneCache/getDisplayTimezone for the full reasoning.
+  await loadTimezoneCache();
+  // Loads the real, saved login rate-limit settings — routes/auth.js's own module-level
+  // loginLimiter starts out as a hardcoded default (its `buildLoginLimiter()` needs an awaited DB
+  // read it can't do at plain require() time), so this replaces it with the real one before the
+  // app starts accepting login attempts. Also reloaded from Administration whenever those settings
+  // are saved (see routes/admin.js).
+  await authRoutes.reloadLoginLimiter();
 
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-// Cache-busting query string for /style.css, /tables.js, /monitor-chart.js (see head.ejs,
-// foot.ejs, monitor-detail.ejs, panel-grid.ejs) — set once at boot rather than per-request, so a
-// browser that cached last version's assets picks up this restart's actual files immediately
-// instead of needing a manual hard-refresh, while every request within the same run still shares
-// one cache-friendly value.
-app.locals.assetVersion = Date.now();
-app.locals.icon = icon;
-app.locals.toggleSwitch = toggleSwitch;
-app.locals.formatDateTime = formatDateTime;
-app.locals.formatCount = formatCount;
-app.locals.formatHeapStatus = formatHeapStatus;
-app.locals.miniserverGenerationLabel = miniserverGenerationLabel;
-app.locals.PLC_STATE_LABELS = PLC_STATE_LABELS;
-app.locals.plcStateLabel = plcStateLabel;
-app.locals.formatDuration = formatDuration;
-app.locals.getVersionStatus = getVersionStatus;
-app.locals.notificationSourceLink = notificationSourceLink;
-app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
-app.locals.serializeThresholdLadder = dashboardsRoutes.serializeThresholdLadder;
-app.locals.serializeValueMappings = dashboardsRoutes.serializeValueMappings;
-app.locals.serializeAnnotations = dashboardsRoutes.serializeAnnotations;
-app.locals.escAttr = chartFieldHelpers.escAttr;
-app.locals.unitField = chartFieldHelpers.unitField;
-app.locals.scaleField = chartFieldHelpers.scaleField;
-app.locals.valueMappingField = chartFieldHelpers.valueMappingField;
-app.locals.thresholdField = chartFieldHelpers.thresholdField;
-app.locals.annotationField = chartFieldHelpers.annotationField;
-app.locals.rangeField = chartFieldHelpers.rangeField;
-// Exposed as a global for the client-side chart (public/monitor-chart.js) — everything
-// server-rendered uses formatDateTime() directly and never needs this.
-app.use((req, res, next) => { res.locals.displayTimezone = getDisplayTimezone(); next(); });
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public')));
-app.use(
-  session({
-    store: new SqliteStore({ client: db, expired: { clear: true, intervalMs: 15 * 60 * 1000 } }),
-    secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
-    resave: false,
-    saveUninitialized: false,
-    // sameSite: 'lax' (not 'strict') is deliberate — the Pocket ID SSO callback is a top-level
-    // GET redirect back from an external origin, and 'strict' would drop the session cookie on
-    // that hop (breaking the codeVerifier/state check in routes/auth.js). 'lax' still excludes
-    // the cookie from cross-site POSTs, which is the actual CSRF vector this app cares about.
-    cookie: { httpOnly: true, sameSite: 'lax' },
-  })
-);
+  const app = express();
 
-app.get('/healthz', (req, res) => res.status(200).json({ ok: true }));
-
-// Public: Loxone calls this directly, no login involved.
-app.use('/api/loxone-in', loxoneInboundRoutes);
-
-app.use(attachCsrfToken);
-app.use(verifyCsrfToken);
-
-// Populates req.user/res.locals.currentUser whenever a session exists; a no-op otherwise, so it's
-// safe to run globally ahead of both the public routes above and every authenticated one below.
-app.use(loadUserContext);
-
-app.use(authRoutes);
-
-app.get('/', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
-  const miniserverRows = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
-  // Same Gateway/Client labeling as the Miniservers page itself (routes/miniservers.js) — shown
-  // as its own column here too, so this summary table doesn't look out of sync with the one on
-  // the actual Miniservers page for the exact same Miniservers.
-  const msNameById = new Map(miniserverRows.map((ms) => [ms.id, ms.name]));
-  const msClientCountByGatewayId = new Map();
-  miniserverRows.forEach((ms) => {
-    if (!ms.gateway_client_of) return;
-    msClientCountByGatewayId.set(ms.gateway_client_of, (msClientCountByGatewayId.get(ms.gateway_client_of) || 0) + 1);
-  });
-  const miniservers = miniserverRows.map((ms) => ({
-    ...ms,
-    gatewayClientOfName: ms.gateway_client_of ? msNameById.get(ms.gateway_client_of) || null : null,
-    gatewayClientCount: msClientCountByGatewayId.get(ms.id) || 0,
+  app.set('view engine', 'ejs');
+  app.set('views', path.join(__dirname, 'views'));
+  // Cache-busting query string for /style.css, /tables.js, /monitor-chart.js (see head.ejs,
+  // foot.ejs, monitor-detail.ejs, panel-grid.ejs) — set once at boot rather than per-request, so a
+  // browser that cached last version's assets picks up this restart's actual files immediately
+  // instead of needing a manual hard-refresh, while every request within the same run still shares
+  // one cache-friendly value.
+  app.locals.assetVersion = Date.now();
+  app.locals.icon = icon;
+  app.locals.toggleSwitch = toggleSwitch;
+  app.locals.formatDateTime = formatDateTime;
+  app.locals.formatCount = formatCount;
+  app.locals.formatHeapStatus = formatHeapStatus;
+  app.locals.miniserverGenerationLabel = miniserverGenerationLabel;
+  app.locals.PLC_STATE_LABELS = PLC_STATE_LABELS;
+  app.locals.plcStateLabel = plcStateLabel;
+  app.locals.formatDuration = formatDuration;
+  app.locals.getVersionStatus = getVersionStatus;
+  app.locals.notificationSourceLink = notificationSourceLink;
+  app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
+  app.locals.serializeThresholdLadder = dashboardsRoutes.serializeThresholdLadder;
+  app.locals.serializeValueMappings = dashboardsRoutes.serializeValueMappings;
+  app.locals.serializeAnnotations = dashboardsRoutes.serializeAnnotations;
+  app.locals.escAttr = chartFieldHelpers.escAttr;
+  app.locals.unitField = chartFieldHelpers.unitField;
+  app.locals.scaleField = chartFieldHelpers.scaleField;
+  app.locals.valueMappingField = chartFieldHelpers.valueMappingField;
+  app.locals.thresholdField = chartFieldHelpers.thresholdField;
+  app.locals.annotationField = chartFieldHelpers.annotationField;
+  app.locals.rangeField = chartFieldHelpers.rangeField;
+  // Exposed as a global for the client-side chart (public/monitor-chart.js) — everything
+  // server-rendered uses formatDateTime() directly and never needs this.
+  app.use((req, res, next) => { res.locals.displayTimezone = getDisplayTimezone(); next(); });
+  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json());
+  app.use(express.static(path.join(__dirname, '..', 'public')));
+  app.use(
+    session({
+      // connect-session-knex (replacing better-sqlite3-session-store — see
+      // legacy-sqlite-schema.js's own migrateSessionsTableForKnexStore for the one-time table-shape
+      // migration this switch needed) takes a live Knex instance directly rather than a raw driver
+      // handle, so it works unchanged once Postgres/MySQL backends exist too (Phase 4/5 of the
+      // db-backend plan) — the SAME store code, just a different dialect underneath.
+      store: new KnexSessionStore({ knex: db.getKnex(), tablename: 'sessions', sidfieldname: 'sid' }),
+      secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
+      resave: false,
+      saveUninitialized: false,
+      // sameSite: 'lax' (not 'strict') is deliberate — the Pocket ID SSO callback is a top-level
+      // GET redirect back from an external origin, and 'strict' would drop the session cookie on
+      // that hop (breaking the codeVerifier/state check in routes/auth.js). 'lax' still excludes
+      // the cookie from cross-site POSTs, which is the actual CSRF vector this app cares about.
+      cookie: { httpOnly: true, sameSite: 'lax' },
+    })
+  );
+  
+  app.get('/healthz', (req, res) => res.status(200).json({ ok: true }));
+  
+  // Public: Loxone calls this directly, no login involved.
+  app.use('/api/loxone-in', loxoneInboundRoutes);
+  
+  app.use(attachCsrfToken);
+  app.use(verifyCsrfToken);
+  
+  // Populates req.user/res.locals.currentUser whenever a session exists; a no-op otherwise, so it's
+  // safe to run globally ahead of both the public routes above and every authenticated one below.
+  app.use(loadUserContext);
+  
+  app.use(authRoutes);
+  
+  app.get('/', requireAuth, requirePermission('dashboard', 'view'), asyncHandler(async (req, res) => {
+    const miniserverRows = await db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
+    // Same Gateway/Client labeling as the Miniservers page itself (routes/miniservers.js) — shown
+    // as its own column here too, so this summary table doesn't look out of sync with the one on
+    // the actual Miniservers page for the exact same Miniservers.
+    const msNameById = new Map(miniserverRows.map((ms) => [ms.id, ms.name]));
+    const msClientCountByGatewayId = new Map();
+    miniserverRows.forEach((ms) => {
+      if (!ms.gateway_client_of) return;
+      msClientCountByGatewayId.set(ms.gateway_client_of, (msClientCountByGatewayId.get(ms.gateway_client_of) || 0) + 1);
+    });
+    const miniservers = miniserverRows.map((ms) => ({
+      ...ms,
+      gatewayClientOfName: ms.gateway_client_of ? msNameById.get(ms.gateway_client_of) || null : null,
+      gatewayClientCount: msClientCountByGatewayId.get(ms.id) || 0,
+    }));
+    const mqttToLoxoneCount = (await db.prepare('SELECT COUNT(*) AS c FROM mappings_mqtt_to_loxone WHERE enabled = 1').get()).c;
+    const loxoneToMqttCount = (await db.prepare('SELECT COUNT(*) AS c FROM mappings_loxone_to_mqtt WHERE enabled = 1').get()).c;
+    const connectedClientCount = getClients().filter((c) => c.status === 'connected').length;
+  
+    // The home Dashboard is one ordinary custom_dashboards row with no owner (user_id IS NULL),
+    // seeded once by db.js's migrateDashboardWidgetsToSharedPanels — same panel system My
+    // Dashboards uses, just shared instead of personal (see routes/dashboards.js). Recreated on the
+    // fly if it's somehow missing (defensive only — the migration always seeds it on startup).
+    let sharedDashboard = await db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
+    if (!sharedDashboard) {
+      const newId = await db.insertReturningId('INSERT INTO custom_dashboards (user_id, name, position, created_at) VALUES (NULL, ?, 0, ?)', ['Dashboard', new Date().toISOString()]);
+      sharedDashboard = { id: newId };
+    }
+    const dashboardMonitors = await db.prepare('SELECT id, label, source_type FROM monitors ORDER BY label').all();
+    const panels = await dashboardsRoutes.loadPanelsWithMonitors(sharedDashboard.id, req.query.range);
+  
+    res.render('dashboard', {
+      username: req.session.username,
+      mqttConnected: mqttClient.state.connected,
+      miniservers,
+      mqttToLoxoneCount,
+      loxoneToMqttCount,
+      stats: mqttClient.getStats(),
+      connectedClientCount,
+      dashboard: sharedDashboard,
+      panels,
+      monitors: dashboardMonitors,
+      defaultPanelDecimals: await dashboardsRoutes.getDefaultPanelDecimals(),
+      panelTypeDefaultsExist: await panelTypeDefaults.listDefaultTypes(sharedDashboard.id),
+    });
   }));
-  const mqttToLoxoneCount = db.prepare('SELECT COUNT(*) AS c FROM mappings_mqtt_to_loxone WHERE enabled = 1').get().c;
-  const loxoneToMqttCount = db.prepare('SELECT COUNT(*) AS c FROM mappings_loxone_to_mqtt WHERE enabled = 1').get().c;
-  const connectedClientCount = getClients().filter((c) => c.status === 'connected').length;
-
-  // The home Dashboard is one ordinary custom_dashboards row with no owner (user_id IS NULL),
-  // seeded once by db.js's migrateDashboardWidgetsToSharedPanels — same panel system My
-  // Dashboards uses, just shared instead of personal (see routes/dashboards.js). Recreated on the
-  // fly if it's somehow missing (defensive only — the migration always seeds it on startup).
-  let sharedDashboard = db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
-  if (!sharedDashboard) {
-    const result = db.prepare('INSERT INTO custom_dashboards (user_id, name, position, created_at) VALUES (NULL, ?, 0, ?)')
-      .run('Dashboard', new Date().toISOString());
-    sharedDashboard = { id: result.lastInsertRowid };
-  }
-  const dashboardMonitors = db.prepare('SELECT id, label, source_type FROM monitors ORDER BY label').all();
-  const panels = dashboardsRoutes.loadPanelsWithMonitors(sharedDashboard.id, req.query.range);
-
-  res.render('dashboard', {
-    username: req.session.username,
-    mqttConnected: mqttClient.state.connected,
-    miniservers,
-    mqttToLoxoneCount,
-    loxoneToMqttCount,
-    stats: mqttClient.getStats(),
-    connectedClientCount,
-    dashboard: sharedDashboard,
-    panels,
-    monitors: dashboardMonitors,
-    defaultPanelDecimals: dashboardsRoutes.getDefaultPanelDecimals(),
-    panelTypeDefaultsExist: panelTypeDefaults.listDefaultTypes(sharedDashboard.id),
+  
+  app.use('/miniservers', requireAuth, requirePermission('miniservers', 'view'), miniserverRoutes);
+  app.use('/live-data', requireAuth, requirePermission('live_data', 'view'), liveDataRoutes);
+  // mappings.js serves three distinct areas (mqtt_to_loxone/loxone_to_mqtt/commands) under one
+  // router, so it's gated per-route inside that file instead of once here.
+  app.use('/mappings', requireAuth, mappingRoutes);
+  app.use('/incoming', requireAuth, requirePermission('incoming', 'view'), incomingRoutes);
+  app.use('/settings', requireAuth, requirePermission('settings', 'view'), settingsRoutes);
+  app.use('/mqtt-users', requireAuth, requirePermission('mqtt_users', 'view'), mqttUsersRoutes);
+  app.use('/mqtt-roles', requireAuth, requirePermission('mqtt_roles', 'view'), mqttRolesRoutes);
+  app.use('/transformations', requireAuth, requirePermission('transformations', 'view'), transformationsRoutes);
+  app.use('/monitor', requireAuth, requirePermission('monitor', 'view'), monitorRoutes);
+  app.use('/hardware', requireAuth, requirePermission('hardware', 'view'), hardwareRoutes);
+  // logs.js serves four distinct areas (one per tab: logs_mqtt/logs_loxone/logs_loxone_commands/
+  // logs_system), so it's gated per-route inside that file instead of once here — same reasoning as
+  // mappings.js above.
+  app.use('/logs', requireAuth, logsRoutes);
+  // Serves both personal My Dashboards (ownership-gated, not part of the Access Roles matrix) and
+  // the shared home Dashboard's panel mutations (gated internally by the `dashboard` area) — see
+  // loadAccessibleDashboard/canMutate in routes/dashboards.js.
+  app.use('/dashboards', requireAuth, dashboardsRoutes);
+  app.use('/api/table-prefs', requireAuth, tablePrefsRoutes);
+  app.use('/api/nav-prefs', requireAuth, navPrefsRoutes);
+  // Mounted before the general '/admin' router below so their routes take precedence without
+  // relying on that router falling through for a path it doesn't recognize.
+  app.use('/admin/backup', requireAuth, requireAdmin, backupRoutes);
+  app.use('/admin/notifications', requireAuth, requireAdmin, notificationsRoutes);
+  app.use('/admin', requireAuth, requireAdmin, adminRoutes);
+  // Admin-only, same as the routes just above — the wizard changes global settings (timezone) and
+  // adds Miniservers, not personal preferences, so it needs the same standing an Administrator's
+  // own hands-on setup of those would.
+  app.use('/setup', requireAuth, requireAdmin, setupRoutes);
+  app.use('/profile', requireAuth, profileRoutes);
+  app.use('/avatar', requireAuth, avatarRoutes);
+  // Ambient topbar chrome (the bell's unread-count/mark-read) — any logged-in user, no
+  // requirePermission gate, same tier as Help/the account menu (see notificationCenter.js's own
+  // header comment for why). The full historical logbook is /logs/notifications instead, which IS
+  // gated (see routes/logs.js's requirePermission('logs_notifications', ...)).
+  app.use('/notifications', requireAuth, notificationCenterRoutes);
+  app.get('/help', requireAuth, (req, res) => res.render('help'));
+  
+  runBootstrap();
+  startHealthchecks();
+  startTailing();
+  // Used to self-connect at plain module-load time (see mqttClient.js's own comment on
+  // startMqttClient) — now started explicitly here, after db.init(), like every other worker below.
+  mqttClient.startMqttClient();
+  startUdpServer();
+  startMonitorCollector();
+  startLogCollector();
+  startHardwarePolling();
+  startLiveConnections();
+  backup.startScheduler();
+  startVersionCheck();
+  
+  const port = process.env.PORT || 5582;
+  app.listen(port, () => {
+    console.log(`LoxSuite listening on port ${port}.`);
   });
-});
-
-app.use('/miniservers', requireAuth, requirePermission('miniservers', 'view'), miniserverRoutes);
-app.use('/live-data', requireAuth, requirePermission('live_data', 'view'), liveDataRoutes);
-// mappings.js serves three distinct areas (mqtt_to_loxone/loxone_to_mqtt/commands) under one
-// router, so it's gated per-route inside that file instead of once here.
-app.use('/mappings', requireAuth, mappingRoutes);
-app.use('/incoming', requireAuth, requirePermission('incoming', 'view'), incomingRoutes);
-app.use('/settings', requireAuth, requirePermission('settings', 'view'), settingsRoutes);
-app.use('/mqtt-users', requireAuth, requirePermission('mqtt_users', 'view'), mqttUsersRoutes);
-app.use('/mqtt-roles', requireAuth, requirePermission('mqtt_roles', 'view'), mqttRolesRoutes);
-app.use('/transformations', requireAuth, requirePermission('transformations', 'view'), transformationsRoutes);
-app.use('/monitor', requireAuth, requirePermission('monitor', 'view'), monitorRoutes);
-app.use('/hardware', requireAuth, requirePermission('hardware', 'view'), hardwareRoutes);
-// logs.js serves four distinct areas (one per tab: logs_mqtt/logs_loxone/logs_loxone_commands/
-// logs_system), so it's gated per-route inside that file instead of once here — same reasoning as
-// mappings.js above.
-app.use('/logs', requireAuth, logsRoutes);
-// Serves both personal My Dashboards (ownership-gated, not part of the Access Roles matrix) and
-// the shared home Dashboard's panel mutations (gated internally by the `dashboard` area) — see
-// loadAccessibleDashboard/canMutate in routes/dashboards.js.
-app.use('/dashboards', requireAuth, dashboardsRoutes);
-app.use('/api/table-prefs', requireAuth, tablePrefsRoutes);
-app.use('/api/nav-prefs', requireAuth, navPrefsRoutes);
-// Mounted before the general '/admin' router below so their routes take precedence without
-// relying on that router falling through for a path it doesn't recognize.
-app.use('/admin/backup', requireAuth, requireAdmin, backupRoutes);
-app.use('/admin/notifications', requireAuth, requireAdmin, notificationsRoutes);
-app.use('/admin', requireAuth, requireAdmin, adminRoutes);
-// Admin-only, same as the routes just above — the wizard changes global settings (timezone) and
-// adds Miniservers, not personal preferences, so it needs the same standing an Administrator's
-// own hands-on setup of those would.
-app.use('/setup', requireAuth, requireAdmin, setupRoutes);
-app.use('/profile', requireAuth, profileRoutes);
-app.use('/avatar', requireAuth, avatarRoutes);
-// Ambient topbar chrome (the bell's unread-count/mark-read) — any logged-in user, no
-// requirePermission gate, same tier as Help/the account menu (see notificationCenter.js's own
-// header comment for why). The full historical logbook is /logs/notifications instead, which IS
-// gated (see routes/logs.js's requirePermission('logs_notifications', ...)).
-app.use('/notifications', requireAuth, notificationCenterRoutes);
-app.get('/help', requireAuth, (req, res) => res.render('help'));
-
-runBootstrap();
-startHealthchecks();
-startTailing();
-startUdpServer();
-startMonitorCollector();
-startLogCollector();
-startHardwarePolling();
-startLiveConnections();
-backup.startScheduler();
-startVersionCheck();
-
-const port = process.env.PORT || 5582;
-app.listen(port, () => {
-  console.log(`LoxSuite listening on port ${port}.`);
-});
+}
 
 process.on('SIGTERM', () => {
   const client = mqttClient.getClient();
   if (client) client.end(true, {}, () => process.exit(0));
   else process.exit(0);
+});
+
+// A broken/unreachable DB at startup can't be "warned and limped through" the way a missing
+// SESSION_SECRET can (see this file's own comment on that near the top) — there's no degraded mode
+// that does anything useful without it. Loud and fatal: log the real error and exit non-zero, so
+// Docker's own restart policy is what actually recovers instead of a half-started process silently
+// accepting connections it can't serve. A real fail-fast connection preflight (retried with
+// backoff, clear diagnostics for a bad DB_BACKEND/DATABASE_URL) lands in gateway/src/db/config.js
+// once Postgres/MySQL are real options (Phase 4/5 of the db-backend plan) — this is the
+// SQLite-only placeholder for that same principle.
+main().catch((err) => {
+  console.error('Fatal error during startup:', err);
+  process.exit(1);
 });

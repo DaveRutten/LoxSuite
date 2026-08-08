@@ -53,8 +53,8 @@ function recordMessage(topic, payload) {
   while (recentTimestamps.length && recentTimestamps[0] < cutoff) recentTimestamps.shift();
 }
 
-function loadSettings() {
-  const settings = db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
+async function loadSettings() {
+  const settings = await db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
   return settings ? { ...settings, password: decrypt(settings.password) } : settings;
 }
 
@@ -84,7 +84,7 @@ function attachHandlers(c) {
 
     recordMessage(topic, payload);
 
-    const mappings = db.prepare('SELECT * FROM mappings_mqtt_to_loxone WHERE enabled = 1').all();
+    const mappings = await db.prepare('SELECT * FROM mappings_mqtt_to_loxone WHERE enabled = 1').all();
     const matching = mappings.filter((m) => topicMatches(m.mqtt_topic, topic));
 
     for (const mapping of matching) {
@@ -98,7 +98,7 @@ function attachHandlers(c) {
         await forwardToLoxone(mapping, payload, topic);
       } catch (err) {
         console.error(`Failed to forward "${topic}" to miniserver ${mapping.miniserver_id}:`, err.message);
-        db.prepare('UPDATE miniservers SET last_error = ? WHERE id = ?').run(err.message, mapping.miniserver_id);
+        await db.prepare('UPDATE miniservers SET last_error = ? WHERE id = ?').run(err.message, mapping.miniserver_id);
       }
     }
   });
@@ -131,8 +131,8 @@ function connectWithSettings(settings) {
   attachHandlers(client);
 }
 
-function reconnect() {
-  connectWithSettings(loadSettings());
+async function reconnect() {
+  connectWithSettings(await loadSettings());
 }
 
 function getClient() {
@@ -159,11 +159,17 @@ function getStats() {
   };
 }
 
-connectWithSettings(loadSettings());
+// Used to be a bare module-load-time call (connectWithSettings(loadSettings());) — safe when
+// loadSettings() was a synchronous better-sqlite3 read, but the async facade means it can't be
+// awaited at plain require() time. server.js's main() calls this explicitly after db.init() instead.
+async function startMqttClient() {
+  connectWithSettings(await loadSettings());
+}
 
 module.exports = {
   getClient,
   state,
+  startMqttClient,
   reconnect,
   getMessageLog: () => messageLog,
   getTopicOverview,

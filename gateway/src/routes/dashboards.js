@@ -4,6 +4,7 @@ const { getCurrentValue, reloadMqttMonitors, findOrCreateDiagMonitor, DIAG_FIELD
 const { humanizeTopic } = require('../topicName');
 const { resolveRange, historyWindowClause, rangeToWindow, MAX_ROWS } = require('./monitor');
 const panelTypeDefaults = require('../panelTypeDefaults');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
@@ -95,8 +96,8 @@ function applyScale(rawValue, scale) {
   return Math.round(numeric * scale * 1e6) / 1e6;
 }
 
-function getDefaultPanelDecimals() {
-  const row = db.prepare('SELECT default_panel_decimals FROM gateway_settings WHERE id = 1').get();
+async function getDefaultPanelDecimals() {
+  const row = await db.prepare('SELECT default_panel_decimals FROM gateway_settings WHERE id = 1').get();
   return row && Number.isFinite(row.default_panel_decimals) ? row.default_panel_decimals : 2;
 }
 
@@ -420,14 +421,14 @@ function evaluateThreshold(numeric, config) {
 // from the Access-Role-based one above since it's per-dashboard rather than app-wide. Every
 // handler below loads through loadAccessibleDashboard (never trusts the :id alone) and, for
 // anything that mutates, additionally checks canMutate or (for owner-only actions) isOwner.
-function loadAccessibleDashboard(id, req) {
-  const dashboard = db.prepare('SELECT * FROM custom_dashboards WHERE id = ?').get(id);
+async function loadAccessibleDashboard(id, req) {
+  const dashboard = await db.prepare('SELECT * FROM custom_dashboards WHERE id = ?').get(id);
   if (!dashboard) return null;
   if (dashboard.user_id === req.session.userId || dashboard.user_id === null) return dashboard;
 
-  const userShare = db.prepare('SELECT can_edit FROM dashboard_shares WHERE dashboard_id = ? AND user_id = ?').get(dashboard.id, req.session.userId);
+  const userShare = await db.prepare('SELECT can_edit FROM dashboard_shares WHERE dashboard_id = ? AND user_id = ?').get(dashboard.id, req.session.userId);
   const roleShare = req.user && req.user.roleId
-    ? db.prepare('SELECT can_edit FROM dashboard_role_shares WHERE dashboard_id = ? AND role_id = ?').get(dashboard.id, req.user.roleId)
+    ? await db.prepare('SELECT can_edit FROM dashboard_role_shares WHERE dashboard_id = ? AND role_id = ?').get(dashboard.id, req.user.roleId)
     : null;
   if (!userShare && !roleShare) return null; // someone else's personal dashboard, not shared with this user or their role
   // Editable if EITHER grant says so — a user individually shared as viewer but whose role was
@@ -480,58 +481,63 @@ function dashboardUrl(dashboard) {
 // here — it needs a monitor to point a panel at, so it finds-or-creates one for that exact topic
 // (same shape the Monitor page's own "add" form and the old widget→panel migration in db.js both
 // use) before pinning a value panel for it on the shared home Dashboard.
-router.post('/quick-add-topic', (req, res) => {
+router.post('/quick-add-topic', asyncHandler(async (req, res) => {
   if (!(req.user && (req.user.isAdmin || req.user.permissions.dashboard?.edit))) return forbidden(res);
 
   const topic = (req.body.topic || '').trim();
-  const sharedDashboard = db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
+  const sharedDashboard = await db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
   if (!topic || !sharedDashboard) return res.redirect('/incoming/messages');
 
-  let monitor = db.prepare("SELECT id FROM monitors WHERE source_type = 'mqtt' AND mqtt_topic = ?").get(topic);
+  let monitor = await db.prepare("SELECT id FROM monitors WHERE source_type = 'mqtt' AND mqtt_topic = ?").get(topic);
   let monitorId = monitor?.id;
   if (!monitorId) {
-    monitorId = db.prepare("INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at) VALUES ('mqtt', ?, ?, 1, ?)")
-      .run(humanizeTopic(topic), topic, new Date().toISOString()).lastInsertRowid;
-    reloadMqttMonitors(); // start recording this topic's history immediately, not just from the next gateway restart
+    monitorId = await db.insertReturningId(
+      "INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at) VALUES ('mqtt', ?, ?, 1, ?)",
+      [humanizeTopic(topic), topic, new Date().toISOString()]
+    );
+    await reloadMqttMonitors(); // start recording this topic's history immediately, not just from the next gateway restart
   }
 
-  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboard.id).m;
-  const panelId = db.prepare(
-    `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`
-  ).run(sharedDashboard.id, humanizeTopic(topic), maxPos + 1).lastInsertRowid;
-  db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
+  const maxPos = (await db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboard.id)).m;
+  const panelId = await db.insertReturningId(
+    `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`,
+    [sharedDashboard.id, humanizeTopic(topic), maxPos + 1]
+  );
+  await db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
 
   res.redirect('/');
-});
+}));
 
 // Loxone equivalent of quick-add-topic above — same shape (find-or-create the Monitor, pin a new
 // "Current value" panel for it on the shared Home dashboard), just keyed by miniserver+uuid
 // instead of an MQTT topic string. Powers Live Data's "Widget" button (routes/liveData.js).
-router.post('/quick-add-loxone', async (req, res) => {
+router.post('/quick-add-loxone', asyncHandler(async (req, res) => {
   if (!(req.user && (req.user.isAdmin || req.user.permissions.dashboard?.edit))) return forbidden(res);
 
   const miniserverId = Number(req.body.miniserver_id);
   const uuid = (req.body.loxone_uuid || '').trim();
   const label = (req.body.label || '').trim();
-  const sharedDashboard = db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
+  const sharedDashboard = await db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
   if (!miniserverId || !uuid || !sharedDashboard) return res.redirect('/live-data');
 
-  let monitor = db.prepare("SELECT id FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ? AND loxone_uuid = ?").get(miniserverId, uuid);
+  let monitor = await db.prepare("SELECT id FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ? AND loxone_uuid = ?").get(miniserverId, uuid);
   let monitorId = monitor?.id;
   if (!monitorId) {
-    monitorId = db.prepare(
-      "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, 10000, 1, ?)"
-    ).run(label || uuid, miniserverId, uuid, new Date().toISOString()).lastInsertRowid;
+    monitorId = await db.insertReturningId(
+      "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, 10000, 1, ?)",
+      [label || uuid, miniserverId, uuid, new Date().toISOString()]
+    );
   }
 
-  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboard.id).m;
-  const panelId = db.prepare(
-    `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`
-  ).run(sharedDashboard.id, label || uuid, maxPos + 1).lastInsertRowid;
-  db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
+  const maxPos = (await db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboard.id)).m;
+  const panelId = await db.insertReturningId(
+    `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`,
+    [sharedDashboard.id, label || uuid, maxPos + 1]
+  );
+  await db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
 
   res.redirect('/');
-});
+}));
 
 // Same shape as quick-add-topic/quick-add-loxone above, for a Miniserver's diagnostic fields (CPU
 // load, heap, task count). Powers the "Add to Dashboard" button next to
@@ -541,31 +547,32 @@ router.post('/quick-add-loxone', async (req, res) => {
 // sibling button (same bundle, minus the panel) via monitorCollector's findOrCreateDiagMonitor.
 const QUICK_ADD_DIAG_FIELDS = ['cpu_load', 'heap_value_kb', 'num_tasks'];
 
-function addDiagWidget(sharedDashboardId, miniserver, diagField) {
-  const monitorId = findOrCreateDiagMonitor(miniserver, diagField);
+async function addDiagWidget(sharedDashboardId, miniserver, diagField) {
+  const monitorId = await findOrCreateDiagMonitor(miniserver, diagField);
   const label = `${miniserver.name} - ${DIAG_FIELD_LABELS[diagField]}`;
 
-  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboardId).m;
-  const panelId = db.prepare(
-    `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`
-  ).run(sharedDashboardId, label, maxPos + 1).lastInsertRowid;
-  db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
+  const maxPos = (await db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboardId)).m;
+  const panelId = await db.insertReturningId(
+    `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`,
+    [sharedDashboardId, label, maxPos + 1]
+  );
+  await db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
 }
 
-router.post('/quick-add-diag', (req, res) => {
+router.post('/quick-add-diag', asyncHandler(async (req, res) => {
   if (!(req.user && (req.user.isAdmin || req.user.permissions.dashboard?.edit))) return forbidden(res);
 
   const miniserverId = Number(req.body.miniserver_id);
-  const sharedDashboard = db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
+  const sharedDashboard = await db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
   if (!miniserverId || !sharedDashboard) return res.redirect('/miniservers');
 
-  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(miniserverId);
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(miniserverId);
   if (!miniserver) return res.redirect('/miniservers');
 
-  QUICK_ADD_DIAG_FIELDS.forEach((diagField) => addDiagWidget(sharedDashboard.id, miniserver, diagField));
+  for (const diagField of QUICK_ADD_DIAG_FIELDS) await addDiagWidget(sharedDashboard.id, miniserver, diagField);
 
   res.redirect('/');
-});
+}));
 
 // rangeOverride (from the dashboard-wide time filter next to the auto-refresh control — see
 // partials/foot.ejs) never touches what's actually stored in dashboard_panels.range: the Edit
@@ -581,9 +588,9 @@ router.post('/quick-add-diag', (req, res) => {
 // specific panel can deliberately stay pinned to its own range while the filter drives everything
 // still left on "Dashboard default". Falls back to '24h' for a 'dashboard' panel on a dashboard
 // whose own filter is itself at rest ("Default range", no override active at all).
-function loadPanelsWithMonitors(dashboardId, rangeOverride) {
+async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
   const effectiveRange = rangeOverride ? resolveRange(rangeOverride) : null;
-  const panels = db.prepare('SELECT * FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboardId);
+  const panels = await db.prepare('SELECT * FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboardId);
   // miniserver_name is only meaningful for source_type='loxone' monitors (NULL for MQTT ones,
   // which aren't tied to any one Miniserver) — used to disambiguate when a panel combines
   // monitors from more than one Miniserver, e.g. the same control name/label on two of them.
@@ -594,8 +601,8 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
      WHERE dpm.panel_id = ? ORDER BY dpm.position`
   );
 
-  return panels.map((panel) => {
-    const monitors = monitorsStmt.all(panel.id);
+  return Promise.all(panels.map(async (panel) => {
+    const monitors = await monitorsStmt.all(panel.id);
     const config = JSON.parse(panel.config || '{}');
     // valueLabels used to be stored as a plain {value: label} map (before value mappings could
     // also carry their own color) — a panel saved under that older shape still has one sitting in
@@ -638,9 +645,10 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
           if (config.monitorNames[m.label] && !series[m.id]) series[m.id] = { name: config.monitorNames[m.label], unit: null };
         });
       }
+      const defaultDecimals = await getDefaultPanelDecimals();
       return {
         ...base,
-        monitors: monitors.map((m) => {
+        monitors: await Promise.all(monitors.map(async (m) => {
           const override = series[m.id] || {};
           const displayLabel = override.name || m.label;
           const effectiveUnit = override.unit || config.unit;
@@ -648,8 +656,8 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
           // chart's single shared Y-axis), so scale/decimals are per-monitor only — no panel-wide
           // default to fall back to besides "unscaled" / the Settings-page global.
           const scale = override.scale != null ? override.scale : 1;
-          const decimals = override.decimals != null ? override.decimals : getDefaultPanelDecimals();
-          const current = getCurrentValue(m.id);
+          const decimals = override.decimals != null ? override.decimals : defaultDecimals;
+          const current = await getCurrentValue(m.id);
           if (!current) return { ...m, displayLabel, effectiveUnit, current: null };
           // An exact match against the value-mapping list takes priority over decimal formatting
           // — a translated "1" -> "Actief" is a label, not a rounded number, so it skips toFixed()
@@ -667,17 +675,17 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
           const displayValue = isLabel ? mapping.label : formatPanelValue(scaledNumeric === null ? current.value : scaledNumeric, decimals);
           const thresholdColor = (mapping && mapping.color) || colorForThresholdLadder(scaledNumeric, config.thresholds);
           return { ...m, displayLabel, effectiveUnit, current: { ...current, displayValue, isLabel, thresholdColor } };
-        }),
+        })),
       };
     }
 
     if (panel.panel_type === 'table') {
       const monitor = monitors[0] || null;
       const scale = config.scale || 1;
-      const decimals = config.decimals != null ? config.decimals : getDefaultPanelDecimals();
+      const decimals = config.decimals != null ? config.decimals : await getDefaultPanelDecimals();
       const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
       const rawRows = monitor
-        ? db.prepare(`SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS)
+        ? await db.prepare(`SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS)
         : [];
       const rows = rawRows.map((r) => {
         const scaledNumeric = applyScale(r.value, scale);
@@ -695,10 +703,10 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
       // buildConfig) — unlike the 'value' panel type, a gauge's range/coloring is a property of
       // the ring/bar being drawn, not of any one reading, so there's no per-monitor override here.
       const scale = config.scale || 1;
-      const decimals = config.decimals != null ? config.decimals : getDefaultPanelDecimals();
+      const decimals = config.decimals != null ? config.decimals : await getDefaultPanelDecimals();
       const { min, max } = config;
-      const gauges = monitors.map((monitor) => {
-        const current = getCurrentValue(monitor.id);
+      const gauges = await Promise.all(monitors.map(async (monitor) => {
+        const current = await getCurrentValue(monitor.id);
         const scaledNumeric = current ? applyScale(current.value, scale) : null;
         const hasNumeric = Number.isFinite(scaledNumeric);
         const displayCurrent = current ? { ...current, displayValue: hasNumeric ? formatPanelValue(scaledNumeric, decimals) : current.value } : null;
@@ -712,7 +720,7 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
         let sparkline = null;
         if (config.sparkline) {
           const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
-          const rows = db.prepare(`SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS);
+          const rows = await db.prepare(`SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS);
           const values = rows.map((r) => r.numericValue).filter((v) => Number.isFinite(v));
           if (values.length >= 2) {
             const sparkMin = Math.min(...values);
@@ -722,15 +730,15 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
           }
         }
         return { monitor, current: displayCurrent, percent, thresholdColor, sparkline };
-      });
+      }));
       return { ...base, gauges };
     }
 
     if (panel.panel_type === 'threshold') {
       const monitor = monitors[0] || null;
-      const current = monitor ? getCurrentValue(monitor.id) : null;
+      const current = monitor ? await getCurrentValue(monitor.id) : null;
       const scale = config.scale || 1;
-      const decimals = config.decimals != null ? config.decimals : getDefaultPanelDecimals();
+      const decimals = config.decimals != null ? config.decimals : await getDefaultPanelDecimals();
       const scaledNumeric = current ? applyScale(current.value, scale) : null;
       const hasNumeric = Number.isFinite(scaledNumeric);
       const displayCurrent = current ? { ...current, displayValue: hasNumeric ? formatPanelValue(scaledNumeric, decimals) : current.value } : null;
@@ -744,7 +752,7 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
       const rangeStartMs = since ? new Date(since).getTime() : null;
       const rangeEndMs = until ? new Date(until).getTime() : Date.now();
       const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
-      const bars = monitors.map((monitor) => {
+      const bars = await Promise.all(monitors.map(async (monitor) => {
         // DESC + LIMIT, then reversed back to ascending — NOT a plain ASC + LIMIT. A busy monitor
         // (polled every few seconds) can easily have more rows in a 24h/7d window than MAX_ROWS;
         // ASC+LIMIT would silently keep only the OLDEST slice of the range and cut off everything
@@ -754,9 +762,9 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
         // direction table/series.json's own history queries already truncate in (see monitor.js).
         // Any truncation this still causes lands at the OLD end, which the "gap before the first
         // reading" logic below already renders as an explicit No data stretch.
-        const rows = db.prepare(
+        const rows = (await db.prepare(
           `SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`
-        ).all(monitor.id, ...rangeParams, MAX_ROWS).reverse();
+        ).all(monitor.id, ...rangeParams, MAX_ROWS)).reverse();
         // One segment per RUN of consecutive readings sharing the same mapped label+color — not
         // one per raw row, which would draw an invisible-thin, unclickable sliver for every single
         // poll even while the underlying state hadn't actually changed at all.
@@ -782,7 +790,7 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
           if (firstStart > rangeStartMs) segments.unshift({ label: 'No data', color: 'var(--border)', startMs: rangeStartMs, endMs: firstStart, noData: true });
         }
         return { monitor, segments };
-      });
+      }));
       // For an unbounded "All" range there's no fixed clock start to anchor every bar to (unlike
       // a real range, where rangeStartMs above already came from the clock, not the data, and so
       // was already the same for every bar) — falls back to the EARLIEST first-segment start
@@ -800,13 +808,13 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
 
     if (panel.panel_type === 'stat_delta') {
       const monitor = monitors[0] || null;
-      const current = monitor ? getCurrentValue(monitor.id) : null;
+      const current = monitor ? await getCurrentValue(monitor.id) : null;
       const scale = config.scale || 1;
-      const decimals = config.decimals != null ? config.decimals : getDefaultPanelDecimals();
+      const decimals = config.decimals != null ? config.decimals : await getDefaultPanelDecimals();
       let comparison = null;
       if (monitor) {
         const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
-        comparison = db.prepare(`SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT 1`).get(monitor.id, ...rangeParams);
+        comparison = await db.prepare(`SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT 1`).get(monitor.id, ...rangeParams);
       }
       const currentNumeric = current ? applyScale(current.value, scale) : null;
       const comparisonNumeric = comparison ? applyScale(comparison.numericValue, scale) : null;
@@ -818,10 +826,10 @@ function loadPanelsWithMonitors(dashboardId, rangeOverride) {
     }
 
     return base; // chart: rendered client-side via /monitor/series.json
-  });
+  }));
 }
 
-function listOwnedDashboards(userId) {
+async function listOwnedDashboards(userId) {
   return db
     .prepare(
       `SELECT custom_dashboards.*, COUNT(dashboard_panels.id) AS panelCount,
@@ -836,7 +844,7 @@ function listOwnedDashboards(userId) {
 // Union of two grant sources — shared with this exact user, or shared with a Role they currently
 // hold — de-duplicated by dashboard (a dashboard could be reachable via both at once) with
 // MAX(canEdit) so the more permissive of the two wins, same rule loadAccessibleDashboard uses.
-function listSharedWithMe(userId, roleId) {
+async function listSharedWithMe(userId, roleId) {
   return db
     .prepare(
       `SELECT d.id, d.name, MAX(d.canEdit) AS canEdit, d.ownerName,
@@ -868,21 +876,21 @@ function listSharedWithMe(userId, roleId) {
 // ownership filter of its own (a monitor can be used on ANY dashboard, not just this viewer's), so
 // without this a monitor's badge could point at another user's un-shared personal dashboard,
 // something "My Dashboards" would never list and clicking through would just 403 on.
-function listAccessibleDashboardIds(userId, roleId) {
-  const ids = new Set(listOwnedDashboards(userId).map((d) => d.id));
-  listSharedWithMe(userId, roleId).forEach((d) => ids.add(d.id));
-  db.prepare('SELECT id FROM custom_dashboards WHERE user_id IS NULL').all().forEach((d) => ids.add(d.id));
+async function listAccessibleDashboardIds(userId, roleId) {
+  const ids = new Set((await listOwnedDashboards(userId)).map((d) => d.id));
+  (await listSharedWithMe(userId, roleId)).forEach((d) => ids.add(d.id));
+  (await db.prepare('SELECT id FROM custom_dashboards WHERE user_id IS NULL').all()).forEach((d) => ids.add(d.id));
   return ids;
 }
 
 // Everyone but the current user — the pool a dashboard's "Add" share form picks from. Small
 // enough (this app's own user base, not a customer list) that listing everyone and letting the
 // view skip already-shared ones is simpler than a NOT IN subquery per dashboard.
-function listOtherUsers(userId) {
+async function listOtherUsers(userId) {
   return db.prepare('SELECT id, username, display_name FROM users WHERE id != ? ORDER BY username').all(userId);
 }
 
-function listShares(dashboardId) {
+async function listShares(dashboardId) {
   return db
     .prepare(
       `SELECT users.id AS userId, COALESCE(users.display_name, users.username) AS name, dashboard_shares.can_edit AS canEdit
@@ -894,7 +902,7 @@ function listShares(dashboardId) {
 
 // Role-based grants (admin-only to add/remove, see the /share-role routes below) — every user
 // holding that Access Role gets access, without the owner picking each of them out individually.
-function listRoleShares(dashboardId) {
+async function listRoleShares(dashboardId) {
   return db
     .prepare(
       `SELECT access_roles.id AS roleId, access_roles.name, dashboard_role_shares.can_edit AS canEdit
@@ -904,60 +912,61 @@ function listRoleShares(dashboardId) {
     .all(dashboardId);
 }
 
-function listRoles() {
+async function listRoles() {
   return db.prepare('SELECT id, name FROM access_roles ORDER BY name').all();
 }
 
-function loadDashboardsPageData(req) {
-  const dashboards = listOwnedDashboards(req.session.userId);
-  const sharedWithMe = listSharedWithMe(req.session.userId, req.user && req.user.roleId);
-  const otherUsers = listOtherUsers(req.session.userId);
-  const roles = listRoles();
+async function loadDashboardsPageData(req) {
+  const dashboards = await listOwnedDashboards(req.session.userId);
+  const sharedWithMe = await listSharedWithMe(req.session.userId, req.user && req.user.roleId);
+  const otherUsers = await listOtherUsers(req.session.userId);
+  const roles = await listRoles();
   // The star toggle on each row (see dashboards.ejs) — a plain id Set is enough here since both
   // lists' rows just need a yes/no, not the full favorite-dashboards sidebar query (that one also
   // fetches names/re-verifies access, neither of which is needed once a row already IS the result
   // of an access-checked list like these two).
   const favoriteIds = new Set(
-    db.prepare('SELECT dashboard_id FROM dashboard_favorites WHERE user_id = ?').all(req.session.userId).map((r) => r.dashboard_id)
+    (await db.prepare('SELECT dashboard_id FROM dashboard_favorites WHERE user_id = ?').all(req.session.userId)).map((r) => r.dashboard_id)
   );
   dashboards.forEach((d) => { d.isFavorited = favoriteIds.has(d.id); });
   sharedWithMe.forEach((d) => { d.isFavorited = favoriteIds.has(d.id); });
   const shares = {};
   const roleShares = {};
-  dashboards.forEach((d) => {
-    shares[d.id] = listShares(d.id);
-    roleShares[d.id] = listRoleShares(d.id);
-  });
+  for (const d of dashboards) {
+    shares[d.id] = await listShares(d.id);
+    roleShares[d.id] = await listRoleShares(d.id);
+  }
   return { dashboards, sharedWithMe, otherUsers, roles, shares, roleShares };
 }
 
-router.get('/', (req, res) => {
-  res.render('dashboards', { ...loadDashboardsPageData(req), error: null });
-});
+router.get('/', asyncHandler(async (req, res) => {
+  res.render('dashboards', { ...(await loadDashboardsPageData(req)), error: null });
+}));
 
-router.post('/', (req, res) => {
+router.post('/', asyncHandler(async (req, res) => {
   const name = (req.body.name || '').trim();
   if (!name) {
-    return res.render('dashboards', { ...loadDashboardsPageData(req), error: 'Name is required.' });
+    return res.render('dashboards', { ...(await loadDashboardsPageData(req)), error: 'Name is required.' });
   }
 
-  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM custom_dashboards WHERE user_id = ?').get(req.session.userId).m;
-  const result = db
-    .prepare('INSERT INTO custom_dashboards (user_id, name, position, created_at) VALUES (?, ?, ?, ?)')
-    .run(req.session.userId, name, maxPos + 1, new Date().toISOString());
+  const maxPos = (await db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM custom_dashboards WHERE user_id = ?').get(req.session.userId)).m;
+  const newId = await db.insertReturningId(
+    'INSERT INTO custom_dashboards (user_id, name, position, created_at) VALUES (?, ?, ?, ?)',
+    [req.session.userId, name, maxPos + 1, new Date().toISOString()]
+  );
 
-  res.redirect(`/dashboards/${result.lastInsertRowid}`);
-});
+  res.redirect(`/dashboards/${newId}`);
+}));
 
-router.post('/:id/rename', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/rename', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (!canManageDashboard(dashboard, req)) return forbidden(res);
 
   const name = (req.body.name || '').trim();
-  if (name) db.prepare('UPDATE custom_dashboards SET name = ? WHERE id = ?').run(name, dashboard.id);
+  if (name) await db.prepare('UPDATE custom_dashboards SET name = ? WHERE id = ?').run(name, dashboard.id);
   res.redirect(req.body.redirect_to ? safeDashboardRedirect(dashboard, req.body.redirect_to) : (isShared(dashboard) ? '/' : '/dashboards'));
-});
+}));
 
 // Only ever '/dashboards' (the list, where a row's own star button lives) or '/dashboards/<id>'
 // (a dashboard's own detail page) — never trusted as-is, since a submitted form field is fully
@@ -972,65 +981,65 @@ function safeDashboardRedirect(dashboard, redirectTo) {
 // partials/head.ejs) is a personal bookmark, not a change to the dashboard itself — anyone who can
 // currently SEE it (owner or a direct/role share) can star it for themselves, unlike
 // rename/delete/share below which are all owner- or editor-gated.
-router.post('/:id/favorite', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/favorite', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
 
-  db.prepare('INSERT OR IGNORE INTO dashboard_favorites (user_id, dashboard_id) VALUES (?, ?)').run(req.session.userId, dashboard.id);
+  await db.prepare('INSERT OR IGNORE INTO dashboard_favorites (user_id, dashboard_id) VALUES (?, ?)').run(req.session.userId, dashboard.id);
   res.redirect(safeDashboardRedirect(dashboard, req.body.redirect_to));
-});
+}));
 
-router.post('/:id/unfavorite', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/unfavorite', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
 
-  db.prepare('DELETE FROM dashboard_favorites WHERE user_id = ? AND dashboard_id = ?').run(req.session.userId, dashboard.id);
+  await db.prepare('DELETE FROM dashboard_favorites WHERE user_id = ? AND dashboard_id = ?').run(req.session.userId, dashboard.id);
   res.redirect(safeDashboardRedirect(dashboard, req.body.redirect_to));
-});
+}));
 
-router.post('/:id/delete', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/delete', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (isShared(dashboard)) return forbidden(res); // the shared home Dashboard can't be deleted, only its panels
   if (!canManageDashboard(dashboard, req)) return forbidden(res);
 
   // No PRAGMA foreign_keys enforcement in this DB (see db.js) — every OTHER user's star on this
   // dashboard has to be cleaned up explicitly too, not just the deleting user's own.
-  db.prepare('DELETE FROM dashboard_favorites WHERE dashboard_id = ?').run(dashboard.id);
-  db.prepare('DELETE FROM custom_dashboards WHERE id = ?').run(dashboard.id);
+  await db.prepare('DELETE FROM dashboard_favorites WHERE dashboard_id = ?').run(dashboard.id);
+  await db.prepare('DELETE FROM custom_dashboards WHERE id = ?').run(dashboard.id);
   res.redirect('/dashboards');
-});
+}));
 
 // Sharing a personal dashboard is owner-only (not delegated to a shared editor, and meaningless
 // for the one user_id IS NULL home Dashboard, which is already visible app-wide) — isOwner, not
 // the broader canManageDashboard, is the right gate here.
-router.post('/:id/share', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/share', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (isShared(dashboard) || !isOwner(dashboard, req)) return forbidden(res);
 
   const rawIds = Array.isArray(req.body.user_ids) ? req.body.user_ids : (req.body.user_ids ? [req.body.user_ids] : []);
   const canEdit = req.body.can_edit ? 1 : 0;
-  const insertShare = db.prepare(
-    `INSERT INTO dashboard_shares (dashboard_id, user_id, can_edit) VALUES (?, ?, ?)
-     ON CONFLICT(dashboard_id, user_id) DO UPDATE SET can_edit = excluded.can_edit`
-  );
   const existsUser = db.prepare('SELECT 1 FROM users WHERE id = ?');
-  rawIds
-    .map(Number)
-    .filter((id) => Number.isInteger(id) && id !== dashboard.user_id && existsUser.get(id))
-    .forEach((id) => insertShare.run(dashboard.id, id, canEdit));
+  const ids = rawIds.map(Number).filter((id) => Number.isInteger(id) && id !== dashboard.user_id);
+  for (const id of ids) {
+    if (!(await existsUser.get(id))) continue;
+    await db.prepare(
+      `INSERT INTO dashboard_shares (dashboard_id, user_id, can_edit) VALUES (?, ?, ?)
+       ON CONFLICT(dashboard_id, user_id) DO UPDATE SET can_edit = excluded.can_edit`
+    ).run(dashboard.id, id, canEdit);
+  }
   res.redirect('/dashboards');
-});
+}));
 
-router.post('/:id/share/:userId/remove', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/share/:userId/remove', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (isShared(dashboard) || !isOwner(dashboard, req)) return forbidden(res);
 
-  db.prepare('DELETE FROM dashboard_shares WHERE dashboard_id = ? AND user_id = ?').run(dashboard.id, req.params.userId);
+  await db.prepare('DELETE FROM dashboard_shares WHERE dashboard_id = ? AND user_id = ?').run(dashboard.id, req.params.userId);
   res.redirect('/dashboards');
-});
+}));
 
 // Sharing with a whole Access Role at once needs the dashboard_group_share permission on top of
 // owner-only — handing out access to everyone in a group is a bigger, less reversible step than
@@ -1039,49 +1048,49 @@ function canManageRoleShares(dashboard, req) {
   return !isShared(dashboard) && isOwner(dashboard, req) && !!req.user && (req.user.isAdmin || !!req.user.permissions.dashboard_group_share?.edit);
 }
 
-router.post('/:id/share-role', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/share-role', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (!canManageRoleShares(dashboard, req)) return forbidden(res);
 
   const rawIds = Array.isArray(req.body.role_ids) ? req.body.role_ids : (req.body.role_ids ? [req.body.role_ids] : []);
   const canEdit = req.body.can_edit ? 1 : 0;
-  const insertRoleShare = db.prepare(
-    `INSERT INTO dashboard_role_shares (dashboard_id, role_id, can_edit) VALUES (?, ?, ?)
-     ON CONFLICT(dashboard_id, role_id) DO UPDATE SET can_edit = excluded.can_edit`
-  );
   const existsRole = db.prepare('SELECT 1 FROM access_roles WHERE id = ?');
-  rawIds
-    .map(Number)
-    .filter((id) => Number.isInteger(id) && existsRole.get(id))
-    .forEach((id) => insertRoleShare.run(dashboard.id, id, canEdit));
+  const ids = rawIds.map(Number).filter((id) => Number.isInteger(id));
+  for (const id of ids) {
+    if (!(await existsRole.get(id))) continue;
+    await db.prepare(
+      `INSERT INTO dashboard_role_shares (dashboard_id, role_id, can_edit) VALUES (?, ?, ?)
+       ON CONFLICT(dashboard_id, role_id) DO UPDATE SET can_edit = excluded.can_edit`
+    ).run(dashboard.id, id, canEdit);
+  }
   res.redirect('/dashboards');
-});
+}));
 
-router.post('/:id/share-role/:roleId/remove', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/share-role/:roleId/remove', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (!canManageRoleShares(dashboard, req)) return forbidden(res);
 
-  db.prepare('DELETE FROM dashboard_role_shares WHERE dashboard_id = ? AND role_id = ?').run(dashboard.id, req.params.roleId);
+  await db.prepare('DELETE FROM dashboard_role_shares WHERE dashboard_id = ? AND role_id = ?').run(dashboard.id, req.params.roleId);
   res.redirect('/dashboards');
-});
+}));
 
-router.get('/:id', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.get('/:id', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (!canViewShared(dashboard, req)) return forbidden(res);
 
-  const monitors = db.prepare('SELECT id, label, source_type FROM monitors ORDER BY label').all();
-  const panels = loadPanelsWithMonitors(dashboard.id, req.query.range);
+  const monitors = await db.prepare('SELECT id, label, source_type FROM monitors ORDER BY label').all();
+  const panels = await loadPanelsWithMonitors(dashboard.id, req.query.range);
 
   // Only meaningful for a personal dashboard someone ELSE shared with the current user — the
   // owner sees no such hint on their own dashboards, and the shared home Dashboard has no single
   // owner to name.
   const sharedByOwner = !isShared(dashboard) && !isOwner(dashboard, req)
-    ? db.prepare('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = ?').get(dashboard.user_id)?.name
+    ? (await db.prepare('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = ?').get(dashboard.user_id))?.name
     : null;
-  const isFavorited = !!db.prepare('SELECT 1 FROM dashboard_favorites WHERE user_id = ? AND dashboard_id = ?').get(req.session.userId, dashboard.id);
+  const isFavorited = !!(await db.prepare('SELECT 1 FROM dashboard_favorites WHERE user_id = ? AND dashboard_id = ?').get(req.session.userId, dashboard.id));
 
   res.render('dashboard-detail', {
     dashboard,
@@ -1089,16 +1098,16 @@ router.get('/:id', (req, res) => {
     monitors,
     error: null,
     canEditPanels: canMutate(dashboard, req),
-    defaultPanelDecimals: getDefaultPanelDecimals(),
-    panelTypeDefaultsExist: panelTypeDefaults.listDefaultTypes(dashboard.id),
+    defaultPanelDecimals: await getDefaultPanelDecimals(),
+    panelTypeDefaultsExist: await panelTypeDefaults.listDefaultTypes(dashboard.id),
     sharedByOwner,
     isFavorited,
     currentRange: req.query.range || '',
   });
-});
+}));
 
-router.post('/:id/panels', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/panels', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (!canMutate(dashboard, req)) return forbidden(res);
 
@@ -1117,7 +1126,7 @@ router.post('/:id/panels', (req, res) => {
   }
 
   const config = JSON.stringify(buildConfig(panelType, req.body));
-  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(dashboard.id).m;
+  const maxPos = (await db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(dashboard.id)).m;
 
   // A fresh group_header always starts full-width/one row tall (a divider, not a card) — the
   // render loop in panel-grid.ejs re-enforces this on every load regardless, but starting the
@@ -1126,25 +1135,25 @@ router.post('/:id/panels', (req, res) => {
   const initialColSpan = panelType === 'group_header' ? 12 : 4;
   const initialRowSpan = panelType === 'group_header' ? 1 : 3;
 
-  const insertPanel = db.transaction(() => {
-    const result = db
+  await db.transaction(async (tx) => {
+    const result = await tx
       .prepare('INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position, col_span, row_span) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(dashboard.id, panelType, req.body.title || null, range, config, maxPos + 1, initialColSpan, initialRowSpan);
     const panelId = result.lastInsertRowid;
-    const insertMonitor = db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)');
-    monitorIds.forEach((monitorId, index) => insertMonitor.run(panelId, monitorId, index));
+    for (let index = 0; index < monitorIds.length; index++) {
+      await tx.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)').run(panelId, monitorIds[index], index);
+    }
   });
-  insertPanel();
 
   res.redirect(dashboardUrl(dashboard));
-});
+}));
 
-router.post('/:id/panels/:panelId/settings', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/panels/:panelId/settings', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (!canMutate(dashboard, req)) return forbidden(res);
 
-  const panel = db.prepare('SELECT panel_type FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').get(req.params.panelId, dashboard.id);
+  const panel = await db.prepare('SELECT panel_type FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').get(req.params.panelId, dashboard.id);
   if (!panel) return res.status(404).send('Panel not found');
 
   // Switching type is optional here (the field defaults to the panel's own current type when absent).
@@ -1157,70 +1166,70 @@ router.post('/:id/panels/:panelId/settings', (req, res) => {
   if (SINGLE_MONITOR_TYPES.includes(panelType)) monitorIds = monitorIds.slice(0, 1);
   if (panelType === 'group_header') monitorIds = []; // a divider has none of its own, whatever the (hidden) checklist happened to submit
 
-  const updatePanel = db.transaction(() => {
-    db.prepare('UPDATE dashboard_panels SET panel_type = ?, title = ?, range = ?, config = ? WHERE id = ? AND dashboard_id = ?')
+  await db.transaction(async (tx) => {
+    await tx.prepare('UPDATE dashboard_panels SET panel_type = ?, title = ?, range = ?, config = ? WHERE id = ? AND dashboard_id = ?')
       .run(panelType, req.body.title || null, range, config, req.params.panelId, dashboard.id);
-    db.prepare('DELETE FROM dashboard_panel_monitors WHERE panel_id = ?').run(req.params.panelId);
-    const insertMonitor = db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)');
-    monitorIds.forEach((monitorId, index) => insertMonitor.run(req.params.panelId, monitorId, index));
+    await tx.prepare('DELETE FROM dashboard_panel_monitors WHERE panel_id = ?').run(req.params.panelId);
+    for (let index = 0; index < monitorIds.length; index++) {
+      await tx.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)').run(req.params.panelId, monitorIds[index], index);
+    }
   });
-  updatePanel();
 
   res.redirect(dashboardUrl(dashboard));
-});
+}));
 
-router.post('/:id/panels/:panelId/duplicate', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/panels/:panelId/duplicate', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (!canMutate(dashboard, req)) return forbidden(res);
 
-  const panel = db.prepare('SELECT * FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').get(req.params.panelId, dashboard.id);
+  const panel = await db.prepare('SELECT * FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').get(req.params.panelId, dashboard.id);
   if (!panel) return res.status(404).send('Panel not found');
-  const monitorIds = db.prepare('SELECT monitor_id FROM dashboard_panel_monitors WHERE panel_id = ? ORDER BY position').all(panel.id).map((r) => r.monitor_id);
+  const monitorIds = (await db.prepare('SELECT monitor_id FROM dashboard_panel_monitors WHERE panel_id = ? ORDER BY position').all(panel.id)).map((r) => r.monitor_id);
 
-  const duplicatePanel = db.transaction(() => {
-    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(dashboard.id).m;
-    const result = db
+  await db.transaction(async (tx) => {
+    const maxPos = (await tx.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(dashboard.id)).m;
+    const result = await tx
       .prepare('INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position, col_span, row_span) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(dashboard.id, panel.panel_type, panel.title ? `${panel.title} (copy)` : null, panel.range, panel.config, maxPos + 1, panel.col_span, panel.row_span);
     const newPanelId = result.lastInsertRowid;
-    const insertMonitor = db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)');
-    monitorIds.forEach((monitorId, index) => insertMonitor.run(newPanelId, monitorId, index));
+    for (let index = 0; index < monitorIds.length; index++) {
+      await tx.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)').run(newPanelId, monitorIds[index], index);
+    }
   });
-  duplicatePanel();
 
   res.redirect(dashboardUrl(dashboard));
-});
+}));
 
 // Saves this panel's current appearance config as the house style for its panel_type — global
 // (every dashboard, every editor), not tied to this specific panel's monitors/title/range. See
 // panelTypeDefaults.js for how per-series settings (chart/value line colors etc.) get remapped by
 // position rather than by monitor id, so the template still makes sense on a differently-wired panel.
-router.post('/:id/panels/:panelId/save-as-default', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/panels/:panelId/save-as-default', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (!canMutate(dashboard, req)) return forbidden(res);
 
-  const panel = db.prepare('SELECT id FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').get(req.params.panelId, dashboard.id);
+  const panel = await db.prepare('SELECT id FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').get(req.params.panelId, dashboard.id);
   if (!panel) return res.status(404).send('Panel not found');
 
-  panelTypeDefaults.saveAsDefault(panel.id);
+  await panelTypeDefaults.saveAsDefault(panel.id);
   res.redirect(dashboardUrl(dashboard));
-});
+}));
 
 // Re-applies whatever's currently saved as this panel_type's house style — a no-op (redirects
 // with nothing changed) if nothing's ever been saved for that type yet.
-router.post('/:id/panels/:panelId/reset-to-default', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/panels/:panelId/reset-to-default', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (!canMutate(dashboard, req)) return forbidden(res);
 
-  const panel = db.prepare('SELECT id FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').get(req.params.panelId, dashboard.id);
+  const panel = await db.prepare('SELECT id FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').get(req.params.panelId, dashboard.id);
   if (!panel) return res.status(404).send('Panel not found');
 
-  panelTypeDefaults.resetToDefault(panel.id);
+  await panelTypeDefaults.resetToDefault(panel.id);
   res.redirect(dashboardUrl(dashboard));
-});
+}));
 
 // GridStack's own drag/resize 'change' event fires with every affected node's new x/y/w/h in one
 // batch (see panel-grid.ejs's grid-init script) — this single endpoint updates every affected
@@ -1242,15 +1251,15 @@ const MAX_GRID_XY = 1000; // sanity bound against a broken/malicious client valu
 // (afterGroupId null), right before the first group_header, same "ungrouped" spot zone 0 always
 // occupies. Fired from the target grid's own 'added' event, once per panel that actually crossed
 // zones (a same-zone drag/resize only fires 'change', handled by /panels/layout below instead).
-router.post('/:id/panels/:panelId/move-to-zone', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/panels/:panelId/move-to-zone', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).json({ error: 'Dashboard not found' });
   if (!canMutate(dashboard, req)) return res.status(403).json({ error: 'Not authorized' });
 
   const panelId = Number(req.params.panelId);
   const afterGroupId = req.body.afterGroupId != null ? Number(req.body.afterGroupId) : null;
 
-  const rows = db.prepare('SELECT id, panel_type FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboard.id);
+  const rows = await db.prepare('SELECT id, panel_type FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboard.id);
   const moved = rows.find((r) => r.id === panelId);
   if (!moved) return res.status(404).json({ error: 'Panel not found' });
   const withoutMoved = rows.filter((r) => r.id !== panelId);
@@ -1268,25 +1277,27 @@ router.post('/:id/panels/:panelId/move-to-zone', (req, res) => {
   }
   withoutMoved.splice(insertAt, 0, moved);
 
-  const setPosition = db.prepare('UPDATE dashboard_panels SET position = ? WHERE id = ?');
-  const renumber = db.transaction((list) => { list.forEach((r, i) => setPosition.run(i, r.id)); });
-  renumber(withoutMoved);
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < withoutMoved.length; i++) {
+      await tx.prepare('UPDATE dashboard_panels SET position = ? WHERE id = ?').run(i, withoutMoved[i].id);
+    }
+  });
 
   res.json({ ok: true });
-});
+}));
 
 // Reorders whole GROUPS (a group_header plus every panel that currently follows it, up to the
 // next group_header or the end — see the render loop's own zone-splitting logic in panel-grid.ejs
 // for the exact same grouping rule) — dragging a group's own header (LoxRowReorder, panel-grid.ejs)
 // sends the new header-id order here. Ungrouped panels (before the first header) always stay
 // first regardless of what order is sent — they're not part of that sort list at all.
-router.post('/:id/panels/reorder-groups', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/panels/reorder-groups', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).json({ error: 'Dashboard not found' });
   if (!canMutate(dashboard, req)) return res.status(403).json({ error: 'Not authorized' });
 
   const groupOrder = Array.isArray(req.body.groupOrder) ? req.body.groupOrder.map(Number) : [];
-  const rows = db.prepare('SELECT id, panel_type FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboard.id);
+  const rows = await db.prepare('SELECT id, panel_type FROM dashboard_panels WHERE dashboard_id = ? ORDER BY position').all(dashboard.id);
 
   const ungrouped = [];
   const segments = new Map(); // header id -> [header row, ...member rows]
@@ -1314,44 +1325,45 @@ router.post('/:id/panels/reorder-groups', (req, res) => {
 
   const reordered = ungrouped.concat(...groupOrder.map((id) => segments.get(id)));
 
-  const setPosition = db.prepare('UPDATE dashboard_panels SET position = ? WHERE id = ?');
-  const renumber = db.transaction((list) => { list.forEach((r, i) => setPosition.run(i, r.id)); });
-  renumber(reordered);
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < reordered.length; i++) {
+      await tx.prepare('UPDATE dashboard_panels SET position = ? WHERE id = ?').run(i, reordered[i].id);
+    }
+  });
 
   res.json({ ok: true });
-});
+}));
 
-router.post('/:id/panels/layout', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/panels/layout', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).json({ error: 'Dashboard not found' });
   if (!canMutate(dashboard, req)) return res.status(403).json({ error: 'Not authorized' });
 
   const updates = Array.isArray(req.body.updates) ? req.body.updates : [];
-  const stmt = db.prepare('UPDATE dashboard_panels SET grid_x = ?, grid_y = ?, col_span = ?, row_span = ? WHERE id = ? AND dashboard_id = ?');
-  const applyLayout = db.transaction((rows) => {
-    rows.forEach((row) => {
+  await db.transaction(async (tx) => {
+    for (const row of updates) {
       const id = Number(row && row.id);
-      if (!Number.isInteger(id)) return;
+      if (!Number.isInteger(id)) continue;
       const x = clamp(row.x, MIN_GRID_XY, MAX_GRID_XY, 0);
       const y = clamp(row.y, MIN_GRID_XY, MAX_GRID_XY, 0);
       const colSpan = clamp(row.w, MIN_COL_SPAN, MAX_COL_SPAN, 4);
       const rowSpan = clamp(row.h, MIN_ROW_SPAN, MAX_ROW_SPAN, 3);
-      stmt.run(x, y, colSpan, rowSpan, id, dashboard.id);
-    });
+      await tx.prepare('UPDATE dashboard_panels SET grid_x = ?, grid_y = ?, col_span = ?, row_span = ? WHERE id = ? AND dashboard_id = ?')
+        .run(x, y, colSpan, rowSpan, id, dashboard.id);
+    }
   });
-  applyLayout(updates);
 
   res.json({ ok: true });
-});
+}));
 
-router.post('/:id/panels/:panelId/delete', (req, res) => {
-  const dashboard = loadAccessibleDashboard(req.params.id, req);
+router.post('/:id/panels/:panelId/delete', asyncHandler(async (req, res) => {
+  const dashboard = await loadAccessibleDashboard(req.params.id, req);
   if (!dashboard) return res.status(404).send('Dashboard not found');
   if (!canMutate(dashboard, req)) return forbidden(res);
 
-  db.prepare('DELETE FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').run(req.params.panelId, dashboard.id);
+  await db.prepare('DELETE FROM dashboard_panels WHERE id = ? AND dashboard_id = ?').run(req.params.panelId, dashboard.id);
   res.redirect(dashboardUrl(dashboard));
-});
+}));
 
 module.exports = router;
 module.exports.loadPanelsWithMonitors = loadPanelsWithMonitors;

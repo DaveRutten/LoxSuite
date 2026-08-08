@@ -42,8 +42,8 @@ let mqttTopicMonitors = new Map();
 const lastPolledAt = new Map(); // monitor id -> ms epoch
 const currentValues = new Map(); // monitor id -> { value, recordedAt }
 
-function reloadMqttMonitors() {
-  const rows = db.prepare("SELECT id, mqtt_topic FROM monitors WHERE source_type = 'mqtt' AND enabled = 1").all();
+async function reloadMqttMonitors() {
+  const rows = await db.prepare("SELECT id, mqtt_topic FROM monitors WHERE source_type = 'mqtt' AND enabled = 1").all();
   const map = new Map();
   for (const row of rows) {
     const list = map.get(row.mqtt_topic) || [];
@@ -58,22 +58,22 @@ function toNumeric(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-function insertHistory(monitorId, value) {
+async function insertHistory(monitorId, value) {
   const recordedAt = new Date().toISOString();
   const numericValue = toNumeric(value);
-  db.prepare('INSERT INTO monitor_history (monitor_id, recorded_at, value, numeric_value) VALUES (?, ?, ?, ?)')
+  await db.prepare('INSERT INTO monitor_history (monitor_id, recorded_at, value, numeric_value) VALUES (?, ?, ?, ?)')
     .run(monitorId, recordedAt, String(value), numericValue);
   currentValues.set(monitorId, { value: String(value), recordedAt, numericValue });
   if (numericValue !== null) {
-    checkMonitorThreshold(monitorId, numericValue);
-    checkThresholdLadderNotify(monitorId, numericValue);
+    await checkMonitorThreshold(monitorId, numericValue);
+    await checkThresholdLadderNotify(monitorId, numericValue);
   }
 }
 
-function recordMqttValue(topic, rawValue) {
+async function recordMqttValue(topic, rawValue) {
   const monitorIds = mqttTopicMonitors.get(topic);
   if (!monitorIds) return;
-  for (const monitorId of monitorIds) insertHistory(monitorId, rawValue);
+  for (const monitorId of monitorIds) await insertHistory(monitorId, rawValue);
 }
 
 // Fed by healthcheck.js's own polling cycle, not polled independently here — see the
@@ -82,12 +82,12 @@ function recordMqttValue(topic, rawValue) {
 // per message; a diagnostics update only happens once per healthcheck interval, typically 60s, so
 // a plain query every time is nowhere near worth the added bookkeeping of keeping an index in sync
 // as monitors are added/removed/toggled).
-function recordMiniserverDiagValue(miniserverId, field, rawValue) {
+async function recordMiniserverDiagValue(miniserverId, field, rawValue) {
   if (rawValue === null || rawValue === undefined) return;
-  const monitors = db.prepare(
+  const monitors = await db.prepare(
     "SELECT id FROM monitors WHERE source_type = 'miniserver_diag' AND miniserver_id = ? AND diag_field = ? AND enabled = 1"
   ).all(miniserverId, field);
-  for (const monitor of monitors) insertHistory(monitor.id, rawValue);
+  for (const monitor of monitors) await insertHistory(monitor.id, rawValue);
 }
 
 // Shared by the manual Add-monitor form (routes/monitor.js) and the Miniservers page's "Add to
@@ -95,30 +95,31 @@ function recordMiniserverDiagValue(miniserverId, field, rawValue) {
 // find-or-create-then-seed operation either way, so it only lives once. Seeds an immediate reading
 // from whatever healthcheck.js already has on hand for a brand-new monitor, same "don't show an
 // empty panel/chart until the next tick" reasoning used elsewhere for freshly-created monitors.
-function findOrCreateDiagMonitor(miniserver, diagField, labelOverride) {
-  const existing = db.prepare(
+async function findOrCreateDiagMonitor(miniserver, diagField, labelOverride) {
+  const existing = await db.prepare(
     "SELECT id FROM monitors WHERE source_type = 'miniserver_diag' AND miniserver_id = ? AND diag_field = ?"
   ).get(miniserver.id, diagField);
   if (existing) return existing.id;
 
   const label = labelOverride || `${miniserver.name} - ${DIAG_FIELD_LABELS[diagField]}`;
-  const monitorId = db.prepare(
-    "INSERT INTO monitors (source_type, label, miniserver_id, diag_field, enabled, created_at) VALUES ('miniserver_diag', ?, ?, ?, 1, ?)"
-  ).run(label, miniserver.id, diagField, new Date().toISOString()).lastInsertRowid;
+  const monitorId = await db.insertReturningId(
+    "INSERT INTO monitors (source_type, label, miniserver_id, diag_field, enabled, created_at) VALUES ('miniserver_diag', ?, ?, ?, 1, ?)",
+    [label, miniserver.id, diagField, new Date().toISOString()]
+  );
 
   if (diagField === 'cpu_load' && miniserver.cpu_load !== null) {
-    recordMiniserverDiagValue(miniserver.id, 'cpu_load', parseFloat(miniserver.cpu_load));
+    await recordMiniserverDiagValue(miniserver.id, 'cpu_load', parseFloat(miniserver.cpu_load));
   } else if (diagField === 'num_tasks' && miniserver.num_tasks !== null) {
-    recordMiniserverDiagValue(miniserver.id, 'num_tasks', miniserver.num_tasks);
+    await recordMiniserverDiagValue(miniserver.id, 'num_tasks', miniserver.num_tasks);
   } else if (diagField === 'heap_value_kb' || diagField === 'heap_total_kb') {
     const heap = parseHeapStatus(miniserver.heap_status);
-    if (heap) recordMiniserverDiagValue(miniserver.id, diagField, diagField === 'heap_value_kb' ? heap.firstKb : heap.totalKb);
+    if (heap) await recordMiniserverDiagValue(miniserver.id, diagField, diagField === 'heap_value_kb' ? heap.firstKb : heap.totalKb);
   }
   return monitorId;
 }
 
 async function pollLoxoneMonitor(monitor) {
-  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(monitor.miniserver_id);
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(monitor.miniserver_id);
   if (!miniserver) return;
 
   // The live websocket cache (loxoneWebSocket.js) is checked first and is right almost all of the
@@ -130,7 +131,7 @@ async function pollLoxoneMonitor(monitor) {
   ensureConnection(miniserver);
   const liveValue = getLiveValue(miniserver.id, monitor.loxone_uuid);
   if (liveValue !== undefined) {
-    if (liveValue !== null) insertHistory(monitor.id, liveValue);
+    if (liveValue !== null) await insertHistory(monitor.id, liveValue);
     return;
   }
 
@@ -142,10 +143,10 @@ async function pollLoxoneMonitor(monitor) {
     const body = await res.json();
     const value = body?.LL?.value;
     if (value === undefined) throw new Error('Response had no LL.value');
-    insertHistory(monitor.id, value);
+    await insertHistory(monitor.id, value);
   } catch (err) {
     console.error(`Failed to poll Loxone monitor ${monitor.id} (${monitor.label}):`, err.message);
-    maybeAutoReconnect(miniserver, monitor);
+    await maybeAutoReconnect(miniserver, monitor);
   }
 }
 
@@ -153,8 +154,8 @@ async function pollLoxoneMonitor(monitor) {
 // the live cache nor the HTTP fallback produced a value this tick — cheap to check every time that
 // happens (a single Map read plus, at most once per monitor, getCurrentValue's own history query),
 // since a monitor with a genuinely healthy connection never reaches here at all.
-function maybeAutoReconnect(miniserver, monitor) {
-  const current = getCurrentValue(monitor.id);
+async function maybeAutoReconnect(miniserver, monitor) {
+  const current = await getCurrentValue(monitor.id);
   // A monitor that's never recorded anything yet (current === null) uses its own creation time as
   // the reference instead of "always stale" — a brand new monitor's connection may just still be
   // in the middle of its normal handshake, not actually stuck.
@@ -173,30 +174,33 @@ function maybeAutoReconnect(miniserver, monitor) {
   resetConnection(miniserver.id);
 }
 
-function pollLoxoneMonitors() {
-  const monitors = db.prepare("SELECT * FROM monitors WHERE source_type = 'loxone' AND enabled = 1").all();
+async function pollLoxoneMonitors() {
+  const monitors = await db.prepare("SELECT * FROM monitors WHERE source_type = 'loxone' AND enabled = 1").all();
   const now = Date.now();
 
   for (const monitor of monitors) {
     const last = lastPolledAt.get(monitor.id);
     if (last !== undefined && now - last < monitor.poll_interval_ms) continue;
     lastPolledAt.set(monitor.id, now);
-    pollLoxoneMonitor(monitor);
+    // Not awaited on purpose — each monitor's own HTTP round trip (or live-cache read) should not
+    // block the others; this tick just needs to have kicked every due monitor off before the next
+    // setInterval fire, same "fire and forget per item" shape as before this conversion.
+    pollLoxoneMonitor(monitor).catch((err) => console.error(`pollLoxoneMonitor(${monitor.id}) failed:`, err.message));
   }
 }
 
-function purgeOldHistory() {
-  const settings = db.prepare('SELECT monitor_retention_days FROM gateway_settings WHERE id = 1').get();
+async function purgeOldHistory() {
+  const settings = await db.prepare('SELECT monitor_retention_days FROM gateway_settings WHERE id = 1').get();
   const days = settings?.monitor_retention_days ?? 30;
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  db.prepare('DELETE FROM monitor_history WHERE recorded_at < ?').run(cutoff);
+  await db.prepare('DELETE FROM monitor_history WHERE recorded_at < ?').run(cutoff);
 }
 
-function getCurrentValue(monitorId) {
+async function getCurrentValue(monitorId) {
   const cached = currentValues.get(monitorId);
   if (cached) return cached;
 
-  const row = db.prepare('SELECT value, recorded_at AS recordedAt, numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ? ORDER BY recorded_at DESC LIMIT 1').get(monitorId);
+  const row = await db.prepare('SELECT value, recorded_at AS recordedAt, numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ? ORDER BY recorded_at DESC LIMIT 1').get(monitorId);
   if (!row) return null;
   currentValues.set(monitorId, row);
   return row;
@@ -209,9 +213,9 @@ function clearCurrentValue(monitorId) {
   currentValues.delete(monitorId);
 }
 
-function startMonitorCollector() {
-  reloadMqttMonitors();
-  purgeOldHistory();
+async function startMonitorCollector() {
+  await reloadMqttMonitors();
+  await purgeOldHistory();
   setInterval(pollLoxoneMonitors, LOXONE_POLL_TICK_MS);
   setInterval(purgeOldHistory, RETENTION_TICK_MS);
 }

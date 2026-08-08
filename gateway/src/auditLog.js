@@ -7,8 +7,8 @@ const db = require('./db');
 
 const insertLogEntry = db.prepare('INSERT INTO log_entries (source, source_label, line, recorded_at) VALUES (?, ?, ?, ?)');
 
-function logSystemEvent(message) {
-  insertLogEntry.run('system', null, message, new Date().toISOString());
+async function logSystemEvent(message) {
+  await insertLogEntry.run('system', null, message, new Date().toISOString());
 }
 
 module.exports = { logSystemEvent };

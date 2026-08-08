@@ -26,11 +26,16 @@ const insertLogEntry = db.prepare('INSERT INTO log_entries (source, source_label
 // newest timestamp already persisted for this source, makes replay naturally idempotent: old
 // lines all have timestamps <= what's already stored and get skipped, only genuinely new ones
 // (or the very first run's full backlog) get inserted.
-let lastPersistedAt = db.prepare("SELECT MAX(recorded_at) AS ts FROM log_entries WHERE source = 'mqtt'").get().ts;
+//
+// Starts undefined, not fetched here at module load — this used to be a synchronous db.prepare()
+// read done the instant the module loaded, safe when the DB was an already-open better-sqlite3
+// handle; the async facade means it can't be read until db.init() has resolved, so it's loaded once
+// by startTailing() below (the actual entry point, always called after boot) instead.
+let lastPersistedAt;
 
-function recordLogLine(line, ts) {
+async function recordLogLine(line, ts) {
   if (lastPersistedAt && ts <= lastPersistedAt) return;
-  insertLogEntry.run('mqtt', null, line, ts);
+  await insertLogEntry.run('mqtt', null, line, ts);
   lastPersistedAt = ts;
 }
 
@@ -41,7 +46,7 @@ function recordLogLine(line, ts) {
 // live/new and fires normally.
 let replayComplete = false;
 
-function processLine(line) {
+async function processLine(line) {
   const lineMatch = line.match(LINE_RE);
   // A genuine Mosquitto line always starts with its own Unix-timestamp prefix — anything else
   // (a stray write to the log file from outside Mosquitto itself, a wrapped continuation of a
@@ -49,7 +54,7 @@ function processLine(line) {
   // "now" timestamp and no useful content, e.g. a bare "hello" with nothing else to say about it.
   if (!lineMatch) return;
   const ts = new Date(Number(lineMatch[1]) * 1000).toISOString();
-  recordLogLine(line, ts);
+  await recordLogLine(line, ts);
 
   const rest = lineMatch[2];
 
@@ -64,7 +69,7 @@ function processLine(line) {
       disconnectedAt: null,
       status: 'connected',
     });
-    if (replayComplete) checkMqttClientStatus(username || null, 'connected');
+    if (replayComplete) await checkMqttClientStatus(username || null, 'connected');
     return;
   }
 
@@ -74,7 +79,7 @@ function processLine(line) {
     if (existing) {
       existing.disconnectedAt = ts;
       existing.status = 'disconnected';
-      if (replayComplete) checkMqttClientStatus(existing.username, 'disconnected');
+      if (replayComplete) await checkMqttClientStatus(existing.username, 'disconnected');
     }
   }
 }
@@ -111,13 +116,26 @@ function poll() {
     stream.on('data', (chunk) => { buffer += chunk; });
     stream.on('end', () => {
       position = stats.size;
-      buffer.split('\n').filter(Boolean).forEach(processLine);
-      markReplayComplete();
+      const lines = buffer.split('\n').filter(Boolean);
+      // Sequential, not Promise.all — each line's own recordLogLine() depends on lastPersistedAt
+      // reflecting every line already processed before it, and connect/disconnect state (clients
+      // map) needs to see them in the same order Mosquitto actually logged them.
+      (async () => {
+        for (const line of lines) await processLine(line);
+        markReplayComplete();
+      })().catch((error) => console.error('Failed to process Mosquitto log lines:', error));
     });
   });
 }
 
-function startTailing(intervalMs = 2000) {
+async function startTailing(intervalMs = 2000) {
+  // Loaded once here (not at module load — see lastPersistedAt's own comment above) rather than
+  // lazily inside recordLogLine(), since this is the one place already guaranteed to run after
+  // db.init() has resolved (see server.js's own async bootstrap) and only ever needs to happen once
+  // regardless of how many log lines get processed afterward.
+  const row = await db.prepare("SELECT MAX(recorded_at) AS ts FROM log_entries WHERE source = 'mqtt'").get();
+  lastPersistedAt = row.ts;
+
   // Start at 0 and replay the whole log once, so clients that connected before
   // this gateway process started (e.g. across a restart) still show up as
   // connected instead of being invisible until their next reconnect.
@@ -142,7 +160,7 @@ function clearClients() {
 // Same "only disconnected" rule as clearClients(), just automatic and age-based instead of a
 // manual all-at-once click — each removal is logged (source='system') so there's a durable trail
 // of what got dropped and when, since the Connected Clients list itself is in-memory only.
-function pruneDisconnectedClients(hours) {
+async function pruneDisconnectedClients(hours) {
   const cutoff = Date.now() - hours * 60 * 60 * 1000;
   const now = new Date().toISOString();
 
@@ -152,7 +170,7 @@ function pruneDisconnectedClients(hours) {
 
     clients.delete(id);
     const label = client.username ? `${client.clientId} (user '${client.username}')` : client.clientId;
-    insertLogEntry.run(
+    await insertLogEntry.run(
       'system',
       null,
       `Removed disconnected MQTT client ${label} from Client Activity — disconnected since ${client.disconnectedAt}, older than the ${hours}h retention.`,

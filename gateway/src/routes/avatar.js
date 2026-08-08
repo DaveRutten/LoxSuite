@@ -6,12 +6,13 @@
 // only ever talks to LoxSuite's own origin here, no cross-origin request happens at all.
 const express = require('express');
 const db = require('../db');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 const FETCH_TIMEOUT_MS = 5000;
 
-router.get('/:userId', async (req, res) => {
-  const user = db.prepare('SELECT avatar_url FROM users WHERE id = ?').get(req.params.userId);
+router.get('/:userId', asyncHandler(async (req, res) => {
+  const user = await db.prepare('SELECT avatar_url FROM users WHERE id = ?').get(req.params.userId);
   if (!user || !user.avatar_url) return res.status(404).end();
 
   try {
@@ -28,6 +29,6 @@ router.get('/:userId', async (req, res) => {
   } catch (err) {
     res.status(502).end();
   }
-});
+}));
 
 module.exports = router;

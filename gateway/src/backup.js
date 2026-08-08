@@ -38,18 +38,18 @@ function timestampForFilename(date) {
   return date.toISOString().replace(/[:.]/g, '-');
 }
 
-function getSettings() {
-  const settings = db.prepare('SELECT * FROM backup_settings WHERE id = 1').get();
+async function getSettings() {
+  const settings = await db.prepare('SELECT * FROM backup_settings WHERE id = 1').get();
   // Decrypted here so every reader (the admin-backup.ejs textarea, routes/setup.js's wizard step,
   // and writeTempRcloneConfig below) gets the real rclone.conf contents without its own call.
   return settings ? { ...settings, rclone_config: decrypt(settings.rclone_config) } : settings;
 }
 
-function updateSettings(fields) {
-  const current = getSettings();
+async function updateSettings(fields) {
+  const current = await getSettings();
   const next = { ...current, ...fields };
   if (next.rclone_config) next.rclone_config = encrypt(next.rclone_config);
-  db.prepare(
+  await db.prepare(
     `UPDATE backup_settings SET enabled = ?, schedule_cron = ?, retention_count = ?, include_mqtt_config = ?,
      last_run_at = ?, last_status = ?, last_error = ?,
      rclone_enabled = ?, rclone_remote = ?, rclone_config = ?,
@@ -82,7 +82,11 @@ async function createBackup({ includeMqttConfig = true, reason = 'manual' } = {}
   const tmpDbPath = path.join(BACKUP_DIR, `.tmp-${stamp}.db`);
   const finalPath = path.join(BACKUP_DIR, `backup-${stamp}.zip`);
 
-  await db.backup(tmpDbPath);
+  // Online backup via better-sqlite3's own .backup() — the one thing that needs the real driver
+  // object rather than a SQL string, so it goes through the facade's withRawConnection escape
+  // hatch (same pooled connection prepare()/transaction() use, acquired then released back, never
+  // a second independent one) instead of a db.backup() method the facade doesn't have.
+  await db.withRawConnection((conn) => conn.backup(tmpDbPath));
 
   const zip = new AdmZip();
   zip.addLocalFile(tmpDbPath, '', 'gateway.db');
@@ -111,19 +115,19 @@ async function createBackup({ includeMqttConfig = true, reason = 'manual' } = {}
   zip.writeZip(finalPath);
   fs.rmSync(tmpDbPath, { force: true });
 
-  enforceRetention();
+  await enforceRetention();
 
   // Additive offsite copy — failing here must not fail the backup itself (the local zip already
   // exists and retention already ran), just surface the failure on its own status fields so it's
   // visible on the Backups page without silently pretending the offsite copy succeeded.
-  const settings = getSettings();
+  const settings = await getSettings();
   if (settings.rclone_enabled) {
     try {
       await uploadToRclone(finalPath, settings);
-      updateSettings({ rclone_last_run_at: new Date().toISOString(), rclone_last_status: 'ok', rclone_last_error: null });
+      await updateSettings({ rclone_last_run_at: new Date().toISOString(), rclone_last_status: 'ok', rclone_last_error: null });
     } catch (err) {
-      updateSettings({ rclone_last_run_at: new Date().toISOString(), rclone_last_status: 'error', rclone_last_error: err.message });
-      notifyBackupFailed(err.message, 'offsite copy (rclone)');
+      await updateSettings({ rclone_last_run_at: new Date().toISOString(), rclone_last_status: 'error', rclone_last_error: err.message });
+      await notifyBackupFailed(err.message, 'offsite copy (rclone)');
     }
   }
 
@@ -153,8 +157,8 @@ function listBackups() {
 
 // Keeps only the most recent `retention_count` backups — runs after every createBackup() (manual
 // or scheduled) so retention can't be bypassed by clicking "Backup now" repeatedly.
-function enforceRetention() {
-  const { retention_count: retentionCount } = getSettings();
+async function enforceRetention() {
+  const { retention_count: retentionCount } = await getSettings();
   const backups = listBackups();
   for (const old of backups.slice(retentionCount)) {
     fs.rmSync(path.join(BACKUP_DIR, old.filename), { force: true });
@@ -302,7 +306,7 @@ function runRclone(args, configPath, timeoutMs) {
 // offsite copy the local retention settings above have already aged out; that stays entirely up to
 // whatever lifecycle rules (or manual cleanup) the admin sets on the remote itself.
 async function uploadToRclone(localZipPath, settings) {
-  const s = settings || getSettings();
+  const s = settings || (await getSettings());
   if (!s.rclone_remote) throw new Error('No rclone remote configured.');
   const configPath = writeTempRcloneConfig(s.rclone_config);
   try {
@@ -382,7 +386,7 @@ async function buildRcloneConfig(backendType, remoteName, fields) {
 // touching any files, the lightest read-only operation that still proves both the pasted config and
 // the remote path actually work end to end.
 async function testRcloneConnection(settings) {
-  const s = settings || getSettings();
+  const s = settings || (await getSettings());
   if (!s.rclone_remote) throw new Error('No rclone remote configured.');
   const configPath = writeTempRcloneConfig(s.rclone_config);
   try {
@@ -394,11 +398,11 @@ async function testRcloneConnection(settings) {
 
 let scheduledTimer = null;
 
-function scheduleNext() {
+async function scheduleNext() {
   if (scheduledTimer) clearTimeout(scheduledTimer);
   scheduledTimer = null;
 
-  const settings = getSettings();
+  const settings = await getSettings();
   if (!settings.enabled) return;
 
   let nextRun;
@@ -420,13 +424,13 @@ function scheduleNext() {
 
   scheduledTimer = setTimeout(async () => {
     if (isActualRun) {
-      const settingsNow = getSettings();
+      const settingsNow = await getSettings();
       try {
         await createBackup({ includeMqttConfig: !!settingsNow.include_mqtt_config, reason: 'scheduled' });
-        updateSettings({ last_run_at: new Date().toISOString(), last_status: 'ok', last_error: null });
+        await updateSettings({ last_run_at: new Date().toISOString(), last_status: 'ok', last_error: null });
       } catch (err) {
-        updateSettings({ last_run_at: new Date().toISOString(), last_status: 'error', last_error: err.message });
-        notifyBackupFailed(err.message, 'scheduled backup');
+        await updateSettings({ last_run_at: new Date().toISOString(), last_status: 'error', last_error: err.message });
+        await notifyBackupFailed(err.message, 'scheduled backup');
       }
     }
     scheduleNext();
@@ -439,8 +443,8 @@ function startScheduler() {
 
 // Called after the admin page saves schedule settings, so a change takes effect immediately
 // instead of waiting for the next daily re-check.
-function rescheduleFromSettings() {
-  scheduleNext();
+async function rescheduleFromSettings() {
+  await scheduleNext();
 }
 
 module.exports = {

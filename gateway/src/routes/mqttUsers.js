@@ -28,8 +28,8 @@ function withLastSeen(clients) {
   return clients.map((c) => ({ ...c, lastSeen: lastSeen.get(c.username) || null }));
 }
 
-function loadAutoScopeDeviceRoles() {
-  return !!db.prepare('SELECT auto_scope_device_roles FROM gateway_settings WHERE id = 1').get()?.auto_scope_device_roles;
+async function loadAutoScopeDeviceRoles() {
+  return !!(await db.prepare('SELECT auto_scope_device_roles FROM gateway_settings WHERE id = 1').get())?.auto_scope_device_roles;
 }
 
 async function renderPage(res, extra = {}) {
@@ -38,7 +38,7 @@ async function renderPage(res, extra = {}) {
     clients: withLastSeen(clients),
     roles,
     protectedUsernames: PROTECTED_USERNAMES,
-    autoScopeDeviceRoles: loadAutoScopeDeviceRoles(),
+    autoScopeDeviceRoles: await loadAutoScopeDeviceRoles(),
     error: null,
     testResult: null,
     ...extra,
@@ -49,7 +49,7 @@ router.get('/', async (req, res) => {
   try {
     await renderPage(res);
   } catch (err) {
-    res.render('mqttUsers', { clients: [], roles: ['client'], protectedUsernames: PROTECTED_USERNAMES, autoScopeDeviceRoles: loadAutoScopeDeviceRoles(), error: err.message, testResult: null });
+    res.render('mqttUsers', { clients: [], roles: ['client'], protectedUsernames: PROTECTED_USERNAMES, autoScopeDeviceRoles: await loadAutoScopeDeviceRoles(), error: err.message, testResult: null });
   }
 });
 
@@ -63,7 +63,7 @@ router.post('/', requirePermission('mqtt_users', 'edit'), async (req, res) => {
     // picked from the dropdown. An empty prefix falls back to that dropdown untouched, same as
     // when the setting is off.
     let effectiveRole = rolename || 'client';
-    if (loadAutoScopeDeviceRoles() && (device_topic_prefix || '').trim()) {
+    if ((await loadAutoScopeDeviceRoles()) && (device_topic_prefix || '').trim()) {
       effectiveRole = await createDeviceScopedRole(device_topic_prefix.trim());
     }
 

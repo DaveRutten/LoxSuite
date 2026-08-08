@@ -69,7 +69,7 @@ async function ensureGatewayAccount(client, username, password) {
 // Idempotent: safe to run on every startup. Lets the gateway's own MQTT account
 // (which mqttClient.js is already retrying to connect as) become valid without
 // any manual mosquitto_ctrl steps, once the broker is reachable.
-function runBootstrap() {
+async function runBootstrap() {
   const adminUsername = process.env.MQTT_ADMIN_USERNAME || 'admin';
   const adminPassword = process.env.MQTT_ADMIN_PASSWORD;
   if (!adminPassword) {
@@ -77,7 +77,7 @@ function runBootstrap() {
     return;
   }
 
-  const settings = db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
+  const settings = await db.prepare('SELECT * FROM mqtt_settings WHERE id = 1').get();
   const protocol = settings.use_tls ? 'mqtts' : 'mqtt';
   const client = mqtt.connect(`${protocol}://${settings.host}:${settings.port}`, {
     clientId: 'loxsuite-bootstrap',

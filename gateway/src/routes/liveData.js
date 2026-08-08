@@ -7,6 +7,7 @@ const { suggestForRoom, BUCKET_BY_KEY } = require('../dashboardSuggestions');
 const { requirePermission } = require('../middleware/requirePermission');
 const { resolveRange } = require('./monitor');
 const { PANEL_TYPES, SINGLE_MONITOR_TYPES, buildConfig } = require('./dashboards');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const POLL_INTERVALS_MS = [5000, 10000, 30000, 60000, 300000];
 
@@ -40,8 +41,8 @@ function pickMiniserver(miniservers, requestedId) {
   return miniservers.find((m) => m.status === 'online') || miniservers[0] || null;
 }
 
-router.get('/', async (req, res) => {
-  const miniservers = db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
+router.get('/', asyncHandler(async (req, res) => {
+  const miniservers = await db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   const requestedId = req.query.miniserver_id ? Number(req.query.miniserver_id) : null;
   const miniserver = pickMiniserver(miniservers, requestedId);
 
@@ -51,7 +52,7 @@ router.get('/', async (req, res) => {
 
   ensureConnection(miniserver);
   const liveStatus = getStatus(miniserver.id);
-  const gatewaySettings = db.prepare('SELECT dashboard_suggestions_enabled FROM gateway_settings WHERE id = 1').get();
+  const gatewaySettings = await db.prepare('SELECT dashboard_suggestions_enabled FROM gateway_settings WHERE id = 1').get();
   const suggestionsEnabled = !!gatewaySettings?.dashboard_suggestions_enabled && res.locals.canEdit('dashboard');
 
   try {
@@ -66,7 +67,7 @@ router.get('/', async (req, res) => {
   } catch (err) {
     res.render('live-data', { miniservers, miniserverId: miniserver.id, rooms: [], error: `Could not read the structure from this Miniserver: ${err.message}`, liveStatus, suggestionsEnabled });
   }
-});
+}));
 
 // Polled client-side every few seconds to keep the "Live connection" line honest — connecting on
 // first load, then flips to open (or reports an error) without the user needing to refresh the page.
@@ -81,8 +82,8 @@ router.get('/status', (req, res) => {
 // LoxAPP3.json indefinitely; the explicit "Refresh" button still exists for that). Room/category
 // counts staying current this way is cheap; the actual per-room control/state lists are still only
 // fetched on demand when a room is opened, same as ever.
-router.get('/rooms', async (req, res) => {
-  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
+router.get('/rooms', asyncHandler(async (req, res) => {
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
   if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
 
   try {
@@ -91,14 +92,14 @@ router.get('/rooms', async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
-});
+}));
 
 // A room's categories/controls are only fetched once it's actually expanded — same reasoning as
 // /values below, one level up: rendering every room's full detail up front is what made the
 // initial page load enormous (900KB+/2000+ DOM nodes on a real installation, enough to crash a
 // browser tab) even though a user only ever looks at a handful of rooms per visit.
-router.get('/room', async (req, res) => {
-  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
+router.get('/room', asyncHandler(async (req, res) => {
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
   if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
 
   try {
@@ -107,13 +108,13 @@ router.get('/room', async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
-});
+}));
 
 // Live values for a category are only fetched once it's actually expanded — a structure file can
 // have hundreds of controls, so reading every one of them up front just to render the page would
 // mean hundreds of Miniserver requests before a user has looked at any of them.
-router.get('/values', async (req, res) => {
-  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
+router.get('/values', asyncHandler(async (req, res) => {
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
   if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
 
   const uuids = (req.query.uuids || '').split(',').map((u) => u.trim()).filter(Boolean).slice(0, 200);
@@ -144,10 +145,10 @@ router.get('/values', async (req, res) => {
   let fetchedIndex = 0;
   const merged = results.map((r) => (r === null ? fetched[fetchedIndex++] : r));
   res.json(Object.fromEntries(merged));
-});
+}));
 
-function suggestionsAllowed(req, res) {
-  const settings = db.prepare('SELECT dashboard_suggestions_enabled FROM gateway_settings WHERE id = 1').get();
+async function suggestionsAllowed(req, res) {
+  const settings = await db.prepare('SELECT dashboard_suggestions_enabled FROM gateway_settings WHERE id = 1').get();
   if (!settings?.dashboard_suggestions_enabled) {
     res.status(403).json({ error: 'Dashboard suggestions are turned off in Settings.' });
     return false;
@@ -157,10 +158,10 @@ function suggestionsAllowed(req, res) {
 
 // Preview for the "Suggest dashboard" button — grouped panel suggestions for one room, nothing
 // created yet. See dashboardSuggestions.js for how a control ends up in a given group.
-router.get('/suggest', async (req, res) => {
-  if (!suggestionsAllowed(req, res)) return;
+router.get('/suggest', asyncHandler(async (req, res) => {
+  if (!(await suggestionsAllowed(req, res))) return;
 
-  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
   if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
 
   try {
@@ -170,7 +171,7 @@ router.get('/suggest', async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
-});
+}));
 
 // Creates the hand-picked selection as a new personal dashboard: one monitor per chosen
 // control+state (found-or-created, same as the "Widget"/"Monitor" buttons elsewhere on this
@@ -178,10 +179,10 @@ router.get('/suggest', async (req, res) => {
 // re-validated against the room's own current structure (not just trusted as submitted) — the
 // preview is built from that same structure, but a stale form or a tampered request shouldn't be
 // able to point a monitor at an arbitrary uuid.
-router.post('/suggest', requirePermission('monitor', 'edit'), async (req, res) => {
-  if (!suggestionsAllowed(req, res)) return;
+router.post('/suggest', requirePermission('monitor', 'edit'), asyncHandler(async (req, res) => {
+  if (!(await suggestionsAllowed(req, res))) return;
 
-  const miniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.body.miniserver_id);
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.body.miniserver_id);
   if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
 
   const room = await getRoomDetail(miniserver, req.body.room_uuid).catch(() => null);
@@ -208,42 +209,39 @@ router.post('/suggest', requirePermission('monitor', 'edit'), async (req, res) =
     const range = resolveRange(req.body.range);
     const pollIntervalMs = POLL_INTERVALS_MS.includes(Number(req.body.poll_interval_ms)) ? Number(req.body.poll_interval_ms) : 10000;
 
-    const insertHistory = db.prepare(
-      'INSERT INTO monitor_history (monitor_id, recorded_at, value, numeric_value) VALUES (?, ?, ?, ?)'
-    );
-
     // A brand new monitor otherwise shows nothing until its first scheduled poll (up to
     // pollIntervalMs away) — seeding one reading immediately from the websocket's already-live cache
     // is what makes a freshly-created panel show something right away instead of looking empty.
-    const findOrCreateMonitor = db.transaction((item) => {
-      const existing = db.prepare(
-        "SELECT id FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ? AND loxone_uuid = ?"
-      ).get(miniserver.id, item.uuid);
-      const monitorId = existing
-        ? existing.id
-        : db.prepare(
-            "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, ?, 1, ?)"
-          ).run(item.label, miniserver.id, item.uuid, pollIntervalMs, new Date().toISOString()).lastInsertRowid;
+    // One transaction per item (matching the original better-sqlite3 db.transaction(fn); fn()
+    // shape, which also opened one transaction per call, not one covering the whole loop below).
+    async function findOrCreateMonitor(item) {
+      return db.transaction(async (tx) => {
+        const existing = await tx.prepare(
+          "SELECT id FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ? AND loxone_uuid = ?"
+        ).get(miniserver.id, item.uuid);
+        const monitorId = existing
+          ? existing.id
+          : (await tx.prepare(
+              "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at) VALUES ('loxone', ?, ?, ?, ?, 1, ?)"
+            ).run(item.label, miniserver.id, item.uuid, pollIntervalMs, new Date().toISOString())).lastInsertRowid;
 
-      if (!existing) {
-        const liveValue = getLiveValue(miniserver.id, item.uuid);
-        if (liveValue !== undefined && liveValue !== null) {
-          const numeric = Number(liveValue);
-          insertHistory.run(monitorId, new Date().toISOString(), String(liveValue), Number.isFinite(numeric) ? numeric : null);
+        if (!existing) {
+          const liveValue = getLiveValue(miniserver.id, item.uuid);
+          if (liveValue !== undefined && liveValue !== null) {
+            const numeric = Number(liveValue);
+            await tx.prepare('INSERT INTO monitor_history (monitor_id, recorded_at, value, numeric_value) VALUES (?, ?, ?, ?)')
+              .run(monitorId, new Date().toISOString(), String(liveValue), Number.isFinite(numeric) ? numeric : null);
+          }
         }
-      }
-      return monitorId;
-    });
+        return monitorId;
+      });
+    }
 
-    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM custom_dashboards WHERE user_id = ?').get(req.session.userId).m;
-    const dashboardId = db.prepare(
-      'INSERT INTO custom_dashboards (user_id, name, position, created_at) VALUES (?, ?, ?, ?)'
-    ).run(req.session.userId, dashboardName, maxPos + 1, new Date().toISOString()).lastInsertRowid;
-
-    const insertPanel = db.prepare(
-      'INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, ?, ?, ?, ?, ?)'
+    const maxPos = (await db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM custom_dashboards WHERE user_id = ?').get(req.session.userId)).m;
+    const dashboardId = await db.insertReturningId(
+      'INSERT INTO custom_dashboards (user_id, name, position, created_at) VALUES (?, ?, ?, ?)',
+      [req.session.userId, dashboardName, maxPos + 1, new Date().toISOString()]
     );
-    const insertPanelMonitor = db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)');
 
     // Each bucket's own suggested panelType (BUCKET_BY_KEY) is only the default — the preview lets
     // it be overridden per bucket (e.g. Climate as a Current value panel instead of a chart), same
@@ -262,7 +260,9 @@ router.post('/suggest', requirePermission('monitor', 'edit'), async (req, res) =
       itemsByBucket.get(item.bucketKey).push(item);
     });
 
-    Array.from(itemsByBucket.entries()).forEach(([bucketKey, items], position) => {
+    const bucketEntries = Array.from(itemsByBucket.entries());
+    for (let position = 0; position < bucketEntries.length; position++) {
+      const [bucketKey, items] = bucketEntries[position];
       const bucket = BUCKET_BY_KEY.get(bucketKey);
       const override = panelTypeOverrides[bucketKey];
       const panelType = PANEL_TYPES.includes(override) ? override : bucket.panelType;
@@ -270,11 +270,16 @@ router.post('/suggest', requirePermission('monitor', 'edit'), async (req, res) =
       // regular panel form applies (routes/dashboards.js), so switching a multi-item bucket to one
       // of these doesn't try to attach items it can't actually display.
       const pickedItems = SINGLE_MONITOR_TYPES.includes(panelType) ? items.slice(0, 1) : items;
-      const monitorIds = pickedItems.map((item) => findOrCreateMonitor(item));
+      const monitorIds = await Promise.all(pickedItems.map((item) => findOrCreateMonitor(item)));
       const config = JSON.stringify(buildConfig(panelType, {}));
-      const panelId = insertPanel.run(dashboardId, panelType, bucket.label, range, config, position).lastInsertRowid;
-      monitorIds.forEach((monitorId, i) => insertPanelMonitor.run(panelId, monitorId, i));
-    });
+      const panelId = await db.insertReturningId(
+        'INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, ?, ?, ?, ?, ?)',
+        [dashboardId, panelType, bucket.label, range, config, position]
+      );
+      for (let i = 0; i < monitorIds.length; i++) {
+        await db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)').run(panelId, monitorIds[i], i);
+      }
+    }
 
     res.json({ dashboardId });
   } catch (err) {
@@ -286,6 +291,6 @@ router.post('/suggest', requirePermission('monitor', 'edit'), async (req, res) =
     console.error('POST /live-data/suggest failed:', err);
     res.status(500).json({ error: 'Something went wrong creating the dashboard.' });
   }
-});
+}));
 
 module.exports = router;

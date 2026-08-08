@@ -301,12 +301,12 @@ async function testConnection(miniserver, timeoutMs = 8000) {
 // first) so the Miniservers page's "Test now" panel and Live Data both reflect a live connection
 // that's already up, and re-scans periodically to pick up newly-added Miniservers — ensureConnection
 // is a no-op for ones already connected/retrying, so this is cheap to just re-run on a timer.
-function startLiveConnections() {
-  const scan = () => {
-    const miniservers = db.prepare('SELECT * FROM miniservers').all();
+async function startLiveConnections() {
+  const scan = async () => {
+    const miniservers = await db.prepare('SELECT * FROM miniservers').all();
     miniservers.forEach(ensureConnection);
   };
-  scan();
+  await scan();
   setInterval(scan, RESCAN_TICK_MS);
 }
 

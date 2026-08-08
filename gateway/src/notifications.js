@@ -75,8 +75,8 @@ function renderBody(event) {
 // plus every one of this event's own fields[].label are available as {{placeholders}}, substituted
 // against the SAME event data every check* function already builds below, so a custom template
 // never needs its own separate variable-gathering step.
-function getNotificationTemplates() {
-  const row = db.prepare('SELECT notification_templates FROM gateway_settings WHERE id = 1').get();
+async function getNotificationTemplates() {
+  const row = await db.prepare('SELECT notification_templates FROM gateway_settings WHERE id = 1').get();
   try {
     const parsed = JSON.parse((row && row.notification_templates) || '{}');
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
@@ -85,8 +85,8 @@ function getNotificationTemplates() {
   }
 }
 
-function saveNotificationTemplates(templates) {
-  db.prepare('UPDATE gateway_settings SET notification_templates = ? WHERE id = 1').run(JSON.stringify(templates));
+async function saveNotificationTemplates(templates) {
+  await db.prepare('UPDATE gateway_settings SET notification_templates = ? WHERE id = 1').run(JSON.stringify(templates));
 }
 
 // Exported separately from getNotificationTemplates/applyTemplate so the admin page's own live
@@ -171,8 +171,8 @@ const TEMPLATE_PREVIEW_SAMPLES = {
   },
 };
 
-function applyTemplate(event, triggerType) {
-  const tpl = getNotificationTemplates()[triggerType];
+async function applyTemplate(event, triggerType) {
+  const tpl = (await getNotificationTemplates())[triggerType];
   if (!tpl || (!tpl.title && !tpl.body)) return event;
   const context = { title: event.title, message: event.message, severity: event.severity };
   (event.fields || []).forEach((f) => { context[f.label] = f.value; });
@@ -251,7 +251,7 @@ async function sendTestMessage(channel) {
 async function sendTemplateTestMessage(channel, triggerType) {
   const sample = TEMPLATE_PREVIEW_SAMPLES[triggerType];
   if (!sample) throw new Error('Unknown trigger type.');
-  const event = applyTemplate({
+  const event = await applyTemplate({
     title: sample.title,
     message: sample.message,
     severity: sample.severity,
@@ -263,7 +263,7 @@ async function sendTemplateTestMessage(channel, triggerType) {
 
 // ---- Rule dispatch ----
 
-function getChannelsForRule(ruleId) {
+async function getChannelsForRule(ruleId) {
   return db.prepare(`
     SELECT nc.* FROM notification_channels nc
     JOIN notification_rule_channels nrc ON nrc.channel_id = nc.id
@@ -276,7 +276,7 @@ function getChannelsForRule(ruleId) {
 // their own configured — a subscription with no URL yet has nowhere to send to, so it's silently
 // skipped here rather than surfaced as a failure (there's nothing to retry or fix on this end;
 // the user just hasn't filled in their channel yet).
-function getSubscriberChannelsForRule(ruleId) {
+async function getSubscriberChannelsForRule(ruleId) {
   return db.prepare(`
     SELECT users.id, users.username, users.notify_url AS url FROM notification_rule_subscribers nrs
     JOIN users ON users.id = nrs.user_id
@@ -288,8 +288,8 @@ function getSubscriberChannelsForRule(ruleId) {
 // is still one alert, not three) — the Notification Center's own persisted history, independent of
 // whether any channel is even configured or a send succeeds. See db.js's notification_events
 // comment for why rule_id carries no REFERENCES/cascade.
-function recordNotificationEvent(event, opts) {
-  db.prepare(
+async function recordNotificationEvent(event, opts) {
+  await db.prepare(
     'INSERT INTO notification_events (event_type, severity, title, message, source_id, source_label, rule_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     opts.eventType,
@@ -304,36 +304,36 @@ function recordNotificationEvent(event, opts) {
 }
 
 async function fireRule(rule, rawEvent) {
-  const event = applyTemplate(rawEvent, rule.trigger_type);
-  recordNotificationEvent(event, { eventType: rule.trigger_type, ruleId: rule.id });
+  const event = await applyTemplate(rawEvent, rule.trigger_type);
+  await recordNotificationEvent(event, { eventType: rule.trigger_type, ruleId: rule.id });
 
-  const channels = getChannelsForRule(rule.id);
+  const channels = await getChannelsForRule(rule.id);
   for (const channel of channels) {
     try {
       await sendToChannel(channel, event);
-      logSystemEvent(`Notification "${rule.name}" sent via "${channel.name}".`);
+      await logSystemEvent(`Notification "${rule.name}" sent via "${channel.name}".`);
     } catch (err) {
-      logSystemEvent(`Notification "${rule.name}" via "${channel.name}" failed: ${err.message}`);
+      await logSystemEvent(`Notification "${rule.name}" via "${channel.name}" failed: ${err.message}`);
     }
   }
 
-  const subscribers = getSubscriberChannelsForRule(rule.id);
+  const subscribers = await getSubscriberChannelsForRule(rule.id);
   for (const subscriber of subscribers) {
     try {
       await sendToChannel({ name: `${subscriber.username}'s notifications`, url: subscriber.url }, event);
-      logSystemEvent(`Notification "${rule.name}" sent to "${subscriber.username}".`);
+      await logSystemEvent(`Notification "${rule.name}" sent to "${subscriber.username}".`);
     } catch (err) {
-      logSystemEvent(`Notification "${rule.name}" to "${subscriber.username}" failed: ${err.message}`);
+      await logSystemEvent(`Notification "${rule.name}" to "${subscriber.username}" failed: ${err.message}`);
     }
   }
 }
 
-function getRulesByTrigger(triggerType) {
+async function getRulesByTrigger(triggerType) {
   return db.prepare('SELECT * FROM notification_rules WHERE trigger_type = ? AND enabled = 1').all(triggerType);
 }
 
-function updateRuleState(ruleId, state) {
-  db.prepare('UPDATE notification_rules SET last_state = ? WHERE id = ?').run(JSON.stringify(state), ruleId);
+async function updateRuleState(ruleId, state) {
+  await db.prepare('UPDATE notification_rules SET last_state = ? WHERE id = ?').run(JSON.stringify(state), ruleId);
 }
 
 function compareThreshold(value, operator, threshold) {
@@ -358,10 +358,11 @@ function operatorLabel(operator) {
 // already breached so only the ok->breached (and, opt-in, breached->ok) *transition* fires —
 // without it, a monitor sitting above its threshold for hours would re-notify on every single
 // reading instead of once when it first crossed the line.
-function checkMonitorThreshold(monitorId, numericValue) {
-  const rules = getRulesByTrigger('monitor_threshold').filter((rule) => Number(JSON.parse(rule.config || '{}').monitor_id) === monitorId);
+async function checkMonitorThreshold(monitorId, numericValue) {
+  const allRules = await getRulesByTrigger('monitor_threshold');
+  const rules = allRules.filter((rule) => Number(JSON.parse(rule.config || '{}').monitor_id) === monitorId);
   if (rules.length === 0) return;
-  const monitor = db.prepare('SELECT id, label FROM monitors WHERE id = ?').get(monitorId);
+  const monitor = await db.prepare('SELECT id, label FROM monitors WHERE id = ?').get(monitorId);
   if (!monitor) return;
 
   for (const rule of rules) {
@@ -369,10 +370,10 @@ function checkMonitorThreshold(monitorId, numericValue) {
     const state = JSON.parse(rule.last_state || '{}');
     const breached = compareThreshold(numericValue, cfg.operator, Number(cfg.value));
     if (breached === !!state.breached) continue;
-    updateRuleState(rule.id, { breached });
+    await updateRuleState(rule.id, { breached });
 
     if (breached) {
-      fireRule(rule, {
+      await fireRule(rule, {
         title: `${monitor.label}: threshold breached`,
         message: `${monitor.label} is now ${operatorLabel(cfg.operator)} ${cfg.value} (current: ${numericValue}).`,
         severity: 'warning',
@@ -386,7 +387,7 @@ function checkMonitorThreshold(monitorId, numericValue) {
         timestamp: new Date().toISOString(),
       });
     } else if (cfg.notify_on_recover) {
-      fireRule(rule, {
+      await fireRule(rule, {
         title: `${monitor.label}: back to normal`,
         message: `${monitor.label} is no longer ${operatorLabel(cfg.operator)} ${cfg.value} (current: ${numericValue}).`,
         severity: 'info',
@@ -414,8 +415,8 @@ function checkMonitorThreshold(monitorId, numericValue) {
 // process restart, which can cost at most one possibly-redundant or (rarely) missed notification
 // right after a restart, not an ongoing correctness issue.
 const lastMatchedRung = new Map();
-function checkThresholdLadderNotify(monitorId, numericValue) {
-  const monitor = db.prepare('SELECT id, label, config FROM monitors WHERE id = ?').get(monitorId);
+async function checkThresholdLadderNotify(monitorId, numericValue) {
+  const monitor = await db.prepare('SELECT id, label, config FROM monitors WHERE id = ?').get(monitorId);
   if (!monitor) return;
 
   let config;
@@ -436,7 +437,7 @@ function checkThresholdLadderNotify(monitorId, numericValue) {
   if (rungKey === previousKey) return; // still in the same rung (or still below every rung)
   if (!rung || !rung.notify) return;
 
-  recordNotificationEvent({
+  await recordNotificationEvent({
     title: `${monitor.label}: ${rung.value}`,
     message: `${monitor.label} reached ${rung.value} (current: ${numericValue}).`,
     severity: 'warning',
@@ -451,17 +452,17 @@ function checkThresholdLadderNotify(monitorId, numericValue) {
 // each one's last-known status independently — keyed by id in last_state — rather than one shared
 // flag that would otherwise misfire ("already notified") the moment a second, unrelated Miniserver
 // changes state first.
-function checkMiniserverStatus(miniserver, newStatus) {
-  for (const rule of getRulesByTrigger('miniserver_status')) {
+async function checkMiniserverStatus(miniserver, newStatus) {
+  for (const rule of await getRulesByTrigger('miniserver_status')) {
     const cfg = JSON.parse(rule.config || '{}');
     if (cfg.miniserver_id && Number(cfg.miniserver_id) !== miniserver.id) continue;
 
     const state = JSON.parse(rule.last_state || '{}');
     const key = String(miniserver.id);
     if (state[key] === newStatus) continue;
-    updateRuleState(rule.id, { ...state, [key]: newStatus });
+    await updateRuleState(rule.id, { ...state, [key]: newStatus });
 
-    fireRule(rule, {
+    await fireRule(rule, {
       title: `${miniserver.name}: ${newStatus}`,
       message: `Miniserver "${miniserver.name}" (${miniserver.host}) is now ${newStatus}.`,
       severity: newStatus === 'offline' ? 'critical' : 'info',
@@ -481,17 +482,17 @@ function checkMiniserverStatus(miniserver, newStatus) {
 // CHANGED, not that a newer one is available — an honest, checkable signal instead of a guess at
 // an external release feed this app doesn't talk to. No last_state needed: the version-string
 // comparison itself already IS the transition check, no separate persisted flag required.
-function checkFirmwareChanged(miniserver, newVersion) {
+async function checkFirmwareChanged(miniserver, newVersion) {
   // The !miniserver.firmware_version guard matters — without it, a brand-new Miniserver's very
   // first successful read (previous version genuinely unknown, not "unchanged") would look like a
   // change from nothing and fire a spurious alert.
   if (!newVersion || !miniserver.firmware_version || newVersion === miniserver.firmware_version) return;
 
-  for (const rule of getRulesByTrigger('firmware_changed')) {
+  for (const rule of await getRulesByTrigger('firmware_changed')) {
     const cfg = JSON.parse(rule.config || '{}');
     if (cfg.miniserver_id && Number(cfg.miniserver_id) !== miniserver.id) continue;
 
-    fireRule(rule, {
+    await fireRule(rule, {
       title: `${miniserver.name}: firmware changed`,
       message: `Miniserver "${miniserver.name}" firmware changed from ${miniserver.firmware_version} to ${newVersion}.`,
       severity: 'info',
@@ -520,13 +521,13 @@ function checkFirmwareChanged(miniserver, newVersion) {
 // checkMiniserverStatus tracks per-Miniserver status above, so a rule scoped to "any Gateway"
 // still tracks each Gateway/Client pair's own mismatched/not-mismatched flag independently, and a
 // resolved mismatch clears cleanly so a later, genuinely new one can fire again.
-function checkGatewayClientFirmwareMismatch() {
-  const rules = getRulesByTrigger('gateway_client_firmware_mismatch');
+async function checkGatewayClientFirmwareMismatch() {
+  const rules = await getRulesByTrigger('gateway_client_firmware_mismatch');
   if (rules.length === 0) return;
 
-  const clients = db.prepare('SELECT * FROM miniservers WHERE gateway_client_of IS NOT NULL').all();
-  const pairs = clients
-    .map((client) => ({ client, gateway: db.prepare('SELECT * FROM miniservers WHERE id = ?').get(client.gateway_client_of) }))
+  const clients = await db.prepare('SELECT * FROM miniservers WHERE gateway_client_of IS NOT NULL').all();
+  const selectMiniserver = db.prepare('SELECT * FROM miniservers WHERE id = ?');
+  const pairs = (await Promise.all(clients.map(async (client) => ({ client, gateway: await selectMiniserver.get(client.gateway_client_of) }))))
     .filter((pair) => pair.gateway);
   if (pairs.length === 0) return;
 
@@ -548,7 +549,7 @@ function checkGatewayClientFirmwareMismatch() {
       stateChanged = true;
       if (!mismatched) continue; // silently cleared — no "back in sync" notification
 
-      fireRule(rule, {
+      await fireRule(rule, {
         title: `${gateway.name}/${client.name}: firmware mismatch`,
         message: `Gateway "${gateway.name}" is running ${gateway.firmware_version}, Client "${client.name}" is running ${client.firmware_version} — both are online and running, but their firmware doesn't match.`,
         severity: cfg.severity || 'warning',
@@ -562,7 +563,7 @@ function checkGatewayClientFirmwareMismatch() {
       });
     }
 
-    if (stateChanged) updateRuleState(rule.id, state);
+    if (stateChanged) await updateRuleState(rule.id, state);
   }
 }
 
@@ -573,13 +574,13 @@ function checkGatewayClientFirmwareMismatch() {
 // nothing in its own config to match against. last_state just remembers the last version already
 // notified about, so this doesn't refire on every one of versionCheck's daily re-checks — only
 // once a genuinely different tag shows up.
-function checkLoxSuiteUpdate(currentVersion, latestVersion) {
-  for (const rule of getRulesByTrigger('loxsuite_update_available')) {
+async function checkLoxSuiteUpdate(currentVersion, latestVersion) {
+  for (const rule of await getRulesByTrigger('loxsuite_update_available')) {
     const state = JSON.parse(rule.last_state || '{}');
     if (state.notifiedVersion === latestVersion) continue;
-    updateRuleState(rule.id, { notifiedVersion: latestVersion });
+    await updateRuleState(rule.id, { notifiedVersion: latestVersion });
 
-    fireRule(rule, {
+    await fireRule(rule, {
       title: `LoxSuite v${latestVersion} available`,
       message: `A newer LoxSuite release (v${latestVersion}) is available on GitHub — currently running v${currentVersion}.`,
       severity: 'info',
@@ -602,13 +603,13 @@ function checkLoxSuiteUpdate(currentVersion, latestVersion) {
 // this trigger type) — defaults to 'warning' rather than forcing one on every install, since how
 // urgent a weak battery is depends entirely on the device (a hallway motion sensor vs. a smoke
 // detector aren't the same emergency).
-function checkBatteryWeak(miniserver, item) {
-  for (const rule of getRulesByTrigger('battery_weak')) {
+async function checkBatteryWeak(miniserver, item) {
+  for (const rule of await getRulesByTrigger('battery_weak')) {
     const cfg = JSON.parse(rule.config || '{}');
     if (cfg.miniserver_id && Number(cfg.miniserver_id) !== miniserver.id) continue;
 
     const label = item.name || item.type || item.deviceKey;
-    fireRule(rule, {
+    await fireRule(rule, {
       title: `${label}: battery weak`,
       message: `"${label}" on "${miniserver.name}" reports a weak battery${item.battery != null ? ` (${item.battery}%)` : ''}.`,
       severity: cfg.severity || 'warning',
@@ -630,13 +631,13 @@ function checkBatteryWeak(miniserver, item) {
 // checkFirmwareChanged above (which only ever compares the Miniserver's OWN firmware string), same
 // "detects CHANGED, not that a newer one is available" honesty. cfg.severity defaults to 'info' —
 // a firmware bump is usually just informational, but configurable since not every install agrees.
-function checkDeviceFirmwareChanged(miniserver, item, previousVersion) {
-  for (const rule of getRulesByTrigger('device_firmware_changed')) {
+async function checkDeviceFirmwareChanged(miniserver, item, previousVersion) {
+  for (const rule of await getRulesByTrigger('device_firmware_changed')) {
     const cfg = JSON.parse(rule.config || '{}');
     if (cfg.miniserver_id && Number(cfg.miniserver_id) !== miniserver.id) continue;
 
     const label = item.name || item.type || item.deviceKey;
-    fireRule(rule, {
+    await fireRule(rule, {
       title: `${label}: firmware changed`,
       message: `"${label}" on "${miniserver.name}" firmware changed from ${previousVersion} to ${item.version}.`,
       severity: cfg.severity || 'info',
@@ -659,13 +660,13 @@ function checkDeviceFirmwareChanged(miniserver, item, previousVersion) {
 // direction's severity only (defaults to 'warning'); coming back online is always reported as
 // 'info' regardless — an unconfigurable second severity for the recovery half would be one control
 // nobody's asked for, mirroring monitor_threshold's own asymmetric treatment of breach vs. recover.
-function checkDeviceOffline(miniserver, item, isOnline) {
-  for (const rule of getRulesByTrigger('device_offline')) {
+async function checkDeviceOffline(miniserver, item, isOnline) {
+  for (const rule of await getRulesByTrigger('device_offline')) {
     const cfg = JSON.parse(rule.config || '{}');
     if (cfg.miniserver_id && Number(cfg.miniserver_id) !== miniserver.id) continue;
 
     const label = item.name || item.type || item.deviceKey;
-    fireRule(rule, {
+    await fireRule(rule, {
       title: `${label}: ${isOnline ? 'online' : 'offline'}`,
       message: `"${label}" on "${miniserver.name}" is now ${isOnline ? 'online' : 'offline'}.`,
       severity: isOnline ? 'info' : (cfg.severity || 'warning'),
@@ -685,17 +686,17 @@ function checkDeviceOffline(miniserver, item, isOnline) {
 // Anonymous connections (no username — shouldn't normally happen, the broker requires auth, but a
 // malformed/edge-case log line could still parse one out) aren't meaningful to alert on by
 // username and are skipped outright.
-function checkMqttClientStatus(username, status) {
+async function checkMqttClientStatus(username, status) {
   if (!username) return;
-  for (const rule of getRulesByTrigger('mqtt_client_status')) {
+  for (const rule of await getRulesByTrigger('mqtt_client_status')) {
     const cfg = JSON.parse(rule.config || '{}');
     if (cfg.username && cfg.username !== username) continue;
 
     const state = JSON.parse(rule.last_state || '{}');
     if (state[username] === status) continue;
-    updateRuleState(rule.id, { ...state, [username]: status });
+    await updateRuleState(rule.id, { ...state, [username]: status });
 
-    fireRule(rule, {
+    await fireRule(rule, {
       title: `${username}: ${status}`,
       message: `MQTT client "${username}" is now ${status}.`,
       severity: status === 'disconnected' ? 'warning' : 'info',
@@ -709,9 +710,9 @@ function checkMqttClientStatus(username, status) {
 // Called from backup.js's own error handling (scheduled run, manual "Backup now", and the rclone
 // offsite-copy step) — every failure is independently worth its own notification, unlike the
 // status triggers above, so there's no last_state/transition logic here at all.
-function notifyBackupFailed(errorMessage, context) {
-  for (const rule of getRulesByTrigger('backup_failed')) {
-    fireRule(rule, {
+async function notifyBackupFailed(errorMessage, context) {
+  for (const rule of await getRulesByTrigger('backup_failed')) {
+    await fireRule(rule, {
       title: 'Backup failed',
       message: errorMessage,
       severity: 'critical',
