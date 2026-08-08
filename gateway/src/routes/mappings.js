@@ -214,10 +214,12 @@ router.post('/commands/catalog', requirePermission('commands', 'edit'), asyncHan
   if (!Array.isArray(commandsParsed) || !Array.isArray(dataParsed)) {
     return res.status(400).send('Catalog JSON must be an array — nothing was saved.');
   }
-  await db.prepare(
-    `INSERT INTO command_catalog_overrides (id, commands_json, data_json, updated_at) VALUES (1, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET commands_json = excluded.commands_json, data_json = excluded.data_json, updated_at = excluded.updated_at`
-  ).run(JSON.stringify(commandsParsed), JSON.stringify(dataParsed), new Date().toISOString());
+  await db.upsert('command_catalog_overrides', {
+    id: 1,
+    commands_json: JSON.stringify(commandsParsed),
+    data_json: JSON.stringify(dataParsed),
+    updated_at: new Date().toISOString(),
+  }, ['id']);
   res.redirect('/mappings/commands?saved=1');
 }));
 

@@ -5,10 +5,11 @@ const asyncHandler = require('../middleware/asyncHandler');
 const router = express.Router();
 
 router.post('/:sectionKey', asyncHandler(async (req, res) => {
-  await db.prepare(
-    `INSERT INTO user_nav_prefs (user_id, section_key, collapsed) VALUES (?, ?, ?)
-     ON CONFLICT(user_id, section_key) DO UPDATE SET collapsed = excluded.collapsed`
-  ).run(req.session.userId, req.params.sectionKey, req.body.collapsed ? 1 : 0);
+  await db.upsert('user_nav_prefs', {
+    user_id: req.session.userId,
+    section_key: req.params.sectionKey,
+    collapsed: req.body.collapsed ? 1 : 0,
+  }, ['user_id', 'section_key']);
 
   res.json({ ok: true });
 }));

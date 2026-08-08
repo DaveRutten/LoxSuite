@@ -113,25 +113,76 @@ function prepare(sql) {
   return makeStatement(null, sql);
 }
 
-// db.transaction(async (tx) => { ... await tx.prepare(sql).run(...); ... }) — replaces
-// better-sqlite3's synchronous db.transaction(fn); fn() pattern. The one thing every call site
-// converting to this MUST do: use the `tx` passed into the callback for every query inside it, not
-// the outer `db` — see knex.js's own comment on why the SQLite pool is pinned to exactly one
-// connection, which is what turns a missed rebind into an immediate, loud deadlock instead of a
-// silent correctness bug.
-async function transaction(fn) {
-  return knex.transaction((trx) => fn({ prepare: (sql) => makeStatement(trx, sql) }));
-}
-
 // db.insertReturningId(sql, params) — replaces reading `.lastInsertRowid` off a `.run()` result,
 // which was a better-sqlite3-specific property with no Postgres equivalent (needs `RETURNING id`)
 // and a different shape on MySQL (`result.insertId`). SQLite: identical to today, just async and a
 // named result field. Postgres/MySQL branches land here in Phase 4/5 of the db-backend plan —
 // documented here now so every call site that needs it converts to this helper once, up front,
-// rather than needing a second pass later.
-async function insertReturningId(sql, params) {
-  const result = await prepare(sql).run(...(params || []));
+// rather than needing a second pass later. Takes an executor (knex itself, or a transaction's own
+// trx) so transaction() below can expose the exact same helper scoped to `tx` instead of the outer
+// `db` — see its own comment for why using the wrong one matters.
+async function insertReturningIdVia(executor, sql, params) {
+  const result = await makeStatement(executor, sql).run(...(params || []));
   return result.lastInsertRowid;
+}
+async function insertReturningId(sql, params) {
+  return insertReturningIdVia(knex, sql, params);
+}
+
+// db.transaction(async (tx) => { ... await tx.prepare(sql).run(...); ... }) — replaces
+// better-sqlite3's synchronous db.transaction(fn); fn() pattern. The one thing every call site
+// converting to this MUST do: use the `tx` passed into the callback for every query inside it, not
+// the outer `db` — see knex.js's own comment on why the SQLite pool is pinned to exactly one
+// connection, which is what turns a missed rebind into an immediate, loud deadlock instead of a
+// silent correctness bug. `tx.insertReturningId`/`tx.upsert`/`tx.insertIgnore` mirror the
+// top-level db.* helpers of the same name, scoped to this same transaction connection.
+async function transaction(fn) {
+  return knex.transaction((trx) => fn({
+    prepare: (sql) => makeStatement(trx, sql),
+    insertReturningId: (sql, params) => insertReturningIdVia(trx, sql, params),
+    upsert: (table, row, conflictColumns) => upsertVia(trx, table, row, conflictColumns),
+    insertIgnore: (table, row, conflictColumns) => insertIgnoreVia(trx, table, row, conflictColumns),
+  }));
+}
+
+// db.upsert(table, row, conflictColumns) — the query-builder equivalent of a hand-written
+// `INSERT ... ON CONFLICT(...) DO UPDATE SET col = excluded.col, ...` — replaces every such
+// raw-SQL upsert (Phase 3 of the project's own db-backend plan): the exact ON CONFLICT syntax
+// genuinely differs enough across SQLite/Postgres/MySQL (MySQL has no ON CONFLICT at all — it needs
+// `ON DUPLICATE KEY UPDATE`) that Knex's query builder, not raw SQL text, is what actually needs to
+// paper over the difference. `row` sets every column (including the conflict target columns
+// themselves, same as the raw SQL this replaces); every non-conflict-target column in `row` is what
+// gets updated on conflict, matching `DO UPDATE SET col = excluded.col` for each one.
+async function upsertVia(executor, table, row, conflictColumns) {
+  return execTimedBuilder(executor(table).insert(row).onConflict(conflictColumns).merge());
+}
+async function upsert(table, row, conflictColumns) {
+  return upsertVia(knex, table, row, conflictColumns);
+}
+
+// db.insertIgnore(table, row, conflictColumns) — the query-builder equivalent of SQLite's own
+// `INSERT OR IGNORE`. Unlike plain `INSERT OR IGNORE` (which silently no-ops on ANY constraint
+// violation, whichever one it happens to hit), this targets the SPECIFIC conflictColumns — every
+// call site this replaces only ever had one real unique constraint in play to begin with (a
+// composite PRIMARY KEY or a single UNIQUE), so this is behaviorally identical for all of them
+// while also being what Postgres/MySQL both actually require (they have no equivalent of a
+// constraint-agnostic "ignore anything that collides").
+async function insertIgnoreVia(executor, table, row, conflictColumns) {
+  return execTimedBuilder(executor(table).insert(row).onConflict(conflictColumns).ignore());
+}
+async function insertIgnore(table, row, conflictColumns) {
+  return insertIgnoreVia(knex, table, row, conflictColumns);
+}
+
+// Shared timing/slow-query-log wrapper for the two query-builder helpers above — same treatment
+// execTimed() gives every raw-SQL call, just around a Knex query-builder promise (`.toString()`
+// for the logged SQL text) instead of a SQL string this facade was handed directly.
+async function execTimedBuilder(builder) {
+  const start = Date.now();
+  const result = await builder;
+  const duration = Date.now() - start;
+  if (duration >= SLOW_QUERY_MS) logSlowQuery(builder.toString(), duration);
+  return result;
 }
 
 // Direct escape hatch for anything that doesn't fit the get/all/run shape (used sparingly).
@@ -240,4 +291,4 @@ async function close() {
   knex = null;
 }
 
-module.exports = { init, close, prepare, transaction, insertReturningId, raw, getBackend, getKnex, withRawConnection };
+module.exports = { init, close, prepare, transaction, insertReturningId, upsert, insertIgnore, raw, getBackend, getKnex, withRawConnection };

@@ -68,7 +68,11 @@ async function queryLogs({ source, sourceId, filters }) {
     // command_topic/value_from/value_to are only ever populated for the 'loxone_commands' source
     // (see db.js's migrateLogEntriesCommandColumns) — NULL on every other source, so OR'ing them in
     // here is a no-op for the other three Logs tabs and just widens what "Contains" matches on this one.
-    conditions.push('(line LIKE ? OR command_topic LIKE ? OR value_from LIKE ? OR value_to LIKE ?)');
+    // LOWER(...) on both sides (not bare LIKE) — SQLite's own LIKE is case-insensitive for ASCII by
+    // default, but Postgres's isn't (it needs ILIKE, a different operator entirely) — wrapping both
+    // sides in LOWER() matches case-insensitively on every backend identically, so this "Contains"
+    // filter doesn't quietly start being case-sensitive once a search runs against Postgres.
+    conditions.push('(LOWER(line) LIKE LOWER(?) OR LOWER(command_topic) LIKE LOWER(?) OR LOWER(value_from) LIKE LOWER(?) OR LOWER(value_to) LIKE LOWER(?))');
     params.push(`%${filters.q}%`, `%${filters.q}%`, `%${filters.q}%`, `%${filters.q}%`);
   }
 
@@ -120,7 +124,8 @@ async function queryNotificationEvents(filters) {
   if (filters.from) { conditions.push('created_at >= ?'); params.push(filters.from); }
   if (filters.to) { conditions.push('created_at <= ?'); params.push(filters.to); }
   if (filters.q) {
-    conditions.push('(title LIKE ? OR message LIKE ?)');
+    // See queryLogs()'s own comment above on why LOWER(...) wraps both sides instead of a bare LIKE.
+    conditions.push('(LOWER(title) LIKE LOWER(?) OR LOWER(message) LIKE LOWER(?))');
     params.push(`%${filters.q}%`, `%${filters.q}%`);
   }
   if (filters.severity) { conditions.push('severity = ?'); params.push(filters.severity); }
