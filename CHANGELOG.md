@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.2-alpha.1] - 2026-08-09
+
+### Fixed
+- **Loxone Virtual UDP Output commands stopped reaching MQTT entirely** since 0.13.0-alpha.1 —
+  every UDP-transport Loxone → MQTT mapping (Shelly lights, dimmers, relays, RGBW/color, or any
+  other UDP-configured command) silently failed to publish, while the command still showed as
+  "queued" with nothing obviously wrong in the UI. Root cause: one function involved in parsing an
+  incoming UDP command became asynchronous when the database layer was converted to the new async
+  Knex facade (0.13.0-alpha.1's own db-backend work), but the one place that called it was missed —
+  it kept calling the function without waiting for its result, which made every such command throw
+  immediately and vanish into a background log line instead of being applied. HTTP-transport
+  mappings and every other part of the app were unaffected. Found and fixed after a report of Shelly
+  devices no longer responding to Loxone commands; verified with a real UDP command sent through the
+  fixed code path end to end (including an independent MQTT subscriber confirming the correct topic
+  and payload actually arrived) and with new automated regression tests
+  (`test/loxoneUdpServer.test.js`) covering both the RGBW color transform and the plain on/off case.
+- Two related hardening fixes found during the same investigation (neither caused a functional
+  failure on their own, but both let a real error vanish as a generic "unhandled promise rejection"
+  instead of a clear log line): recording an incoming MQTT message's value into monitor history now
+  properly reports a failure instead of swallowing it silently, and every background service started
+  at boot (dynamic-security bootstrap, MQTT log tailing, the MQTT client itself, the monitor/log
+  collectors, live Loxone connections) now logs a clear message if its own startup fails instead of
+  producing an unlabeled warning.
+
 ## [0.13.1-alpha.1] - 2026-08-08
 
 ### Fixed

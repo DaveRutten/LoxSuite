@@ -275,17 +275,25 @@ async function main() {
   app.use('/notifications', requireAuth, notificationCenterRoutes);
   app.get('/help', requireAuth, (req, res) => res.render('help'));
   
-  runBootstrap();
+  // Each of these async worker-starters does its own real setup (an initial DB read/MQTT connect/
+  // history purge/etc.) before settling into a self-perpetuating setInterval loop — none of that
+  // startup work is awaited here (every worker starts concurrently rather than serially blocking
+  // boot), so a .catch() is the only thing standing between a failure during that startup phase and
+  // a bare, hard-to-trace "unhandled promise rejection" warning instead of a clear log line naming
+  // which worker failed (the Phase 1 async conversion made these async in the first place; the sync
+  // functions below them never had this gap since a thrown error there was never a rejected promise
+  // to begin with).
+  runBootstrap().catch((err) => console.error('Dynamic security bootstrap failed:', err.message));
   startHealthchecks();
-  startTailing();
+  startTailing().catch((err) => console.error('Failed to start Mosquitto log tailing:', err.message));
   // Used to self-connect at plain module-load time (see mqttClient.js's own comment on
   // startMqttClient) — now started explicitly here, after db.init(), like every other worker below.
-  mqttClient.startMqttClient();
+  mqttClient.startMqttClient().catch((err) => console.error('Failed to start MQTT client:', err.message));
   startUdpServer();
-  startMonitorCollector();
-  startLogCollector();
+  startMonitorCollector().catch((err) => console.error('Failed to start monitor collector:', err.message));
+  startLogCollector().catch((err) => console.error('Failed to start log collector:', err.message));
   startHardwarePolling();
-  startLiveConnections();
+  startLiveConnections().catch((err) => console.error('Failed to start live Loxone connections:', err.message));
   backup.startScheduler();
   startVersionCheck();
   

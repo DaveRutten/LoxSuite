@@ -1,7 +1,9 @@
 const mqtt = require('mqtt');
 const db = require('./db');
 const { forwardToLoxone } = require('./loxone');
-const { recordMqttValue } = require('./monitorCollector');
+// Namespace require (not destructured) — see loxoneUdpServer.js's own comment on the same pattern:
+// lets test/mqttClient.test.js stub monitorCollector.recordMqttValue without a real DB write.
+const monitorCollector = require('./monitorCollector');
 const { decrypt } = require('./secretCrypto');
 
 const MAX_LOG = 200;
@@ -36,7 +38,11 @@ function recordMessage(topic, payload) {
   messageLog.unshift({ topic, payload: value, receivedAt: now });
   if (messageLog.length > MAX_LOG) messageLog.length = MAX_LOG;
 
-  recordMqttValue(topic, value);
+  // Fire-and-forget by design (recordMessage itself stays a plain sync function, called from the
+  // hot per-message path) — but recordMqttValue is async (a monitor_history DB write), and an
+  // unhandled rejection here would otherwise vanish as a generic Node warning instead of a clear
+  // log line if that write ever fails.
+  monitorCollector.recordMqttValue(topic, value).catch((err) => console.error(`Failed to record monitor value for "${topic}":`, err.message));
 
   const existing = topicOverview.get(topic);
   topicOverview.set(topic, {
@@ -175,4 +181,5 @@ module.exports = {
   getTopicOverview,
   clearTopicOverview,
   getStats,
+  recordMessage,
 };
