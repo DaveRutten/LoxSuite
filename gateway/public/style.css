@@ -3431,6 +3431,21 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
 }
 .panel-value-list[data-layout="row"] .panel-value-row .value { text-align: left; }
 
+/* Hide name (panel-grid.ejs's config.hideLabel): with no label crowding it, the value becomes the
+   whole point of the row instead of one half of a label/value pair, so it's centered and blown up
+   to a "hero" size instead of keeping the compact right-aligned number sized for sitting next to
+   text. clamp() ties it to the row's own width (cqw) rather than a fixed rem, so a single big
+   value panel and a several-values-stacked one don't both get the exact same font size regardless
+   of how much room each value row actually has. */
+.panel-value-list-no-label { container-type: inline-size; }
+.panel-value-list-no-label .panel-value-row { justify-content: center; text-align: center; }
+.panel-value-list-no-label .panel-value-row .value {
+  text-align: center;
+  font-size: clamp(1.2rem, 14cqw, 3rem);
+}
+.panel-value-list-no-label[data-layout="row"] .panel-value-row { align-items: center; }
+.panel-value-list-no-label[data-layout="row"] .panel-value-row .value { text-align: center; }
+
 /* ---- Gauge / threshold / stat-delta panels ---- */
 .threshold-wrap, .stat-delta {
   display: flex;
@@ -3653,11 +3668,11 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
 .state-bar-panel {
   display: grid;
   grid-template-columns: max-content 1fr;
-  /* minmax floor must match .state-bar-track's own STATE_BAR_ROW_MIN_PX in panel-grid.ejs — that's
-     the true resize-floor minimum (one row this thin is still readable), the 1fr on top is what
-     lets a row grow into whatever extra height the panel actually has instead of leaving it as
-     dead space below a fixed-height bar (see .state-bar-track's height:100% below). With only one
-     or two rows this means they thicken to fill the panel; with enough rows to already exceed the
+  /* The 1.3rem floor must match STATE_BAR_ROW_MIN_PX in panel-grid.ejs — that's the true
+     resize-floor minimum (one row this thin is still readable). The 1fr on top of it is what lets
+     a row grow into whatever extra height the panel actually has instead of leaving it as dead
+     space below a fixed-height bar (see .state-bar-track's height:100% below). With only one or
+     two rows this means they thicken to fill the panel; with enough rows to already exceed the
      available height, 1fr has nothing left to hand out and every row just sits at this floor,
      same as a plain `auto` track would. */
   grid-auto-rows: minmax(1.3rem, 1fr);

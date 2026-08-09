@@ -323,6 +323,7 @@ function buildConfig(panelType, body) {
     return {
       layout: body.value_layout === 'row' ? 'row' : 'stacked',
       unit: fieldStr(body.unit_value),
+      hideLabel: !!body.hide_value_label,
       valueLabels: parseValueMappings(fieldStr(body.value_labels)),
       thresholds: parseThresholdLadder(fieldStr(body.value_thresholds)),
       series: parseValueSeriesConfig(body.value_series),

@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.4-alpha.1] - 2026-08-09
+
+### Added
+- A **Current value** panel now has a "Hide name" toggle — drops the monitor label from every row
+  and blows the value itself up to a big centered "hero" size instead, for a panel whose title
+  already says what it's showing.
+
 ## [0.13.3-alpha.1] - 2026-08-09
 
 ### Added

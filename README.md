@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.13.3-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.13.4-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -236,7 +236,9 @@ Create any number of named dashboards, each holding **panels**:
 - **Table** — one monitor's raw values (single-monitor by design — a true multi-series comparison
   table would need aligning independently-sampled timestamps, which a chart panel already covers).
 - **Current value** — a compact tile listing the latest reading for one or more monitors, stacked or
-  in a row, each with its own optional rename/unit/scale/decimals override.
+  in a row, each with its own optional rename/unit/scale/decimals override. An optional "Hide name"
+  toggle drops the monitor label and blows the value itself up to a big centered size instead, for
+  a panel whose title already says what it's showing.
 - **Gauge** — a fill-bar meter against a configurable min/max range, with an optional unit.
 - **Stat with change** — current value plus the change vs. the start of the panel's time range, with
   an up/down arrow; optionally colored once you specify whether higher or lower is "better".
