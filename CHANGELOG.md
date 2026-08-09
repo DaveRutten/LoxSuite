@@ -2,6 +2,42 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.3-alpha.1] - 2026-08-09
+
+### Added
+- The Loxone → MQTT mapping page's Test dialog now has a proper color picker for a Shelly
+  RGBW/White mapping's "RGB" and "RGB (Analog input)" modes, instead of typing a raw HSV/packed
+  value by hand — pick a color (or one of several quick-pick palettes) and it's converted to
+  exactly the value Loxone itself would send, verified end to end against the real transform.
+  - Three new color palettes — Vivid, Pastel, and Muted — join the existing default palette
+    everywhere a color picker appears in the app (thresholds, value mappings, annotations, chart
+    series, and this new Test dialog), not just here.
+  - New "Dimmer (0-100%)" value transform (behaves identically to plain pass-through — it only
+    changes what the Test dialog shows) gets a 0-100% slider in the Test dialog instead of a bare
+    text box; the same slider is used for a Shelly RGBW/White mapping's "White" mode.
+  - Both the color picker and the slider have a genuine Off/On toggle — switching off remembers
+    the color or brightness it was on, and switching back on restores it exactly, rather than
+    leaving you to re-pick it.
+  - A "Paste JSON instead" option on both lets you send an exact payload verbatim when you need to
+    test something the picker itself can't produce.
+
+### Fixed
+- Several layout issues in the Loxone → MQTT mapping table and its Test dialog: the
+  Connection info column's content wasn't vertically centered in its row, the Test dialog could
+  show an unwanted vertical scrollbar, its value picker and Send/Close buttons were cramped onto
+  one wrapping line, the Off button's position shifted left and right as the value text next to it
+  changed length, and that same value text wasn't vertically aligned with the Off button — all
+  traced back to two related causes: a shared `.hint` text-style class also carrying page-paragraph
+  margins that made no sense reused inside a table cell or a dialog, and simply not giving the
+  dialog and its color-picker popover enough room by default.
+- A slider (e.g. the new dimmer/white one above) now uses this app's own green accent color instead
+  of the browser's default blue, matching every checkbox and radio button already.
+- A State panel's bar(s) stayed a fixed, thin height regardless of how tall the panel itself was
+  resized, leaving dead space between the bar and the panel's footer instead of using it — the
+  bar(s) now stretch to fill whatever height the panel has, and the panel's own drag-resize floor
+  shrank to match (previously computed from that fixed height, which no longer means anything now
+  that it stretches).
+
 ## [0.13.2-alpha.1] - 2026-08-09
 
 ### Fixed
@@ -45,7 +81,7 @@ All notable changes to this project are documented in this file.
   nothing changes for existing installs unless you opt in. Set `DB_BACKEND=postgres` or
   `DB_BACKEND=mysql` and either `DATABASE_URL` or the discrete `DB_HOST`/`DB_PORT`/`DB_NAME`/
   `DB_USER`/`DB_PASSWORD` env vars — see the commented-out example in `docker-compose.yml`/
-  `.env.example` and the README's own Data and persistence section. Administration &rarr; General
+  `.env.example` and the README's own Data and persistence section. Administration → General
   shows which backend is active.
 - **Transfer tool** for moving an existing SQLite install's data to Postgres or MySQL/MariaDB:
   `docker compose exec loxsuite node src/db/transfer.js --from-sqlite /data/gateway.db --to
@@ -76,10 +112,10 @@ All notable changes to this project are documented in this file.
   change alone fixes.
 
 ### Changed
-- The MQTT &rarr; Loxone and Loxone &rarr; MQTT mapping tables had a small filter box under every
+- The MQTT → Loxone and Loxone → MQTT mapping tables had a small filter box under every
   filterable column's own header — replaced with the one search box each table had before the
   Tabulator conversion (0.12.0-alpha.1), now matching Topic/Miniserver/Transport/Target/Transform
-  (plus Token on Loxone &rarr; MQTT) all at once instead of one column at a time.
+  (plus Token on Loxone → MQTT) all at once instead of one column at a time.
 
 ## [0.12.1-alpha.1] - 2026-08-07
 
@@ -97,7 +133,7 @@ All notable changes to this project are documented in this file.
 ### Changed
 - Miniservers (including the same status table embedded on the shared home Dashboard),
   Transformations, the two Loxone/MQTT translation-table lookup pages, the admin Backup page, and
-  both Mappings pages (MQTT &rarr; Loxone / Loxone &rarr; MQTT) now run on a shared table engine
+  both Mappings pages (MQTT → Loxone / Loxone → MQTT) now run on a shared table engine
   (Tabulator.js) instead of the old hand-rolled one — the same column show/hide/resize/reorder
   controls every table already had, now consistent and more reliable across all of them: resizing
   one column no longer leaves a stray gap on the right once the others no longer add up to the
@@ -843,7 +879,7 @@ All notable changes to this project are documented in this file.
 - **Command catalog**: 18 named Shelly Gen1 device types, Shelly Gen2/Gen3 (both the full RPC form
   and the simpler "command/switch:N" form), a matching telemetry catalog ("Common data"), JSON/XML
   catalog import & export, and a native Shelly RGBW/White/Tunable-white value transform for
-  Loxone &rarr; MQTT mappings.
+  Loxone → MQTT mappings.
 - **Monitor**: history table grouped by day/hour instead of one unbounded list; hover tooltips with
   time + value on the chart.
 - Miniserver firmware version, shown alongside the existing Online/Offline status.

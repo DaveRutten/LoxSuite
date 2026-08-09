@@ -59,6 +59,16 @@
           <label>Value transform</label>
           <select name="value_transform" id="add-value-transform-select">
             <option value="passthrough">Pass through unchanged</option>
+            <%
+              // Behaves exactly like "Pass through unchanged" server-side (loxone.js's own
+              // applyLoxoneToMqttTransform only special-cases translation_table/shelly_rgbw, every
+              // other value_transform — this included — publishes the raw 0-100 Loxone sends
+              // straight through) — the only thing choosing this over plain passthrough actually
+              // changes is that the Test dialog then shows a 0-100% slider instead of a bare text
+              // box (see mappings-loxone-to-mqtt-tabulator.js's own buildWhitePicker), since nothing
+              // about a mapping otherwise says "this one happens to be a dimmer".
+            %>
+            <option value="dimmer">Dimmer (0-100%)</option>
             <option value="translation_table">Translation table (manage after adding)</option>
             <option value="shelly_rgbw">Shelly RGBW/White (color/N/set JSON)</option>
           </select>
@@ -105,20 +115,26 @@
   </div>
 </div>
 
-<dialog id="l2m-test-dialog" class="update-changelog-dialog">
+<dialog id="l2m-test-dialog" class="update-changelog-dialog l2m-test-dialog">
   <h2 id="l2m-test-dialog-title">Test</h2>
   <p class="hint" style="margin-top:0;">
     Publishes a value on this mapping to check the device reacts, without needing Loxone at all —
     any value transform (e.g. a translation table) is applied exactly as it would be for a real call.
   </p>
-  <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
-    <label style="margin:0; font-size:0.78rem;">Value to send:</label>
-    <div id="l2m-test-value-wrap"></div>
-    <button type="button" id="l2m-test-send-btn" class="btn-test" style="margin-left:auto;"><%- icon('link') %> Send</button>
-  </div>
-  <span class="hint" id="l2m-test-result" style="display:block; margin-top:0.6rem;"></span>
-  <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
+  <%
+    // Its own row (label above, picker below) rather than everything crammed onto one wrapping
+    // flex line — the color picker's own swatch+readout+Off button is already a small row of its
+    // own (see mappings-loxone-to-mqtt-tabulator.js's buildColorPicker), so stacking THIS on top of
+    // that instead of beside it keeps every value-picker variant (plain text, translation dropdown,
+    // color picker) predictably left-aligned under the same label instead of reflowing differently
+    // depending on how wide its own content happens to be.
+  %>
+  <label style="display:block; margin:0 0 0.4rem; font-size:0.78rem;">Value to send:</label>
+  <div id="l2m-test-value-wrap"></div>
+  <span class="hint" id="l2m-test-result" style="display:block; margin-top:0.7rem;"></span>
+  <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:0.9rem;">
     <button type="button" class="btn-soft" id="l2m-test-dialog-close">Close</button>
+    <button type="button" id="l2m-test-send-btn" class="btn-test"><%- icon('link') %> Send</button>
   </div>
 </dialog>
 
@@ -128,6 +144,7 @@
 <script src="/vendor/floating-ui.core.umd.min.js"></script>
 <script src="/vendor/floating-ui.dom.umd.min.js"></script>
 <script src="/tabulator-table.js"></script>
+<script src="/color-picker.js"></script>
 <script src="/mappings-loxone-to-mqtt-tabulator.js"></script>
 
 <script>

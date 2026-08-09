@@ -127,6 +127,16 @@
 }
 .tabulator-cell.tabulator-row-header { background: var(--surface-alt) !important; }
 
+/* .hint (see style.css) carries a page-paragraph spacing convention — a negative top margin to
+   pull it snug under whatever's above it, a 1.25rem bottom margin to separate it from whatever
+   follows — that makes no sense once several Tabulator formatters reuse the class purely for its
+   color/font-size (e.g. mappings-loxone-to-mqtt-tabulator.js's connectionInfoFormatter and its own
+   UDP-message sub-row). Inside a cell, that leftover bottom margin reads as a large empty gap below
+   otherwise-short content — exactly the "not aligned nicely" look this resets. Doesn't touch an
+   explicit inline margin a caller sets afterward (e.g. that same file's `msgRow.style.marginTop =
+   '0.3rem'`) — inline styles still win over this class rule. */
+.tabulator-cell .hint { margin: 0; }
+
 .tabulator-data-tree-branch { border-color: var(--border) !important; }
 .tabulator-data-tree-control {
   border: 1px solid var(--border) !important;

@@ -83,6 +83,252 @@
   var testResult = document.getElementById('l2m-test-result');
   document.getElementById('l2m-test-dialog-close').addEventListener('click', function () { testDialog.close(); });
 
+  // Inverse of loxone.js's own loxoneHsvToRgb (H 0-359, S/V 0-100) — standard RGB->HSV conversion,
+  // kept in lockstep with that function's own hue-sextant math so a color picked here round-trips
+  // back through the real transform on the server to (rounding aside) the same RGB the swatch shows.
+  function rgbToLoxoneHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    var h = 0;
+    if (d !== 0) {
+      if (max === r) h = ((g - b) / d) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+      if (h < 0) h += 360;
+    }
+    var s = max === 0 ? 0 : d / max;
+    return { h: Math.round(h), s: Math.round(s * 100), v: Math.round(max * 100) };
+  }
+
+  // Inverse of loxone.js's own decodePackedRgbPercent (red% + green%*1000 + blue%*1000000, each
+  // channel 0-100) — Loxone's "Analoge ingang RGB" packed format, a completely different
+  // convention from the H,S,V one above (see that function's own comment).
+  function rgbToPackedPercent(r, g, b) {
+    var toPct = function (c) { return Math.round(c / 255 * 100); };
+    return toPct(b) * 1000000 + toPct(g) * 1000 + toPct(r);
+  }
+
+  function hexToRgb(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+
+  // The same shared color-picker control every threshold/value-mapping/annotation/chart-series row
+  // already uses (window.LoxColorPicker, see color-picker.js) — a swatch button opening a palette
+  // grid plus a custom-hex fallback — rather than a bare native <input type="color">, for the same
+  // look everywhere else in the app already has one. Its own hidden `.color-picker-value` input
+  // only ever carries a hex color though; a second, separate hidden input here carries the actual
+  // raw value Loxone's own HSV or packed-RGB convention needs (what testSendBtn.onclick posts),
+  // recomputed from that hex on every change — a live readout shows exactly what will be sent, same
+  // as typing it into the plain text input by hand would show once typed.
+  // Escape hatch shared by every shelly_rgbw picker variant below: testing an exact payload the
+  // picker itself can't produce (a shape the real device also accepts but this transform never
+  // generates, e.g. extra fields, or checking how the device reacts to a deliberately malformed
+  // body) — sent completely as typed, with no HSV/packed-percent/brightness conversion at all.
+  // Safe to reuse the exact same test endpoint for this: applyLoxoneToMqttTransform's own HSV/
+  // packed-percent/white parsing already falls back to publishing the raw value verbatim, unchanged,
+  // whenever it can't parse as its own expected shape (see applyShellyRgbwTransform in loxone.js) —
+  // real JSON always fails that parse (`{`/`"`/`:` are never valid numbers), so it always takes that
+  // fallback path rather than being reinterpreted as something else. primaryRow is hidden while JSON
+  // mode is active; onBackToPrimary re-derives hiddenValue/readout from the primary control's own
+  // current state when switching back off it.
+  function attachJsonToggle(outer, primaryRow, hiddenValue, readout, onBackToPrimary) {
+    var jsonToggle = document.createElement('button');
+    jsonToggle.type = 'button';
+    jsonToggle.style.cssText = 'font-size:0.78rem; background:none; border:none; padding:0; margin-top:0.5rem; color:var(--accent); cursor:pointer; text-decoration:underline;';
+    jsonToggle.textContent = 'Paste JSON instead';
+    outer.appendChild(jsonToggle);
+
+    var jsonRow = document.createElement('div');
+    jsonRow.hidden = true;
+    jsonRow.style.cssText = 'margin-top:0.5rem;';
+    var jsonTextarea = document.createElement('textarea');
+    jsonTextarea.rows = 3;
+    jsonTextarea.placeholder = '{"red":255,"green":0,"blue":128,"turn":"on"}';
+    jsonTextarea.style.cssText = 'width:100%; max-width:28rem; font-family:"SF Mono", Consolas, monospace; font-size:0.82rem; padding:0.5rem 0.6rem; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text);';
+    jsonRow.appendChild(jsonTextarea);
+    var jsonHint = document.createElement('p');
+    jsonHint.className = 'hint';
+    jsonHint.style.marginTop = '0.3rem';
+    jsonHint.textContent = 'Sent exactly as typed — not run through the transform at all.';
+    jsonRow.appendChild(jsonHint);
+    outer.appendChild(jsonRow);
+
+    function updateFromTextarea() {
+      var v = jsonTextarea.value.trim();
+      hiddenValue.value = v;
+      readout.textContent = v ? 'sends "' + v + '"' : '';
+    }
+
+    var inJsonMode = false;
+    jsonToggle.addEventListener('click', function () {
+      inJsonMode = !inJsonMode;
+      primaryRow.hidden = inJsonMode;
+      jsonRow.hidden = !inJsonMode;
+      jsonToggle.textContent = inJsonMode ? 'Back to picker' : 'Paste JSON instead';
+      if (inJsonMode) { updateFromTextarea(); jsonTextarea.focus(); } else { onBackToPrimary(); }
+    });
+    jsonTextarea.addEventListener('input', updateFromTextarea);
+  }
+
+  function buildColorPicker(mode) {
+    var outer = document.createElement('div');
+
+    var pickerRow = document.createElement('div');
+    pickerRow.style.cssText = 'display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;';
+    outer.appendChild(pickerRow);
+
+    var pickerHost = document.createElement('div');
+    pickerHost.innerHTML = window.LoxColorPicker.buildPickerHtml('#ff0000', 'l2m-test-color-hex');
+    var pickerEl = pickerHost.firstElementChild;
+    pickerRow.appendChild(pickerEl);
+    var colorValueInput = pickerEl.querySelector('.color-picker-value');
+    // Opens on LoxColorPicker's own "Vivid" palette by default here (rather than "Default") —
+    // testing an RGBW light wants obviously different, easy-to-tell-apart colors to click through,
+    // which is exactly what that palette is for (see color-picker.js's own comment); the other
+    // palettes stay the default everywhere else, unaffected by this. renderGrid() (color-picker.js,
+    // not exported) reads this select's live value fresh each time the popover opens, so setting it
+    // here is enough — no need to also fire a synthetic change event.
+    pickerEl.querySelector('.color-picker-palette-select').value = 'vivid';
+
+    // Off button BEFORE the readout, not after — the readout's own text length changes with every
+    // color (e.g. `sends "331,97,40"` vs `sends "0" (off)`), which used to shift the Off button
+    // left/right along with it since it sat right after in the same flex row. Its position now only
+    // depends on the swatch's own fixed width, never on how long the readout text next to it is.
+    var offBtn = document.createElement('button');
+    offBtn.type = 'button';
+    offBtn.className = 'btn-soft';
+    offBtn.textContent = 'Off';
+    pickerRow.appendChild(offBtn);
+
+    var readout = document.createElement('code');
+    readout.className = 'hint';
+    pickerRow.appendChild(readout);
+
+    // A plain, hidden <input> is what testSendBtn.onclick actually reads (see its own
+    // `valueInput.value` below) — keeps that one code path working unchanged for every value
+    // picker variant (plain text, translation dropdown, color picker, or raw JSON) instead of
+    // special-casing it.
+    var hiddenValue = document.createElement('input');
+    hiddenValue.type = 'hidden';
+    outer.appendChild(hiddenValue);
+
+    // Off/On is a genuine toggle, not a one-way "turn it off" button: clicking it while showing a
+    // color remembers that color and switches to Off; clicking it again while off restores exactly
+    // that same color instead of leaving you to re-pick it from scratch. Picking a NEW color while
+    // off (palette grid, native picker, hex field) exits the off state on its own too, same as
+    // physically turning a dimmer's knob does more than flipping its switch.
+    var isOff = false;
+    var lastActiveHex = colorValueInput.value;
+
+    function applyHex(hex) {
+      isOff = false;
+      offBtn.textContent = 'Off';
+      lastActiveHex = hex;
+      var rgb = hexToRgb(hex);
+      var raw = mode === 'rgb-percent'
+        ? String(rgbToPackedPercent(rgb.r, rgb.g, rgb.b))
+        : (function () { var hsv = rgbToLoxoneHsv(rgb.r, rgb.g, rgb.b); return hsv.h + ',' + hsv.s + ',' + hsv.v; })();
+      hiddenValue.value = raw;
+      readout.textContent = 'sends "' + raw + '"';
+    }
+
+    // color-picker.js dispatches this on the value input for every kind of pick (palette-grid
+    // click, the native picker while dragging, or typing a hex) — one listener covers all three.
+    colorValueInput.addEventListener('change', function () { applyHex(colorValueInput.value); });
+    offBtn.addEventListener('click', function () {
+      if (isOff) {
+        applyHex(lastActiveHex);
+        return;
+      }
+      isOff = true;
+      offBtn.textContent = 'On';
+      // Bare "0" (no comma) is applyShellyRgbwTransform's own dedicated all-channels-off shorthand
+      // for "rgb" mode — NOT hue 0 (pure red) — see that function's own comment. rgb-percent has no
+      // such shorthand; 0 there decodes as red%=0 (still valid, still off since every channel's 0).
+      hiddenValue.value = '0';
+      readout.textContent = 'sends "0" (off)';
+    });
+
+    attachJsonToggle(outer, pickerRow, hiddenValue, readout, function () { applyHex(colorValueInput.value); });
+    applyHex(colorValueInput.value);
+
+    return { element: outer, input: hiddenValue };
+  }
+
+  // shelly_rgbw's "white" sub-mode: Loxone sends a plain 0-100 brightness number (see
+  // applyShellyRgbwTransform's own 'white' branch in loxone.js) — no color to pick, just how bright,
+  // so a slider fits this shape better than the color popover the "rgb"/"rgb-percent" modes get.
+  function buildWhitePicker() {
+    var outer = document.createElement('div');
+
+    var sliderRow = document.createElement('div');
+    sliderRow.style.cssText = 'display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;';
+    outer.appendChild(sliderRow);
+
+    var slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.value = '100';
+    slider.style.width = '10rem';
+    sliderRow.appendChild(slider);
+
+    // Off button BEFORE the readout, not after — same reasoning as buildColorPicker's own Off
+    // button: the readout's own text length changes with every value (e.g. `100% — sends "100"` vs
+    // `0% — sends "0" (off)`), which used to shift the Off button along with it. Its position now
+    // only depends on the slider's own fixed width, never on the readout text next to it.
+    var offBtn = document.createElement('button');
+    offBtn.type = 'button';
+    offBtn.className = 'btn-soft';
+    offBtn.textContent = 'Off';
+    sliderRow.appendChild(offBtn);
+
+    var readout = document.createElement('code');
+    readout.className = 'hint';
+    sliderRow.appendChild(readout);
+
+    var hiddenValue = document.createElement('input');
+    hiddenValue.type = 'hidden';
+    outer.appendChild(hiddenValue);
+
+    // Off/On is a genuine toggle, not a one-way "turn it off" button — same reasoning as
+    // buildColorPicker's own Off button: clicking it while at some brightness remembers that level
+    // and switches to Off; clicking it again while off restores exactly that same level instead of
+    // leaving you to drag the slider back up from scratch. Dragging the slider itself (to any value,
+    // 0 included) exits the off state on its own too.
+    var isOff = false;
+    var lastActivePct = Number(slider.value);
+
+    function applyPct(pct) {
+      isOff = false;
+      offBtn.textContent = 'Off';
+      lastActivePct = pct;
+      hiddenValue.value = String(pct);
+      readout.textContent = pct + '% — sends "' + pct + '"';
+    }
+
+    slider.addEventListener('input', function () { applyPct(Number(slider.value)); });
+    offBtn.addEventListener('click', function () {
+      if (isOff) {
+        slider.value = String(lastActivePct);
+        applyPct(lastActivePct);
+        return;
+      }
+      isOff = true;
+      offBtn.textContent = 'On';
+      slider.value = '0';
+      hiddenValue.value = '0';
+      readout.textContent = '0% — sends "0" (off)';
+    });
+
+    attachJsonToggle(outer, sliderRow, hiddenValue, readout, function () { applyPct(Number(slider.value)); });
+    applyPct(Number(slider.value));
+
+    return { element: outer, input: hiddenValue };
+  }
+
   function openTestDialog(v) {
     testTitle.textContent = 'Test — ' + v.mqttTopic;
     testResult.textContent = '';
@@ -90,7 +336,15 @@
     testValueWrap.innerHTML = '';
 
     var valueInput;
-    if (v.translationValues && v.translationValues.length > 0) {
+    if (v.valueTransform === 'shelly_rgbw' && (v.transformArg === 'rgb' || v.transformArg === 'rgb-percent')) {
+      var picker = buildColorPicker(v.transformArg);
+      testValueWrap.appendChild(picker.element);
+      valueInput = picker.input;
+    } else if (v.valueTransform === 'dimmer' || (v.valueTransform === 'shelly_rgbw' && v.transformArg === 'white')) {
+      var whitePicker = buildWhitePicker();
+      testValueWrap.appendChild(whitePicker.element);
+      valueInput = whitePicker.input;
+    } else if (v.translationValues && v.translationValues.length > 0) {
       valueInput = document.createElement('select');
       valueInput.style.maxWidth = '12rem';
       v.translationValues.forEach(function (val) {

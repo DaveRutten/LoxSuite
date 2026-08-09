@@ -2022,6 +2022,7 @@
     var ROW_UNIT_PX = 70; // must match GridStack's own cellHeight in the init options above
     var GAP_PX = 8; // must match GridStack's own margin in the init options above
     var MIN_ROW_SPAN = 2, MAX_ROW_SPAN = 200, MIN_COL_SPAN = 2, MAX_COL_SPAN = 12;
+    var STATE_BAR_ROW_MIN_PX = 20.8; // must match .state-bar-track's grid-auto-rows minmax() floor (1.3rem) in style.css
     function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
 
     // Every direct child that's actually part of this panel's own body, everything else being
@@ -2129,8 +2130,13 @@
           if (content.classList.contains('chart-wrap')) minContentPx = 180; // a chart needs real plot room even at its smallest, not just its legend/axes
           else if (content.classList.contains('panel-table-scroll')) minContentPx = 60; // header row + one data row
           else if (content.classList.contains('state-bar-panel')) {
-            var track = content.querySelector('.state-bar-track');
-            minContentPx = track ? track.getBoundingClientRect().height + 10 : 40; // one bar row; the rest scrolls
+            // A fixed constant, not a measurement: .state-bar-track now stretches to fill
+            // whatever row height the grid hands it (see style.css), so its OWN
+            // getBoundingClientRect().height is just whatever height the panel already happens to
+            // be — the same near-tautological trap contentMinRowSpan's own comment above flags for
+            // charts. STATE_BAR_ROW_MIN_PX is the actual floor (one bar row, still readable; the
+            // rest scrolls) that height is allowed to shrink to.
+            minContentPx = STATE_BAR_ROW_MIN_PX + 10;
           }
         }
         // +16: a fixed safety margin, not just rounding slop — a footer/head measured a frame or

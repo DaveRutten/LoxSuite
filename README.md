@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.13.2-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.13.3-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -18,8 +18,8 @@ It provides:
 
 - An MQTT broker (Mosquitto), with user/role management built into the web UI.
 - A bidirectional bridge between MQTT and one or more Loxone Miniservers:
-  - **MQTT &rarr; Loxone**: incoming MQTT messages call a Virtual Input on a Miniserver, over HTTP or UDP.
-  - **Loxone &rarr; MQTT**: a Virtual Output on a Miniserver calls back into the gateway (HTTP or UDP), which
+  - **MQTT → Loxone**: incoming MQTT messages call a Virtual Input on a Miniserver, over HTTP or UDP.
+  - **Loxone → MQTT**: a Virtual Output on a Miniserver calls back into the gateway (HTTP or UDP), which
     publishes the value to MQTT.
 - **Monitor**: track any MQTT topic or Loxone value over time, with charts, tables, and CSV export.
 - **Logs**: live + persisted view of the Mosquitto broker log and each Miniserver's own log.
@@ -120,8 +120,8 @@ same single container, same env vars as above. It pulls a pre-built image from
 on every push to `main` and on version tags — that workflow needs to have run at least once
 before the template can pull anything.
 
-To install it before it's listed in Community Applications: Unraid's **Docker** tab &rarr;
-**Add Container** &rarr; **Template repositories** &rarr; add this file's raw GitHub URL (or copy
+To install it before it's listed in Community Applications: Unraid's **Docker** tab →
+**Add Container** → **Template repositories** → add this file's raw GitHub URL (or copy
 it directly into `/boot/config/plugins/dockerMan/templates-user/` on the Unraid box). Fill in the
 same passwords/secrets the `.env` steps above ask for, and set the three path mappings to real
 appdata locations — the config one especially, since MQTT Users/Roles management and MQTT-config
@@ -332,7 +332,7 @@ remotely without switching configuration.
 There is no Loxone-sourced autocomplete for Virtual Input names: they are pure programming blocks
 in Loxone Config and don't appear anywhere in a Miniserver's structure export (`LoxAPP3.json`) —
 confirmed against a real Miniserver with 365 controls and zero Virtual Inputs in the export. Type
-the name exactly as configured in Loxone Config — the field on the MQTT &rarr; Loxone mapping form
+the name exactly as configured in Loxone Config — the field on the MQTT → Loxone mapping form
 does suggest names you've already used in other mappings, which covers the common case of one
 Virtual Input receiving several different mapped commands, but there's nothing to suggest for a
 name you haven't typed anywhere yet.
@@ -378,7 +378,7 @@ later — there's no per-device setup. The 3 buttons next to the search bar crea
 toggle (every click after) a default "Any Miniserver" alert rule for a weak battery, a device
 firmware change, or a device going offline, each with its own configurable severity (fine-tune
 scoping, severity, or channels on Notifications). Every transition is also written to the Logs
-&rarr; Loxone Miniservers log unconditionally, whether or not an alert rule exists for it — logging
+→ Loxone Miniservers log unconditionally, whether or not an alert rule exists for it — logging
 and alerting are independent.
 
 <picture>
@@ -388,20 +388,20 @@ and alerting are independent.
 
 *(Real data from a live installation.)*
 
-### MQTT &rarr; Loxone
+### MQTT → Loxone
 
 Subscribe to a topic (wildcards `+`/`#` supported) and forward each message to a Virtual Input on
 a chosen Miniserver, via HTTP (`/dev/sps/io/<target>/<value>`) or UDP. Available value transforms:
 
 - **Pass through unchanged**
-- **on/off &rarr; 1/0**
+- **on/off → 1/0**
 - **JSON path** — pull one field out of a JSON payload
-- **Translation table** — a free-form lookup you manage per mapping (e.g. `False &rarr; 0`, `open &rarr; 1`)
+- **Translation table** — a free-form lookup you manage per mapping (e.g. `False → 0`, `open → 1`)
 
 An optional **minimum interval (ms)** throttles a mapping so a fast-changing sensor can't flood the
 Miniserver — messages arriving sooner than the interval since the last forwarded one are dropped.
 
-### Loxone &rarr; MQTT
+### Loxone → MQTT
 
 Each mapping gets a random token and publishes to one MQTT topic.
 
@@ -418,7 +418,11 @@ the `on`/`off` text a device expects.
 
 Every mapping also has a **Test** action: publish a value straight to its topic without touching
 Loxone at all, running through the same transform a real call would use — useful for confirming a
-device reacts before wiring up the actual Virtual Output.
+device reacts before wiring up the actual Virtual Output. A Shelly RGBW/White mapping's color modes
+get a real color picker instead of a raw HSV/packed value to type by hand (with a few quick-pick
+palettes to choose from); its White mode and the **Dimmer (0-100%)** value transform both get a
+0-100% slider. Both have an Off/On toggle that remembers and restores whatever it was on, and a
+"Paste JSON instead" option for sending an exact payload verbatim.
 
 ### Common commands & Common data
 
@@ -443,7 +447,7 @@ message in the gateway's log naming the file and the problem, rather than failin
 `device-templates/heatmeister.json` and `heatmeister-ha.json` (see below) are real, working examples
 of the format, not placeholders.
 
-A Loxone &rarr; MQTT mapping also has a **Shelly RGBW/White/Tunable-white** value transform, which
+A Loxone → MQTT mapping also has a **Shelly RGBW/White/Tunable-white** value transform, which
 converts Loxone's own RGB ("H,S,V") or Lumitech tunable-white ("brightness,kelvin") output format
 into the JSON payload a Shelly RGBW2/Bulb/Duo actually expects — built in, no separate UDP
 transformer plugin needed.
@@ -472,7 +476,7 @@ in-memory only (cleared on a gateway restart):
   and previous value, a message count (abbreviated past 1000 — `1.2K`, `3.4M` — for a broker that's
   been running for months, full number on hover), and a ready-to-copy **Command Recognition**
   string (`MQTT:\i<topic>=\i\v`) for a Loxone Virtual UDP Input. **Map** jumps to a pre-filled MQTT
-  &rarr; Loxone mapping, **Widget** pins the value on the Dashboard.
+  → Loxone mapping, **Widget** pins the value on the Dashboard.
 - **Connected Clients** — which MQTT clients are connected or have been, split into a **Devices**
   tab and a **LoxSuite itself** tab (the gateway's own persistent connection, its one-shot
   dynamic-security bootstrap, and any ad-hoc Test button use — each with a stable `loxsuite-...`
@@ -530,7 +534,7 @@ so this can be managed live from the UI. Change a device's role right in the tab
 password without recreating the account. The gateway's own account (`gateway` by default) can't be
 edited or deleted here, since that would lock the gateway itself out of the broker.
 
-With **Per-device MQTT roles** turned on (Settings &rarr; MQTT Broker, off by default), the Add form
+With **Per-device MQTT roles** turned on (Settings → MQTT Broker, off by default), the Add form
 gains an optional **Device topic prefix** field — filling it in (e.g. `shellies/shellydimmer-Toilet`)
 creates (or reuses) a role scoped to just `<prefix>/#` and assigns that instead of the shared
 `client` role, so a compromised device credential can't read or write topics belonging to any other
@@ -558,7 +562,7 @@ changes, ordered so a failed add never leaves a role with neither the old nor th
   clients/dashboards that can't open a raw TCP socket. Only written into a genuinely fresh
   `mosquitto.conf` (an empty `Mosquitto Config` volume) the same way the rest of that file is —
   add `listener 9001` / `protocol websockets` to an existing one yourself to pick it up on upgrade.
-- **Auto-create Loxone &rarr; MQTT mappings** — off by default. When enabled, a call to
+- **Auto-create Loxone → MQTT mappings** — off by default. When enabled, a call to
   `/api/loxone-in/<anything>` that doesn't match an existing token is treated as a literal MQTT
   topic and a new passthrough mapping is created on the spot instead of returning 404. Convenient
   for wiring up Loxone quickly, but it means any string reaching that endpoint becomes a real
@@ -689,7 +693,7 @@ whatever channel(s) they already send to.
 - **CSRF protection** — a synchronizer token, stamped onto every form client-side and checked on
   every state-changing request. Session cookies use `SameSite=Lax` (not `Strict`, which would
   break the Pocket ID SSO redirect callback).
-- **Login rate-limiting** — configurable from Administration &rarr; Security (default 10 attempts
+- **Login rate-limiting** — configurable from Administration → Security (default 10 attempts
   per 15 minutes per IP on `/login`).
 - **Secrets encrypted at rest** — Miniserver passwords, the MQTT broker password, the SSO client
   secret, and any saved `rclone.conf` are stored encrypted (AES-256-GCM) in `gateway.db`, not
@@ -730,7 +734,7 @@ whatever channel(s) they already send to.
   `DB_BACKEND=mysql` (works against MySQL or MariaDB servers alike) and either `DATABASE_URL` or
   the discrete `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` vars — see the commented-out
   example in `docker-compose.yml`/`.env.example`. This is read once at boot (restart required to
-  change), not a live Settings-page toggle. Administration &rarr; General shows which backend is
+  change), not a live Settings-page toggle. Administration → General shows which backend is
   active.
   - **Moving an existing SQLite install over**: `docker compose exec loxsuite node
     src/db/transfer.js --from-sqlite /data/gateway.db --to "$DATABASE_URL" [--backend mysql]`
@@ -761,7 +765,7 @@ whatever channel(s) they already send to.
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | Discrete Postgres/MySQL connection settings, used if `DATABASE_URL` isn't set. |
 | `DB_SSL` | `false` (default), `require`, or `verify-full` — Postgres/MySQL TLS mode. |
 | `DB_POOL_MAX` / `DB_CONNECT_TIMEOUT_MS` / `DB_CONNECT_RETRIES` | Postgres/MySQL connection pool size and boot-time connectivity retry/backoff settings. |
-| `LOXONE_UDP_PORT` | UDP port the gateway listens on for Loxone &rarr; MQTT UDP mappings (default 11884). |
+| `LOXONE_UDP_PORT` | UDP port the gateway listens on for Loxone → MQTT UDP mappings (default 11884). |
 | `DEVICE_TEMPLATES_PATH` | Directory the gateway reads Common Commands/Data device template files from at startup (set in `docker-compose.yml`, rarely needs changing). |
 
 ## Security notes

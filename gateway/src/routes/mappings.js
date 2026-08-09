@@ -284,6 +284,7 @@ router.get('/loxone-to-mqtt/data.json', asyncHandler(async (req, res) => {
     miniserverName: m.miniserver_name,
     transport: m.transport,
     valueTransform: m.value_transform,
+    transformArg: m.transform_arg,
     qos: m.qos,
     retain: !!m.retain,
     token: m.token,
@@ -295,11 +296,15 @@ router.get('/loxone-to-mqtt/data.json', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
-// value_transform for this (Loxone -> MQTT) direction: 'passthrough' (default), 'translation_table'
-// (managed separately, see its own routes), or 'shelly_rgbw' (see applyShellyRgbwTransform in
-// loxone.js), whose transform_arg picks which of the three independent Loxone outputs this one
-// mapping carries.
-const LOXONE_TO_MQTT_TRANSFORMS = ['passthrough', 'translation_table', 'shelly_rgbw'];
+// value_transform for this (Loxone -> MQTT) direction: 'passthrough' (default), 'dimmer' (behaves
+// identically to passthrough below — applyLoxoneToMqttTransform in loxone.js only special-cases
+// translation_table/shelly_rgbw, so this publishes the same raw 0-100 Loxone sends either way;
+// choosing it over plain "Pass through unchanged" only changes what the Test dialog shows, a 0-100%
+// slider instead of a bare text box — see mappings-loxone-to-mqtt-tabulator.js's own
+// buildWhitePicker), 'translation_table' (managed separately, see its own routes), or 'shelly_rgbw'
+// (see applyShellyRgbwTransform in loxone.js), whose transform_arg picks which of the three
+// independent Loxone outputs this one mapping carries.
+const LOXONE_TO_MQTT_TRANSFORMS = ['passthrough', 'dimmer', 'translation_table', 'shelly_rgbw'];
 const SHELLY_RGBW_MODES = ['white', 'rgb', 'rgb-percent', 'tunablew'];
 function normalizeLoxoneToMqttTransform(body) {
   const transform = LOXONE_TO_MQTT_TRANSFORMS.includes(body.value_transform) ? body.value_transform : 'passthrough';

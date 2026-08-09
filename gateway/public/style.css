@@ -126,8 +126,12 @@
 
 /* The *checked* fill still needs its own color — color-scheme above only fixes the unchecked
    state's border/background, a checked native checkbox/radio otherwise defaults to a generic
-   browser blue that clashes with this app's own accent green. */
-input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+   browser blue that clashes with this app's own accent green. range shares the same fix for the
+   same reason (its filled track/thumb, e.g. the dimmer/white 0-100% slider in
+   mappings-loxone-to-mqtt-tabulator.js's own buildWhitePicker, defaults to that same generic blue
+   otherwise) — accent-color covers all three in every current browser without needing the old
+   per-vendor ::-webkit-slider-thumb/::-moz-range-thumb overrides a range input used to require. */
+input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--accent); }
 
 /* Nearly everything in this stylesheet is sized in rem, so scaling the root font-size scales
    text, padding, gaps, icons, etc. all together — the same effect as the browser's own zoom,
@@ -2111,12 +2115,16 @@ label.switch { display: inline-flex; align-items: center; cursor: pointer; margi
   left: 0;
   z-index: 20;
   margin-top: 0.4rem;
-  width: 11rem;
+  /* Was 11rem — labels like "Starts with orange"/"Vivid (wide spread)" got clipped by the palette
+     <select> at that width (the select itself is only as wide as this popover, width:100% below).
+     16rem comfortably fits the longest current label with room to spare; the swatch grid (still a
+     fixed 4 columns) just gets a bit more breathing room per swatch as a side effect. */
+  width: 16rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow-lg);
-  padding: 0.6rem;
+  padding: 0.7rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -2335,6 +2343,33 @@ summary.btn-edit::-webkit-details-marker, summary.btn-test::-webkit-details-mark
 .ms-diag-dialog-wide .ms-diagnostics { gap: 2rem; }
 .ms-diag-dialog-wide .ms-diagnostics > div { min-width: 9.5rem; }
 .ms-diag-dialog-wide .ms-diagnostics-card { padding: 1.1rem 1.3rem; }
+
+/* Loxone -> MQTT's own Test dialog (mappings-loxone-to-mqtt-tabulator.js's openTestDialog) — its
+   value picker can be a plain text input with a .value-suggest-list dropdown popping up below it
+   (position:absolute, see that rule's own comment), or — for a shelly_rgbw mapping — a color-picker
+   swatch (see .color-picker-wrap, itself now 16rem wide when its own popover is open) plus an
+   on-the-fly HSV/packed-percent readout. Either way the dialog's own content is short and fits
+   comfortably well under the base class's 80vh cap; what actually forced a vertical scrollbar was
+   the dropdown/popover being clipped by the dialog's own default overflow handling once it extended
+   past the dialog's tightly content-sized height, rather than simply overlaying past it. overflow:
+   visible here is what stops that clipping (the base class never needed it since a plain changelog/
+   diagnostics dialog has no popover content that escapes its own box). max-width/padding both
+   bumped up from the base class — comfortably fits the color popover's own 16rem width beside its
+   label without either one feeling cramped, and gives the plain-text/translation-dropdown variants
+   noticeably more breathing room too, not just the color-picker case. */
+.l2m-test-dialog { max-width: 40rem; padding: 1.5rem 1.7rem; overflow: visible; }
+/* .hint's own margin (a page-paragraph spacing convention — negative top margin to pull it snug
+   under whatever's above, a 1.25rem bottom margin to separate it from whatever follows) makes no
+   sense once reused purely for its color/font-size inside this dialog's own color-picker/
+   white-slider readout (buildColorPicker/buildWhitePicker in mappings-loxone-to-mqtt-tabulator.js)
+   — same bug, same fix as .tabulator-cell .hint above, just a different container this time: the
+   negative top margin pulled the readout text out of vertical alignment with the Off button sitting
+   right next to it in the same flex row (align-items:center centers the FLEX BOX, margin then
+   shifts the text inside it right back out again). The dialog's other two .hint uses (the intro
+   paragraph, the #l2m-test-result message) both already set their own explicit margin-top inline,
+   which still wins over this rule regardless — only their otherwise-unused trailing 1.25rem bottom
+   margin actually changes, and nothing here relies on that for spacing. */
+.l2m-test-dialog .hint { margin: 0; }
 
 /* Miniservers' own top-level rows (miniservers-tabulator.js, movableRows:true) are whole-row
    draggable — without this, the mousedown-then-move a drag starts with is indistinguishable from
@@ -3618,7 +3653,15 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
 .state-bar-panel {
   display: grid;
   grid-template-columns: max-content 1fr;
-  align-items: center;
+  /* minmax floor must match .state-bar-track's own STATE_BAR_ROW_MIN_PX in panel-grid.ejs — that's
+     the true resize-floor minimum (one row this thin is still readable), the 1fr on top is what
+     lets a row grow into whatever extra height the panel actually has instead of leaving it as
+     dead space below a fixed-height bar (see .state-bar-track's height:100% below). With only one
+     or two rows this means they thicken to fill the panel; with enough rows to already exceed the
+     available height, 1fr has nothing left to hand out and every row just sits at this floor,
+     same as a plain `auto` track would. */
+  grid-auto-rows: minmax(1.3rem, 1fr);
+  align-items: stretch;
   /* start, not center: center looks nicer when there's a LITTLE extra room, but once the row stack
      is taller than the box (see overflow-y below), centering means the overflow splits evenly
      above AND below — the first row clips at the top by the same amount the last one clips at the
@@ -3660,13 +3703,22 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
      that the label stops actually identifying which monitor a bar belongs to. ch is a character-
      width unit, so this scales with font-size instead of needing a re-guess in px. */
   min-width: 15ch;
+  /* Overrides the container's own align-items:stretch (see .state-bar-panel — that's there so the
+     TRACK can grow tall to fill spare panel height) back to vertically centered: a label is a
+     single line of text, not something that benefits from stretching, and stretch would otherwise
+     leave it pinned to the top of a row that's grown much taller than one text line. */
+  align-self: center;
 }
 .state-bar-track {
   position: relative;
-  /* Trimmed from 1.6rem — plenty of room for the 0.68rem segment label at this height, and it
-     directly shrinks applyMinSizes()'s per-row content floor (panel-grid.ejs), so a state_bar
-     panel with just one or two monitors no longer has to stay taller than its own content needs. */
-  height: 1.3rem;
+  /* Fills its grid row instead of a fixed height — the row itself is what's sized now (see
+     .state-bar-panel's grid-auto-rows:minmax(1.3rem,1fr)), so a panel dragged taller than its
+     content needs makes the bar itself thicker instead of leaving dead space between a
+     still-thin bar and the footer below it. min-height is the actual floor (also the value
+     applyMinSizes()/STATE_BAR_ROW_MIN_PX in panel-grid.ejs treats as this content's true resize
+     minimum) — plenty of room for the 0.68rem segment label even at its smallest. */
+  height: 100%;
+  min-height: 1.3rem;
   min-width: 2.5rem;
   background: var(--surface-alt);
   border-radius: 6px;

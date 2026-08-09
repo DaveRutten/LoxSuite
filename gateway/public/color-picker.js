@@ -3,7 +3,7 @@
 // of a bare native <input type="color"> with one component that adds palette swatches and a
 // custom-hex fallback on top of that same native input, rather than instead of it.
 //
-// Palettes are three validated orderings of the SAME eight hues monitor-chart.js's own
+// default/warm/bold are three validated orderings of the SAME eight hues monitor-chart.js's own
 // LIGHT_PALETTE/DARK_PALETTE already uses for un-colored chart series (see that file's own
 // comment) — not three different hue sets. Re-ordering (not re-hueing) is deliberate: the
 // project's dataviz skill treats the slot order as the CVD-safety mechanism itself, validated as a
@@ -11,7 +11,20 @@
 // would mean re-deriving that validation from scratch. These three are plain rotations of the
 // default order (see monitor-chart.js), each independently re-validated (scripts/validate_palette
 // in the project's dataviz skill) rather than assumed safe by resemblance to the default.
+//
+// `vivid`/`pastel`/`muted` are different on purpose: each is eight hues spread evenly around the
+// wheel at a different lightness/saturation character (fully-saturated / light-and-soft / deep-and-
+// dusty), picked for looking OBVIOUSLY different from each other at a glance (e.g. picking a test
+// color for an RGBW light — see mappings-loxone-to-mqtt-tabulator.js's own Test dialog) rather than
+// for chart-legend legibility — none of the three has been run through the dataviz skill's own CVD/
+// contrast validation the three palettes above have, so none is a substitute for them on a chart
+// series; same light/dark values for all of these, since a swatch is a self-contained block of
+// color rather than a line that needs contrast tuned against whatever's behind it the way a chart
+// series does.
 window.LoxColorPicker = (function () {
+  var VIVID = ['#ff0000', '#ff8c00', '#ffd400', '#00b300', '#00c8c8', '#0066ff', '#8000ff', '#ff00b3'];
+  var PASTEL = ['#ffadad', '#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff', '#a0c4ff', '#bdb2ff', '#ffc6ff'];
+  var MUTED = ['#c97b6d', '#cb9d6a', '#cdbb6a', '#8fa66b', '#6b9a8f', '#6b87a6', '#8a749c', '#b57a94'];
   var PALETTES = {
     default: {
       label: 'Default',
@@ -27,6 +40,21 @@ window.LoxColorPicker = (function () {
       label: 'Starts with red',
       light: ['#e34948', '#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7'],
       dark: ['#e66767', '#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9'],
+    },
+    vivid: {
+      label: 'Vivid (wide spread)',
+      light: VIVID,
+      dark: VIVID,
+    },
+    pastel: {
+      label: 'Pastel (soft, light)',
+      light: PASTEL,
+      dark: PASTEL,
+    },
+    muted: {
+      label: 'Muted (soft, deep)',
+      light: MUTED,
+      dark: MUTED,
     },
   };
   var HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -153,7 +181,7 @@ window.LoxColorPicker = (function () {
     var swatch = wrap.querySelector('.color-picker-swatch');
     popover.classList.remove('color-picker-popover-align-right');
     var swatchRect = swatch.getBoundingClientRect();
-    var popoverWidth = popover.offsetWidth || 176; // 11rem fallback while still hidden pre-measure
+    var popoverWidth = popover.offsetWidth || 256; // 16rem fallback (see the CSS) while still hidden pre-measure
     var wouldOverflow = swatchRect.left + popoverWidth > window.innerWidth - 8;
     if (wouldOverflow) popover.classList.add('color-picker-popover-align-right');
   }

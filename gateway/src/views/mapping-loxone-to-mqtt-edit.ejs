@@ -58,6 +58,12 @@
         <label>Value transform</label>
         <select name="value_transform" id="value-transform-select">
           <option value="passthrough" <%= mapping.value_transform === 'passthrough' ? 'selected' : '' %>>Pass through unchanged</option>
+          <%
+            // See mappings-loxone-to-mqtt.ejs's own Add form comment on this option — behaves
+            // exactly like "Pass through unchanged" server-side, just gets the Test dialog's 0-100%
+            // slider instead of a plain text box.
+          %>
+          <option value="dimmer" <%= mapping.value_transform === 'dimmer' ? 'selected' : '' %>>Dimmer (0-100%)</option>
           <option value="translation_table" <%= mapping.value_transform === 'translation_table' ? 'selected' : '' %>>Translation table (manage separately)</option>
           <option value="shelly_rgbw" <%= mapping.value_transform === 'shelly_rgbw' ? 'selected' : '' %>>Shelly RGBW/White (color/N/set JSON)</option>
         </select>
