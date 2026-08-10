@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.5-alpha.1] - 2026-08-10
+
+### Added
+- **Gauge** panels can now give one monitor its own unit and/or threshold colors instead of sharing
+  the panel's — e.g. Temperature at °C and Humidity at % in the same panel, each with its own alert
+  thresholds. Min/max/scale/decimals stay shared across the panel.
+- **State bar** panels can now give one monitor its own value names/colors instead of sharing the
+  panel's mapping — e.g. a lock's 0/1 and a mode control's 1/2/3 in the same panel.
+- Monitor's table has new (default-hidden, enable via the Columns menu) **Room** and **Category**
+  columns showing where a Loxone-sourced monitor's control actually lives.
+- New installs now ship with `jLocked` pre-hidden in Settings' "Hidden state names" — near-universal
+  noise on any installation with a lockable control, previously something everyone had to discover
+  and type in by hand.
+
+### Changed
+- A dashboard panel's Edit/Duplicate/Delete buttons now collapse behind a single "…" menu instead
+  of three separate icon buttons, matching the same kebab-menu pattern already used for table rows.
+- The Edit-panel drawer's monitor checklist now sorts already-checked monitors to the top.
+- Monitor history is no longer written on every poll regardless of whether the value changed: a row
+  is only inserted when the value actually changes, plus (for numeric monitors only) a 30-minute
+  heartbeat so a chart/stat panel filtered to a short range never comes up empty for a monitor
+  that's been constant longer than that. This is the main fix for backup size growing every day even
+  with no real data changes.
+- A State bar panel's own minimum drag-resize height is one grid row-unit shorter than before.
+
+### Fixed
+- A **Current value** panel showed an unwanted scrollbar once resized narrow enough for a long
+  monitor label to wrap onto multiple lines — labels now truncate with an ellipsis (click to expand,
+  same as elsewhere in the app) instead of wrapping and growing the row past the panel's own height.
+
 ## [0.13.4-alpha.1] - 2026-08-09
 
 ### Added

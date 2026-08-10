@@ -765,6 +765,11 @@
       // anchoring to .row-actions there would just squeeze the bar in sideways next to the title
       // instead of below it. Anchoring to the whole head instead lands it as a sibling in
       // .dash-panel's flex *column*, where a new full-width block correctly stacks underneath.
+      // In practice this branch no longer fires for a panel's own Delete: tables.js's
+      // collapseRowActions() now also collapses .dash-panel-head's row-actions into a kebab menu
+      // (see that function's own comment), so by click time the form already lives inside a
+      // .row-actions-popover and falls into the rowActionsPopover branch below instead. Left as a
+      // fallback rather than removed — harmless if that collapse were ever skipped.
       var anchor = form.closest('.dash-panel-head') || form.closest('.row-actions') || form;
       anchor.insertAdjacentElement('afterend', bar);
 
@@ -786,9 +791,11 @@
       // A plain table row's own .row-actions (Edit/Delete, etc. — Miniservers/Users/Roles/... when
       // NOT kebab-collapsed) gets the same popover treatment: a full-width block there is squeezed
       // into that one <td>'s own narrow width, wrapping the message/buttons across several cramped
-      // lines instead of a clean floating card. Excludes .dash-panel-head's own row-actions (a
-      // dashboard panel's Delete/Duplicate) — that one's "stacks under the whole head" block
-      // treatment already reads fine there and isn't a table row.
+      // lines instead of a clean floating card. The `!form.closest('.dash-panel-head')` guard is
+      // now effectively dead for a panel's own Delete — that row-actions is always kebab-collapsed
+      // (see collapseRowActions() in tables.js), so `rowActionsPopover` above already catches it
+      // first. Kept anyway as a harmless fallback rather than reworked into an assumption that the
+      // collapse always ran.
       var tableRowActions = !toolbar && !rowActionsPopover && !form.closest('.dash-panel-head') ? form.closest('.row-actions') : null;
       var usePopover = !!(toolbar || tableRowActions);
       if (usePopover) bar.classList.add('confirm-bar-popover');
@@ -952,7 +959,11 @@
       });
     }
 
-    document.querySelectorAll('.value-mapping-builder').forEach(function (builder) {
+    // Split out so a .value-mapping-builder created entirely client-side (a per-monitor state-bar
+    // value/color override — see panel-grid.ejs's state-bar-series row builder) can be wired up on
+    // demand, the same way threshold-annotation-builder.js's own initThresholdBuilder now is,
+    // instead of only ever running once against whatever existed at this script's own load time.
+    function initValueMappingBuilder(builder) {
       var hidden = builder.querySelector('.value-mapping-hidden');
       hidden.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
         var parts = line.split('=');
@@ -964,6 +975,99 @@
         addRow(builder, '', '', '');
         serializeRows(builder);
       });
+    }
+
+    document.querySelectorAll('.value-mapping-builder').forEach(initValueMappingBuilder);
+    window.LoxValueMappingBuilder = { init: initValueMappingBuilder };
+  })();
+</script>
+<script>
+  // A State bar panel's per-monitor value-name/color override (panel-grid.ejs's
+  // .state-bar-series-settings) — same checked-monitor-driven row builder shape as that file's own
+  // gauge-series one, with a nested .value-mapping-builder instead of a threshold-builder: a state
+  // bar's mapping is always discrete raw-value -> name/color, never a continuous threshold. Lives
+  // HERE rather than alongside gauge-series in panel-grid.ejs specifically because it needs
+  // LoxValueMappingBuilder, defined just above in THIS file — panel-grid.ejs's own <script> tags
+  // render earlier in the page than foot.ejs's, so calling LoxValueMappingBuilder.init() from
+  // there hit it before that assignment had even run yet (a live ReferenceError, caught testing
+  // this exact feature). The nested markup below has to match exactly what valueMappingField()
+  // (chartFieldHelpers.js) renders server-side, same reasoning as gauge's own nested
+  // threshold-builder.
+  (function () {
+    function buildStateBarSeriesRow(monitorId, monitorLabel, override) {
+      var row = document.createElement('div');
+      row.className = 'state-bar-series-row';
+      row.dataset.monitorId = monitorId;
+      var label = document.createElement('div');
+      label.className = 'chart-series-row-label';
+      // Overrides the shared rule's own max-width:7rem/nowrap/ellipsis — those exist so a long
+      // label doesn't crowd the value/unit/scale fields sitting right next to it on a chart/value/
+      // gauge row, but this row has nothing beside the label at all (the value-mapping-builder sits
+      // on its own line below), so there's no cramped neighbor to protect here.
+      label.style.cssText = 'max-width: none; white-space: normal; overflow: visible; text-overflow: initial;';
+      label.textContent = monitorLabel;
+      label.title = monitorLabel;
+      row.appendChild(label);
+
+      var builder = document.createElement('div');
+      builder.className = 'value-mapping-builder';
+      builder.style.marginTop = '0.3rem';
+      // Same inline SVG chartFieldHelpers.js's icon('plus') renders server-side — see
+      // panel-grid.ejs's buildGaugeSeriesRow's own identical comment for why this is hardcoded.
+      builder.innerHTML =
+        '<div class="value-mapping-rows"></div>' +
+        '<button type="button" class="btn-soft value-mapping-add-row"><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Add value</button>' +
+        '<textarea class="value-mapping-hidden" hidden></textarea>';
+      builder.querySelector('.value-mapping-hidden').value = (override && override.valueLabelsRaw) || '';
+      row.appendChild(builder);
+      window.LoxValueMappingBuilder.init(builder);
+
+      return row;
+    }
+
+    document.querySelectorAll('.state-bar-series-settings').forEach(function (container) {
+      var form = container.closest('form');
+      var checklist = form.querySelector(container.dataset.checklistSelector);
+      if (!checklist) return;
+      var hidden = container.querySelector('.state-bar-series-hidden');
+      var rowsEl = container.querySelector('.state-bar-series-rows');
+      var cache = {};
+      try { cache = JSON.parse(hidden.value || '{}'); } catch (e) { /* malformed — start empty */ }
+
+      function serialize() {
+        var out = {};
+        rowsEl.querySelectorAll('.state-bar-series-row').forEach(function (row) {
+          var id = row.dataset.monitorId;
+          var valueLabelsRaw = row.querySelector('.value-mapping-hidden').value;
+          var entry = { valueLabelsRaw: valueLabelsRaw || null };
+          cache[id] = entry;
+          if (valueLabelsRaw) out[id] = entry;
+        });
+        hidden.value = JSON.stringify(out);
+      }
+
+      function rebuildRows() {
+        var checked = Array.prototype.slice.call(checklist.querySelectorAll('input[type="checkbox"]:checked'));
+        rowsEl.innerHTML = '';
+        checked.forEach(function (checkbox) {
+          var id = checkbox.value;
+          var labelEl = checkbox.closest('label');
+          var monitorLabel = labelEl ? labelEl.textContent.trim().replace(/\s*\([a-z_]+\)\s*$/i, '') : id;
+          rowsEl.appendChild(buildStateBarSeriesRow(id, monitorLabel, cache[id]));
+        });
+        serialize();
+      }
+
+      // Same delegated-listener reasoning as panel-grid.ejs's own gauge-series builder — the
+      // value/name inputs ('input'), the color swatch ('change'), and the Add/Remove buttons
+      // ('click') all bubble up through here regardless of which row's nested
+      // value-mapping-builder they belong to.
+      ['input', 'change', 'click'].forEach(function (evtName) { rowsEl.addEventListener(evtName, serialize); });
+
+      checklist.addEventListener('change', function (e) {
+        if (e.target.matches('input[type="checkbox"]')) rebuildRows();
+      });
+      rebuildRows();
     });
   })();
 </script>

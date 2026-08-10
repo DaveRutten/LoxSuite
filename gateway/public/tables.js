@@ -417,7 +417,13 @@
   // the floating-popover approach is back — this earlier growing-the-row-taller design read as
   // one more distinct interaction pattern next to those two rather than the same one.
   function collapseRowActions(root) {
-    (root || document).querySelectorAll('td .row-actions').forEach(function (bar) {
+    // .dash-panel-head's own row-actions (a dashboard panel's Edit/Duplicate/Delete) used to be
+    // deliberately excluded from this collapse (see the now-stale exclusion comments in
+    // style.css/foot.ejs) since three inline buttons fit fine there — always collapsing them to a
+    // single kebab instead was a direct user request, not a fix for a layout problem. The generic
+    // confirm-bar handling in foot.ejs already treats ANY .row-actions-popover the same regardless
+    // of where its buttons came from, so no changes were needed there.
+    (root || document).querySelectorAll('td .row-actions, .dash-panel-head .row-actions').forEach(function (bar) {
       if (bar.classList.contains('row-actions-collapsed')) return;
       var actions = Array.prototype.slice.call(bar.children);
       if (actions.length <= 1) return; // one action needs no menu to hide it behind

@@ -340,7 +340,11 @@ window.LoxRowReorder = (function () {
     });
   }
 
-  document.querySelectorAll('.threshold-builder').forEach(function (builder) {
+  // Split out so a .threshold-builder created entirely client-side (a per-monitor gauge threshold
+  // override — see panel-grid.ejs's gauge-series row builder) can be wired up on demand, the same
+  // way every other dynamic row builder in that file already is, instead of only ever running once
+  // against whatever .threshold-builder elements happened to exist at this script's own load time.
+  function initThresholdBuilder(builder) {
     var hidden = builder.querySelector('.threshold-builder-hidden');
     hidden.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
       var parts = line.split('=');
@@ -351,7 +355,10 @@ window.LoxRowReorder = (function () {
       addRow(builder, '', null, 'line', false);
       serializeRows(builder);
     });
-  });
+  }
+
+  document.querySelectorAll('.threshold-builder').forEach(initThresholdBuilder);
+  window.LoxThresholdBuilder = { init: initThresholdBuilder };
 })();
 
 // Annotations: a labeled vertical line at a fixed moment in time ("<epoch-ms>=<label>[=<color>]").

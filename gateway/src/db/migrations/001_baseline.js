@@ -457,7 +457,14 @@ async function seedFreshInstall(knex) {
   // explicitly rather than left to their own column defaults — MySQL/MariaDB can't declare a
   // DEFAULT on a TEXT column at all (see this file's own top-of-file comment), and gateway_settings
   // is a singleton only ever inserted here, so this is the one and only place that matters.
-  await knex('gateway_settings').insert({ id: 1, live_data_hidden_states: '[]', monitor_chart_default_config: '{}', notification_templates: '{}' });
+  // "jLocked" ships pre-hidden by default (a direct product decision, not a "one right list"
+  // claim — loxoneStructure.js's own getHiddenStateNames comment is right that which sub-states
+  // read as noise varies a lot by installation) because it's near-universal noise regardless: it's
+  // repeated across every lockable Loxone control on any installation that has one, and every
+  // brand-new install otherwise has to discover and type it in by hand before Live Data/Monitor's
+  // state list reads as anything but cluttered. Still just this table's ordinary editable list —
+  // removing it here is exactly as easy as removing any other entry a user added themselves.
+  await knex('gateway_settings').insert({ id: 1, live_data_hidden_states: '["jLocked"]', monitor_chart_default_config: '{}', notification_templates: '{}' });
   await knex('sso_settings').insert({ id: 1 });
   await knex('backup_settings').insert({ id: 1 });
 

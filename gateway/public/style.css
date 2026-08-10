@@ -1469,12 +1469,16 @@ td .row-actions {
    deliberately does NOT get .confirm-bar-popover itself, since it stays a plain in-flow block
    inside a popover that's already floating) so Delete/Cancel there right-align the same way the
    row-actions-expanded buttons right above them already do, instead of sitting flush left.
-   A dashboard panel's own confirm-bar (its Delete button) is the same story yet again — see
-   tableRowActions in foot.ejs, which deliberately excludes .dash-panel-head from the popover
-   treatment too, so it ALSO never gets .confirm-bar-popover. That one's own .confirm-bar is
-   inserted as a SIBLING right after .dash-panel-head (anchor.insertAdjacentElement('afterend', …)
-   in foot.ejs), not nested inside it — `.dash-panel-head .confirm-bar-inner` (descendant) would
-   never match it, hence the adjacent-sibling selector here instead. */
+   A dashboard panel's own confirm-bar (its Delete button) used to be the same story yet again —
+   see tableRowActions in foot.ejs — but a panel's row-actions is now ALWAYS kebab-collapsed
+   (collapseRowActions() in tables.js also runs on .dash-panel-head, not just table rows), so by
+   the time Delete is clicked its confirm-bar lands in the generic .row-actions-popover branch
+   instead (styled by the rule right above this one) and never reaches this selector at all. The
+   `.dash-panel-head + .confirm-bar` selector below is kept only as a fallback for the case where
+   that collapse didn't run — its own .confirm-bar is inserted as a SIBLING right after
+   .dash-panel-head (anchor.insertAdjacentElement('afterend', …) in foot.ejs), not nested inside
+   it — `.dash-panel-head .confirm-bar-inner` (descendant) would never match it, hence the
+   adjacent-sibling selector here instead. */
 .confirm-bar-popover .confirm-bar-inner, .row-actions-popover .confirm-bar-inner, .dash-panel-head + .confirm-bar .confirm-bar-inner { justify-content: flex-end; }
 /* .table-toolbar's own `gap: 0.4rem` (see above) applies on BOTH sides of this element even while
    it's zero-width and collapsed, so any button followed by a data-confirm form visually sits twice
@@ -2016,8 +2020,15 @@ label.switch { display: inline-flex; align-items: center; cursor: pointer; margi
 /* One row per currently-checked monitor (see chart series settings JS in panel-grid.ejs) — a
    chart-only feature, so this only ever appears once at least one monitor is checked, and stays
    in sync with the checklist above it (checking/unchecking a monitor adds/removes its row). */
-.chart-series-rows, .value-series-rows { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.4rem 0; }
+.chart-series-rows, .value-series-rows, .gauge-series-rows, .state-bar-series-rows { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.4rem 0; }
 .chart-series-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+/* Unlike a chart/value series row (one flat line of fields), a gauge series row stacks its own
+   name+unit line above a full nested threshold-builder (see buildGaugeSeriesRow in panel-grid.ejs)
+   — tall enough, and different enough in shape from its neighbors, that the shared rows list's
+   plain 0.4rem gap alone reads as barely separated at all. A bottom border + padding gives each
+   row its own visually distinct block instead, same idea as .row-actions-popover-extra's divider
+   just serving a taller unit here. */
+.gauge-series-row:not(:last-child), .state-bar-series-row:not(:last-child) { padding-bottom: 0.6rem; border-bottom: 1px solid var(--border); }
 .chart-series-row .chart-series-row-label {
   flex: 0 0 auto;
   max-width: 7rem;
@@ -3414,8 +3425,18 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
   gap: 0.6rem;
 }
 
-.panel-value-row .label { font-size: 0.85rem; color: var(--text-muted); }
-.panel-value-row .value { font-size: 1.2rem; font-weight: 600; text-align: right; }
+/* min-width:0 overrides the flex default of auto (= this text's own full nowrap width as an
+   unshrinkable floor) — without it, .truncate's max-width:320px never actually gets to bite for a
+   panel narrower than that: the flex algorithm would hold the label at its full text width
+   instead of shrinking it down to whatever the row can actually spare, so a long label just
+   pushed the row wider (or, at a fixed panel width, wrapped onto extra lines — see the
+   .panel-value-list/.dash-panel overflow-y:auto rule above, that wrap-driven extra height used to
+   be exactly what triggered an "unwanted" scrollbar on an otherwise single-value panel that had
+   simply been resized narrow). flex-shrink:0 on .value is the other half — a label giving up width
+   is only useful if the actual number next to it is guaranteed to keep its own full width instead
+   of shrinking first. */
+.panel-value-row .label { font-size: 0.85rem; color: var(--text-muted); min-width: 0; flex-shrink: 1; }
+.panel-value-row .value { font-size: 1.2rem; font-weight: 600; text-align: right; flex-shrink: 0; }
 
 /* Row layout: same cards, laid out side by side and wrapping instead of stacked. */
 .panel-value-list[data-layout="row"] {

@@ -586,8 +586,14 @@
         </div>
         <div data-fields-for="gauge" style="grid-column:1/-1;">
           <%- thresholdField('gauge_thresholds', p.panel_type === 'gauge' ? p.config.thresholds : []) %>
-          <% if (p.panel_type === 'gauge') { %><p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor above to show several gauges side by side, all sharing this same range/unit/thresholds.</p><% } %>
+          <% if (p.panel_type === 'gauge') { %><p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor above to show several gauges side by side, all sharing this same range — unit/thresholds below can still be overridden per value.</p><% } %>
         </div>
+        <details data-fields-for="gauge" class="gauge-series-settings threshold-builder-details" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;" <%= p.panel_type === 'gauge' && Object.keys(p.config.series || {}).length > 0 ? 'open' : '' %>>
+          <summary>Per-value unit &amp; thresholds</summary>
+          <div class="gauge-series-rows"></div>
+          <textarea class="gauge-series-hidden" name="gauge_series" hidden><%= p.panel_type === 'gauge' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
+          <p class="hint" style="margin:0.3rem 0 0;">Give one value its own unit and/or alert thresholds — e.g. Temperature at &deg;C, Humidity at % in the same panel. Blank leaves it on the panel's own unit/thresholds above.</p>
+        </details>
 
         <div class="panel-section" data-fields-for="stat_delta">
           <div class="panel-section-title">Appearance</div>
@@ -635,8 +641,14 @@
         </div>
         <div data-fields-for="state_bar" style="grid-column:1/-1;">
           <%- valueMappingField('state_bar_value_labels', p.panel_type === 'state_bar' ? p.config.valueLabels : []) %>
-          <p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor below to stack several state bars in this one panel, one row per monitor.</p>
+          <p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor below to stack several state bars in this one panel, one row per monitor — value names/colors below can still be overridden per monitor.</p>
         </div>
+        <details data-fields-for="state_bar" class="state-bar-series-settings threshold-builder-details" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;" <%= p.panel_type === 'state_bar' && Object.keys(p.config.series || {}).length > 0 ? 'open' : '' %>>
+          <summary>Per-monitor value names &amp; colors</summary>
+          <div class="state-bar-series-rows"></div>
+          <textarea class="state-bar-series-hidden" name="state_bar_series" hidden><%= p.panel_type === 'state_bar' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
+          <p class="hint" style="margin:0.3rem 0 0;">Give one monitor its own value names/colors — e.g. a lock's 0/1 and a mode control's 1/2/3 in the same panel. Blank leaves it on the panel's own mapping above.</p>
+        </details>
 
         <div class="panel-section-title" data-fields-for="chart,table,value,gauge,stat_delta,threshold,state_bar" style="grid-column:1/-1;">Monitors</div>
         <div data-fields-for="chart,table,value,gauge,stat_delta,threshold,state_bar" style="grid-column:1/-1;">
@@ -645,7 +657,17 @@
           </p>
           <input type="text" class="panel-monitor-filter" placeholder="Filter monitors&hellip;" style="margin-bottom:0.25rem; width:100%;">
           <div class="panel-monitor-checklist" style="display:flex; flex-direction:column; max-height:220px; overflow-y:auto; overflow-x:hidden; padding:0.2rem; border:1px solid var(--border); border-radius:6px;">
-            <% monitors.forEach(m => { %>
+            <%
+              // Already-checked monitors first — otherwise a panel with several monitors picked
+              // from a long list has no way to see at a glance which ones are selected without
+              // scrolling the whole checklist looking for checkmarks.
+              var sortedPanelMonitors = monitors.slice().sort((a, b) => {
+                var aSel = p.monitors.some(pm => pm.id === a.id);
+                var bSel = p.monitors.some(pm => pm.id === b.id);
+                return aSel === bSel ? 0 : (aSel ? -1 : 1);
+              });
+            %>
+            <% sortedPanelMonitors.forEach(m => { %>
               <label class="panel-monitor-check-row" data-label="<%= m.label.toLowerCase() %>" style="display:flex; align-items:center; gap:0.3rem; font-size:0.75rem; min-width:0; padding:0.05rem 0;">
                 <input type="checkbox" name="monitor_ids" value="<%= m.id %>" style="flex-shrink:0;" <%= p.monitors.some(pm => pm.id === m.id) ? 'checked' : '' %>>
                 <span style="flex:1; min-width:0; overflow-wrap:anywhere; line-height:1.2;"><%= m.label %></span>
@@ -912,7 +934,7 @@
                     <% } %>
                   </svg>
                   <div class="gauge-radial-value" <% if (g.thresholdColor) { %>style="color: <%= g.thresholdColor %>;"<% } %>>
-                    <div class="gauge-radial-value-text"><%= g.current ? g.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+                    <div class="gauge-radial-value-text"><%= g.current ? g.current.displayValue : '-' %><%= g.effectiveUnit ? ' ' + g.effectiveUnit : '' %></div>
                     <%
                       // Always reserves the sparkline's own slot (via visibility, not display/
                       // presence) rather than only rendering it when actually enabled+has data —
@@ -947,7 +969,7 @@
                 <% if (p.gauges.length > 1) { %><div class="gauge-bar-label truncate" title="<%= g.monitor.label %>"><%= g.monitor.label %></div><% } %>
                 <div class="gauge-track"><div class="gauge-fill" style="width: <%= g.percent === null ? 0 : g.percent %>%; <% if (g.thresholdColor) { %>background: <%= g.thresholdColor %>;<% } %>"></div></div>
                 <% if (barGradientCss) { %><div class="gauge-bar-sections" style="background: <%= barGradientCss %>;"></div><% } %>
-                <div class="gauge-value" <% if (g.thresholdColor) { %>style="color: <%= g.thresholdColor %>;"<% } %>><%= g.current ? g.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+                <div class="gauge-value" <% if (g.thresholdColor) { %>style="color: <%= g.thresholdColor %>;"<% } %>><%= g.current ? g.current.displayValue : '-' %><%= g.effectiveUnit ? ' ' + g.effectiveUnit : '' %></div>
                 <div class="hint" style="margin:0;"><%= p.config.min %>&ndash;<%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
               </div>
             <% }) %>
@@ -1022,7 +1044,7 @@
           <% p.monitors.forEach(m => { %>
             <div class="panel-value-row">
               <% if (!p.config.hideLabel) { %>
-                <div class="label">
+                <div class="label truncate" title="<%= m.displayLabel %><% if (m.miniserver_name) { %> (<%= m.miniserver_name %>)<% } %>">
                   <%= m.displayLabel %>
                   <% if (m.miniserver_name) { %><span class="hint" style="margin:0;">(<%= m.miniserver_name %>)</span><% } %>
                 </div>
@@ -1572,6 +1594,97 @@
         });
         serialize();
       }
+
+      checklist.addEventListener('change', function (e) {
+        if (e.target.matches('input[type="checkbox"]')) rebuildRows();
+      });
+      rebuildRows();
+    });
+
+    // A Gauge panel's per-value unit/threshold override — same checked-monitor-driven row builder
+    // as chart/value above (reusing their buildUnitPicker/unitPickerValue), plus a full threshold
+    // ladder builder per row instead of scale/decimals (a gauge has no per-monitor equivalent of
+    // either — min/max/scale/decimals stay panel-wide, see dashboards.js's own render-time
+    // comment). The nested .threshold-builder markup here has to match exactly what
+    // thresholdField() (chartFieldHelpers.js) renders server-side — that's what
+    // LoxThresholdBuilder.init() (threshold-annotation-builder.js) expects to find.
+    function buildGaugeSeriesRow(monitorId, monitorLabel, override) {
+      var row = document.createElement('div');
+      row.className = 'gauge-series-row';
+      row.dataset.monitorId = monitorId;
+      var head = document.createElement('div');
+      head.className = 'chart-series-row';
+      head.innerHTML = '<span class="chart-series-row-label"></span><span class="chart-series-row-unit-slot"></span>';
+      head.querySelector('.chart-series-row-label').textContent = monitorLabel;
+      head.querySelector('.chart-series-row-label').title = monitorLabel;
+      var unitPicker = buildUnitPicker((override && override.unit) || '');
+      head.querySelector('.chart-series-row-unit-slot').replaceWith(unitPicker);
+      row.appendChild(head);
+
+      var builder = document.createElement('div');
+      builder.className = 'threshold-builder';
+      builder.style.marginTop = '0.4rem';
+      // Same inline SVG chartFieldHelpers.js's icon('plus') renders server-side — hardcoded here
+      // rather than called, since this whole row (unlike the panel-wide threshold builder) is built
+      // entirely client-side with no server round trip to ask for it.
+      builder.innerHTML =
+        '<div class="threshold-builder-rows"></div>' +
+        '<button type="button" class="btn-soft threshold-add-row"><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Add threshold</button>' +
+        '<textarea class="threshold-builder-hidden" hidden></textarea>';
+      var hiddenTa = builder.querySelector('.threshold-builder-hidden');
+      hiddenTa.value = (override && override.thresholdsRaw) || '';
+      row.appendChild(builder);
+      LoxThresholdBuilder.init(builder);
+
+      return row;
+    }
+
+    document.querySelectorAll('.gauge-series-settings').forEach(function (container) {
+      var form = container.closest('form');
+      var checklist = form.querySelector(container.dataset.checklistSelector);
+      if (!checklist) return;
+      var hidden = container.querySelector('.gauge-series-hidden');
+      var rowsEl = container.querySelector('.gauge-series-rows');
+      var cache = {};
+      try { cache = JSON.parse(hidden.value || '{}'); } catch (e) { /* malformed — start empty */ }
+
+      function serialize() {
+        var out = {};
+        rowsEl.querySelectorAll('.gauge-series-row').forEach(function (row) {
+          var id = row.dataset.monitorId;
+          var unit = unitPickerValue(row.querySelector('.chart-series-row-unit-wrap'));
+          var thresholdsRaw = row.querySelector('.threshold-builder-hidden').value;
+          var entry = { unit: unit || null, thresholdsRaw: thresholdsRaw || null };
+          // Same "keep it in the cache regardless, only a real value goes in `out`" reasoning as
+          // the chart/value builders above — a monitor unchecked and re-checked later in the same
+          // session still shows whatever was last entered for it.
+          cache[id] = entry;
+          if (unit || thresholdsRaw) out[id] = entry;
+        });
+        hidden.value = JSON.stringify(out);
+      }
+
+      function rebuildRows() {
+        var checked = Array.prototype.slice.call(checklist.querySelectorAll('input[type="checkbox"]:checked'));
+        rowsEl.innerHTML = '';
+        checked.forEach(function (checkbox) {
+          var id = checkbox.value;
+          var labelEl = checkbox.closest('label');
+          var monitorLabel = labelEl ? labelEl.textContent.trim().replace(/\s*\([a-z_]+\)\s*$/i, '') : id;
+          rowsEl.appendChild(buildGaugeSeriesRow(id, monitorLabel, cache[id]));
+        });
+        serialize();
+      }
+
+      // One delegated listener for the whole row list rather than one per row/per field: the unit
+      // picker's own select/input ('input'+'change'), every threshold row's value/style/color/
+      // notify field ('input'+'change'), and its Add/Remove buttons ('click') all bubble up through
+      // here regardless of which row or which nested threshold-builder they belong to — same
+      // "listen where things bubble TO, not where they start" reasoning as the panel-wide auto-save
+      // listener on .panel-settings-form itself (see the doSave block further down this file).
+      // Needed at all because that outer listener only decides WHEN to schedule a save; it has no
+      // idea gauge_series (this hidden textarea) even exists, let alone when to re-serialize it.
+      ['input', 'change', 'click'].forEach(function (evtName) { rowsEl.addEventListener(evtName, serialize); });
 
       checklist.addEventListener('change', function (e) {
         if (e.target.matches('input[type="checkbox"]')) rebuildRows();
@@ -2153,6 +2266,18 @@
         // in the meantime.
         var neededHeightPx = paddingV + headOuter + footerPx + minContentPx + contentInset * 2 + 6 + 16;
         var minH = clamp(Math.ceil((neededHeightPx + GAP_PX) / (ROW_UNIT_PX + GAP_PX)), MIN_ROW_SPAN, MAX_ROW_SPAN);
+        // A state bar's own header+footer+one-row-of-content need is already comfortably under two
+        // whole row-units — it's the ceil() above (GridStack only sizes in whole row-units) that
+        // rounds it up to 2 regardless, wasting almost a full extra row-unit of dead space on a
+        // panel that already made every other floor here as tight as it reasonably could (see the
+        // state-bar-panel branch above, and .dash-panel:has(.state-bar-panel) in style.css). One
+        // row-unit lower than that rounded-up floor, not a re-derivation of a separate one — direct
+        // user request after the rounded floor still read as too tall in practice, accepting the
+        // small risk that a browser measuring the header/footer a hair taller than usual right after
+        // load (see the +16 safety margin above) trims into the state-bar-panel's own overflow-y:auto
+        // scroll instead of leaving a clean gap, rather than the header/footer bleeding over the
+        // panel's own edge (the failure mode the rest of this function exists to prevent).
+        if (content && content.classList.contains('state-bar-panel')) minH = clamp(minH - 1, 1, MAX_ROW_SPAN);
 
         // Width floor: only state_bar has real text that stops being useful below a certain
         // width (see .state-bar-label's own min-width:15ch) — every other panel type's content

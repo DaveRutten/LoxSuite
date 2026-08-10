@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { humanizeTopic } = require('../topicName');
 const { getTopicOverview } = require('../mqttClient');
-const { getMonitorableStates } = require('../loxoneStructure');
+const { getMonitorableStates, getUuidLocationIndex } = require('../loxoneStructure');
 const {
   reloadMqttMonitors,
   getCurrentValue,
@@ -227,6 +227,21 @@ router.get('/', asyncHandler(async (req, res) => {
        ORDER BY monitors.label`
     )
     .all();
+  const miniservers = await db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
+  const miniserversById = new Map(miniservers.map((ms) => [ms.id, ms]));
+  // One structure fetch per Miniserver actually referenced by a loxone monitor below (deduped,
+  // and reusing loxoneStructure.js's own per-miniserver cache — the same one the Add-monitor
+  // form's state picker and Live Data already warm up), not one per monitor. A Miniserver that's
+  // offline/unreachable just leaves every one of its monitors' room/category blank rather than
+  // failing this whole list page over what's a "nice to have" column.
+  const locationIndexByMiniserver = new Map();
+  async function getLocationIndex(miniserverId) {
+    if (locationIndexByMiniserver.has(miniserverId)) return locationIndexByMiniserver.get(miniserverId);
+    const miniserver = miniserversById.get(miniserverId);
+    const promise = miniserver ? getUuidLocationIndex(miniserver).catch(() => null) : Promise.resolve(null);
+    locationIndexByMiniserver.set(miniserverId, promise);
+    return promise;
+  }
   const monitors = await Promise.all(rawMonitors.map(async (m) => {
     // Whether THIS monitor's own threshold ladder (its chart-settings config, edited from this
     // page — see notifications.js's checkThresholdLadderNotify) has at least one rung flagged
@@ -247,10 +262,19 @@ router.get('/', asyncHandler(async (req, res) => {
         .filter((pair) => accessibleDashboardIds.has(Number(pair.slice(0, pair.indexOf(':')))))
         .join(',') || null;
     }
-    return { ...m, current: await getCurrentValue(m.id), hasNotifyThreshold };
+    // mqtt/miniserver_diag monitors have no Loxone room/category concept at all (an arbitrary
+    // MQTT topic, or a fixed per-Miniserver diagnostic field) — left as null for those, same as a
+    // loxone monitor whose uuid isn't found in its own Miniserver's structure (a stale/renamed
+    // control) or whose Miniserver is unreachable right now (getLocationIndex above).
+    let room = null, category = null;
+    if (m.source_type === 'loxone' && m.miniserver_id && m.loxone_uuid) {
+      const index = await getLocationIndex(m.miniserver_id);
+      const location = index ? index.get(m.loxone_uuid) : null;
+      if (location) { room = location.room; category = location.category; }
+    }
+    return { ...m, current: await getCurrentValue(m.id), hasNotifyThreshold, room, category };
   }));
 
-  const miniservers = await db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   const retention = await db.prepare('SELECT monitor_retention_days FROM gateway_settings WHERE id = 1').get();
   const unusedCount = monitors.filter((m) => m.panelCount === 0).length;
   const { getDefaultPanelDecimals } = require('./dashboards');

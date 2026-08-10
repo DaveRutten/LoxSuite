@@ -41,6 +41,25 @@ const lastAutoReconnectAt = new Map(); // miniserver id -> ms epoch
 let mqttTopicMonitors = new Map();
 const lastPolledAt = new Map(); // monitor id -> ms epoch
 const currentValues = new Map(); // monitor id -> { value, recordedAt }
+const lastWrittenAt = new Map(); // monitor id -> ms epoch of the last actual monitor_history INSERT
+
+// insertHistory() below only writes a new row when the value actually changed, or — for a NUMERIC
+// value only — when it's been at least this long since the last row for that monitor. Without a
+// floor like this, change-only storage would mean a chart/stat_delta panel's own range-bounded
+// query (dashboards.js, both filter on numeric_value) comes up completely empty for a monitor
+// that's been constant for longer than the panel's own range, and any plain arithmetic mean/min/max
+// computed over stored rows stops being roughly time-weighted (two rows — one at 0 for 23 hours,
+// one at 100 for the last 1 — average to 50, not the ~4.2 dense sampling would have given).
+// Non-numeric values (Loxone/MQTT text or discrete state strings) skip the heartbeat entirely and
+// go pure change-only: a chart can't plot them anyway (both queries above filter to
+// Number.isFinite(numeric_value)), and state_bar — the panel type that actually visualizes this
+// kind of value as a timeline — already carries the last-seen segment forward to "now" regardless
+// of how old its underlying row is (see its endMs comment in dashboards.js), so a heartbeat row
+// would just be wasted storage for exactly the monitors most likely to sit unchanged for a long
+// time. 30 minutes was picked as a balance for the numeric case: still cheap for a monitor that
+// never changes (48 rows/day instead of 8640 at a 10s poll interval), while keeping any "last hour"
+// view populated with at least one point.
+const HISTORY_HEARTBEAT_MS = 30 * 60 * 1000;
 
 async function reloadMqttMonitors() {
   const rows = await db.prepare("SELECT id, mqtt_topic FROM monitors WHERE source_type = 'mqtt' AND enabled = 1").all();
@@ -61,9 +80,26 @@ function toNumeric(value) {
 async function insertHistory(monitorId, value) {
   const recordedAt = new Date().toISOString();
   const numericValue = toNumeric(value);
+  const stringValue = String(value);
+  // Captured before overwriting currentValues below — this is "what did we already know before
+  // THIS poll", the thing the dedup check below needs to compare against.
+  const previous = currentValues.get(monitorId);
+  // Unconditional, regardless of whether this poll ends up skipping the DB write below: the
+  // in-memory "current value" cache (getCurrentValue(), the stale-connection check in
+  // maybeAutoReconnect) needs to reflect that this monitor was just successfully read, not just
+  // that its value last changed — otherwise a monitor sitting on a genuinely constant reading would
+  // look stuck/stale and trigger a needless reconnect every LOXONE_STALE_MS, even on a perfectly
+  // healthy connection.
+  currentValues.set(monitorId, { value: stringValue, recordedAt, numericValue });
+
+  if (previous && previous.value === stringValue) {
+    const lastWrite = lastWrittenAt.get(monitorId);
+    if (numericValue === null || (lastWrite !== undefined && Date.now() - lastWrite < HISTORY_HEARTBEAT_MS)) return;
+  }
+
   await db.prepare('INSERT INTO monitor_history (monitor_id, recorded_at, value, numeric_value) VALUES (?, ?, ?, ?)')
-    .run(monitorId, recordedAt, String(value), numericValue);
-  currentValues.set(monitorId, { value: String(value), recordedAt, numericValue });
+    .run(monitorId, recordedAt, stringValue, numericValue);
+  lastWrittenAt.set(monitorId, Date.now());
   if (numericValue !== null) {
     await checkMonitorThreshold(monitorId, numericValue);
     await checkThresholdLadderNotify(monitorId, numericValue);
@@ -214,6 +250,11 @@ async function getCurrentValue(monitorId) {
 // poll/message happens to come in and overwrite it, which for an MQTT topic could be a long wait.
 function clearCurrentValue(monitorId) {
   currentValues.delete(monitorId);
+  // Not strictly required — insertHistory()'s dedup check above only reads this once `previous`
+  // (currentValues) is also truthy again, and that was just deleted too — but leaving a stale
+  // timestamp behind for a monitor id that a NEW monitor could later reuse is the kind of thing
+  // that's cheap to avoid now and confusing to debug later.
+  lastWrittenAt.delete(monitorId);
 }
 
 async function startMonitorCollector() {

@@ -149,6 +149,41 @@ async function getRoomCategoryTree(miniserver, { forceRefresh } = {}) {
   return await buildRoomCategoryTree(structure);
 }
 
+// uuid (a state's value-memory uuid — the same one monitors.loxone_uuid stores, NOT the control's
+// own uuid) -> { room, category }. Same control/subControl/state iteration as flattenStates/
+// buildRoomCategoryTree above, just indexed the other way round (by uuid instead of by control) —
+// powers Monitor's own Room/Category column (routes/monitor.js), which already has a monitor's
+// loxone_uuid and needs to reduce it back to where that state actually lives. null room/category
+// (not 'No room'/'No category' — see buildRoomCategoryTree's own fallback) since a bare "-" in a
+// table cell reads better than that placeholder text repeated down a whole column.
+function buildUuidLocationIndex(structure) {
+  const rooms = structure.rooms || {};
+  const cats = structure.cats || {};
+  const controls = structure.controls || {};
+  const index = new Map();
+
+  for (const control of Object.values(controls)) {
+    const roomName = control.room && rooms[control.room] ? rooms[control.room].name : null;
+    // Same "undefined" string quirk buildRoomCategoryTree's own catType guards against.
+    const rawCatName = control.cat && cats[control.cat] ? cats[control.cat].name : null;
+    const catName = rawCatName && rawCatName !== 'undefined' ? rawCatName : null;
+
+    for (const group of collectStateGroups(control)) {
+      if (!group.states) continue;
+      for (const uuid of Object.values(group.states)) {
+        if (typeof uuid !== 'string') continue;
+        index.set(uuid, { room: roomName, category: catName });
+      }
+    }
+  }
+  return index;
+}
+
+async function getUuidLocationIndex(miniserver, { forceRefresh } = {}) {
+  const structure = await getStructure(miniserver, { forceRefresh });
+  return buildUuidLocationIndex(structure);
+}
+
 // Just enough to render the initial room list — name and a couple of counts, nothing per-category
 // or per-control. A real installation's full tree can run into the thousands of DOM nodes once
 // rendered (rooms * categories * controls * states), which is enough to make a browser tab choke;
@@ -203,4 +238,4 @@ async function getAllDistinctStateNames(miniservers) {
   return Array.from(names).sort((a, b) => a.localeCompare(b));
 }
 
-module.exports = { getStructure, getMonitorableStates, getRoomCategoryTree, getRoomSummaries, getRoomDetail, getAllDistinctStateNames };
+module.exports = { getStructure, getMonitorableStates, getRoomCategoryTree, getRoomSummaries, getRoomDetail, getAllDistinctStateNames, getUuidLocationIndex };

@@ -280,6 +280,62 @@ function parseValueSeriesConfig(text) {
   return result;
 }
 
+// A gauge's own min/max/style/etc. really are one shared range for every ring in the panel (see
+// the render-time comment below), but unit and thresholds are the two things that stop making
+// sense once a panel mixes readings of genuinely different kinds — e.g. Temperature (°C, alert
+// above 28) and Humidity (%, alert above 70) side by side, sharing one ladder tuned for whichever
+// of the two it was originally set up for. Same keyed-by-monitor-id shape as parseValueSeriesConfig
+// above, minus name/scale/decimals (a gauge already has its own panel-wide scale/decimals with no
+// per-monitor equivalent requested). thresholdsRaw is the builder's own raw "value=color=style"
+// lines (see chartFieldHelpers.js's thresholdField/threshold-annotation-builder.js) — reusing
+// parseThresholdLadder here rather than inventing a second thresholds wire format for this one
+// per-monitor case.
+function parseGaugeSeriesConfig(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text || '{}');
+  } catch (err) {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const result = {};
+  for (const id of Object.keys(parsed)) {
+    const entry = parsed[id] || {};
+    const unit = typeof entry.unit === 'string' ? entry.unit.trim() : '';
+    const thresholds = parseThresholdLadder(typeof entry.thresholdsRaw === 'string' ? entry.thresholdsRaw : '');
+    if (unit || thresholds.length) {
+      result[id] = { unit: unit || null, thresholds };
+    }
+  }
+  return result;
+}
+
+// A state bar stacking several monitors shares ONE valueLabels mapping across every row today
+// (buildConfig's own state_bar branch below) — fine as long as every monitor in the panel reports
+// the same small set of raw values, but a mixed panel (say, a lock's 0/1 next to a mode control's
+// 1/2/3) has no single mapping that means the same thing for both rows. Same per-monitor-override
+// shape as parseGaugeSeriesConfig above, minus unit/thresholds (a state bar has neither — it's
+// always a discrete label+color per raw value, never a continuous reading). valueLabelsRaw is the
+// value-mapping builder's own raw "value=label=color" lines (see chartFieldHelpers.js's
+// valueMappingField/foot.ejs's value-mapping-builder script) — reusing parseValueMappings rather
+// than inventing a second wire format for this one per-monitor case.
+function parseStateBarSeriesConfig(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text || '{}');
+  } catch (err) {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const result = {};
+  for (const id of Object.keys(parsed)) {
+    const entry = parsed[id] || {};
+    const valueLabels = parseValueMappings(typeof entry.valueLabelsRaw === 'string' ? entry.valueLabelsRaw : '');
+    if (valueLabels.length) result[id] = { valueLabels };
+  }
+  return result;
+}
+
 function buildConfig(panelType, body) {
   if (panelType === 'chart') {
     // No panel-wide decimals/scale any more — every series sets its own of both now (see
@@ -346,6 +402,7 @@ function buildConfig(panelType, body) {
       // unmapped stretch of the timeline would render invisible rather than "some raw value with
       // no name given to it yet".
       defaultColor: sanitizeColor(fieldStr(body.state_bar_default_color)) || '#8a93a6',
+      series: parseStateBarSeriesConfig(body.state_bar_series),
     };
   }
   if (panelType === 'gauge') {
@@ -367,6 +424,7 @@ function buildConfig(panelType, body) {
       sparkline: !!body.gauge_sparkline,
       sparklineColor: body.gauge_sparkline_neutral ? 'default' : 'threshold',
       thresholds: parseThresholdLadder(fieldStr(body.gauge_thresholds)),
+      series: parseGaugeSeriesConfig(body.gauge_series),
     };
   }
   if (panelType === 'stat_delta') {
@@ -703,19 +761,27 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
     }
 
     if (panel.panel_type === 'gauge') {
-      // Every monitor shares this ONE panel's min/max/unit/scale/decimals/thresholds (see
-      // buildConfig) — unlike the 'value' panel type, a gauge's range/coloring is a property of
-      // the ring/bar being drawn, not of any one reading, so there's no per-monitor override here.
+      // Every monitor shares this ONE panel's min/max/scale/decimals (see buildConfig) — a gauge's
+      // range is a property of the ring/bar being drawn, not of any one reading, so there's no
+      // per-monitor override for those. unit and thresholds DO have one (config.series, same
+      // keyed-by-monitor-id shape as the 'value'/'chart' panel types' own series — see
+      // parseGaugeSeriesConfig) — added once a panel mixing e.g. Temperature and Humidity had no
+      // way to give each its own unit/alert threshold instead of one shared ladder tuned for
+      // whichever reading it was originally set up for.
       const scale = config.scale || 1;
       const decimals = config.decimals != null ? config.decimals : await getDefaultPanelDecimals();
       const { min, max } = config;
+      const series = config.series || {};
       const gauges = await Promise.all(monitors.map(async (monitor) => {
+        const override = series[monitor.id] || {};
+        const effectiveUnit = override.unit || config.unit;
+        const effectiveThresholds = override.thresholds && override.thresholds.length ? override.thresholds : config.thresholds;
         const current = await getCurrentValue(monitor.id);
         const scaledNumeric = current ? applyScale(current.value, scale) : null;
         const hasNumeric = Number.isFinite(scaledNumeric);
         const displayCurrent = current ? { ...current, displayValue: hasNumeric ? formatPanelValue(scaledNumeric, decimals) : current.value } : null;
         const percent = hasNumeric && max > min ? Math.min(100, Math.max(0, ((scaledNumeric - min) / (max - min)) * 100)) : null;
-        const thresholdColor = hasNumeric ? colorForThresholdLadder(scaledNumeric, config.thresholds) : null;
+        const thresholdColor = hasNumeric ? colorForThresholdLadder(scaledNumeric, effectiveThresholds) : null;
         // A small recent-history trend line under the value (Style: Round only, see
         // panel-grid.ejs) — optional since it costs one extra query per monitor in the panel.
         // Normalized against ITS OWN sampled min/max (not the gauge's configured min/max), same as
@@ -733,7 +799,7 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
             sparkline = values.map((v) => (sparkRange > 0 ? (v - sparkMin) / sparkRange : 0.5));
           }
         }
-        return { monitor, current: displayCurrent, percent, thresholdColor, sparkline };
+        return { monitor, current: displayCurrent, percent, thresholdColor, sparkline, effectiveUnit };
       }));
       return { ...base, gauges };
     }
@@ -752,11 +818,18 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
     if (panel.panel_type === 'state_bar') {
       const valueLabels = config.valueLabels || [];
       const defaultColor = config.defaultColor || '#8a93a6';
+      // Per-monitor override (config.series, same shape/reasoning as the 'gauge' panel type's own
+      // unit/thresholds override above) — a state bar stacking several monitors otherwise has no
+      // way to give a lock's 0/1 and a mode control's 1/2/3 different meanings/colors when they
+      // share one panel-wide mapping.
+      const series = config.series || {};
       const { since, until } = rangeToWindow(range);
       const rangeStartMs = since ? new Date(since).getTime() : null;
       const rangeEndMs = until ? new Date(until).getTime() : Date.now();
       const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
       const bars = await Promise.all(monitors.map(async (monitor) => {
+        const override = series[monitor.id];
+        const effectiveValueLabels = override && override.valueLabels && override.valueLabels.length ? override.valueLabels : valueLabels;
         // DESC + LIMIT, then reversed back to ascending — NOT a plain ASC + LIMIT. A busy monitor
         // (polled every few seconds) can easily have more rows in a 24h/7d window than MAX_ROWS;
         // ASC+LIMIT would silently keep only the OLDEST slice of the range and cut off everything
@@ -774,7 +847,7 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
         // poll even while the underlying state hadn't actually changed at all.
         const segments = [];
         rows.forEach((r) => {
-          const mapping = valueLabels.find((vm) => vm.value === String(r.value));
+          const mapping = effectiveValueLabels.find((vm) => vm.value === String(r.value));
           const label = mapping ? mapping.label : String(r.value);
           const color = (mapping && mapping.color) || defaultColor;
           const startMs = new Date(r.recordedAt).getTime();

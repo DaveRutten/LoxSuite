@@ -116,7 +116,9 @@
         <option value="3">Dashboard</option>
         <option value="4">Notification</option>
         <option value="5">Raw value</option>
-        <option value="6">Last updated</option>
+        <option value="7">Last updated</option>
+        <option value="8">Room</option>
+        <option value="9">Category</option>
       </select>
       <div class="clearable-input-wrap">
         <input type="text" id="monitor-filter-query" placeholder="Filter…">
@@ -142,7 +144,7 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Status</th><th>Label</th><th>Source</th><th>Dashboard</th><th>Notification</th><th>Raw value</th><th>Scaled value</th><th>Last updated</th><th>Actions</th></tr>
+      <tr><th>Status</th><th>Label</th><th>Source</th><th>Dashboard</th><th>Notification</th><th>Raw value</th><th>Scaled value</th><th>Last updated</th><th data-default-hidden>Room</th><th data-default-hidden>Category</th><th>Actions</th></tr>
     </thead>
     <tbody>
       <% monitors.forEach(m => { %>
@@ -203,6 +205,8 @@
             <% } else { %>-<% } %>
           </td>
           <td><%= m.current ? formatDateTime(m.current.recordedAt) : '-' %></td>
+          <td><%= m.room || '-' %></td>
+          <td><%= m.category || '-' %></td>
           <td>
             <div class="row-actions">
               <a class="inline" href="/monitor/<%= m.id %>"><button type="button" class="btn-soft"><%- icon('list') %> View</button></a>
@@ -220,7 +224,7 @@
         </tr>
         <% if (canEdit('monitor')) { %>
         <tr class="expand-row" id="monitor-edit-<%= m.id %>">
-          <td colspan="8">
+          <td colspan="10">
             <form method="post" action="/monitor/<%= m.id %>/update" class="form-grid" style="max-width:28rem;">
               <div><label>Label</label><input type="text" name="label" value="<%= m.label %>" required></div>
               <% if (m.source_type === 'loxone') { %>
