@@ -280,16 +280,17 @@ function parseValueSeriesConfig(text) {
   return result;
 }
 
-// A gauge's own min/max/style/etc. really are one shared range for every ring in the panel (see
-// the render-time comment below), but unit and thresholds are the two things that stop making
-// sense once a panel mixes readings of genuinely different kinds — e.g. Temperature (°C, alert
-// above 28) and Humidity (%, alert above 70) side by side, sharing one ladder tuned for whichever
-// of the two it was originally set up for. Same keyed-by-monitor-id shape as parseValueSeriesConfig
-// above, minus name/scale/decimals (a gauge already has its own panel-wide scale/decimals with no
-// per-monitor equivalent requested). thresholdsRaw is the builder's own raw "value=color=style"
-// lines (see chartFieldHelpers.js's thresholdField/threshold-annotation-builder.js) — reusing
-// parseThresholdLadder here rather than inventing a second thresholds wire format for this one
-// per-monitor case.
+// Unit/thresholds/min/max are the things that stop making sense shared once a panel mixes readings
+// of genuinely different kinds — e.g. Temperature (°C, 0-40, alert above 28) and Humidity (%,
+// 0-100, alert above 70) side by side, sharing one range/ladder tuned for whichever of the two it
+// was originally set up for. style/shape/sections/needle/sparkline stay panel-wide (see the
+// render-time comment below) — those are properties of how the ring/bar itself is DRAWN, not of
+// any one reading, so there's no "per-monitor" version of them that would mean anything. Same
+// keyed-by-monitor-id shape as parseValueSeriesConfig above, minus name/scale/decimals (a gauge
+// already has its own panel-wide scale/decimals with no per-monitor equivalent requested).
+// thresholdsRaw is the builder's own raw "value=color=style" lines (see chartFieldHelpers.js's
+// thresholdField/threshold-annotation-builder.js) — reusing parseThresholdLadder here rather than
+// inventing a second thresholds wire format for this one per-monitor case.
 function parseGaugeSeriesConfig(text) {
   let parsed;
   try {
@@ -303,8 +304,16 @@ function parseGaugeSeriesConfig(text) {
     const entry = parsed[id] || {};
     const unit = typeof entry.unit === 'string' ? entry.unit.trim() : '';
     const thresholds = parseThresholdLadder(typeof entry.thresholdsRaw === 'string' ? entry.thresholdsRaw : '');
-    if (unit || thresholds.length) {
-      result[id] = { unit: unit || null, thresholds };
+    // entry.min == null check FIRST, not just Number.isFinite(Number(entry.min)) — Number(null) is
+    // 0, not NaN, so skipping this guard would silently turn "no override sent" into an explicit
+    // 0 override the very first time this ran (confirmed live: min/max on a monitor that was never
+    // touched came back as 0/0 after one save-reload round trip, not the panel's own real min/max).
+    const hasMin = entry.min != null && Number.isFinite(Number(entry.min));
+    const hasMax = entry.max != null && Number.isFinite(Number(entry.max));
+    const min = hasMin ? Number(entry.min) : null;
+    const max = hasMax ? Number(entry.max) : null;
+    if (unit || thresholds.length || hasMin || hasMax) {
+      result[id] = { unit: unit || null, thresholds, min: min, max: max };
     }
   }
   return result;
@@ -761,26 +770,28 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
     }
 
     if (panel.panel_type === 'gauge') {
-      // Every monitor shares this ONE panel's min/max/scale/decimals (see buildConfig) — a gauge's
-      // range is a property of the ring/bar being drawn, not of any one reading, so there's no
-      // per-monitor override for those. unit and thresholds DO have one (config.series, same
-      // keyed-by-monitor-id shape as the 'value'/'chart' panel types' own series — see
-      // parseGaugeSeriesConfig) — added once a panel mixing e.g. Temperature and Humidity had no
-      // way to give each its own unit/alert threshold instead of one shared ladder tuned for
-      // whichever reading it was originally set up for.
+      // Style/shape/sections/needle/sparkline/scale/decimals stay this ONE panel's own shared
+      // settings (see buildConfig) — properties of how the ring/bar itself is drawn, not of any one
+      // reading, so there's no meaningful per-monitor version of them. min/max/unit/thresholds DO
+      // have one (config.series, same keyed-by-monitor-id shape as the 'value'/'chart' panel
+      // types' own series — see parseGaugeSeriesConfig) — added once a panel mixing e.g.
+      // Temperature (0-40°C) and Humidity (0-100%) had no way to give each its own range/unit/alert
+      // threshold instead of one shared range/ladder tuned for whichever reading it was originally
+      // set up for.
       const scale = config.scale || 1;
       const decimals = config.decimals != null ? config.decimals : await getDefaultPanelDecimals();
-      const { min, max } = config;
       const series = config.series || {};
       const gauges = await Promise.all(monitors.map(async (monitor) => {
         const override = series[monitor.id] || {};
         const effectiveUnit = override.unit || config.unit;
         const effectiveThresholds = override.thresholds && override.thresholds.length ? override.thresholds : config.thresholds;
+        const effectiveMin = override.min != null ? override.min : config.min;
+        const effectiveMax = override.max != null ? override.max : config.max;
         const current = await getCurrentValue(monitor.id);
         const scaledNumeric = current ? applyScale(current.value, scale) : null;
         const hasNumeric = Number.isFinite(scaledNumeric);
         const displayCurrent = current ? { ...current, displayValue: hasNumeric ? formatPanelValue(scaledNumeric, decimals) : current.value } : null;
-        const percent = hasNumeric && max > min ? Math.min(100, Math.max(0, ((scaledNumeric - min) / (max - min)) * 100)) : null;
+        const percent = hasNumeric && effectiveMax > effectiveMin ? Math.min(100, Math.max(0, ((scaledNumeric - effectiveMin) / (effectiveMax - effectiveMin)) * 100)) : null;
         const thresholdColor = hasNumeric ? colorForThresholdLadder(scaledNumeric, effectiveThresholds) : null;
         // A small recent-history trend line under the value (Style: Round only, see
         // panel-grid.ejs) — optional since it costs one extra query per monitor in the panel.
@@ -799,7 +810,7 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
             sparkline = values.map((v) => (sparkRange > 0 ? (v - sparkMin) / sparkRange : 0.5));
           }
         }
-        return { monitor, current: displayCurrent, percent, thresholdColor, sparkline, effectiveUnit };
+        return { monitor, current: displayCurrent, percent, thresholdColor, sparkline, effectiveUnit, effectiveMin, effectiveMax, effectiveThresholds };
       }));
       return { ...base, gauges };
     }

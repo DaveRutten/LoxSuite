@@ -2055,7 +2055,9 @@ label.switch { display: inline-flex; align-items: center; cursor: pointer; margi
    two builders line up identically wherever they show the same field (see the "make every panel
    type's properties look the same" note on .chart-series-row-scale-wrap below). */
 .chart-series-row input.chart-series-row-decimals[type="number"],
-.value-series-row input.value-series-row-decimals[type="number"] {
+.value-series-row input.value-series-row-decimals[type="number"],
+.gauge-series-row input.gauge-series-row-min[type="number"],
+.gauge-series-row input.gauge-series-row-max[type="number"] {
   flex: 0 0 auto;
   width: 4.2rem;
   min-width: 0;

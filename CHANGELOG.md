@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.6-alpha.1] - 2026-08-10
+
+### Added
+- **Gauge** panels can now also give one monitor its own minimum/maximum, on top of the per-value
+  unit/thresholds added in 0.13.5-alpha.1 — the whole range, not just the coloring, can now differ
+  per value (e.g. Temperature at 0-40°C next to Humidity at 0-100% in the same panel).
+- A panel's shared Unit/Threshold colors/Min/Max/Value names &amp; colors field now hides itself
+  once every currently-selected monitor already has its own override for that specific thing —
+  applies to Value (Unit), Chart (Y-axis unit), Gauge (Unit/Min/Max/Threshold colors), and State bar
+  (Value names &amp; colors). A field stays visible as long as it's still the real, active fallback
+  for at least one selected monitor; nothing disappears just because 2+ monitors are checked.
+
+### Fixed
+- A Gauge panel's per-value minimum/maximum override, when left blank, was silently saved as an
+  explicit `0` instead of "no override" (`Number(null)` is `0` in JavaScript, not `NaN`) — the
+  monitor would then show a broken 0-0 range instead of falling back to the panel's own min/max.
+
 ## [0.13.5-alpha.1] - 2026-08-10
 
 ### Added

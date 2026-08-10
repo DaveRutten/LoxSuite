@@ -476,7 +476,7 @@
               </div>
             </details>
           </div>
-          <div data-chart-type-for="line"><label>Y-axis unit</label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
+          <div data-chart-type-for="line" data-shared-override="unit"><label>Y-axis unit</label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
           <div data-chart-type-for="line"><label>Stepped line</label>
             <select name="stepped_line">
               <option value="" <%= steppedVal === '' ? 'selected' : '' %>>Off</option>
@@ -528,7 +528,7 @@
               <option value="row" <%= p.panel_type === 'value' && p.config.layout === 'row' ? 'selected' : '' %>>Row (side by side)</option>
             </select>
           </div>
-          <div><label>Unit</label><%- unitField('unit_value', p.panel_type === 'value' ? (p.config.unit || '') : '') %></div>
+          <div data-shared-override="unit"><label>Unit</label><%- unitField('unit_value', p.panel_type === 'value' ? (p.config.unit || '') : '') %></div>
           <div><label>Hide name</label><%- toggleSwitch('hide_value_label', p.panel_type === 'value' && !!p.config.hideLabel) %></div>
         </div>
         <div data-fields-for="value" style="grid-column:1/-1;">
@@ -573,9 +573,9 @@
               <option value="circle" <%= p.panel_type === 'gauge' && p.config.shape === 'circle' ? 'selected' : '' %>>Full circle</option>
             </select>
           </div>
-          <div><label>Minimum</label><input type="number" name="gauge_min" value="<%= p.panel_type === 'gauge' ? p.config.min : 0 %>" step="any"></div>
-          <div><label>Maximum</label><input type="number" name="gauge_max" value="<%= p.panel_type === 'gauge' ? p.config.max : 100 %>" step="any"></div>
-          <div><label>Unit</label><%- unitField('unit_gauge', p.panel_type === 'gauge' ? (p.config.unit || '') : '') %></div>
+          <div data-shared-override="min"><label>Minimum</label><input type="number" name="gauge_min" value="<%= p.panel_type === 'gauge' ? p.config.min : 0 %>" step="any"></div>
+          <div data-shared-override="max"><label>Maximum</label><input type="number" name="gauge_max" value="<%= p.panel_type === 'gauge' ? p.config.max : 100 %>" step="any"></div>
+          <div data-shared-override="unit"><label>Unit</label><%- unitField('unit_gauge', p.panel_type === 'gauge' ? (p.config.unit || '') : '') %></div>
           <div><label>Value scale</label><%- scaleField('scale_gauge', p.panel_type === 'gauge' && p.config.scale != null ? p.config.scale : 1) %></div>
           <div><label>Decimals (optional)</label><input type="number" name="decimals_gauge" min="0" max="6" placeholder="Default" value="<%= p.panel_type === 'gauge' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
           <div><label>Threshold sections</label><%- toggleSwitch('gauge_sections', p.panel_type === 'gauge' && !!p.config.sections) %></div>
@@ -584,15 +584,15 @@
           <div data-gauge-style-for="radial"><label>Trend line under value</label><%- toggleSwitch('gauge_sparkline', p.panel_type === 'gauge' && !!p.config.sparkline) %></div>
           <div data-gauge-style-for="radial" data-gauge-sparkline-for="on"><label>Neutral trend line color</label><%- toggleSwitch('gauge_sparkline_neutral', p.panel_type === 'gauge' && p.config.sparklineColor === 'default') %></div>
         </div>
-        <div data-fields-for="gauge" style="grid-column:1/-1;">
+        <div data-fields-for="gauge" data-shared-override="thresholds" style="grid-column:1/-1;">
           <%- thresholdField('gauge_thresholds', p.panel_type === 'gauge' ? p.config.thresholds : []) %>
-          <% if (p.panel_type === 'gauge') { %><p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor above to show several gauges side by side, all sharing this same range — unit/thresholds below can still be overridden per value.</p><% } %>
+          <% if (p.panel_type === 'gauge') { %><p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor above to show several gauges side by side, all sharing this same style — range/unit/thresholds below can still be overridden per value.</p><% } %>
         </div>
         <details data-fields-for="gauge" class="gauge-series-settings threshold-builder-details" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;" <%= p.panel_type === 'gauge' && Object.keys(p.config.series || {}).length > 0 ? 'open' : '' %>>
-          <summary>Per-value unit &amp; thresholds</summary>
+          <summary>Per-value range, unit &amp; thresholds</summary>
           <div class="gauge-series-rows"></div>
           <textarea class="gauge-series-hidden" name="gauge_series" hidden><%= p.panel_type === 'gauge' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
-          <p class="hint" style="margin:0.3rem 0 0;">Give one value its own unit and/or alert thresholds — e.g. Temperature at &deg;C, Humidity at % in the same panel. Blank leaves it on the panel's own unit/thresholds above.</p>
+          <p class="hint" style="margin:0.3rem 0 0;">Give one value its own min/max, unit, and/or alert thresholds — e.g. Temperature at 0&ndash;40&deg;C, Humidity at 0&ndash;100% in the same panel. Blank leaves it on the panel's own range/unit/thresholds above.</p>
         </details>
 
         <div class="panel-section" data-fields-for="stat_delta">
@@ -639,7 +639,7 @@
           <div class="panel-section-title">State bar</div>
           <div><label>Default color (unmapped values)</label><input type="color" class="single-color-input" name="state_bar_default_color" value="<%= p.panel_type === 'state_bar' && p.config.defaultColor ? p.config.defaultColor : '#8a93a6' %>"></div>
         </div>
-        <div data-fields-for="state_bar" style="grid-column:1/-1;">
+        <div data-fields-for="state_bar" data-shared-override="valueLabels" style="grid-column:1/-1;">
           <%- valueMappingField('state_bar_value_labels', p.panel_type === 'state_bar' ? p.config.valueLabels : []) %>
           <p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor below to stack several state bars in this one panel, one row per monitor — value names/colors below can still be overridden per monitor.</p>
         </div>
@@ -790,10 +790,14 @@
           // strip (barSectionsGradient, a flat CSS gradient) below, so the two styles' "Threshold
           // sections"/"Gradient sections" toggles mean exactly the same ladder either way. null
           // when Sections is off or there's no ladder to draw one from.
-          function thresholdStops() {
-            var min = p.config.min;
-            if (!p.config.sections || p.config.max <= min || !p.config.thresholds || !p.config.thresholds.length) return null;
-            var sorted = p.config.thresholds.slice().sort(function (a, b) { return a.value - b.value; });
+          // min/max/thresholds are parameters, not p.config.* directly — a gauge's effective
+          // range/ladder is per-monitor since the 'gauge_series' override (dashboards.js) was
+          // added, so these three all get called fresh per gauge in the render loops below rather
+          // than once for the whole panel; a shared "Sections" toggle still needs each ring's own
+          // bands actually matching THAT ring's own scale, not a stale panel-wide one.
+          function thresholdStops(min, max, thresholds) {
+            if (!p.config.sections || max <= min || !thresholds || !thresholds.length) return null;
+            var sorted = thresholds.slice().sort(function (a, b) { return a.value - b.value; });
             var stops = [];
             // A plain hex (not var(--accent-soft), which blendColor can't resolve/interpolate
             // against) for the "nothing defined yet" zone below the lowest threshold, but only
@@ -808,7 +812,6 @@
             sorted.forEach(function (t) { stops.push({ from: t.value, color: t.color }); });
             return stops;
           }
-          const gaugeStops = thresholdStops();
 
           // Stops -> a list of colored sub-arcs for the thin outer section ring, subdivided into
           // GRADIENT_STEPS tiny segments per transition (blendColor above) rather than one flat-
@@ -816,9 +819,10 @@
           // stripe. The FINAL rung (nothing above it to blend toward) stays one flat segment all
           // the way to max. GRADIENT_STEPS=1 collapses this back to plain hard-edged bands when
           // Gradient itself is off (Sections can be on independently of it).
-          function gaugeSections() {
+          function gaugeSections(min, max, thresholds) {
+            var gaugeStops = thresholdStops(min, max, thresholds);
             if (!gaugeStops) return null;
-            var min = p.config.min, max = p.config.max, range = max - min;
+            var range = max - min;
             var sectionArcLen = arcLenFor(gaugeSectionR);
             var sectionC = circumference(gaugeSectionR);
             var GRADIENT_STEPS = p.config.sectionsGradient ? 16 : 1;
@@ -841,15 +845,15 @@
             }
             return bands;
           }
-          const gaugeBands = gaugeSections();
 
           // Stops -> a plain CSS linear-gradient() string for the Bar style's own section strip —
           // CSS gradients already interpolate color between explicit stops on their own, so
           // Gradient here just means "omit the hard-stop pairs" rather than needing the manual
           // sub-segment subdivision the SVG arc technique above requires.
-          function barSectionsGradient() {
+          function barSectionsGradient(min, max, thresholds) {
+            var gaugeStops = thresholdStops(min, max, thresholds);
             if (!gaugeStops) return null;
-            var min = p.config.min, max = p.config.max, range = max - min;
+            var range = max - min;
             var parts = gaugeStops.map(function (s, i) {
               var pct = Math.min(100, Math.max(0, ((s.from - min) / range) * 100));
               if (p.config.sectionsGradient || i === 0) return s.color + ' ' + pct + '%';
@@ -859,7 +863,6 @@
             });
             return 'linear-gradient(to right, ' + parts.join(', ') + ')';
           }
-          const barGradientCss = barSectionsGradient();
 
           // Needle angle (local, pre-rotation) — the CSS rotate() already applied to the whole
           // <svg> below carries this line to the correct world angle for free, same as the track.
@@ -916,6 +919,7 @@
               <%
                 var fillLen = g.percent === null ? 0 : gaugeArcLen * (g.percent / 100);
                 var needle = needleLine(g.percent);
+                var gaugeBands = gaugeSections(g.effectiveMin, g.effectiveMax, g.effectiveThresholds);
               %>
               <div class="gauge-radial-item">
                 <div class="gauge-radial-outer">
@@ -948,15 +952,15 @@
                     </svg>
                   </div>
                   <% if (p.config.shape !== 'circle') { %>
-                    <span class="gauge-radial-min hint" style="left: <%= gaugeMinPoint.left %>%; top: <%= gaugeMinPoint.top %>%;"><%= p.config.min %><%= p.config.unit ? ' ' + p.config.unit : '' %></span>
-                    <span class="gauge-radial-max hint" style="left: <%= gaugeMaxPoint.left %>%; top: <%= gaugeMaxPoint.top %>%;"><%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></span>
+                    <span class="gauge-radial-min hint" style="left: <%= gaugeMinPoint.left %>%; top: <%= gaugeMinPoint.top %>%;"><%= g.effectiveMin %><%= g.effectiveUnit ? ' ' + g.effectiveUnit : '' %></span>
+                    <span class="gauge-radial-max hint" style="left: <%= gaugeMaxPoint.left %>%; top: <%= gaugeMaxPoint.top %>%;"><%= g.effectiveMax %><%= g.effectiveUnit ? ' ' + g.effectiveUnit : '' %></span>
                   <% } %>
                 </div>
                 <% if (p.gauges.length > 1) { %><div class="gauge-radial-label truncate" title="<%= g.monitor.label %>"><%= g.monitor.label %></div><% } %>
                 <% if (p.config.shape === 'circle') { %>
                   <div class="gauge-radial-minmax hint">
-                    <span><%= p.config.min %><%= p.config.unit ? ' ' + p.config.unit : '' %></span>
-                    <span><%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></span>
+                    <span><%= g.effectiveMin %><%= g.effectiveUnit ? ' ' + g.effectiveUnit : '' %></span>
+                    <span><%= g.effectiveMax %><%= g.effectiveUnit ? ' ' + g.effectiveUnit : '' %></span>
                   </div>
                 <% } %>
               </div>
@@ -965,12 +969,13 @@
         <% } else { %>
           <div class="gauge-wrap" data-live-id="panel-<%= p.id %>-body">
             <% p.gauges.forEach(function (g) { %>
+              <% var barGradientCss = barSectionsGradient(g.effectiveMin, g.effectiveMax, g.effectiveThresholds); %>
               <div class="gauge-bar-item">
                 <% if (p.gauges.length > 1) { %><div class="gauge-bar-label truncate" title="<%= g.monitor.label %>"><%= g.monitor.label %></div><% } %>
                 <div class="gauge-track"><div class="gauge-fill" style="width: <%= g.percent === null ? 0 : g.percent %>%; <% if (g.thresholdColor) { %>background: <%= g.thresholdColor %>;<% } %>"></div></div>
                 <% if (barGradientCss) { %><div class="gauge-bar-sections" style="background: <%= barGradientCss %>;"></div><% } %>
                 <div class="gauge-value" <% if (g.thresholdColor) { %>style="color: <%= g.thresholdColor %>;"<% } %>><%= g.current ? g.current.displayValue : '-' %><%= g.effectiveUnit ? ' ' + g.effectiveUnit : '' %></div>
-                <div class="hint" style="margin:0;"><%= p.config.min %>&ndash;<%= p.config.max %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+                <div class="hint" style="margin:0;"><%= g.effectiveMin %>&ndash;<%= g.effectiveMax %><%= g.effectiveUnit ? ' ' + g.effectiveUnit : '' %></div>
               </div>
             <% }) %>
           </div>
@@ -1283,6 +1288,31 @@
 %>
 
 <script>
+  // Shared by every panel type with BOTH a panel-wide field (Unit, Threshold colors, Min/Max,
+  // Value names & colors) and a per-monitor override of that same thing (chart/value/gauge/
+  // state_bar's own *-series builders, further down this file and in foot.ejs) — a panel-wide
+  // field only actually does anything for a monitor that has NO override of its own; once every
+  // currently-checked monitor has its own, the panel-wide one is dead weight that just reads as
+  // "which one actually wins?" clutter. Each shared field's wrapper opts in via
+  // data-shared-override="<key>" (e.g. data-shared-override="unit"); fieldChecks maps that same
+  // key to a function deciding whether one series-cache entry counts as "has its own". Hides the
+  // field only once EVERY checked monitor is covered — one still-uncovered monitor means the
+  // panel-wide value is still that monitor's real, active fallback, not a stale leftover.
+  function updateSharedOverrideVisibility(form, checklist, cache, fieldChecks) {
+    var checked = Array.prototype.slice.call(checklist.querySelectorAll('input[type="checkbox"]:checked'));
+    Object.keys(fieldChecks).forEach(function (key) {
+      var allOverridden = checked.length > 0 && checked.every(function (checkbox) {
+        return fieldChecks[key](cache[checkbox.value]);
+      });
+      Array.prototype.forEach.call(form.querySelectorAll('[data-shared-override="' + key + '"]'), function (el) {
+        el.style.display = allOverridden ? 'none' : '';
+      });
+    });
+  }
+  window.updateSharedOverrideVisibility = updateSharedOverrideVisibility;
+</script>
+
+<script>
   // Drives every .chart-series-settings (Add-panel's and each panel's own Edit form both have
   // one) — builds one row per currently-checked monitor in that SAME form's monitor checklist
   // (found via the container's own data-checklist-selector, since the two forms use different
@@ -1490,6 +1520,7 @@
           if (name || unit || entry.scale != null || decimals != null || axis === 'right' || color || style) out[id] = entry;
         });
         hidden.value = JSON.stringify(out);
+        updateSharedOverrideVisibility(form, checklist, cache, { unit: function (e) { return !!(e && e.unit); } });
       }
 
       function rebuildRows() {
@@ -1576,6 +1607,7 @@
           if (name || unit || entry.scale != null || entry.decimals != null) out[id] = entry;
         });
         hidden.value = JSON.stringify(out);
+        updateSharedOverrideVisibility(form, checklist, cache, { unit: function (e) { return !!(e && e.unit); } });
       }
 
       function rebuildRows() {
@@ -1614,11 +1646,17 @@
       row.dataset.monitorId = monitorId;
       var head = document.createElement('div');
       head.className = 'chart-series-row';
-      head.innerHTML = '<span class="chart-series-row-label"></span><span class="chart-series-row-unit-slot"></span>';
+      head.innerHTML =
+        '<span class="chart-series-row-label"></span>' +
+        '<span class="chart-series-row-unit-slot"></span>' +
+        '<input type="number" step="any" class="gauge-series-row-min" placeholder="Min">' +
+        '<input type="number" step="any" class="gauge-series-row-max" placeholder="Max">';
       head.querySelector('.chart-series-row-label').textContent = monitorLabel;
       head.querySelector('.chart-series-row-label').title = monitorLabel;
       var unitPicker = buildUnitPicker((override && override.unit) || '');
       head.querySelector('.chart-series-row-unit-slot').replaceWith(unitPicker);
+      head.querySelector('.gauge-series-row-min').value = (override && override.min != null) ? override.min : '';
+      head.querySelector('.gauge-series-row-max').value = (override && override.max != null) ? override.max : '';
       row.appendChild(head);
 
       var builder = document.createElement('div');
@@ -1654,14 +1692,26 @@
           var id = row.dataset.monitorId;
           var unit = unitPickerValue(row.querySelector('.chart-series-row-unit-wrap'));
           var thresholdsRaw = row.querySelector('.threshold-builder-hidden').value;
-          var entry = { unit: unit || null, thresholdsRaw: thresholdsRaw || null };
+          var minRaw = row.querySelector('.gauge-series-row-min').value.trim();
+          var maxRaw = row.querySelector('.gauge-series-row-max').value.trim();
+          var min = minRaw === '' ? null : Number(minRaw);
+          var max = maxRaw === '' ? null : Number(maxRaw);
+          if (!Number.isFinite(min)) min = null;
+          if (!Number.isFinite(max)) max = null;
+          var entry = { unit: unit || null, thresholdsRaw: thresholdsRaw || null, min: min, max: max };
           // Same "keep it in the cache regardless, only a real value goes in `out`" reasoning as
           // the chart/value builders above — a monitor unchecked and re-checked later in the same
           // session still shows whatever was last entered for it.
           cache[id] = entry;
-          if (unit || thresholdsRaw) out[id] = entry;
+          if (unit || thresholdsRaw || min != null || max != null) out[id] = entry;
         });
         hidden.value = JSON.stringify(out);
+        updateSharedOverrideVisibility(form, checklist, cache, {
+          unit: function (e) { return !!(e && e.unit); },
+          thresholds: function (e) { return !!(e && e.thresholdsRaw); },
+          min: function (e) { return !!(e && e.min != null); },
+          max: function (e) { return !!(e && e.max != null); },
+        });
       }
 
       function rebuildRows() {

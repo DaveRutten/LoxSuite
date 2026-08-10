@@ -1044,6 +1044,11 @@
           if (valueLabelsRaw) out[id] = entry;
         });
         hidden.value = JSON.stringify(out);
+        // Defined in panel-grid.ejs, whose own <script> tags render earlier in the page than
+        // this file's — same "defined-before-use" ordering LoxValueMappingBuilder/LoxThresholdBuilder
+        // above already rely on, just in the opposite direction (this file consuming panel-grid.ejs's
+        // global instead of the other way around).
+        window.updateSharedOverrideVisibility(form, checklist, cache, { valueLabels: function (e) { return !!(e && e.valueLabelsRaw); } });
       }
 
       function rebuildRows() {
