@@ -12,9 +12,25 @@ const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
+// Same bundle quick-add-diag/the Miniservers-page "Add to Monitor" button pins in one click (see
+// routes/dashboards.js's own QUICK_ADD_DIAG_FIELDS) — kept as its own copy rather than exported
+// from there, matching that file's own comment on why DIAG_FIELD_LABELS is the one thing shared
+// instead: this list is a UI decision (which 3 of the 4 diag fields get a one-click bundle),
+// duplicating a 3-item array is cheaper than a cross-route-file dependency for it.
+const DIAG_MONITOR_BUNDLE_FIELDS = ['cpu_load', 'heap_value_kb', 'num_tasks'];
+
 router.get('/', asyncHandler(async (req, res) => {
   const rows = await db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
   const nameById = new Map(rows.map((ms) => [ms.id, ms.name]));
+  // Whether THIS Miniserver's "Add to Monitor" bundle button has anything left to add — grey it
+  // out once all 3 fields already have their own monitor, same "don't invite creating a
+  // functionally identical row" reasoning as Live Data's own per-state +Monitor button
+  // (routes/liveData.js). findOrCreateDiagMonitor already makes clicking it again harmless (it
+  // reuses whichever of the 3 already exist rather than duplicating them), so this is purely a
+  // clarity improvement, not a correctness fix the way that one was.
+  const diagMonitorCounts = new Map();
+  (await db.prepare("SELECT miniserver_id, COUNT(DISTINCT diag_field) AS n FROM monitors WHERE source_type = 'miniserver_diag' AND diag_field IN (?, ?, ?) GROUP BY miniserver_id")
+    .all(...DIAG_MONITOR_BUNDLE_FIELDS)).forEach((r) => diagMonitorCounts.set(r.miniserver_id, r.n));
   // Client count per Gateway — every OTHER row whose own gateway_client_of points here — so a
   // Gateway's own row can show "Gateway · N clients" without a second query per row.
   const clientCountByGatewayId = new Map();
@@ -26,6 +42,7 @@ router.get('/', asyncHandler(async (req, res) => {
     ...ms,
     gatewayClientOfName: ms.gateway_client_of ? nameById.get(ms.gateway_client_of) || null : null,
     gatewayClientCount: clientCountByGatewayId.get(ms.id) || 0,
+    diagFullyMonitored: (diagMonitorCounts.get(ms.id) || 0) >= DIAG_MONITOR_BUNDLE_FIELDS.length,
   }));
 
   // Every Client immediately follows its own Gateway in the rendered list, regardless of what its
@@ -68,11 +85,18 @@ router.get('/data.json', asyncHandler(async (req, res) => {
     if (!ms.gateway_client_of) return;
     clientCountByGatewayId.set(ms.gateway_client_of, (clientCountByGatewayId.get(ms.gateway_client_of) || 0) + 1);
   });
+  // Same "Add to Monitor" already-covered check as the plain page route above — this Tabulator
+  // JSON feed is what the page actually renders (see miniservers.ejs's own PILOT comment), the
+  // plain route's own rendering of miniserver-diagnostics.ejs isn't reachable from here at all.
+  const diagMonitorCounts = new Map();
+  (await db.prepare("SELECT miniserver_id, COUNT(DISTINCT diag_field) AS n FROM monitors WHERE source_type = 'miniserver_diag' AND diag_field IN (?, ?, ?) GROUP BY miniserver_id")
+    .all(...DIAG_MONITOR_BUNDLE_FIELDS)).forEach((r) => diagMonitorCounts.set(r.miniserver_id, r.n));
 
   function toRow(ms) {
     const plc = plcStateLabel(ms.plc_state);
     return {
       id: ms.id,
+      diagFullyMonitored: (diagMonitorCounts.get(ms.id) || 0) >= DIAG_MONITOR_BUNDLE_FIELDS.length,
       status: ms.status,
       statusLabel: ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown',
       stateLabel: plc ? plc[0] : null,

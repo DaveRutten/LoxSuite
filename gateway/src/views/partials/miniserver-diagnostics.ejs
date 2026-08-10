@@ -91,7 +91,7 @@
     <% if (canEdit('monitor')) { %>
     <form class="inline" method="post" action="/monitor/quick-add-diag">
       <input type="hidden" name="miniserver_id" value="<%= ms.id %>">
-      <button type="submit" class="primary" <%= msOffline ? 'disabled' : '' %> title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : 'Start recording CPU load, Heap value and Task count on the Monitor page, without pinning them to the Dashboard' %>"><%- icon('plus') %> Add to Monitor</button>
+      <button type="submit" class="primary" <%= (msOffline || ms.diagFullyMonitored) ? 'disabled' : '' %> title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : (ms.diagFullyMonitored ? 'CPU load, Heap value and Task count are all already monitored' : 'Start recording CPU load, Heap value and Task count on the Monitor page, without pinning them to the Dashboard') %>"><%- icon('plus') %> <%= ms.diagFullyMonitored ? 'Monitored' : 'Add to Monitor' %></button>
     </form>
     <% } %>
   </div>

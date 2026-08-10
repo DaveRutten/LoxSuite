@@ -11,10 +11,23 @@ const router = express.Router();
 
 router.get('/', (req, res) => res.redirect('/incoming/messages'));
 
-router.get('/messages', (req, res) => {
+router.get('/messages', asyncHandler(async (req, res) => {
   const topics = getTopicOverview().map((t) => ({ ...t, recognition: commandRecognitionString(t.topic) }));
-  res.render('incoming-messages', { topics });
-});
+  // Every MQTT topic already tracked by a monitor — same "grey out instead of letting someone
+  // create a second, identical monitor" treatment as Live Data's own Loxone states (see
+  // routes/liveData.js), just keyed by topic instead of uuid.
+  const monitoredTopics = (await db.prepare("SELECT mqtt_topic FROM monitors WHERE source_type = 'mqtt'").all()).map((r) => r.mqtt_topic);
+  // Same "show what's already true about this row" idea, for the other two per-row actions this
+  // page also offers: Map (does an MQTT -> Loxone mapping already exist for this exact topic?) and
+  // Widget (does its monitor already have at least one dashboard panel pinned to it?).
+  const mappedTopics = (await db.prepare('SELECT DISTINCT mqtt_topic FROM mappings_mqtt_to_loxone').all()).map((r) => r.mqtt_topic);
+  const widgetedTopics = (await db.prepare(
+    `SELECT DISTINCT m.mqtt_topic FROM monitors m
+     JOIN dashboard_panel_monitors dpm ON dpm.monitor_id = m.id
+     WHERE m.source_type = 'mqtt'`
+  ).all()).map((r) => r.mqtt_topic);
+  res.render('incoming-messages', { topics, monitoredTopics, mappedTopics, widgetedTopics });
+}));
 
 router.post('/messages/clear', requirePermission('incoming', 'edit'), (req, res) => {
   clearTopicOverview();

@@ -295,12 +295,19 @@
       '<button type="submit" class="primary"' + (msOffline ? ' disabled' : '') + '>' + ICONS.plus + ' Add to Dashboard</button>';
     diagActions.appendChild(addDashForm);
 
+    // Greyed out once CPU load/Heap value/Task count already each have their own monitor —
+    // findOrCreateDiagMonitor (monitorCollector.js) makes clicking it again harmless either way
+    // (it reuses whichever already exist), so this is purely a clarity improvement, same as Live
+    // Data's own already-monitored +Monitor button (routes/liveData.js).
+    var monAlreadyDone = !msOffline && v.diagFullyMonitored;
     var addMonForm = document.createElement('form');
     addMonForm.className = 'inline';
     addMonForm.method = 'post';
     addMonForm.action = '/monitor/quick-add-diag';
     addMonForm.innerHTML = '<input type="hidden" name="miniserver_id" value="' + v.id + '">' +
-      '<button type="submit" class="primary"' + (msOffline ? ' disabled' : '') + '>' + ICONS.plus + ' Add to Monitor</button>';
+      '<button type="submit" class="primary"' + (msOffline || monAlreadyDone ? ' disabled' : '') +
+      (monAlreadyDone ? ' title="CPU load, Heap value and Task count are all already monitored"' : '') + '>' +
+      ICONS.plus + ' ' + (monAlreadyDone ? 'Monitored' : 'Add to Monitor') + '</button>';
     diagActions.appendChild(addMonForm);
 
     diagHint.textContent = '"Check for update" reads this Miniserver’s own release channel (best-effort, not a guarantee). "Update to latest release" sends a real update command — a real firmware update and reboot on this Miniserver right now.';

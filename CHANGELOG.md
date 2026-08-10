@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.7-alpha.1] - 2026-08-10
+
+### Added
+- Loxone Live Data and MQTT Live Traffic now show a **Status** column with small purple badges
+  (Monitored/Widget/Mapped) so it's obvious at a glance which values are already tracked somewhere
+  else, without needing to click + Monitor or + Widget to find out.
+- Both +Monitor and +Widget now grey themselves out once the value already has one — pinning the
+  same value on the Dashboard a second time used to silently create a duplicate panel; it's now
+  rejected the same way a duplicate monitor already was. Applies to the single-row buttons, the
+  per-room bulk actions, and the Miniservers diagnostics "Add to Monitor" button.
+- The Miniservers page's diagnostics dialog also greys out "Add to Monitor" once CPU load, heap
+  value, and task count are all already being tracked.
+
+### Changed
+- Live Data's bulk "Monitor selected"/"Widget selected" now disable the moment even ONE selected
+  control is already monitored/widgeted, instead of only once every selected control is — avoids a
+  partial bulk add silently skipping some of the selection with no visual warning beforehand.
+- A bulk add's rows now update their Status badges and buttons immediately in place once it
+  succeeds, without needing a page reload to see the new state.
+- Deleting a monitor (or clearing its history) now responds immediately and removes the row from
+  the page right away; the actual history purge runs in the background afterwards instead of
+  blocking the page load — a monitor with years of history used to make the page hang for a long
+  time on delete.
+
+### Fixed
+- Manually adding a monitor (Monitor page's own Add form) for a value/topic that already had one
+  silently created a second, duplicate monitor — this is the one path that check was missing from.
+
 ## [0.13.6-alpha.1] - 2026-08-10
 
 ### Added

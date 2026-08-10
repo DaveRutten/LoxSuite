@@ -47,13 +47,30 @@ router.get('/', asyncHandler(async (req, res) => {
   const miniserver = pickMiniserver(miniservers, requestedId);
 
   if (!miniserver) {
-    return res.render('live-data', { miniservers, miniserverId: null, rooms: [], error: null, liveStatus: null });
+    return res.render('live-data', { miniservers, miniserverId: null, rooms: [], error: null, liveStatus: null, suggestionsEnabled: false, monitoredUuids: [], widgetedUuids: [] });
   }
 
   ensureConnection(miniserver);
   const liveStatus = getStatus(miniserver.id);
   const gatewaySettings = await db.prepare('SELECT dashboard_suggestions_enabled FROM gateway_settings WHERE id = 1').get();
   const suggestionsEnabled = !!gatewaySettings?.dashboard_suggestions_enabled && res.locals.canEdit('dashboard');
+  // Every state uuid on THIS Miniserver already tracked by a 'loxone' monitor — sent down so the
+  // client-side row builder (buildMonitorForm below) can grey out "+ Monitor" instead of letting
+  // someone create a second, functionally-identical monitor for the same value (routes/monitor.js
+  // now also rejects that server-side, but catching it here means the button itself already looks
+  // right rather than needing an error round trip to find out).
+  const monitoredUuids = (await db.prepare(
+    "SELECT loxone_uuid FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ?"
+  ).all(miniserver.id)).map((r) => r.loxone_uuid);
+  // Every state uuid on THIS Miniserver whose monitor has at least one dashboard panel pinned to
+  // it — same "grey out +Monitor instead of allowing a duplicate" idea as monitoredUuids above,
+  // just for the Widget side: routes/dashboards.js's quick-add-loxone now rejects a second +Widget
+  // for the same value the same way routes/monitor.js already rejects a second monitor.
+  const widgetedUuids = (await db.prepare(
+    `SELECT DISTINCT m.loxone_uuid FROM monitors m
+     JOIN dashboard_panel_monitors dpm ON dpm.monitor_id = m.id
+     WHERE m.source_type = 'loxone' AND m.miniserver_id = ?`
+  ).all(miniserver.id)).map((r) => r.loxone_uuid);
 
   try {
     // The structure file (LoxAPP3.json) is cached indefinitely per Miniserver (see
@@ -63,9 +80,9 @@ router.get('/', asyncHandler(async (req, res) => {
     // (the page's own Refresh button) is the explicit way around that.
     const forceRefresh = req.query.refresh === '1';
     const rooms = await getRoomSummaries(miniserver, { forceRefresh });
-    res.render('live-data', { miniservers, miniserverId: miniserver.id, rooms, error: null, liveStatus, suggestionsEnabled });
+    res.render('live-data', { miniservers, miniserverId: miniserver.id, rooms, error: null, liveStatus, suggestionsEnabled, monitoredUuids, widgetedUuids });
   } catch (err) {
-    res.render('live-data', { miniservers, miniserverId: miniserver.id, rooms: [], error: `Could not read the structure from this Miniserver: ${err.message}`, liveStatus, suggestionsEnabled });
+    res.render('live-data', { miniservers, miniserverId: miniserver.id, rooms: [], error: `Could not read the structure from this Miniserver: ${err.message}`, liveStatus, suggestionsEnabled, monitoredUuids, widgetedUuids });
   }
 }));
 

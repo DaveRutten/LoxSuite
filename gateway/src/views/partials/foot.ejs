@@ -841,7 +841,23 @@
         bar.classList.add('open');
         growRowActionsPopover(true);
       });
-      yesBtn.addEventListener('click', function () { form.submit(); });
+      // data-ajax-delete (e.g. Monitor's own per-row Delete, see monitor.ejs): a plain form.submit()
+      // navigates away and blocks on the FULL response — fine for a normal delete, but this
+      // specific route deliberately responds fast and keeps purging that monitor's history in the
+      // background (see routes/monitor.js), so waiting for it here would defeat the whole point.
+      // Fires a fetch instead (result intentionally ignored — the route always responds once its
+      // own fast/cheap part is done, regardless of how the background purge later turns out) and
+      // dispatches a generic event with the form for whichever page-specific script (monitor.ejs's
+      // own listener) actually knows how to remove that one row from ITS OWN markup — this file
+      // has no business knowing a monitor row's DOM shape, only that "something to clean up
+      // client-side" just happened.
+      yesBtn.addEventListener('click', function () {
+        if (!form.hasAttribute('data-ajax-delete')) { form.submit(); return; }
+        var params = new URLSearchParams();
+        new FormData(form).forEach(function (value, key) { params.append(key, value); });
+        fetch(form.action, { method: 'POST', body: params }).catch(function () {});
+        document.dispatchEvent(new CustomEvent('lox:ajax-delete', { detail: { form: form } }));
+      });
       noBtn.addEventListener('click', function () {
         bar.classList.remove('open');
         growRowActionsPopover(false);

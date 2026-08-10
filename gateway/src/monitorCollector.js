@@ -228,11 +228,41 @@ async function pollLoxoneMonitors() {
   }
 }
 
+const HISTORY_PURGE_BATCH_SIZE = 5000;
+
+// Deletes in bounded chunks, yielding to the event loop between each — an unbounded single-
+// statement DELETE against monitor_history can end up removing hundreds of thousands of rows in
+// one go (a monitor that accumulated a lot of history before the change-only dedup in
+// insertHistory(), or a long-neglected install's first retention sweep) and ties up the ENTIRE
+// event loop — every other request, every MQTT message — for its whole multi-second-or-more
+// duration, not just whoever triggered it. The extra derived-table wrapper around the inner
+// SELECT is for MySQL, which refuses to reference the same table being deleted from directly
+// inside a subquery ("You can't specify target table for update in FROM clause") — harmlessly
+// redundant on SQLite/Postgres, which don't have that restriction.
+async function purgeHistoryBatched(whereSql, whereParams) {
+  for (;;) {
+    const { changes } = await db.prepare(
+      `DELETE FROM monitor_history WHERE id IN (
+        SELECT id FROM (SELECT id FROM monitor_history WHERE ${whereSql} LIMIT ?) AS lox_purge_batch
+      )`
+    ).run(...whereParams, HISTORY_PURGE_BATCH_SIZE);
+    if (!changes) break;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
 async function purgeOldHistory() {
   const settings = await db.prepare('SELECT monitor_retention_days FROM gateway_settings WHERE id = 1').get();
   const days = settings?.monitor_retention_days ?? 30;
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  await db.prepare('DELETE FROM monitor_history WHERE recorded_at < ?').run(cutoff);
+  await purgeHistoryBatched('recorded_at < ?', [cutoff]);
+}
+
+// Used by routes/monitor.js's own clear-history and delete-monitor handlers — same batching, same
+// reasoning, just scoped to one monitor instead of a retention cutoff. Exported rather than each
+// duplicating the batching loop themselves.
+async function purgeMonitorHistory(monitorId) {
+  await purgeHistoryBatched('monitor_id = ?', [monitorId]);
 }
 
 async function getCurrentValue(monitorId) {
@@ -273,4 +303,5 @@ module.exports = {
   DIAG_FIELD_LABELS,
   getCurrentValue,
   clearCurrentValue,
+  purgeMonitorHistory,
 };

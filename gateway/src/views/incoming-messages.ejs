@@ -30,7 +30,7 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Topic</th><th>Actual value</th><th>Previous value</th><th>Count</th><th>Last seen</th><th>Command Recognition (UDP)</th><th>Actions</th></tr>
+      <tr><th>Topic</th><th>Actual value</th><th>Previous value</th><th>Count</th><th>Last seen</th><th>Command Recognition (UDP)</th><th>Status</th><th>Actions</th></tr>
     </thead>
     <tbody>
       <% topics.forEach(t => { %>
@@ -67,21 +67,28 @@
             </div>
           </td>
           <td>
+            <% if (mappedTopics.includes(t.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;">Mapped</span><% } %>
+            <% if (monitoredTopics.includes(t.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;">Monitored</span><% } %>
+            <% if (widgetedTopics.includes(t.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;">Widget</span><% } %>
+          </td>
+          <td>
             <div class="row-actions">
               <% if (canEdit('mqtt_to_loxone')) { %>
               <a class="inline" href="/mappings/mqtt-to-loxone?topic=<%= encodeURIComponent(t.topic) %>" title="Use this topic in a new MQTT&nbsp;&rarr;&nbsp;Loxone mapping"><button type="button" class="primary"><%- icon('link') %> Map</button></a>
               <% } %>
               <% if (canEdit('dashboard')) { %>
+              <% var topicWidgeted = widgetedTopics.includes(t.topic); %>
               <form class="inline" method="post" action="/dashboards/quick-add-topic">
                 <input type="hidden" name="topic" value="<%= t.topic %>">
-                <button type="submit" class="primary" title="Pin this topic's value on the Dashboard &mdash; gets an auto-generated name"><%- icon('plus') %> Widget</button>
+                <button type="submit" class="primary" <%= topicWidgeted ? 'disabled' : '' %> title="<%= topicWidgeted ? 'Already pinned on the Dashboard' : 'Pin this topic\'s value on the Dashboard — gets an auto-generated name' %>"><%- icon('plus') %> <%= topicWidgeted ? 'On Dashboard' : 'Widget' %></button>
               </form>
               <% } %>
               <% if (canEdit('monitor')) { %>
+              <% var topicMonitored = monitoredTopics.includes(t.topic); %>
               <form class="inline" method="post" action="/monitor">
                 <input type="hidden" name="source_type" value="mqtt">
                 <input type="hidden" name="topic" value="<%= t.topic %>">
-                <button type="submit" class="primary" title="Start recording this topic's history on the Monitor page"><%- icon('plus') %> Monitor</button>
+                <button type="submit" class="primary" <%= topicMonitored ? 'disabled' : '' %> title="<%= topicMonitored ? 'Already being monitored' : 'Start recording this topic\'s history on the Monitor page' %>"><%- icon('plus') %> <%= topicMonitored ? 'Monitored' : 'Monitor' %></button>
               </form>
               <% } %>
             </div>

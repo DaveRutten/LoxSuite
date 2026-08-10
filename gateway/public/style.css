@@ -2716,7 +2716,10 @@ main > p.hint:first-of-type { margin-top: 0; }
 .live-data-category[open] > summary::before { transform: rotate(45deg); margin-top: 0.2rem; }
 
 .live-data-category .table-wrap { margin: 0 0.6rem 0.85rem 1.7rem; }
-.live-data-category .badge { font-size: 0.68rem; padding: 0.1rem 0.45rem; }
+/* Scoped to the category's own <summary> line (its "type" tag, e.g. "AI") — NOT every .badge
+   nested anywhere inside .live-data-category, which would also catch the Status column's
+   Monitored/Widget badges further down inside that same table-wrap and shrink those too. */
+.live-data-category > summary .badge { font-size: 0.68rem; padding: 0.1rem 0.45rem; }
 
 /* Fixed layout (paired with the <colgroup> built in live-data.ejs) so every category's table
    uses the same column proportions regardless of its own content — without this, a table-wrap's
@@ -2758,6 +2761,7 @@ main > p.hint:first-of-type { margin-top: 0; }
    line split the free space between them instead of one pushing the whole group, which opened up
    a visible gap between the cluster and Suggest dashboard instead of the two sitting flush together. */
 .live-data-inline-bulk:not([hidden]) ~ .suggest-dashboard-btn { margin-left: 0; }
+
 
 .suggest-preview {
   margin: 0 0.6rem 0.85rem 1.7rem;

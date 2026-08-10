@@ -92,10 +92,10 @@
         // (checkboxes can span rooms), all wired to the same document-level state in the script
         // near the bottom of this file.
       %>
-      <span class="live-data-inline-bulk hint" hidden>
+      <span class="live-data-inline-bulk hint">
         <span class="live-data-bulk-count"></span>
-        <button type="button" class="primary live-data-bulk-monitor" title="Monitor every selected control"><%- icon('plus') %> Monitor selected</button>
         <button type="button" class="primary live-data-bulk-widget" title="Add every selected control as a dashboard widget"><%- icon('plus') %> Widget selected</button>
+        <button type="button" class="primary live-data-bulk-monitor" title="Monitor every selected control"><%- icon('plus') %> Monitor selected</button>
         <button type="button" class="btn-soft live-data-bulk-clear">Clear selection</button>
       </span>
       <% if (suggestionsEnabled) { %>
@@ -117,6 +117,22 @@
 
 <script>
   (function () {
+    // Every state uuid on this Miniserver already tracked by a monitor (routes/liveData.js) — a
+    // Set for O(1) lookups per row, since buildMonitorForm below runs once per state, potentially
+    // hundreds of times on a room with a lot of controls. On window, not just this IIFE's own
+    // local scope — the "Checkbox selection + bulk +Monitor/+Widget" script further down this
+    // file is a SEPARATE top-level IIFE and needs this same Set too (confirmed live: referencing
+    // the un-hoisted local from there threw "monitoredUuids is not defined" on every checkbox
+    // check, silently aborting that whole change handler — including the updateBar() call after
+    // it, which is why the bulk bar then never appeared at all instead of just missing its warning
+    // styling).
+    var monitoredUuids = new Set(<%- JSON.stringify(monitoredUuids || []) %>);
+    window.monitoredUuids = monitoredUuids;
+    // Every state uuid whose monitor already has at least one dashboard panel pinned to it — same
+    // "show what's already true about this row" idea, just for the Widget side (routes/liveData.js).
+    var widgetedUuids = new Set(<%- JSON.stringify(widgetedUuids || []) %>);
+    window.widgetedUuids = widgetedUuids;
+
     function el(tag, attrs, children) {
       var node = document.createElement(tag);
       Object.keys(attrs || {}).forEach(function (k) {
@@ -140,8 +156,18 @@
       form.appendChild(el('input', { type: 'hidden', name: 'miniserver_id', value: miniserverId }));
       form.appendChild(el('input', { type: 'hidden', name: 'loxone_uuid', value: uuid }));
       form.appendChild(el('input', { type: 'hidden', name: 'label', value: label }));
-      var btn = el('button', { type: 'submit', class: 'primary', title: 'Start recording this state\'s history on the Monitor page' });
-      btn.innerHTML = '+ Monitor';
+      // Greyed out (not just left clickable and rejected server-side, see routes/monitor.js's own
+      // existence check) once this exact value already has a monitor — the same value can't be
+      // usefully tracked twice, it would just be two identical monitors independently polling and
+      // logging the same reading.
+      var alreadyMonitored = monitoredUuids.has(uuid);
+      var btn = el('button', {
+        type: 'submit',
+        class: 'primary',
+        title: alreadyMonitored ? 'Already being monitored' : 'Start recording this state\'s history on the Monitor page',
+      });
+      if (alreadyMonitored) btn.disabled = true;
+      btn.innerHTML = alreadyMonitored ? '✓ Monitored' : '+ Monitor';
       form.appendChild(btn);
       return form;
     }
@@ -151,11 +177,36 @@
       form.appendChild(el('input', { type: 'hidden', name: 'miniserver_id', value: miniserverId }));
       form.appendChild(el('input', { type: 'hidden', name: 'loxone_uuid', value: uuid }));
       form.appendChild(el('input', { type: 'hidden', name: 'label', value: label }));
-      var btn = el('button', { type: 'submit', class: 'primary', title: 'Pin this value on the Dashboard — gets an auto-generated name' });
-      btn.innerHTML = '+ Widget';
+      // Same "only once" treatment as +Monitor above — pinning the same value on the Dashboard a
+      // second time would just leave two identical panels sitting side by side; routes/dashboards.js's
+      // quick-add-loxone now rejects it server-side too.
+      var alreadyWidgeted = widgetedUuids.has(uuid);
+      var btn = el('button', {
+        type: 'submit',
+        class: 'primary',
+        title: alreadyWidgeted ? 'Already pinned on the Dashboard' : 'Pin this value on the Dashboard — gets an auto-generated name',
+      });
+      if (alreadyWidgeted) btn.disabled = true;
+      btn.innerHTML = alreadyWidgeted ? '✓ On Dashboard' : '+ Widget';
       form.appendChild(btn);
       return form;
     }
+
+    // The Status column's own cell contents — 0-2 small badges, same purple .badge-purple class
+    // used for the Miniservers page's Gateway/Client tags: this is a categorical "this already
+    // exists elsewhere" flag, not a good/bad status verdict, so it deliberately doesn't borrow
+    // .badge-ok's green (already meaning "online"/"enabled" elsewhere). A plain function (not built
+    // once per row and cached) since bulkAdd below also calls this again, after a successful add,
+    // to refresh a row's cell in place without a full page reload. Exposed on window so the
+    // separate "bulk select" IIFE further down this file can call it too (see monitoredUuids above
+    // for why a plain local var/function isn't visible there).
+    function buildStatusBadges(uuid) {
+      var badges = [];
+      if (window.monitoredUuids.has(uuid)) badges.push(el('span', { class: 'badge badge-purple', text: 'Monitored' }));
+      if (window.widgetedUuids.has(uuid)) badges.push(el('span', { class: 'badge badge-purple', text: 'Widget' }));
+      return badges;
+    }
+    window.buildStatusBadges = buildStatusBadges;
 
     // Compact, single-line JSON rendering — {k: v, k: v} / [a, b, c] rather than an indented
     // multi-line dump. A short array like [778] or [1, 2, 778] has no business taking three lines,
@@ -219,15 +270,16 @@
       // with fixed percentages keeps every category's table the same shape regardless of content.
       table.appendChild(el('colgroup', {}, [
         el('col', { style: 'width:4%;' }),
-        el('col', { style: 'width:20%;' }),
-        el('col', { style: 'width:13%;' }),
-        el('col', { style: 'width:43%;' }),
+        el('col', { style: 'width:18%;' }),
+        el('col', { style: 'width:12%;' }),
+        el('col', { style: 'width:34%;' }),
+        el('col', { style: 'width:12%;' }),
         el('col', { style: 'width:20%;' }),
       ]));
       var thead = el('thead');
       thead.appendChild(el('tr', {}, [
         el('th', {}, [el('input', { type: 'checkbox', class: 'live-data-select-all', title: 'Select every row in this category' })]),
-        el('th', { text: 'Control' }), el('th', { text: 'State' }), el('th', { text: 'Value' }), el('th', { text: 'Actions' }),
+        el('th', { text: 'Control' }), el('th', { text: 'State' }), el('th', { text: 'Value' }), el('th', { text: 'Status' }), el('th', { text: 'Actions' }),
       ]));
       table.appendChild(thead);
       var tbody = el('tbody', { class: 'live-data-body' });
@@ -244,9 +296,10 @@
           row.appendChild(el('td', {}, [document.createTextNode(control.name + ' '), el('span', { class: 'hint', style: 'margin:0;', text: '(' + control.type + ')' })]));
           row.appendChild(el('td', { text: s.stateName }));
           row.appendChild(el('td', { 'data-value-for': s.uuid, class: 'hint' }, [document.createTextNode('…')]));
+          row.appendChild(el('td', { 'data-status-for': s.uuid }, buildStatusBadges(s.uuid)));
           var actions = el('div', { class: 'row-actions' }, [
-            buildMonitorForm(miniserverId, s.uuid, label),
             buildWidgetForm(miniserverId, s.uuid, label),
+            buildMonitorForm(miniserverId, s.uuid, label),
           ]);
           row.appendChild(el('td', {}, [actions]));
           tbody.appendChild(row);
@@ -698,16 +751,36 @@
     // shows/hides and updates its count in lockstep regardless of which room's checkboxes changed.
     var clusters = Array.prototype.slice.call(document.querySelectorAll('.live-data-inline-bulk'));
     if (!clusters.length) return;
+    updateBar(); // sets the correct initial disabled state (nothing selected yet) now that the bar itself is always visible rather than starting hidden
 
     function selectedCheckboxes() {
       return Array.prototype.slice.call(document.querySelectorAll('.live-data-row-select:checked'));
     }
 
     function updateBar() {
-      var n = selectedCheckboxes().length;
+      // Per-room, not one global count for every copy — each cluster lives inside ONE room's own
+      // <summary> (see the markup above), and its own bar should only appear once THAT room has a
+      // selection, not whenever ANYTHING anywhere on the page does (the earlier version's single
+      // shared `n` made every OTHER room's bar pop up right along with it, which read as random).
+      // Monitor selected additionally goes disabled the moment ANY ONE of THIS room's selected
+      // controls already has a monitor — not just once every one of them does. Letting the click
+      // through for a selection that's only PARTLY already-monitored would still get rejected for
+      // that subset (routes/monitor.js), just less predictably than blocking it up front the same
+      // way a single already-monitored row's own +Monitor button is blocked.
       clusters.forEach(function (cluster) {
+        var room = cluster.closest('.live-data-room');
+        var boxes = room ? Array.prototype.slice.call(room.querySelectorAll('.live-data-row-select:checked')) : [];
+        var n = boxes.length;
+        var anyMonitored = n > 0 && boxes.some(function (cb) { return window.monitoredUuids.has(cb.dataset.uuid); });
+        var anyWidgeted = n > 0 && boxes.some(function (cb) { return window.widgetedUuids.has(cb.dataset.uuid); });
         cluster.hidden = n === 0;
         cluster.querySelector('.live-data-bulk-count').textContent = n + ' selected';
+        var widgetBtn = cluster.querySelector('.live-data-bulk-widget');
+        var monitorBtn = cluster.querySelector('.live-data-bulk-monitor');
+        widgetBtn.disabled = n === 0 || anyWidgeted;
+        widgetBtn.title = anyWidgeted ? 'Deselect the control(s) already pinned on the Dashboard first' : 'Pin every selected control on the Dashboard';
+        monitorBtn.disabled = n === 0 || anyMonitored;
+        monitorBtn.title = anyMonitored ? 'Deselect the already-monitored control(s) first' : 'Monitor every selected control';
       });
     }
 
@@ -745,7 +818,29 @@
     // `siblingClass` re-labels every OTHER room's copy of the same button too, not just the one
     // actually clicked, so all of them read "Adding N…" together instead of just the one under
     // whichever room summary happened to be clicked.
-    function bulkAdd(url, buildBody, siblingClass, label) {
+    // Refreshes ONE row's Status badges + its own +Monitor button in place — called after a
+    // successful add (single OR bulk) so the row reflects reality immediately, without needing a
+    // full page reload the way the classic (non-JS) form submit underneath still gets it for free.
+    function refreshRowState(uuid) {
+      var cell = document.querySelector('td[data-status-for="' + uuid + '"]');
+      if (cell) { cell.innerHTML = ''; window.buildStatusBadges(uuid).forEach(function (b) { cell.appendChild(b); }); }
+      var monForm = document.querySelector('form[action="/monitor"] input[name="loxone_uuid"][value="' + uuid + '"]');
+      if (monForm && window.monitoredUuids.has(uuid)) {
+        var btn = monForm.closest('form').querySelector('button');
+        btn.disabled = true;
+        btn.title = 'Already being monitored';
+        btn.innerHTML = '✓ Monitored';
+      }
+      var widgetForm = document.querySelector('form[action="/dashboards/quick-add-loxone"] input[name="loxone_uuid"][value="' + uuid + '"]');
+      if (widgetForm && window.widgetedUuids.has(uuid)) {
+        var wbtn = widgetForm.closest('form').querySelector('button');
+        wbtn.disabled = true;
+        wbtn.title = 'Already pinned on the Dashboard';
+        wbtn.innerHTML = '✓ On Dashboard';
+      }
+    }
+
+    function bulkAdd(url, buildBody, siblingClass, label, targetSet, dupLabel) {
       var boxes = selectedCheckboxes();
       if (boxes.length === 0) return;
       var buttons = Array.prototype.slice.call(document.querySelectorAll('.' + siblingClass));
@@ -755,14 +850,40 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(buildBody(cb)),
+        }).then(function (r) {
+          if (r.ok) return { ok: true };
+          // routes/monitor.js's own duplicate rejection answers JSON with isDuplicate — checked
+          // here (rather than just counting every non-ok response as one flat "failed") so a
+          // bulk "Monitor selected" that included some already-monitored controls tells the user
+          // WHY those didn't get added instead of reading as an unexplained partial failure. Any
+          // other error shape (network failure, a route that doesn't send this field) falls back
+          // to plain "failed" — the total count is still right either way.
+          return r.json().then(
+            function (body) { return { ok: false, isDuplicate: !!body.isDuplicate }; },
+            function () { return { ok: false, isDuplicate: false }; }
+          );
         });
       })).then(function (results) {
-        var failed = results.filter(function (r) { return r.status !== 'fulfilled' || !r.value.ok; }).length;
+        var outcomes = results.map(function (r) { return r.status === 'fulfilled' ? r.value : { ok: false, isDuplicate: false }; });
+        var duplicates = outcomes.filter(function (o) { return !o.ok && o.isDuplicate; }).length;
+        var otherFailed = outcomes.filter(function (o) { return !o.ok && !o.isDuplicate; }).length;
+        var added = boxes.length - duplicates - otherFailed;
+        // Every successfully-added box's uuid joins the relevant Set right away — Monitor and
+        // Widget hit two DIFFERENT sets (see the two call sites below), so which one to update is
+        // passed in rather than guessed from the url.
+        outcomes.forEach(function (o, i) {
+          if (!o.ok) return;
+          var uuid = boxes[i].dataset.uuid;
+          targetSet.add(uuid);
+          refreshRowState(uuid);
+        });
         buttons.forEach(function (b) { b.disabled = false; b.textContent = label; });
         clearSelection();
-        window.alert(failed === 0
-          ? 'Added ' + boxes.length + (boxes.length === 1 ? ' item' : ' items') + '.'
-          : (boxes.length - failed) + ' of ' + boxes.length + ' added — ' + failed + ' failed.');
+        var parts = [];
+        if (added) parts.push(added + (added === 1 ? ' item added' : ' items added'));
+        if (duplicates) parts.push(duplicates + ' ' + dupLabel + ', skipped');
+        if (otherFailed) parts.push(otherFailed + (otherFailed === 1 ? ' failed' : ' failed'));
+        window.alert(parts.join(', ') + '.');
       });
     }
 
@@ -777,7 +898,7 @@
         e.stopPropagation();
         bulkAdd('/monitor', function (cb) {
           return { source_type: 'loxone', miniserver_id: cb.dataset.miniserverId, loxone_uuid: cb.dataset.uuid, label: cb.dataset.label };
-        }, 'live-data-bulk-monitor', btn.textContent);
+        }, 'live-data-bulk-monitor', btn.textContent, window.monitoredUuids, 'already monitored');
       });
     });
     document.querySelectorAll('.live-data-bulk-widget').forEach(function (btn) {
@@ -786,7 +907,7 @@
         e.stopPropagation();
         bulkAdd('/dashboards/quick-add-loxone', function (cb) {
           return { miniserver_id: cb.dataset.miniserverId, loxone_uuid: cb.dataset.uuid, label: cb.dataset.label };
-        }, 'live-data-bulk-widget', btn.textContent);
+        }, 'live-data-bulk-widget', btn.textContent, window.widgetedUuids, 'already on the Dashboard');
       });
     });
   })();

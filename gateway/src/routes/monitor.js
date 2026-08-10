@@ -9,6 +9,7 @@ const {
   clearCurrentValue,
   findOrCreateDiagMonitor,
   DIAG_FIELD_LABELS,
+  purgeMonitorHistory,
 } = require('../monitorCollector');
 const { requirePermission } = require('../middleware/requirePermission');
 const { getDisplayTimezone, parseInTimezone } = require('../dateFormat');
@@ -308,6 +309,13 @@ router.post('/', requirePermission('monitor', 'edit'), asyncHandler(async (req, 
   try {
     if (source_type === 'mqtt') {
       if (!topic) throw new Error('MQTT topic is required.');
+      // Same existence check /dashboards/quick-add-topic (Live Traffic's own "Widget" button) and
+      // liveData.js's findOrCreateMonitor already do — this form is the one path left that let a
+      // topic be monitored twice: two otherwise-identical monitors polling/logging the exact same
+      // value, doubling its own contribution to the every-poll-history-write cost this session's
+      // own dedup fix (monitorCollector.js) just cut down.
+      const existingMqtt = await db.prepare("SELECT id FROM monitors WHERE source_type = 'mqtt' AND mqtt_topic = ?").get(topic);
+      if (existingMqtt) throw new Error(`"${topic}" is already being monitored.`);
       await db.prepare(
         // config passed explicitly ('{}') — MySQL/MariaDB can't declare a DEFAULT on a TEXT column
         // at all (see 001_baseline.js's own comment), unlike SQLite/Postgres.
@@ -319,6 +327,14 @@ router.post('/', requirePermission('monitor', 'edit'), asyncHandler(async (req, 
       if (!miniserver_id || !loxone_uuid) throw new Error('Miniserver and state are required.');
       const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(miniserver_id);
       if (!miniserver) throw new Error('Miniserver not found.');
+
+      // Same existence check /dashboards/quick-add-loxone (Live Data's own "+ Widget" button) and
+      // liveData.js's findOrCreateMonitor already do — this form (what Live Data's sibling
+      // "+ Monitor" button posts to) was the one path left without it.
+      const existingLoxone = await db.prepare(
+        "SELECT id, label FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ? AND loxone_uuid = ?"
+      ).get(miniserver_id, loxone_uuid);
+      if (existingLoxone) throw new Error(`Already monitored as "${existingLoxone.label}".`);
 
       let resolvedLabel = label;
       if (!resolvedLabel) {
@@ -343,6 +359,16 @@ router.post('/', requirePermission('monitor', 'edit'), asyncHandler(async (req, 
     }
     res.redirect('/monitor');
   } catch (err) {
+    // Live Data's bulk "Monitor selected" (live-data.ejs's bulkAdd) posts JSON and reads the HTTP
+    // status alone to decide success/failure — res.render() below always answers 200 regardless of
+    // `error`, which used to make a rejected duplicate silently count as "added" in that one path
+    // (the classic form-post path this same catch already handled fine, since it renders the error
+    // straight onto the page the browser navigates to either way). A real error status here is
+    // what bulkAdd actually checks; the isDuplicate flag lets it tell "skipped, already monitored"
+    // apart from a genuine failure in its own alert instead of lumping both under "failed".
+    if (req.is('json')) {
+      return res.status(409).json({ error: err.message, isDuplicate: /already being monitored|Already monitored/.test(err.message) });
+    }
     const rawMonitors = await db
       .prepare(
         `SELECT monitors.*, miniservers.name AS miniserver_name
@@ -420,15 +446,36 @@ router.post('/:id/update', requirePermission('monitor', 'edit'), asyncHandler(as
 // same as a brand new monitor. For resetting a monitor's history (e.g. after moving a sensor),
 // as opposed to /:id/delete which removes the monitor definition entirely.
 router.post('/:id/clear-history', requirePermission('monitor', 'edit'), asyncHandler(async (req, res) => {
-  await db.prepare('DELETE FROM monitor_history WHERE monitor_id = ?').run(req.params.id);
-  clearCurrentValue(Number(req.params.id));
+  const monitorId = Number(req.params.id);
+  clearCurrentValue(monitorId);
   res.redirect(req.get('referer') || '/monitor');
+  // Not awaited before responding — see purgeMonitorHistory's own comment (monitorCollector.js)
+  // for why an unbounded delete against a monitor that's accumulated a lot of history would
+  // otherwise make this request (and, since better-sqlite3 blocks the whole event loop for the
+  // duration of each statement, every OTHER request/MQTT message too) wait on it.
+  purgeMonitorHistory(monitorId).catch((err) => console.error(`Failed to clear history for monitor ${monitorId}:`, err.message));
 }));
 
 router.post('/:id/delete', requirePermission('monitor', 'edit'), asyncHandler(async (req, res) => {
-  await db.prepare('DELETE FROM monitors WHERE id = ?').run(req.params.id);
-  await reloadMqttMonitors();
+  const monitorId = Number(req.params.id);
+  clearCurrentValue(monitorId);
   res.redirect('/monitor');
+  // Purge history FIRST, then the (now cheap) monitor row itself — deleting monitors while it
+  // still has a lot of history attached would just hand that same unbounded-delete cost to its
+  // own ON DELETE CASCADE foreign key instead, which the database runs as one atomic step with no
+  // chance to batch/yield it the way purgeMonitorHistory does. Not awaited before responding, same
+  // reasoning as clear-history above — the row's actual removal from the page is handled
+  // optimistically client-side (see foot.ejs's data-ajax-delete handling), not by waiting for
+  // this to finish; monitor.js's own listing query simply won't include it once this settles.
+  (async () => {
+    try {
+      await purgeMonitorHistory(monitorId);
+      await db.prepare('DELETE FROM monitors WHERE id = ?').run(monitorId);
+      await reloadMqttMonitors();
+    } catch (err) {
+      console.error(`Failed to delete monitor ${monitorId}:`, err.message);
+    }
+  })();
 }));
 
 // Bulk cleanup for monitors nothing actually references any more — e.g. ones a dashboard

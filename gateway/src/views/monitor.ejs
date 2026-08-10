@@ -148,7 +148,7 @@
     </thead>
     <tbody>
       <% monitors.forEach(m => { %>
-        <tr>
+        <tr data-monitor-id="<%= m.id %>">
           <td><span class="badge badge-live <%= m.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= m.enabled ? 'Active' : 'Off' %></span></td>
           <td><a href="/monitor/<%= m.id %>"><%= m.label %></a></td>
           <td>
@@ -215,7 +215,7 @@
               <form class="inline" method="post" action="/monitor/<%= m.id %>/toggle">
                 <button type="submit" class="btn-edit"><%- icon('power') %> <%= m.enabled ? 'Disable' : 'Enable' %></button>
               </form>
-              <form class="inline" method="post" action="/monitor/<%= m.id %>/delete" data-confirm="Delete this monitor and all of its history?">
+              <form class="inline" method="post" action="/monitor/<%= m.id %>/delete" data-confirm="Delete this monitor and all of its history?" data-ajax-delete>
                 <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
               </form>
               <% } %>
@@ -339,6 +339,37 @@
         });
     });
   })();
+</script>
+
+<script>
+  // Removes a just-deleted monitor's row the instant Delete is confirmed, rather than waiting for
+  // the full page reload a plain form submit would otherwise force — routes/monitor.js's own
+  // :id/delete responds quickly and keeps purging that monitor's (possibly very large) history in
+  // the background, so the row disappearing here is the ONLY signal the user gets that anything
+  // happened; nothing about this ever reloads the page for them to see it removed the old way.
+  // The event itself (and the actual fetch) come from foot.ejs's generic data-ajax-delete handling
+  // — this listener only knows how to turn "that form" into "this row", which is this page's own
+  // business, not foot.ejs's.
+  document.addEventListener('lox:ajax-delete', function (e) {
+    var form = e.detail.form;
+    var idMatch = form.action.match(/\/(\d+)\/delete$/);
+    if (!idMatch) return;
+    // Not form.closest('tr') — a Delete button with 2+ siblings (View/Edit/Enable/Delete) has
+    // already been relocated into a body-level .row-actions-popover by tables.js's
+    // collapseRowActions() by the time this fires, so the form is no longer a descendant of its
+    // own row at all. And not the monitor-edit-<id> expand-row either — collapseRowActions()
+    // itself already merges THAT row's own content into the popover and removes the original
+    // element from the DOM outright (see its own [data-toggle-row] handling), so by the time this
+    // runs it no longer exists to anchor from (confirmed live: getElementById came back null).
+    // data-monitor-id on the main <tr> (see the row loop below) is the one identifier that's
+    // neither moved nor removed by any of that.
+    var mainRow = document.querySelector('tr[data-monitor-id="' + idMatch[1] + '"]');
+    var expandRow = document.getElementById('monitor-edit-' + idMatch[1]);
+    if (mainRow) mainRow.remove();
+    if (expandRow) expandRow.remove();
+    var popover = form.closest('.row-actions-popover');
+    if (popover) popover.remove();
+  });
 </script>
 
 <script>

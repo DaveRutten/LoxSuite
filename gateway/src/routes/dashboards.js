@@ -556,26 +556,38 @@ router.post('/quick-add-topic', asyncHandler(async (req, res) => {
   const sharedDashboard = await db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
   if (!topic || !sharedDashboard) return res.redirect('/incoming/messages');
 
-  let monitor = await db.prepare("SELECT id FROM monitors WHERE source_type = 'mqtt' AND mqtt_topic = ?").get(topic);
-  let monitorId = monitor?.id;
-  if (!monitorId) {
-    monitorId = await db.insertReturningId(
-      // config passed explicitly ('{}') — MySQL/MariaDB can't declare a DEFAULT on a TEXT column
-      // at all (see 001_baseline.js's own comment), unlike SQLite/Postgres.
-      "INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at, config) VALUES ('mqtt', ?, ?, 1, ?, '{}')",
-      [humanizeTopic(topic), topic, new Date().toISOString()]
+  try {
+    let monitor = await db.prepare("SELECT id FROM monitors WHERE source_type = 'mqtt' AND mqtt_topic = ?").get(topic);
+    let monitorId = monitor?.id;
+    // Rejected the same way routes/monitor.js rejects a duplicate monitor — pinning the same topic
+    // on the Dashboard a second time would just leave two identical panels sitting side by side.
+    if (monitorId && (await db.prepare('SELECT 1 FROM dashboard_panel_monitors WHERE monitor_id = ? LIMIT 1').get(monitorId))) {
+      throw new Error(`"${topic}" is already pinned on the Dashboard.`);
+    }
+    if (!monitorId) {
+      monitorId = await db.insertReturningId(
+        // config passed explicitly ('{}') — MySQL/MariaDB can't declare a DEFAULT on a TEXT column
+        // at all (see 001_baseline.js's own comment), unlike SQLite/Postgres.
+        "INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at, config) VALUES ('mqtt', ?, ?, 1, ?, '{}')",
+        [humanizeTopic(topic), topic, new Date().toISOString()]
+      );
+      await reloadMqttMonitors(); // start recording this topic's history immediately, not just from the next gateway restart
+    }
+
+    const maxPos = (await db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboard.id)).m;
+    const panelId = await db.insertReturningId(
+      `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`,
+      [sharedDashboard.id, humanizeTopic(topic), maxPos + 1]
     );
-    await reloadMqttMonitors(); // start recording this topic's history immediately, not just from the next gateway restart
+    await db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
+
+    res.redirect('/');
+  } catch (err) {
+    if (req.is('json')) {
+      return res.status(409).json({ error: err.message, isDuplicate: /already pinned on the dashboard/i.test(err.message) });
+    }
+    res.redirect('/incoming/messages');
   }
-
-  const maxPos = (await db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboard.id)).m;
-  const panelId = await db.insertReturningId(
-    `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`,
-    [sharedDashboard.id, humanizeTopic(topic), maxPos + 1]
-  );
-  await db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
-
-  res.redirect('/');
 }));
 
 // Loxone equivalent of quick-add-topic above — same shape (find-or-create the Monitor, pin a new
@@ -590,24 +602,35 @@ router.post('/quick-add-loxone', asyncHandler(async (req, res) => {
   const sharedDashboard = await db.prepare('SELECT * FROM custom_dashboards WHERE user_id IS NULL LIMIT 1').get();
   if (!miniserverId || !uuid || !sharedDashboard) return res.redirect('/live-data');
 
-  let monitor = await db.prepare("SELECT id FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ? AND loxone_uuid = ?").get(miniserverId, uuid);
-  let monitorId = monitor?.id;
-  if (!monitorId) {
-    monitorId = await db.insertReturningId(
-      // config passed explicitly ('{}') — see the quick-add-topic route above for why.
-      "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at, config) VALUES ('loxone', ?, ?, ?, 10000, 1, ?, '{}')",
-      [label || uuid, miniserverId, uuid, new Date().toISOString()]
+  try {
+    let monitor = await db.prepare("SELECT id FROM monitors WHERE source_type = 'loxone' AND miniserver_id = ? AND loxone_uuid = ?").get(miniserverId, uuid);
+    let monitorId = monitor?.id;
+    // Same "only once" rejection as quick-add-topic above.
+    if (monitorId && (await db.prepare('SELECT 1 FROM dashboard_panel_monitors WHERE monitor_id = ? LIMIT 1').get(monitorId))) {
+      throw new Error(`Already pinned on the Dashboard as "${monitor.label || label || uuid}".`);
+    }
+    if (!monitorId) {
+      monitorId = await db.insertReturningId(
+        // config passed explicitly ('{}') — see the quick-add-topic route above for why.
+        "INSERT INTO monitors (source_type, label, miniserver_id, loxone_uuid, poll_interval_ms, enabled, created_at, config) VALUES ('loxone', ?, ?, ?, 10000, 1, ?, '{}')",
+        [label || uuid, miniserverId, uuid, new Date().toISOString()]
+      );
+    }
+
+    const maxPos = (await db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboard.id)).m;
+    const panelId = await db.insertReturningId(
+      `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`,
+      [sharedDashboard.id, label || uuid, maxPos + 1]
     );
+    await db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
+
+    res.redirect('/');
+  } catch (err) {
+    if (req.is('json')) {
+      return res.status(409).json({ error: err.message, isDuplicate: /already pinned on the dashboard/i.test(err.message) });
+    }
+    res.redirect('/live-data');
   }
-
-  const maxPos = (await db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM dashboard_panels WHERE dashboard_id = ?').get(sharedDashboard.id)).m;
-  const panelId = await db.insertReturningId(
-    `INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position) VALUES (?, 'value', ?, '24h', '{"layout":"stacked"}', ?)`,
-    [sharedDashboard.id, label || uuid, maxPos + 1]
-  );
-  await db.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, 0)').run(panelId, monitorId);
-
-  res.redirect('/');
 }));
 
 // Same shape as quick-add-topic/quick-add-loxone above, for a Miniserver's diagnostic fields (CPU

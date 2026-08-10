@@ -2316,18 +2316,23 @@
         // in the meantime.
         var neededHeightPx = paddingV + headOuter + footerPx + minContentPx + contentInset * 2 + 6 + 16;
         var minH = clamp(Math.ceil((neededHeightPx + GAP_PX) / (ROW_UNIT_PX + GAP_PX)), MIN_ROW_SPAN, MAX_ROW_SPAN);
-        // A state bar's own header+footer+one-row-of-content need is already comfortably under two
-        // whole row-units — it's the ceil() above (GridStack only sizes in whole row-units) that
-        // rounds it up to 2 regardless, wasting almost a full extra row-unit of dead space on a
-        // panel that already made every other floor here as tight as it reasonably could (see the
-        // state-bar-panel branch above, and .dash-panel:has(.state-bar-panel) in style.css). One
-        // row-unit lower than that rounded-up floor, not a re-derivation of a separate one — direct
-        // user request after the rounded floor still read as too tall in practice, accepting the
-        // small risk that a browser measuring the header/footer a hair taller than usual right after
-        // load (see the +16 safety margin above) trims into the state-bar-panel's own overflow-y:auto
-        // scroll instead of leaving a clean gap, rather than the header/footer bleeding over the
-        // panel's own edge (the failure mode the rest of this function exists to prevent).
-        if (content && content.classList.contains('state-bar-panel')) minH = clamp(minH - 1, 1, MAX_ROW_SPAN);
+        // A state bar's (or a Current value panel's own stacked rows) header+footer+one-row-of-
+        // content need is already comfortably under two whole row-units — it's the ceil() above
+        // (GridStack only sizes in whole row-units) that rounds it up to 2 regardless, wasting
+        // almost a full extra row-unit of dead space on a panel that already made every other
+        // floor here as tight as it reasonably could (see the state-bar-panel branch above, and
+        // .dash-panel:has(.state-bar-panel) in style.css — panel-value-list has no matching
+        // padding trim of its own, its rows are already compact without one). One row-unit lower
+        // than that rounded-up floor, not a re-derivation of a separate one — direct user request
+        // after the rounded floor still read as too tall in practice for both panel types,
+        // accepting the small risk that a browser measuring the header/footer a hair taller than
+        // usual right after load (see the +16 safety margin above) trims into the content's own
+        // overflow-y:auto scroll instead of leaving a clean gap, rather than the header/footer
+        // bleeding over the panel's own edge (the failure mode the rest of this function exists to
+        // prevent).
+        if (content && (content.classList.contains('state-bar-panel') || content.classList.contains('panel-value-list'))) {
+          minH = clamp(minH - 1, 1, MAX_ROW_SPAN);
+        }
 
         // Width floor: only state_bar has real text that stops being useful below a certain
         // width (see .state-bar-label's own min-width:15ch) — every other panel type's content
