@@ -111,6 +111,16 @@ router.get('/schedules', asyncHandler(async (req, res) => {
     catalog,
     presetDevice: req.query.device || '',
     presetFamilyKey: req.query.family || deviceFamily[req.query.device || ''] || '',
+    // Client Activity's own Device column falls back to the raw MQTT client ID whenever it
+    // couldn't match one to a real topic prefix seen in that device's own traffic (see
+    // resolveTopicPrefix in deviceDiscovery.js) — there's no protocol-level way to ask the broker
+    // "who published this topic", so that fallback is a best-effort GUESS, not a confirmed match.
+    // A device renamed in its own web UI (changing its topic prefix) without its MQTT client ID
+    // also changing looks exactly like this: the two strings then share nothing for that guess to
+    // work from at all. Carried through as its own query param (not re-derived here) since by the
+    // time this page loads, deviceFamily/allDevices only know about CONFIRMED topic prefixes —
+    // they have no way to tell "this exact device string came from a client ID fallback" on their own.
+    deviceUnconfirmed: !!req.query.device && req.query.resolved === '0',
     timezone: tz,
     error: req.query.error || null,
   });

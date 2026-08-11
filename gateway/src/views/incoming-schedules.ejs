@@ -10,6 +10,19 @@
 
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 
+<% if (deviceUnconfirmed) { %>
+  <p class="hint" style="color: var(--warning);">
+    <strong>&quot;<%= presetDevice %>&quot; is a guess, not a confirmed match</strong> — Client
+    Activity couldn't match this device to a real MQTT topic prefix (there's no protocol-level way
+    to ask the broker "who published this topic"), so both the Device field and the Device type
+    below fell back to a guess (the raw MQTT client ID, and a name-based guess at its type). If the
+    device was ever renamed in its own web UI, its real topic prefix can be completely different
+    from its client ID. Check <a href="/incoming/messages">Live Traffic</a> for the topic it
+    actually publishes under, and correct both fields below if they're wrong — the command is built
+    from whatever's actually in them, not from this guess.
+  </p>
+<% } %>
+
 <% if (canEdit('incoming')) { %>
 <details class="add-panel" <%= presetDevice ? 'open' : '' %>>
   <summary>Add schedule</summary>

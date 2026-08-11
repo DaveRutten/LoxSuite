@@ -77,7 +77,7 @@
                 <a class="inline" href="/mappings/commands?family=<%= encodeURIComponent(family) %>&device=<%= encodeURIComponent(c.displayName) %>">
                   <button type="button" class="btn-soft"><%- icon('link') %> Suggest commands</button>
                 </a>
-                <a class="inline" href="/incoming/schedules?family=<%= encodeURIComponent(family) %>&device=<%= encodeURIComponent(c.displayName) %>">
+                <a class="inline" href="/incoming/schedules?family=<%= encodeURIComponent(family) %>&device=<%= encodeURIComponent(c.displayName) %>&resolved=<%= c.resolvedFromTopic ? '1' : '0' %>">
                   <button type="button" class="btn-soft"><%- icon('refresh') %> Schedule command<% if (scheduleCounts[c.displayName]) { %> (<%= scheduleCounts[c.displayName] %>)<% } %></button>
                 </a>
               <% } %>
