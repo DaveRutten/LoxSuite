@@ -5,7 +5,7 @@ const { execFile } = require('child_process');
 const AdmZip = require('adm-zip');
 const cronParser = require('cron-parser');
 const db = require('./db');
-const { notifyBackupFailed } = require('./notifications');
+const { notifyBackupFailed, notifyBackupSucceeded } = require('./notifications');
 const { encrypt, decrypt } = require('./secretCrypto');
 const sqliteEngine = require('./backup/engines/sqlite');
 const postgresEngine = require('./backup/engines/postgres');
@@ -441,6 +441,7 @@ async function scheduleNext() {
       try {
         await createBackup({ includeMqttConfig: !!settingsNow.include_mqtt_config, reason: 'scheduled' });
         await updateSettings({ last_run_at: new Date().toISOString(), last_status: 'ok', last_error: null });
+        await notifyBackupSucceeded('scheduled backup');
       } catch (err) {
         await updateSettings({ last_run_at: new Date().toISOString(), last_status: 'error', last_error: err.message });
         await notifyBackupFailed(err.message, 'scheduled backup');

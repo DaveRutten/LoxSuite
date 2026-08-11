@@ -72,11 +72,16 @@
           <td><%= formatDateTime(c.connectedAt) %></td>
           <td><%= c.disconnectedAt ? formatDateTime(c.disconnectedAt) : '-' %></td>
           <td>
-            <% if (family) { %>
-              <a class="inline" href="/mappings/commands?family=<%= encodeURIComponent(family) %>&device=<%= encodeURIComponent(c.displayName) %>">
-                <button type="button" class="btn-soft"><%- icon('link') %> Suggest commands</button>
-              </a>
-            <% } %>
+            <div class="row-actions">
+              <% if (family) { %>
+                <a class="inline" href="/mappings/commands?family=<%= encodeURIComponent(family) %>&device=<%= encodeURIComponent(c.displayName) %>">
+                  <button type="button" class="btn-soft"><%- icon('link') %> Suggest commands</button>
+                </a>
+                <a class="inline" href="/incoming/schedules?family=<%= encodeURIComponent(family) %>&device=<%= encodeURIComponent(c.displayName) %>">
+                  <button type="button" class="btn-soft"><%- icon('refresh') %> Schedule command<% if (scheduleCounts[c.displayName]) { %> (<%= scheduleCounts[c.displayName] %>)<% } %></button>
+                </a>
+              <% } %>
+            </div>
           </td>
         </tr>
       <% }) %>
@@ -89,10 +94,11 @@
 </div>
 
 <p class="hint">
-  "Suggest commands" appears once a device's traffic has been recognized as belonging to a known
-  Common Commands family (see that page — includes anything added via a
-  <a href="/mappings/commands">device template</a>, not just the built-in ones) and opens that
-  builder with the device type and device pre-selected.
+  "Suggest commands" and "Schedule command" both appear once a device's traffic has been
+  recognized as belonging to a known Common Commands family (see that page — includes anything
+  added via a <a href="/mappings/commands">device template</a>, not just the built-in ones) and
+  open with the device type and device pre-selected. "Schedule command" opts that device into
+  repeating a command on a timer — e.g. a nightly reboot — entirely optional per device.
 </p>
 
 <script>

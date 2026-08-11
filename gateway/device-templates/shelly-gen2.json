@@ -32,6 +32,14 @@
         "{\"id\":1,\"src\":\"loxsuite\",\"method\":\"Light.Set\",\"params\":{\"id\":{channel},\"on\":false}}",
         "{\"id\":1,\"src\":\"loxsuite\",\"method\":\"Light.Set\",\"params\":{\"id\":{channel},\"on\":true,\"brightness\":50}}"
       ]
+    },
+    {
+      "key": "reboot",
+      "label": "Reboot",
+      "topicTemplate": "{device}/rpc",
+      "actions": [
+        "{\"id\":1,\"src\":\"loxsuite\",\"method\":\"Shelly.Reboot\"}"
+      ]
     }
   ]
 }

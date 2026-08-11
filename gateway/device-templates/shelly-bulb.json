@@ -32,6 +32,14 @@
       "actions": [
         "white <0-100>"
       ]
+    },
+    {
+      "key": "reboot",
+      "label": "Reboot",
+      "topicTemplate": "shellies/{device}/command",
+      "actions": [
+        "reboot"
+      ]
     }
   ]
 }

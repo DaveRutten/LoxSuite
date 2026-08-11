@@ -1,0 +1,300 @@
+<%- include('partials/head', { pageTitle: 'MQTT', active: 'incoming-schedules' }) %>
+
+<p class="hint">
+  Sends one already-known MQTT command &mdash; picked from the
+  <a href="/mappings/commands">Common Commands</a> catalog &mdash; on a repeating schedule, e.g. a
+  nightly reboot for a Shelly. Entirely opt-in per device; nothing here runs unless you add it
+  below. Times are evaluated in this gateway's configured display timezone
+  (<strong><%= timezone %></strong> &mdash; change that in <a href="/settings">Settings</a>).
+</p>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+
+<% if (canEdit('incoming')) { %>
+<details class="add-panel" <%= presetDevice ? 'open' : '' %>>
+  <summary>Add schedule</summary>
+  <div class="add-panel-body">
+    <form method="post" action="/incoming/schedules" class="form-grid" id="schedule-add-form">
+      <div>
+        <label for="schedule-device-input">Device</label>
+        <input type="text" name="device_key" id="schedule-device-input" list="schedule-known-devices" placeholder="shellyplug-s-02086E" value="<%= presetDevice %>" required>
+        <datalist id="schedule-known-devices">
+          <% allDevices.forEach(d => { %><option value="<%= d %>"></option><% }) %>
+        </datalist>
+      </div>
+      <div>
+        <label for="schedule-family-select">Device type</label>
+        <select name="family_key" id="schedule-family-select" required>
+          <% catalog.forEach(f => { %>
+            <option value="<%= f.key %>" <%= f.key === presetFamilyKey ? 'selected' : '' %>><%= f.label %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label for="schedule-command-select">Command</label>
+        <div style="display:flex; gap:0.4rem; align-items:center;">
+          <select name="command_value" id="schedule-command-select" required style="flex:1;"></select>
+          <button type="button" class="btn-soft" id="schedule-test-btn" title="Send this exact command once, right now — before saving it as a recurring schedule">Test</button>
+        </div>
+        <span class="hint" id="schedule-no-command-hint" style="display:none; margin:0.3rem 0 0;">
+          This device type has no schedulable command yet — device-level commands only for now (not
+          one that needs a channel), added via the <a href="/mappings/commands">Common Commands</a>
+          catalog.
+        </span>
+        <span class="hint" id="schedule-test-result" style="display:none; margin:0.3rem 0 0;"></span>
+      </div>
+      <div>
+        <label for="schedule-interval-select">Repeat</label>
+        <select name="interval_type" id="schedule-interval-select">
+          <option value="daily">Daily</option>
+          <option value="every_n_days">Every N days</option>
+          <option value="weekly">Weekly, on specific days</option>
+        </select>
+      </div>
+      <div id="schedule-interval-days-field" style="display:none;">
+        <label for="schedule-interval-days-input">Every how many days</label>
+        <input type="number" name="interval_days" id="schedule-interval-days-input" min="1" value="2">
+      </div>
+      <div id="schedule-weekdays-field" style="display:none; grid-column:1/-1;">
+        <label>Days of week</label>
+        <div style="display:flex; gap:0.9rem; flex-wrap:wrap;">
+          <% ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((d, i) => { %>
+            <label style="display:flex; align-items:center; gap:0.3rem; font-size:0.85rem; font-weight:400;">
+              <input type="checkbox" name="weekdays" value="<%= i %>"> <%= d %>
+            </label>
+          <% }) %>
+        </div>
+      </div>
+      <div>
+        <label for="schedule-time-input">Time of day</label>
+        <input type="time" name="time_of_day" id="schedule-time-input" value="01:00" required>
+      </div>
+      <div>
+        <button type="submit" class="primary" id="schedule-add-submit"><%- icon('plus') %> Add schedule</button>
+      </div>
+    </form>
+  </div>
+</details>
+<% } %>
+
+<div class="filterable-table-card" style="margin-top:1.5rem;">
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Device</th><th>Command</th><th>Repeat</th><th>Next run</th><th>Last run</th><th>Enabled</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; %>
+      <% schedules.forEach(s => { %>
+        <tr>
+          <td><%= s.device_key %></td>
+          <td><code class="truncate" title="<%= s.mqtt_topic %>"><%= s.command_label %></code></td>
+          <td>
+            <% if (s.interval_type === 'daily') { %>
+              Daily at <%= s.time_of_day %>
+            <% } else if (s.interval_type === 'every_n_days') { %>
+              Every <%= s.interval_days %> day<%= s.interval_days === 1 ? '' : 's' %> at <%= s.time_of_day %>
+            <% } else { %>
+              Weekly (<%= (s.weekdays || '').split(',').filter(Boolean).map(d => WEEKDAY_LABELS[Number(d)]).join(', ') %>) at <%= s.time_of_day %>
+            <% } %>
+          </td>
+          <td><%= s.nextRun ? formatDateTime(s.nextRun.toISOString()) : '-' %></td>
+          <td>
+            <% if (s.last_run_at) { %>
+              <span class="badge <%= s.last_status === 'ok' ? 'badge-ok' : 'badge-off' %>"><%= formatDateTime(s.last_run_at) %></span>
+              <% if (s.last_status !== 'ok' && s.last_error) { %><div class="hint" style="margin:0.25rem 0 0;"><%= s.last_error %></div><% } %>
+            <% } else { %>Never<% } %>
+          </td>
+          <td>
+            <% if (canEdit('incoming')) { %>
+            <form method="post" action="/incoming/schedules/<%= s.id %>/toggle" class="schedule-toggle-form">
+              <%- toggleSwitch('enabled', !!s.enabled) %>
+            </form>
+            <% } else { %><%= s.enabled ? 'Yes' : 'No' %><% } %>
+          </td>
+          <td>
+            <% if (canEdit('incoming')) { %>
+            <div class="row-actions">
+              <button type="button" class="btn-edit" data-toggle-row="schedule-edit-<%= s.id %>"><%- icon('edit') %> Edit</button>
+              <form method="post" action="/incoming/schedules/<%= s.id %>/run-now">
+                <button type="submit" class="btn-soft" title="Send this command right now, to test it"><%- icon('power') %> Run now</button>
+              </form>
+              <form method="post" action="/incoming/schedules/<%= s.id %>/delete" data-confirm="Delete this schedule?">
+                <button type="submit" class="icon-btn icon-btn-danger" title="Delete"><%- icon('trash') %></button>
+              </form>
+            </div>
+            <% } %>
+          </td>
+        </tr>
+        <% if (canEdit('incoming')) { %>
+        <tr class="expand-row" id="schedule-edit-<%= s.id %>">
+          <td colspan="7">
+            <form method="post" action="/incoming/schedules/<%= s.id %>/update" class="form-grid schedule-edit-form">
+              <div>
+                <label>Repeat</label>
+                <select name="interval_type" class="schedule-edit-interval-select">
+                  <option value="daily" <%= s.interval_type === 'daily' ? 'selected' : '' %>>Daily</option>
+                  <option value="every_n_days" <%= s.interval_type === 'every_n_days' ? 'selected' : '' %>>Every N days</option>
+                  <option value="weekly" <%= s.interval_type === 'weekly' ? 'selected' : '' %>>Weekly, on specific days</option>
+                </select>
+              </div>
+              <div class="schedule-edit-days-field" style="<%= s.interval_type === 'every_n_days' ? '' : 'display:none;' %>">
+                <label>Every how many days</label>
+                <input type="number" name="interval_days" min="1" value="<%= s.interval_days || 2 %>">
+              </div>
+              <div class="schedule-edit-weekdays-field" style="grid-column:1/-1; <%= s.interval_type === 'weekly' ? '' : 'display:none;' %>">
+                <label>Days of week</label>
+                <div style="display:flex; gap:0.9rem; flex-wrap:wrap;">
+                  <% var savedWeekdays = (s.weekdays || '').split(',').filter(Boolean); %>
+                  <% ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((d, i) => { %>
+                    <label style="display:flex; align-items:center; gap:0.3rem; font-size:0.85rem; font-weight:400;">
+                      <input type="checkbox" name="weekdays" value="<%= i %>" <%= savedWeekdays.includes(String(i)) ? 'checked' : '' %>> <%= d %>
+                    </label>
+                  <% }) %>
+                </div>
+              </div>
+              <div>
+                <label>Time of day</label>
+                <input type="time" name="time_of_day" value="<%= s.time_of_day %>" required>
+              </div>
+              <div>
+                <button type="submit" class="primary"><%- icon('check') %> Save</button>
+              </div>
+            </form>
+          </td>
+        </tr>
+        <% } %>
+      <% }) %>
+      <% if (schedules.length === 0) { %>
+        <tr><td colspan="7" class="empty">No scheduled commands yet.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<script>
+  (function () {
+    // A schedule fires one FIXED thing on a timer, unlike "Suggest commands"' own pick-one-when-
+    // you-click-it buttons — "Relay switch" with its on/off/toggle actions has to become three
+    // distinct choices here, not one dropdown plus a second "which action" dropdown. Device-level
+    // commands only (topicTemplate with no {channel} of its own, e.g. a Shelly's "Reboot") — a
+    // per-channel one (relay/roller/...) would need a channel picker this UI doesn't have yet.
+    var catalog = <%- JSON.stringify(catalog) %>;
+    var deviceFamily = <%- JSON.stringify(deviceFamily) %>;
+
+    var deviceInput = document.getElementById('schedule-device-input');
+    var familySelect = document.getElementById('schedule-family-select');
+    var commandSelect = document.getElementById('schedule-command-select');
+    var noCommandHint = document.getElementById('schedule-no-command-hint');
+    var addSubmit = document.getElementById('schedule-add-submit');
+    var testBtn = document.getElementById('schedule-test-btn');
+    var testResult = document.getElementById('schedule-test-result');
+    if (!deviceInput || !familySelect || !commandSelect) return;
+
+    function commandOptionsFor(familyKey) {
+      var family = catalog.find(function (f) { return f.key === familyKey; });
+      if (!family || !family.commands) return [];
+      return family.commands
+        .filter(function (c) { return c.topicTemplate.indexOf('{channel}') === -1; })
+        .reduce(function (opts, c) {
+          c.actions.forEach(function (action, i) {
+            opts.push({ value: c.key + '::' + i, label: c.actions.length > 1 ? (c.label + ': ' + action) : c.label });
+          });
+          return opts;
+        }, []);
+    }
+
+    function rebuildCommandSelect() {
+      var opts = commandOptionsFor(familySelect.value);
+      commandSelect.innerHTML = '';
+      opts.forEach(function (o) {
+        var el = document.createElement('option');
+        el.value = o.value;
+        el.textContent = o.label;
+        commandSelect.appendChild(el);
+      });
+      var hasOptions = opts.length > 0;
+      commandSelect.disabled = !hasOptions;
+      if (noCommandHint) noCommandHint.style.display = hasOptions ? 'none' : '';
+      if (addSubmit) addSubmit.disabled = !hasOptions;
+      if (testBtn) testBtn.disabled = !hasOptions;
+      if (testResult) testResult.style.display = 'none';
+    }
+
+    deviceInput.addEventListener('input', function () {
+      var known = deviceFamily[deviceInput.value];
+      if (known) { familySelect.value = known; rebuildCommandSelect(); }
+    });
+    familySelect.addEventListener('change', rebuildCommandSelect);
+    rebuildCommandSelect();
+
+    if (testBtn) {
+      testBtn.addEventListener('click', function () {
+        testResult.style.display = '';
+        testResult.style.color = '';
+        testResult.textContent = 'Sending…';
+        testBtn.disabled = true;
+        fetch('/incoming/schedules/test-send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            device_key: deviceInput.value,
+            family_key: familySelect.value,
+            command_value: commandSelect.value,
+          }),
+        })
+          .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+          .then(function (result) {
+            testBtn.disabled = false;
+            if (result.ok && result.body.ok) {
+              testResult.style.color = 'var(--success)';
+              testResult.textContent = 'Sent "' + result.body.payload + '" to ' + result.body.topic + '.';
+            } else {
+              testResult.style.color = 'var(--danger)';
+              testResult.textContent = (result.body && result.body.error) || 'Failed to send.';
+            }
+          })
+          .catch(function () {
+            testBtn.disabled = false;
+            testResult.style.color = 'var(--danger)';
+            testResult.textContent = 'Failed to send — check the gateway is reachable.';
+          });
+      });
+    }
+
+    var intervalSelect = document.getElementById('schedule-interval-select');
+    var daysField = document.getElementById('schedule-interval-days-field');
+    var weekdaysField = document.getElementById('schedule-weekdays-field');
+    function syncIntervalFields() {
+      daysField.style.display = intervalSelect.value === 'every_n_days' ? '' : 'none';
+      weekdaysField.style.display = intervalSelect.value === 'weekly' ? '' : 'none';
+    }
+    intervalSelect.addEventListener('change', syncIntervalFields);
+    syncIntervalFields();
+
+    // One edit form per schedule row (see the expand-row markup above) — delegated on the
+    // document since collapseRowActions() (tables.js) can insert the Edit toggle button into a
+    // freshly-created popover after this script has already run, same reasoning as every other
+    // delegated listener already in this app.
+    document.addEventListener('change', function (e) {
+      if (!e.target.matches('.schedule-edit-interval-select')) return;
+      var form = e.target.closest('.schedule-edit-form');
+      form.querySelector('.schedule-edit-days-field').style.display = e.target.value === 'every_n_days' ? '' : 'none';
+      form.querySelector('.schedule-edit-weekdays-field').style.display = e.target.value === 'weekly' ? '' : 'none';
+    });
+
+    // The switch itself has no Save button of its own (see toggleSwitch's own doc comment) —
+    // every OTHER page using it lives inside a bigger settings form with one shared Save button,
+    // but this one's whole form IS just the switch, so a plain change listener submitting it
+    // immediately is the equivalent of that page's own Save click, not a new pattern.
+    document.querySelectorAll('.schedule-toggle-form input[type="checkbox"]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var form = cb.closest('form');
+        if (form) (form.requestSubmit ? form.requestSubmit() : form.submit());
+      });
+    });
+  })();
+</script>
+
+<%- include('partials/foot') %>

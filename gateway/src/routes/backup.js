@@ -3,7 +3,7 @@ const fs = require('fs');
 const multer = require('multer');
 const backup = require('../backup');
 const db = require('../db');
-const { notifyBackupFailed } = require('../notifications');
+const { notifyBackupFailed, notifyBackupSucceeded } = require('../notifications');
 const { verifyCsrfToken } = require('../middleware/csrf');
 const asyncHandler = require('../middleware/asyncHandler');
 
@@ -100,6 +100,7 @@ router.post('/run', asyncHandler(async (req, res) => {
     const settings = await backup.getSettings();
     await backup.createBackup({ includeMqttConfig: !!settings.include_mqtt_config, reason: 'manual' });
     await backup.updateSettings({ last_run_at: new Date().toISOString(), last_status: 'ok', last_error: null });
+    await notifyBackupSucceeded('manual backup');
     res.redirect('/admin/backup');
   } catch (err) {
     await backup.updateSettings({ last_run_at: new Date().toISOString(), last_status: 'error', last_error: err.message });

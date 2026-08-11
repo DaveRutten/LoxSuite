@@ -210,6 +210,7 @@
       <span class="hint" style="margin:0;"><%= currentSubText %></span>
     </div>
     <div class="monitor-chart-canvas-wrap">
+      <div class="chart-canvas-box">
       <canvas data-monitor-ids="<%= monitor.id %>" data-range="<%= range %>" data-range-until="<%= rangeUntilMs || '' %>" height="90"
         data-legend="<%= config.legendPosition || 'auto' %>" data-legend-align="<%= config.legendAlign || 'start' %>" data-legend-stats="<%= legendStats.join(',') %>" data-unit="<%= config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>"
         data-fill="<%= config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= config.curveTension != null ? config.curveTension : 0.15 %>"
@@ -217,6 +218,7 @@
         data-y-min="<%= config.yMin != null ? config.yMin : '' %>" data-y-max="<%= config.yMax != null ? config.yMax : '' %>" data-zoom="<%= config.zoom ? '1' : '' %>"
         data-thresholds="<%= JSON.stringify(config.thresholds || []) %>" data-annotations="<%= JSON.stringify(config.annotations || []) %>"
         data-series="<%= JSON.stringify(config.series || {}) %>"></canvas>
+      </div>
     </div>
   </div>
 <% } else { %>

@@ -154,7 +154,7 @@ glancing at the list. **View all** links to a full history under **Logs → Noti
 permission area, separate from the other Logs tabs). Every event logged here also went through the
 existing
 [Apprise](https://github.com/caronc/apprise) rule engine for delivery — Monitor threshold,
-Miniserver/MQTT client status, backup failure, Miniserver firmware changed, LoxSuite update
+Miniserver/MQTT client status, backup failure or success, Miniserver firmware changed, LoxSuite update
 available, and (see Hardware above) Loxone device battery weak/firmware changed/online-offline are
 all real, admin-creatable rule types, sendable to any channel exactly like the others — the three
 hardware ones also carry their own configurable severity — except one:
@@ -228,8 +228,11 @@ Create any number of named dashboards, each holding **panels**:
   fill-under-line, linear or logarithmic Y-axis with an optional fixed min/max,
   scroll-to-zoom/drag-to-pan, threshold lines *or* filled bands, and time-anchored annotations. Per
   series: rename, its own unit/scale/decimals, the right-hand axis, a fixed color, a line style
-  (solid/thick/dashed/dotted), and any combination of **min/max/avg/current** shown right in the
-  legend. **Chart type** can also be switched to **Bar (compare)**,
+  (solid/thick/dashed/dotted), and any combination of **min/max/avg/current** shown as their own
+  columns in the legend — laid out as a compact table (Grafana-style) rather than one long sentence
+  per series, capped to a share of the panel's own height with its own scrollbar past that so a
+  chart with many series never squeezes the plot itself down to a sliver. **Chart type** can also be
+  switched to **Bar (compare)**,
   **Doughnut**, **Pie**, **Polar Area**, or **Radar** — these five are snapshots (each monitor's
   *current* value, side by side) rather than a time series, for comparing several monitors at a
   glance instead of tracking one over time.
@@ -431,7 +434,7 @@ palettes to choose from); its White mode and the **Dimmer (0-100%)** value trans
 An interactive builder for devices with well-known MQTT topic shapes — 16 named Shelly Gen1 device
 types (Plug, Plug S, Dimmer, Bulb, Bulb Duo, RGBW2, EM, 3EM, Uni, ...) plus Shelly Gen2/Gen3 (both
 the full JSON-RPC form and the simpler `command/switch:N`/`command/cover:N` form some devices also
-support). **Common commands** covers relay/roller/light/color/white commands; **Common data** covers
+support). **Common commands** covers relay/roller/light/color/white/reboot commands; **Common data** covers
 the matching telemetry (power, energy, temperature, position, ...). Pick a device — from every device
 the broker has actually seen traffic for — and its type fills in automatically; correct it manually
 if it guessed wrong or the device hasn't been seen yet. Each device entry is individually editable
@@ -490,6 +493,16 @@ in-memory only (cleared on a gateway restart):
   entries only — clients that are still actually connected stay listed, since they won't send a
   new "connected" event just because the view was cleared.
 
+Any device resolved to a known **Common Commands** family (see below) also gets a **Schedule
+command** shortcut, opening its own page to have one of that family's commands re-sent on a
+repeating schedule — daily, every N days, or weekly on specific days, at a time evaluated in the
+gateway's own configured display timezone (Settings), not the container's. Entirely opt-in per
+device (e.g. a nightly Shelly reboot, added as a real command for the built-in Shelly Gen1/Gen2/Gen3
+families). A **Test** button sends the picked command once immediately, before committing to a
+schedule; each saved schedule has its own **Run now**, enable/disable switch, inline edit (time and
+repeat pattern), and delete, plus a **Last run**/**Next run** column so a silent failure (broker not
+connected, ...) is visible instead of just quietly not happening.
+
 ### Logs
 
 Different from Monitor: real **log files** and structured events, not tracked values. Five tabs,
@@ -509,7 +522,12 @@ Monitor's history):
   accepted or rejected, with who sent it, when, which MQTT topic it targeted, and the value
   transition. A rejected row caused by a missing mapping gets a one-click **+ Mapping** button
   (pre-fills the Loxone → MQTT add form with that exact topic); an accepted row gets **+ Reject**
-  to disable its mapping on the spot if it's misbehaving.
+  to disable its mapping on the spot if it's misbehaving. A rejected row is a snapshot of what
+  happened at the time — once a mapping exists for it, it shows **Pending** instead of staying
+  Rejected forever, since Loxone itself never retries the exact same command on its own. A **Send
+  test command** form above the table fires an arbitrary token/value at the gateway's own UDP
+  listener (the same packet a real Virtual UDP Output would) to see that whole Rejected → add a
+  mapping → Pending → send again → Accepted arc play out on demand.
 - **System** — everything else worth an audit trail: settings changes, account/role changes,
   scheduled-job results, and any single database query that took 200ms or longer (a symptom worth
   seeing on its own, e.g. slow storage on some self-hosting setups, without needing to reproduce it

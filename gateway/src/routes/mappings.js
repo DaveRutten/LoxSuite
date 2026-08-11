@@ -2,7 +2,7 @@ const express = require('express');
 const dgram = require('dgram');
 const { nanoid } = require('nanoid');
 const db = require('../db');
-const { CATALOG, DATA_CATALOG } = require('../commandCatalog');
+const { loadCommandCatalogs } = require('../commandCatalog');
 const { getClient } = require('../mqttClient');
 const { applyLoxoneToMqttTransform } = require('../loxone');
 const { discoverDevices } = require('../deviceDiscovery');
@@ -158,26 +158,6 @@ router.post('/mqtt-to-loxone/:id/translations/:translationId/delete', requirePer
   await db.prepare('DELETE FROM mapping_translations WHERE id = ? AND mapping_id = ?').run(req.params.translationId, req.params.id);
   res.redirect(`/mappings/mqtt-to-loxone/${req.params.id}/translations`);
 }));
-
-// User edits to "Common commands"/"Common data" (see commandCatalog.js's own comment) replace the
-// built-in catalog wholesale once saved — not merged field-by-field — so the Edit UI always seeds
-// itself from whichever of these two is actually in effect, never straight from the hardcoded
-// defaults once an override exists.
-async function loadCommandCatalogs() {
-  const row = await db.prepare('SELECT commands_json, data_json FROM command_catalog_overrides WHERE id = 1').get();
-  let catalog = CATALOG;
-  let dataCatalog = DATA_CATALOG;
-  let isCustomized = false;
-  if (row) {
-    if (row.commands_json) {
-      try { catalog = JSON.parse(row.commands_json); isCustomized = true; } catch (err) { /* corrupt — fall back to built-in */ }
-    }
-    if (row.data_json) {
-      try { dataCatalog = JSON.parse(row.data_json); isCustomized = true; } catch (err) { /* corrupt — fall back to built-in */ }
-    }
-  }
-  return { catalog, dataCatalog, isCustomized };
-}
 
 router.get('/commands', asyncHandler(async (req, res) => {
   const { devicesByFamily, deviceFamily, allDevices } = discoverDevices();

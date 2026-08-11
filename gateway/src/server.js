@@ -90,6 +90,7 @@ const avatarRoutes = require('./routes/avatar');
 const { icon } = require('./icons');
 const { toggleSwitch } = require('./toggleSwitch');
 const backup = require('./backup');
+const scheduledDeviceCommands = require('./scheduledDeviceCommands');
 const { formatDateTime, getDisplayTimezone, loadTimezoneCache } = require('./dateFormat');
 const { formatCount, formatHeapStatus, miniserverGenerationLabel, formatDuration, PLC_STATE_LABELS, plcStateLabel } = require('./format');
 const panelTypeDefaults = require('./panelTypeDefaults');
@@ -295,6 +296,7 @@ async function main() {
   startHardwarePolling();
   startLiveConnections().catch((err) => console.error('Failed to start live Loxone connections:', err.message));
   backup.startScheduler();
+  scheduledDeviceCommands.startScheduler();
   startVersionCheck();
   
   const port = process.env.PORT || 5582;

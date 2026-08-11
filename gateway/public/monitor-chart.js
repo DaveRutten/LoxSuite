@@ -68,15 +68,25 @@
 
   // The 'line' chart type's own legend — plain HTML, not Chart.js's canvas-drawn one (see
   // plugins.legend.display:false in render() below), specifically so every series always gets its
-  // own full row (swatch + name + every enabled min/max/avg/current stat, all on that ONE line) —
+  // own full row (swatch + name + every enabled min/max/avg/current stat, in their own columns) —
   // Chart.js's built-in legend at position:top/bottom instead wraps as many series as fit side by
   // side on one row, which read as inconsistent once a series' own label could also be carrying a
-  // stats parenthetical. position only changes WHERE this list sits (above/below/beside the plot,
-  // via canvas's own flex-container parent — see .chart-canvas-inner/.monitor-chart-canvas-wrap in
-  // style.css), never how it's laid out internally (always one row per series, top to bottom).
-  // Click-to-toggle a series' visibility, same as Chart.js's own default legend already did.
+  // stat. A CSS grid, not a flex column — see .chart-custom-legend in style.css — so every row's
+  // swatch/name/stat cells line up in actual table columns (closer to how Grafana's own legend
+  // table reads) instead of one long "name (min X, max Y, ...)" sentence per row, AND so its own
+  // height is capped with an internal scrollbar instead of growing without bound: a panel with
+  // many series used to let this list alone push the actual plot down to a sliver, or squeeze the
+  // panel open/shut as series were toggled — capped, it can never take more than a fixed share of
+  // the panel regardless of series count. position only changes WHERE this list sits (above/below/
+  // beside the plot, via canvas's own flex-container parent — see .chart-canvas-inner/
+  // .monitor-chart-canvas-wrap in style.css), never its own internal layout. Click-to-toggle a
+  // series' visibility, same as Chart.js's own default legend already did.
   function buildCustomLegend(canvas, chart, show, position, align, stats, decimals) {
-    var wrap = canvas.parentElement; // .chart-canvas-inner / .monitor-chart-canvas-wrap
+    // NOT canvas.parentElement any more — that's .chart-canvas-box now, the canvas's own dedicated
+    // sizing box (see style.css's own comment on why that layer exists at all). The legend has to
+    // land one level further up, as .chart-canvas-box's own sibling, or it would just be squeezed
+    // inside the canvas's box fighting it for the exact space that box exists to keep for Chart.js.
+    var wrap = canvas.closest('.chart-canvas-inner, .monitor-chart-canvas-wrap');
     if (!wrap) return;
     var legendEl = wrap.querySelector(':scope > .chart-custom-legend');
     if (!show) {
@@ -89,8 +99,11 @@
     if (!legendEl) {
       legendEl = document.createElement('div');
       legendEl.addEventListener('click', function (e) {
+        // .chart-legend-row is display:contents (its cells are the real grid items, see
+        // style.css) — that only removes ITS OWN box from the render tree, not the element from
+        // the DOM, so closest() still walks straight through it same as any other ancestor.
         var row = e.target.closest('.chart-legend-row');
-        if (!row) return;
+        if (!row || row.classList.contains('chart-legend-head')) return;
         var index = Number(row.dataset.datasetIndex);
         if (!Number.isInteger(index)) return;
         var meta = chart.getDatasetMeta(index);
@@ -101,34 +114,55 @@
       });
     }
     legendEl.className = 'chart-custom-legend' + (isSide ? ' chart-custom-legend-side' : '');
-    legendEl.style.alignItems = align === 'center' ? 'center' : (align === 'end' ? 'flex-end' : 'flex-start');
+    legendEl.style.justifyContent = align === 'center' ? 'center' : (align === 'end' ? 'end' : 'start');
+    // One fixed-width swatch column, a flexible name column, then one auto-width column per
+    // enabled stat — every row (built as display:contents, so its cells ARE this grid's items)
+    // lines up against these same columns.
+    legendEl.style.gridTemplateColumns = '0.75rem minmax(3rem, 1fr)' + stats.map(function () { return ' auto'; }).join('');
     legendEl.innerHTML = '';
+
+    if (stats.length) {
+      var head = document.createElement('div');
+      head.className = 'chart-legend-row chart-legend-head';
+      head.appendChild(document.createElement('span'));
+      head.appendChild(document.createElement('span'));
+      stats.forEach(function (s) {
+        var cell = document.createElement('span');
+        cell.className = 'chart-legend-cell chart-legend-stat';
+        cell.textContent = s === 'current' ? 'Now' : s.charAt(0).toUpperCase() + s.slice(1);
+        head.appendChild(cell);
+      });
+      legendEl.appendChild(head);
+    }
+
     chart.data.datasets.forEach(function (ds, i) {
       var meta = chart.getDatasetMeta(i);
-      var label = ds.label;
-      if (ds._stats && stats.length) {
-        var d = ds._tooltipDecimals != null ? ds._tooltipDecimals : decimals;
-        var u = ds._tooltipUnit ? ' ' + ds._tooltipUnit : '';
-        var parts = [];
-        if (stats.indexOf('min') !== -1) parts.push('min ' + formatAxisValue(ds._stats.min, d) + u);
-        if (stats.indexOf('max') !== -1) parts.push('max ' + formatAxisValue(ds._stats.max, d) + u);
-        if (stats.indexOf('avg') !== -1) parts.push('avg ' + formatAxisValue(ds._stats.avg, d) + u);
-        if (stats.indexOf('current') !== -1) parts.push('now ' + formatAxisValue(ds._stats.current, d) + u);
-        if (parts.length) label += '  (' + parts.join(', ') + ')';
-      }
       var row = document.createElement('div');
       row.className = 'chart-legend-row' + (meta.hidden ? ' chart-legend-hidden' : '');
       row.dataset.datasetIndex = String(i);
       var swatch = document.createElement('span');
       swatch.className = 'chart-legend-swatch';
       swatch.style.background = ds.borderColor;
+      row.appendChild(swatch);
       var text = document.createElement('span');
-      text.className = 'chart-legend-text';
+      text.className = 'chart-legend-cell chart-legend-name';
       // textContent, not innerHTML — a series name comes from a monitor's own free-text label/
       // override, so it needs the same escaping any other user-supplied text would.
-      text.textContent = label;
-      row.appendChild(swatch);
+      text.textContent = ds.label;
+      text.title = ds.label;
       row.appendChild(text);
+      if (stats.length) {
+        var d = ds._tooltipDecimals != null ? ds._tooltipDecimals : decimals;
+        var u = ds._tooltipUnit ? ' ' + ds._tooltipUnit : '';
+        stats.forEach(function (s) {
+          var cell = document.createElement('span');
+          cell.className = 'chart-legend-cell chart-legend-stat';
+          // A dataset with no data points in range (see the points.length check below) never got
+          // its own _stats at all — a blank cell instead of a misleading 0/NaN in that column.
+          cell.textContent = ds._stats ? formatAxisValue(ds._stats[s], d) + u : '–';
+          row.appendChild(cell);
+        });
+      }
       legendEl.appendChild(row);
     });
     if (position === 'left' || position === 'top') wrap.insertBefore(legendEl, wrap.firstChild);
@@ -444,17 +478,32 @@
       // pure noise once the hour:minute already disambiguates them from each other.
       showDate = axisMinMs !== null && dayKey(axisMinMs) !== dayKey(axisMaxMs);
 
+      // Computed here — BEFORE the create-vs-update branch below — and not, as before, only in the
+      // create branch further down: render() is a closure called repeatedly (initial draw, then
+      // every live refresh), and `var`s are fresh on every call, not carried over from the previous
+      // one. The update branch used to reference these two by the same names from down there, which
+      // were real values the FIRST time (when this whole function's execution actually reached that
+      // code), but merely hoisted-and-unassigned (undefined) on every call after that, since `chart`
+      // was already truthy and returned out before ever reaching their assignment. buildCustomLegend
+      // treats an undefined `show` as falsy and removes the legend — exactly the "works right after
+      // a reload, gone again after the next live refresh" behavior this fixes.
+      var showLegend = legendPosition === 'off' ? false : (legendPosition === 'auto' ? datasets.length > 1 : true);
+      var resolvedPosition = (legendPosition === 'auto' || legendPosition === 'off') ? 'top' : legendPosition;
+
       if (chart) {
         chart.data.datasets = datasets;
         chart.options.scales.x.max = axisMaxMs;
         if (axisMinMs !== null) chart.options.scales.x.min = axisMinMs;
         chart.update('none');
         buildCustomLegend(canvas, chart, showLegend, resolvedPosition, legendAlign, legendStats, decimals);
+        // The legend is a flex SIBLING of this canvas (see buildCustomLegend/.chart-canvas-inner in
+        // style.css) — inserting/removing it, or just changing its own height (a stat column
+        // toggled, more/fewer series), changes how much space is actually left for the canvas.
+        // Chart.js has no way to know that on its own; resize() forces it to re-measure right now
+        // rather than keep drawing at whatever size it last had.
+        chart.resize();
         return;
       }
-
-      var showLegend = legendPosition === 'off' ? false : (legendPosition === 'auto' ? datasets.length > 1 : true);
-      var resolvedPosition = (legendPosition === 'auto' || legendPosition === 'off') ? 'top' : legendPosition;
 
       var scales = {
         x: { type: 'linear', min: axisMinMs === null ? undefined : axisMinMs, max: axisMaxMs, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8, callback: formatTick } },
@@ -552,6 +601,13 @@
         },
       });
       buildCustomLegend(canvas, chart, showLegend, resolvedPosition, legendAlign, legendStats, decimals);
+      // Chart.js's own responsive sizing measures its available space at construction time, which
+      // is BEFORE the legend above has inserted itself as a flex sibling of this canvas — without
+      // this, the canvas stays sized (and its internal drawing buffer stays resolved) for the
+      // FULL wrap height as if the legend didn't exist, then gets visually squeezed into the
+      // smaller box flex actually gives it once the legend is there, leaving the chart itself
+      // drawn/scaled for a taller area than it actually has.
+      chart.resize();
     }
 
     // Polar Area/Doughnut/Pie/Radar/Bar-compare — a snapshot of each monitor's CURRENT value, not

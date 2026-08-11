@@ -2,6 +2,57 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.8-alpha.1] - 2026-08-11
+
+### Added
+- **Scheduled device commands** — Client Activity's new "Schedule command" button (next to Suggest
+  commands, for any device resolved to a known Common Commands family) lets a command be re-sent on
+  a repeating schedule: daily, every N days, or weekly on specific days, at a time evaluated in the
+  gateway's own configured display timezone (Settings) rather than the container's. Entirely
+  opt-in per device — nothing runs unless a schedule is explicitly added. A **Test** button sends
+  the picked command once immediately, before committing to a schedule; each saved schedule gets its
+  own **Run now**, enable/disable, inline edit (time and repeat pattern), delete, and a
+  **Last run**/**Next run** column so a silent failure (broker not connected, ...) is visible
+  instead of quietly not happening.
+- A real **Reboot** command, added to every built-in Shelly Gen1/Gen2/Gen3 device template — Gen1's
+  `shellies/{device}/command` = `reboot`, Gen2/3's RPC `Shelly.Reboot` over MQTT. Shows up in
+  Suggest Commands too, not just the new scheduler.
+- Loxone Commands log: a rejected "no matching mapping" row now shows **Pending** once a mapping for
+  it actually exists — the row itself is a snapshot of what happened at the time, so it used to sit
+  there looking permanently Rejected even after being fixed, with no hint that Loxone just hasn't
+  sent that exact command again yet (it never retries on its own). A new **Send test command** form
+  on that page fires an arbitrary token/value at the gateway's own UDP listener, to see the whole
+  Rejected → add a mapping → Pending → send again → Accepted arc on demand.
+- **Backup succeeded** is now its own notification trigger, alongside the existing Backup failed —
+  kept separate rather than making Backup failed also fire on success, so an existing failure-only
+  rule keeps meaning exactly what its name says.
+- Chart panel legend redesigned as an actual table (closer to how Grafana's own legend reads):
+  swatch/name/Min/Max/Avg/Now as real columns instead of one long sentence per series, capped to a
+  share of the panel's own height (scales with the panel, not a fixed value) with its own scrollbar
+  past that — a chart with many series can no longer squeeze the plot itself down to a sliver.
+
+### Changed
+- A dashboard panel's own drag handle and "…" action button now hide themselves while that exact
+  panel's Edit drawer is already open — both were redundant clutter at that point.
+- The Edit-panel monitor checklist now sorts a newly-checked monitor to the top immediately, not
+  just after the next page reload.
+- Chart panel Series settings: Style/Point-style/the per-series color checkbox+swatch now land
+  together on one row as intended — a missing CSS rule on the point-style dropdown was stretching it
+  to the full row width and forcing everything after it onto its own line.
+
+### Fixed
+- A chart panel's canvas didn't correctly resize itself when a legend was present: Chart.js measures
+  its available space from the canvas's own direct parent, which never actually shrank just because
+  a legend sibling started sharing space in it via flex — so growing a panel left a visible gap
+  between the plot and the legend, and shrinking one left axis tick labels cramped/overlapping
+  (computed for a size the canvas no longer actually had). Fixed by giving the canvas its own
+  dedicated, correctly-flex-constrained box, so Chart.js always measures the real thing.
+- The custom chart legend disappeared after the very first 15-second live refresh, even though it
+  displayed correctly on initial load — `showLegend`/`resolvedPosition` were only ever computed on
+  the code path taken the first time a chart was drawn; every refresh after that hit an early
+  return before reaching them, passing `undefined` into the legend builder, which treats that as
+  "hide it".
+
 ## [0.13.7-alpha.1] - 2026-08-10
 
 ### Added

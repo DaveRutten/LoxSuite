@@ -11,6 +11,7 @@ const TRIGGER_TYPES = [
   { key: 'miniserver_status', label: 'Miniserver online/offline' },
   { key: 'mqtt_client_status', label: 'MQTT client online/offline' },
   { key: 'backup_failed', label: 'Backup failed' },
+  { key: 'backup_succeeded', label: 'Backup succeeded' },
   { key: 'firmware_changed', label: 'Miniserver firmware changed' },
   { key: 'gateway_client_firmware_mismatch', label: 'Gateway/Client firmware mismatch' },
   { key: 'loxsuite_update_available', label: 'LoxSuite update available' },
@@ -144,6 +145,12 @@ const TEMPLATE_PREVIEW_SAMPLES = {
     message: 'rclone exited with code 1: connection refused.',
     severity: 'critical',
     fields: [{ label: 'Step', value: 'offsite copy' }],
+  },
+  backup_succeeded: {
+    title: 'Backup succeeded',
+    message: 'Backup completed successfully (scheduled backup).',
+    severity: 'info',
+    fields: [{ label: 'Step', value: 'scheduled backup' }],
   },
   battery_weak: {
     title: 'Hallway motion sensor: battery weak',
@@ -723,6 +730,23 @@ async function notifyBackupFailed(errorMessage, context) {
   }
 }
 
+// A separate trigger from backup_failed above (not the same rule also firing on success) — an
+// existing "Backup failed" rule someone already set up keeps meaning exactly what its name says;
+// this is its own opt-in for anyone who also wants to hear about a backup actually completing,
+// same "called from backup.js's own success paths" shape as notifyBackupFailed.
+async function notifyBackupSucceeded(context) {
+  for (const rule of await getRulesByTrigger('backup_succeeded')) {
+    await fireRule(rule, {
+      title: 'Backup succeeded',
+      message: `Backup completed successfully (${context || 'backup'}).`,
+      severity: 'info',
+      fields: [{ label: 'Step', value: context || 'backup' }],
+      sourceLabel: context || 'backup',
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
 module.exports = {
   TRIGGER_TYPES,
   sendTestMessage,
@@ -738,6 +762,7 @@ module.exports = {
   checkDeviceFirmwareChanged,
   checkDeviceOffline,
   notifyBackupFailed,
+  notifyBackupSucceeded,
   // Pure helpers, exported mainly so test/notifications.test.js can exercise them directly rather
   // than only indirectly through the DB-driven check*/fireRule functions above.
   compareThreshold,

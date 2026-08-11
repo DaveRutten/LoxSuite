@@ -12,6 +12,14 @@
         "off",
         "toggle"
       ]
+    },
+    {
+      "key": "reboot",
+      "label": "Reboot",
+      "topicTemplate": "shellies/{device}/command",
+      "actions": [
+        "reboot"
+      ]
     }
   ]
 }

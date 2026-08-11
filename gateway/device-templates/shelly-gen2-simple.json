@@ -22,6 +22,14 @@
         "close",
         "stop"
       ]
+    },
+    {
+      "key": "reboot",
+      "label": "Reboot",
+      "topicTemplate": "{device}/rpc",
+      "actions": [
+        "{\"id\":1,\"src\":\"loxsuite\",\"method\":\"Shelly.Reboot\"}"
+      ]
     }
   ]
 }

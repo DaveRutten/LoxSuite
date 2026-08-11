@@ -1,4 +1,5 @@
 const express = require('express');
+const dgram = require('dgram');
 const db = require('../db');
 const { requirePermission } = require('../middleware/requirePermission');
 const { classifyLogLevel } = require('../logLevel');
@@ -226,7 +227,54 @@ router.get('/loxone-commands', requirePermission('logs_loxone_commands', 'view')
   const filters = parseFilters(req.query);
   const rows = await queryLogs({ source: 'loxone_commands', filters });
   const settings = await db.prepare('SELECT log_retention_days FROM gateway_settings WHERE id = 1').get();
-  res.render('logs-loxone-commands', { rows, query: req.query, range: filters.range, retentionDays: settings.log_retention_days });
+  // A rejected "no matching mapping" row is a snapshot of what happened AT THE TIME — adding the
+  // missing mapping afterwards doesn't rewrite history, so the row would otherwise sit there
+  // looking permanently Rejected even once it's actually fixed, with no hint that Loxone just
+  // hasn't sent that exact command again yet (it doesn't retry on its own). Mirrors
+  // findOrAutoCreateLoxoneMapping's own two ways a mapping can match a raw token (loxone.js).
+  const rejectedTopics = [...new Set(rows.filter((r) => r.level === 'error' && r.commandTopic).map((r) => r.commandTopic))];
+  const pendingTopics = new Set();
+  if (rejectedTopics.length) {
+    const placeholders = rejectedTopics.map(() => '?').join(',');
+    const matches = await db.prepare(
+      `SELECT token, mqtt_topic FROM mappings_loxone_to_mqtt
+       WHERE enabled = 1 AND (token IN (${placeholders}) OR mqtt_topic IN (${placeholders}))`
+    ).all(...rejectedTopics, ...rejectedTopics);
+    matches.forEach((m) => { pendingTopics.add(m.token); pendingTopics.add(m.mqtt_topic); });
+  }
+  res.render('logs-loxone-commands', {
+    rows, query: req.query, range: filters.range, retentionDays: settings.log_retention_days, pendingTopics,
+    testError: req.query.testError || null,
+  });
+}));
+
+// Fires the exact same UDP packet a real Loxone Virtual UDP Output would ("<token>=<value>" at
+// 127.0.0.1:LOXONE_UDP_PORT — see loxoneUdpServer.js's own handleMessage()), for a token typed in
+// here rather than one tied to an already-saved mapping (mappings.js's own /loxone-to-mqtt/:id/test
+// only ever proves an EXISTING mapping works). Lets someone see the whole Rejected → add a mapping
+// → Pending → send again → Accepted arc play out on demand, without waiting for a real Miniserver
+// to happen to send an unmapped command.
+router.post('/loxone-commands/test-send', requirePermission('logs_loxone_commands', 'edit'), asyncHandler(async (req, res) => {
+  const token = (req.body.token || '').trim();
+  const value = (req.body.value || '').trim();
+  if (!token || !value) {
+    return res.redirect(`/logs/loxone-commands?testError=${encodeURIComponent('Enter both a token and a value.')}`);
+  }
+
+  const port = Number(process.env.LOXONE_UDP_PORT) || 11885;
+  const message = `${token}=${value}`;
+  await new Promise((resolve) => {
+    const socket = dgram.createSocket('udp4');
+    socket.send(Buffer.from(message), port, '127.0.0.1', () => {
+      socket.close();
+      resolve(); // fire-and-forget on the wire, same as the real thing — the log row is the real proof
+    });
+  });
+  // The UDP round trip (loopback, but still async through the socket + the listener's own DB
+  // write) needs a beat to land before the redirect reloads the page, or the new row might not
+  // show up until the next 5s auto-refresh tick.
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  res.redirect('/logs/loxone-commands');
 }));
 
 router.get('/loxone-commands/export.txt', requirePermission('logs_loxone_commands', 'edit'), asyncHandler(async (req, res) => {

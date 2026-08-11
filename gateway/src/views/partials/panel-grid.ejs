@@ -717,7 +717,9 @@
             if (p.config.legendShowAvg) legendStats.push('avg');
             if (p.config.legendShowCurrent) legendStats.push('current');
           %>
+          <div class="chart-canvas-box">
           <canvas data-chart-type="<%= p.config.chartType || 'line' %>" data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.displayRange || p.range %>" data-range-until="<%= p.chartUntilMs || '' %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-legend-align="<%= p.config.legendAlign || 'start' %>" data-legend-stats="<%= legendStats.join(',') %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>" data-scale="1" data-fill="<%= p.config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= p.config.curveTension != null ? p.config.curveTension : 0.15 %>" data-points="<%= p.config.points ? '1' : '' %>" data-animation="<%= p.config.animation ? '1' : '' %>" data-y-scale-type="<%= p.config.yScaleType || 'linear' %>" data-y-min="<%= p.config.yMin != null ? p.config.yMin : '' %>" data-y-max="<%= p.config.yMax != null ? p.config.yMax : '' %>" data-zoom="<%= p.config.zoom ? '1' : '' %>" data-thresholds="<%= JSON.stringify(p.config.thresholds || []) %>" data-annotations="<%= JSON.stringify(p.config.annotations || []) %>" data-series="<%= JSON.stringify(p.config.series || {}) %>"></canvas>
+          </div>
           </div>
         </div>
       <% } else if (p.panel_type === 'table') { %>
@@ -1265,6 +1267,22 @@
         form.querySelectorAll('.panel-monitor-check-row').forEach(function (row) {
           row.style.display = row.dataset.label.indexOf(q) !== -1 ? '' : 'none';
         });
+      });
+    });
+
+    // Already-checked monitors sort to the top server-side (see this checklist's own EJS loop
+    // above) — but that's only re-evaluated on the next full page render, so checking a new box
+    // here just left it sitting wherever it already was until the page was reloaded. This keeps
+    // the same checked-first ordering live as boxes are (un)checked, without a reload.
+    document.querySelectorAll('.panel-monitor-checklist').forEach(function (checklist) {
+      checklist.addEventListener('change', function (e) {
+        if (!e.target.matches('input[type="checkbox"]')) return;
+        var rows = Array.prototype.slice.call(checklist.querySelectorAll('.panel-monitor-check-row'));
+        var checked = rows.filter(function (row) { return row.querySelector('input[type="checkbox"]').checked; });
+        var unchecked = rows.filter(function (row) { return !row.querySelector('input[type="checkbox"]').checked; });
+        // appendChild on a node already in the document MOVES it — calling it in this order
+        // rebuilds the checked-first, otherwise-original-order arrangement every time.
+        checked.concat(unchecked).forEach(function (row) { checklist.appendChild(row); });
       });
     });
   })();

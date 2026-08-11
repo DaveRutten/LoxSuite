@@ -30,6 +30,36 @@
   </div>
 </form>
 
+<% if (canEdit('logs_loxone_commands')) { %>
+<details class="add-panel" style="margin-bottom:1rem;" <%= testError ? 'open' : '' %>>
+  <summary>Send test command</summary>
+  <div class="add-panel-body">
+    <p class="hint" style="margin-top:0;">
+      Fires the same UDP packet a real Loxone Virtual UDP Output sends, straight at this gateway —
+      handy for seeing the whole arc without waiting for the Miniserver to happen to send an
+      unmapped command: pick a token with no mapping yet, send it (shows up below as
+      <strong>Rejected</strong>), add a mapping for it via that row's own "+ Mapping" button (turns
+      into <strong>Pending</strong>), then send the exact same thing again (turns into
+      <strong>Accepted</strong>).
+    </p>
+    <% if (testError) { %><p class="error"><%= testError %></p><% } %>
+    <form method="post" action="/logs/loxone-commands/test-send" class="form-grid" style="align-items:end;">
+      <div>
+        <label>Token</label>
+        <input type="text" name="token" placeholder="e.g. test-token-1" required>
+      </div>
+      <div>
+        <label>Value</label>
+        <input type="text" name="value" placeholder="1" required>
+      </div>
+      <div>
+        <button type="submit" class="primary"><%- icon('link') %> Send</button>
+      </div>
+    </form>
+  </div>
+</details>
+<% } %>
+
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="search-combo log-search-combo">
@@ -74,12 +104,16 @@
           <td><code class="truncate" title="<%= r.commandTopic || '' %>"><%= r.commandTopic || '-' %></code></td>
           <td><%= (r.valueFrom === null || r.valueFrom === undefined) ? '–' : `"${r.valueFrom}"` %></td>
           <td><%= (r.valueTo === null || r.valueTo === undefined) ? '–' : `"${r.valueTo}"` %></td>
+          <%
+            const isPending = !accepted && r.line === NO_MAPPING_REASON && r.commandTopic && pendingTopics.has(r.commandTopic);
+          %>
           <td>
             <span class="badge <%= accepted ? 'badge-ok' : 'badge-off' %>"><%= accepted ? 'Accepted' : 'Rejected' %></span>
             <% if (!accepted) { %><div class="hint" style="margin:0.25rem 0 0;"><%= r.line.replace(/^Rejected:\s*/, '') %></div><% } %>
+            <% if (isPending) { %><span class="badge badge-purple" style="margin-top:0.25rem;" title="A mapping now exists for this — it'll show as Accepted the next time Loxone actually sends this exact command again">Pending</span><% } %>
           </td>
           <td>
-            <% if (canEdit('loxone_to_mqtt') && !accepted && r.line === NO_MAPPING_REASON && r.commandTopic) { %>
+            <% if (canEdit('loxone_to_mqtt') && !accepted && r.line === NO_MAPPING_REASON && r.commandTopic && !isPending) { %>
               <%
                 // transport/sourceMiniserverId are only ever known here (see loxoneCommandLog.js) —
                 // carried through as query params so the new mapping form can pre-select them

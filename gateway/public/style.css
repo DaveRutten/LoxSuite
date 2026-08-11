@@ -2040,7 +2040,8 @@ label.switch { display: inline-flex; align-items: center; cursor: pointer; margi
 }
 .chart-series-row input.chart-series-row-name[type="text"] { flex: 2; min-width: 0; width: auto; }
 .chart-series-row select.chart-series-row-axis,
-.chart-series-row select.chart-series-row-style { flex: 0 0 auto; width: auto; }
+.chart-series-row select.chart-series-row-style,
+.chart-series-row select.chart-series-row-point-style { flex: 0 0 auto; width: auto; }
 /* A value-series row has no axis/color columns to share space with (chart-only), so its label
    gets noticeably more room than .chart-series-row's own 7rem before falling back to the ellipsis
    + hover-title truncation both rows already share. A fixed width (not just a max-width the label
@@ -2976,52 +2977,83 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
   min-height: 0;
   min-width: 0;
 }
-/* The canvas itself, once the custom legend (see monitor-chart.js's buildCustomLegend) becomes its
-   sibling inside this same flex wrapper. Without flex:1 here, a plain flex item defaults to
-   sizing itself from its own current width/height — whatever Chart.js had last set them to,
-   typically the WHOLE wrapper, from before the legend existed as a sibling taking up any of that
-   space at all — so the pair together overflowed the wrapper's own fixed box by however tall/wide
-   the legend turned out to be, instead of the canvas actually shrinking to make room for it. */
-.monitor-chart-canvas-wrap > canvas,
-.chart-canvas-inner > canvas {
+/* The canvas's OWN dedicated box, once the custom legend (see monitor-chart.js's buildCustomLegend)
+   becomes ITS sibling inside the flex wrapper above (not the canvas's own sibling — see the markup
+   in panel-grid.ejs/monitor-detail.ejs). This extra layer of nesting matters because Chart.js
+   measures its available size from the canvas's DIRECT parent alone — if the legend were the
+   canvas's own sibling instead, inserting it would correctly shrink the canvas's SHARE of the flex
+   wrapper (flex layout redistributing space is real), but Chart.js has no way to know that: it
+   would keep reading the OUTER wrapper's own unchanged total height as "mine to fill" and size
+   (and internally rasterize) the chart for that whole height regardless, since flex is only
+   squeezing the canvas's rendered BOX after the fact, not anything Chart.js's own parent-based
+   measurement ever sees. Giving the canvas its own flex:1 box as its literal parent means THAT box
+   — correctly shrunk by flex once the legend claims its own share — is what Chart.js actually
+   measures. */
+.chart-canvas-box {
+  position: relative;
   flex: 1;
   min-height: 0;
   min-width: 0;
+}
+.chart-canvas-box > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* Chart.js's own canvas-drawn legend (plugins.legend) is display:false for every 'line'-type chart
    (see monitor-chart.js) — its wrapping behavior at position:top/bottom packs as many series as
    fit side by side on one row, which read as "some values run together, some don't" once each
-   series' own name could also carry a min/max/avg/current stat onto the SAME line (see the Legend
-   fields in panel-grid.ejs/monitor-detail.ejs) — a long line already, and two of them sharing a
-   row got unreadable fast. This custom HTML one instead always gives each series its own row,
-   with everything about it (swatch, name, every enabled stat) on that ONE line — regardless of
-   position, which only changes WHERE this list sits (above/below/beside the plot), never how it's
-   laid out internally. */
+   series' own name could also carry a min/max/avg/current stat (see the Legend fields in
+   panel-grid.ejs/monitor-detail.ejs). This custom HTML one instead lays out as an actual table —
+   a CSS grid (each .chart-legend-row is display:contents, so its own cells become the grid's real
+   items — see buildCustomLegend in monitor-chart.js) with one column per stat, closer to how
+   Grafana's own legend table reads than one long "name (min X, max Y, ...)" sentence per row.
+   max-height + its own scrollbar (rather than growing forever) is the actual fix for a panel with
+   many series: unbounded, this list alone could push the plot down to a sliver, or visibly resize
+   the whole panel as series got toggled on/off — capped, it can never take more than a small,
+   predictable share of the panel no matter how many series are in it. */
 .chart-custom-legend {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.78rem;
+  display: grid;
+  /* Every row's own cells (.chart-legend-cell) are overflow:hidden for their ellipsis truncation —
+     which per the grid sizing spec gives them an automatic MINIMUM size of 0 for track-sizing
+     purposes, content be damned. A data row still ends up a sane height because its swatch column
+     has an explicit width/height with no overflow clipping to anchor the row against — the header
+     row's own swatch-column placeholder is a bare, contentless <span> with nothing to anchor it,
+     so its auto-sized track collapsed to a sub-pixel sliver, with the header text then rendering
+     wherever align-items:center happened to center THAT (bleeding up out of the legend's own
+     clipped box and into the row below instead of sitting in a proper header line). A minimum
+     row height, not reliant on any one cell's own sizing, fixes every row the same way regardless.
+  */
+  grid-auto-rows: minmax(1.05rem, auto);
+  align-items: center;
+  gap: 0.15rem 0.6rem;
+  font-size: 0.72rem;
   color: var(--text);
   overflow: auto;
   flex-shrink: 0;
+  /* A percentage, not a fixed rem value — a fixed cap kept the scrollbar around even once the
+     panel itself had been resized tall enough that every row would otherwise have fit. This scales
+     with whatever height the panel actually has (resolves against .chart-canvas-inner's own real
+     pixel height, itself flex:1 off the panel's — see .dash-panel .chart-wrap below), so growing
+     the panel keeps giving the legend more room until it no longer needs to scroll at all, instead
+     of stopping at some fixed height regardless of how much space is actually available. */
+  max-height: 40%;
 }
-.chart-custom-legend-side { max-width: 45%; }
-.chart-legend-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.chart-legend-row.chart-legend-hidden { opacity: 0.45; text-decoration: line-through; }
+.chart-custom-legend-side { max-width: 45%; max-height: none; }
+.chart-legend-row { display: contents; cursor: pointer; }
+.chart-legend-row.chart-legend-hidden { opacity: 0.45; }
+.chart-legend-row.chart-legend-hidden .chart-legend-name { text-decoration: line-through; }
+.chart-legend-head { cursor: default; font-weight: 600; color: var(--text-muted); }
 .chart-legend-swatch {
-  width: 0.85rem;
-  height: 0.85rem;
+  width: 0.75rem;
+  height: 0.75rem;
   border-radius: 3px;
   flex-shrink: 0;
 }
+.chart-legend-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-legend-stat { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.chart-legend-head .chart-legend-stat { color: inherit; }
 
 /* ---- Custom dashboards ---- */
 /* GridStack.js (see panel-grid.ejs) now owns the actual grid layout, in one ".grid-stack" instance
@@ -3223,6 +3255,16 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
    partly behind the drawer itself, or squeezed into a thin sliver at the edge of the remaining
    visible area. */
 .dash-panel.editing { z-index: 95; box-shadow: 0 0 0 2px var(--accent), var(--shadow-lg); transition: left 0.2s var(--ease), top 0.2s var(--ease); }
+/* The head's own Edit/Duplicate/Delete kebab (collapsed by tables.js's collapseRowActions into
+   .row-actions-toggle) is redundant the moment this exact panel's own Edit drawer is already open
+   right below it — Edit doesn't do anything new, and Duplicate/Delete are one click away once the
+   drawer is closed again. */
+.dash-panel.editing .dash-panel-head .row-actions-toggle { display: none; }
+/* The drag handle is just as pointless while this exact panel's own drawer is already open —
+   dragging it to reorder mid-edit isn't a thing GridStack even supports once it's been lifted out
+   of the grid's own flow via position:fixed above, so leaving it visible only invited a click that
+   wouldn't do anything. */
+.dash-panel.editing .widget-drag-handle { display: none; }
 /* GridStack's own resize handle is a child of .grid-stack-item — the OUTER wrapper, one level up
    from the .dash-panel that centerEditingPanel() (see foot.ejs) lifts to z-index:95 and re-centers
    via position:fixed while its drawer is open. The wrapper itself never moves (fixed positioning

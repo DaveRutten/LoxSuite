@@ -4,6 +4,9 @@ const { getTopicOverview, clearTopicOverview } = require('../mqttClient');
 const { getClients, clearClients } = require('../mosquittoLog');
 const { commandRecognitionString } = require('../loxone');
 const { discoverDevices, resolveTopicPrefix } = require('../deviceDiscovery');
+const { loadCommandCatalogs } = require('../commandCatalog');
+const { getDisplayTimezone } = require('../dateFormat');
+const scheduledDeviceCommands = require('../scheduledDeviceCommands');
 const { requirePermission } = require('../middleware/requirePermission');
 const asyncHandler = require('../middleware/asyncHandler');
 
@@ -52,6 +55,12 @@ router.get('/clients', asyncHandler(async (req, res) => {
   const systemClients = allClients.filter((c) => isSystemClient(c.clientId));
   const tab = req.query.tab === 'system' ? 'system' : 'device';
   const settings = await db.prepare('SELECT client_retention_hours FROM gateway_settings WHERE id = 1').get();
+  // How many "Schedule command" rows (see /schedules below) already exist per device — shown as a
+  // small count next to that button so a schedule already set up isn't invisible from this page.
+  const scheduleCounts = {};
+  (await scheduledDeviceCommands.listSchedules()).forEach((s) => {
+    scheduleCounts[s.device_key] = (scheduleCounts[s.device_key] || 0) + 1;
+  });
   res.render('incoming-clients', {
     clients: tab === 'system' ? systemClients : deviceClients,
     deviceCount: deviceClients.length,
@@ -65,6 +74,7 @@ router.get('/clients', asyncHandler(async (req, res) => {
     // "radiator-gang" — nothing in that string says "heatmeister"), unlike deviceFamily here,
     // which already knows the real answer from which topicPrefixPattern actually matched.
     deviceFamily,
+    scheduleCounts,
   });
 }));
 
@@ -81,6 +91,123 @@ router.post('/clients/settings', requirePermission('incoming', 'edit'), asyncHan
   // Referer-based (not a fixed '/incoming/clients') since this form now lives on the Settings
   // page — same pattern already used by /logs/settings.
   res.redirect(req.get('referer') || '/incoming/clients');
+}));
+
+router.get('/schedules', asyncHandler(async (req, res) => {
+  const { allDevices, deviceFamily } = discoverDevices();
+  const { catalog } = await loadCommandCatalogs();
+  const tz = getDisplayTimezone();
+  const now = new Date();
+
+  const schedules = (await scheduledDeviceCommands.listSchedules()).map((s) => ({
+    ...s,
+    nextRun: s.enabled ? scheduledDeviceCommands.computeNextRun(s, tz, now) : null,
+  }));
+
+  res.render('incoming-schedules', {
+    schedules,
+    allDevices,
+    deviceFamily,
+    catalog,
+    presetDevice: req.query.device || '',
+    presetFamilyKey: req.query.family || deviceFamily[req.query.device || ''] || '',
+    timezone: tz,
+    error: req.query.error || null,
+  });
+}));
+
+// Shared by the create route and the Add form's own "Test" button below — device-level commands
+// only for now (a topicTemplate with no {channel} of its own, e.g. a Shelly's "Reboot"): a
+// per-channel one (relay/roller/...) would need a channel picker this UI doesn't have yet, and the
+// same filter is applied client-side when building the dropdown, this is just the server-side half
+// of that same rule.
+function resolveCommand(catalog, familyKey, commandValue, deviceKey) {
+  const family = catalog.find((f) => f.key === familyKey);
+  if (!family) throw new Error('Unknown device family.');
+  const [commandKey, actionIndexRaw] = String(commandValue || '').split('::');
+  const command = (family.commands || []).find((c) => c.key === commandKey && !c.topicTemplate.includes('{channel}'));
+  const actionIndex = Number(actionIndexRaw);
+  if (!command || !command.actions[actionIndex]) throw new Error('Unknown command.');
+  return {
+    label: command.actions.length > 1 ? `${command.label}: ${command.actions[actionIndex]}` : command.label,
+    topic: command.topicTemplate.replace('{device}', deviceKey),
+    payload: command.actions[actionIndex],
+  };
+}
+
+router.post('/schedules', requirePermission('incoming', 'edit'), asyncHandler(async (req, res) => {
+  const { device_key: deviceKey, family_key: familyKey, command_value: commandValue, interval_type: intervalType, interval_days: intervalDays, time_of_day: timeOfDay } = req.body;
+  try {
+    const { catalog } = await loadCommandCatalogs();
+    const resolved = resolveCommand(catalog, familyKey, commandValue, deviceKey);
+    // Same array-vs-single-string quirk every other checkbox group in this app works around
+    // (Express only gives an array once MORE than one same-named box is checked).
+    const weekdaysRaw = req.body.weekdays;
+    const weekdaysCsv = Array.isArray(weekdaysRaw) ? weekdaysRaw.join(',') : (weekdaysRaw || '');
+
+    await scheduledDeviceCommands.createSchedule({
+      device_key: deviceKey,
+      family_key: familyKey,
+      command_label: resolved.label,
+      mqtt_topic: resolved.topic,
+      mqtt_payload: resolved.payload,
+      interval_type: intervalType,
+      interval_days: intervalDays,
+      weekdays: weekdaysCsv,
+      time_of_day: timeOfDay,
+    });
+    res.redirect('/incoming/schedules');
+  } catch (err) {
+    res.redirect(`/incoming/schedules?error=${encodeURIComponent(err.message)}&device=${encodeURIComponent(deviceKey || '')}&family=${encodeURIComponent(familyKey || '')}`);
+  }
+}));
+
+// Backs the Add-schedule form's own "Test" button — fires the currently-picked device/command
+// once, before a schedule even exists to save, so a typo'd device id or a command that doesn't
+// actually do anything on this specific device gets caught right there instead of after committing
+// to a recurring schedule for it. JSON in/out (fetch()'d from the form, see incoming-schedules.ejs)
+// rather than a redirect, so the rest of the not-yet-saved form (interval type, weekdays, ...)
+// doesn't get thrown away just to show the result of a test send.
+router.post('/schedules/test-send', requirePermission('incoming', 'edit'), asyncHandler(async (req, res) => {
+  const { device_key: deviceKey, family_key: familyKey, command_value: commandValue } = req.body;
+  try {
+    const { catalog } = await loadCommandCatalogs();
+    const resolved = resolveCommand(catalog, familyKey, commandValue, deviceKey);
+    await scheduledDeviceCommands.testSend(resolved.topic, resolved.payload);
+    res.json({ ok: true, topic: resolved.topic, payload: resolved.payload });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+}));
+
+router.post('/schedules/:id/update', requirePermission('incoming', 'edit'), asyncHandler(async (req, res) => {
+  const { interval_type: intervalType, interval_days: intervalDays, time_of_day: timeOfDay } = req.body;
+  const weekdaysRaw = req.body.weekdays;
+  const weekdaysCsv = Array.isArray(weekdaysRaw) ? weekdaysRaw.join(',') : (weekdaysRaw || '');
+  try {
+    await scheduledDeviceCommands.updateSchedule(req.params.id, {
+      interval_type: intervalType, interval_days: intervalDays, weekdays: weekdaysCsv, time_of_day: timeOfDay,
+    });
+    res.redirect('/incoming/schedules');
+  } catch (err) {
+    res.redirect(`/incoming/schedules?error=${encodeURIComponent(err.message)}`);
+  }
+}));
+
+router.post('/schedules/:id/toggle', requirePermission('incoming', 'edit'), asyncHandler(async (req, res) => {
+  const schedule = await scheduledDeviceCommands.getSchedule(req.params.id);
+  if (schedule) await scheduledDeviceCommands.setEnabled(schedule.id, !schedule.enabled);
+  res.redirect('/incoming/schedules');
+}));
+
+router.post('/schedules/:id/run-now', requirePermission('incoming', 'edit'), asyncHandler(async (req, res) => {
+  await scheduledDeviceCommands.runNow(req.params.id); // failure is recorded on the row itself (last_status/last_error), not thrown here
+  res.redirect('/incoming/schedules');
+}));
+
+router.post('/schedules/:id/delete', requirePermission('incoming', 'edit'), asyncHandler(async (req, res) => {
+  await scheduledDeviceCommands.deleteSchedule(req.params.id);
+  res.redirect('/incoming/schedules');
 }));
 
 module.exports = router;
