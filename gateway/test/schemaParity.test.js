@@ -17,6 +17,7 @@ const Database = require('better-sqlite3');
 const { dumpSchema } = require('./helpers/schemaDump');
 const runLegacySqliteSchema = require('../src/db/legacy-sqlite-schema');
 const { createKnex } = require('../src/db/knex');
+const baseline = require('../src/db/migrations/001_baseline');
 
 test('the Knex baseline (001_baseline.js) produces the exact same schema as the frozen legacy migration path', async () => {
   // Side A: the frozen legacy path, run directly against a fresh :memory: connection — exactly
@@ -26,10 +27,13 @@ test('the Knex baseline (001_baseline.js) produces the exact same schema as the 
   const legacySchema = dumpSchema(legacyConn);
   legacyConn.close();
 
-  // Side B: a genuinely fresh install via Knex's own migration runner — what 001_baseline.js
-  // produces on its own, unaided by any legacy function.
+  // Side B: 001_baseline.js's own up() called directly — not knex.migrate.latest(), which (now
+  // that migrations after 001_baseline exist, e.g. 002_scheduled_device_commands.js) would also
+  // run every one of THOSE, comparing "the baseline plus everything since" against the frozen
+  // legacy path instead of the baseline alone. This is what 001_baseline.js produces truly on its
+  // own, unaided by any legacy function — matching what this test actually claims to check.
   const knex = createKnex(':memory:');
-  await knex.migrate.latest();
+  await baseline.up(knex);
   const baselineConn = await knex.client.acquireConnection();
   const baselineSchema = dumpSchema(baselineConn);
   knex.client.releaseConnection(baselineConn);
