@@ -48,4 +48,4 @@ function humanizeTopic(topic) {
   return `${deviceLabel} - ${humanizePart(metric)}`;
 }
 
-module.exports = { humanizeTopic, BRAND_PREFIX_RE };
+module.exports = { humanizeTopic, BRAND_PREFIX_RE, ROOT_NAMESPACES };

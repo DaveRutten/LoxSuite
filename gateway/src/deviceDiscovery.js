@@ -1,6 +1,35 @@
 const { CATALOG } = require('./commandCatalog');
 const { getTopicOverview } = require('./mqttClient');
-const { BRAND_PREFIX_RE } = require('./topicName');
+const { BRAND_PREFIX_RE, ROOT_NAMESPACES } = require('./topicName');
+
+// A root namespace's device segment is whatever comes right after it, e.g.
+// "shellies/<this>/relay/0" or "zigbee2mqtt/<this>/set" — used below to
+// register a device ID even when no catalog family's stricter pattern
+// matches it (see discoverDevices()).
+const ROOT_NAMESPACE_RE = new RegExp(`^(?:${[...ROOT_NAMESPACES].join('|')})/([^/]+)/`);
+
+// Shelly devices broadcast their own identity — {id, mac, ...} — on "<prefix>/announce" and the
+// shared "shellies/announce" topic whenever they (re)connect. "id" is the device's current, real
+// topic prefix (whatever it's been renamed to), and "mac" is its fixed hardware address, whose
+// last 6 hex digits are also embedded in its factory-default MQTT client ID (e.g. client ID
+// "shellyplug-s-02086E" for mac "807D3A02086E"). That overlap is a real fact reported by the
+// device itself — not a string-matching guess — so it survives a rename that changes the topic
+// prefix but leaves the client ID at its factory default.
+function announcedPrefixesByMacSuffix(topicEntries) {
+  const byMacSuffix = {};
+  topicEntries.forEach((t) => {
+    if (!/\/announce$/.test(t.topic) || !t.value) return;
+    let payload;
+    try {
+      payload = JSON.parse(t.value);
+    } catch (e) {
+      return;
+    }
+    const macSuffix = String(payload.mac || '').replace(/[^0-9a-f]/gi, '').toLowerCase().slice(-6);
+    if (payload.id && macSuffix.length === 6) byMacSuffix[macSuffix] = payload.id;
+  });
+  return byMacSuffix;
+}
 
 // Scans every topic the broker has actually seen for each catalog family's
 // topicPrefixPattern, so the resulting device IDs are the real values used in
@@ -8,9 +37,11 @@ const { BRAND_PREFIX_RE } = require('./topicName');
 // ID (a device's configured topic prefix can be customized separately from
 // its client ID/hostname).
 function discoverDevices() {
-  const topics = getTopicOverview().map((t) => t.topic);
+  const topicEntries = getTopicOverview();
+  const topics = topicEntries.map((t) => t.topic);
   const devicesByFamily = {};
   const deviceFamily = {};
+  const allIds = new Set();
 
   CATALOG.forEach((family) => {
     const re = new RegExp(family.topicPrefixPattern);
@@ -19,24 +50,50 @@ function discoverDevices() {
       const m = topic.match(re);
       if (m) {
         ids.add(m[1]);
+        allIds.add(m[1]);
         if (!deviceFamily[m[1]]) deviceFamily[m[1]] = family.key;
       }
     });
     devicesByFamily[family.key] = [...ids].sort();
   });
 
-  return { devicesByFamily, deviceFamily, allDevices: Object.keys(deviceFamily).sort() };
+  // A family's topicPrefixPattern hardcodes that model's factory brand token
+  // (e.g. "shellyplug-s-"), so it stops matching the moment a device is
+  // renamed away from its factory-default topic prefix on the device itself
+  // — a normal, supported thing to do, not a misconfiguration. Also register
+  // every device segment seen under a known root namespace regardless of
+  // which (if any) family pattern matched, so resolveTopicPrefix() can still
+  // recognize a renamed device's real topic prefix — we just won't know which
+  // specific family it belongs to.
+  topics.forEach((topic) => {
+    const m = topic.match(ROOT_NAMESPACE_RE);
+    if (m) allIds.add(m[1]);
+  });
+
+  return {
+    devicesByFamily,
+    deviceFamily,
+    allDevices: [...allIds].sort(),
+    announcedByMacSuffix: announcedPrefixesByMacSuffix(topicEntries),
+  };
 }
 
 // Best-effort match between a raw MQTT client ID and a known topic prefix:
 // exact match first (the common case — a device's client ID and topic prefix
-// are usually the same string), then a brand-prefix-insensitive match (Shelly:
-// clientId "shellyplug-s-A1B2C3" vs. topic prefix "A1B2C3"). There is no
-// protocol-level way to reliably link the two when they genuinely differ —
-// the broker never tells subscribers which client published a message — so
-// anything beyond this heuristic would be a guess.
-function resolveTopicPrefix(clientId, knownPrefixes) {
+// are usually the same string), then the device's own announced MAC (see
+// announcedPrefixesByMacSuffix above — a confirmed fact, not a guess), then a
+// brand-prefix-insensitive match (Shelly: clientId "shellyplug-s-A1B2C3" vs.
+// topic prefix "A1B2C3"). Beyond that there is no protocol-level way to
+// reliably link the two when they genuinely differ — the broker never tells
+// subscribers which client published a message — so anything past this point
+// would be a guess.
+function resolveTopicPrefix(clientId, knownPrefixes, announcedByMacSuffix) {
   if (knownPrefixes.includes(clientId)) return clientId;
+  if (announcedByMacSuffix) {
+    const m = clientId.match(/(?:^|[-_])([0-9a-f]{6})$/i);
+    const announced = m && announcedByMacSuffix[m[1].toLowerCase()];
+    if (announced) return announced;
+  }
   const stripped = clientId.replace(BRAND_PREFIX_RE, '').toLowerCase();
   const match = knownPrefixes.find((p) => p.replace(BRAND_PREFIX_RE, '').toLowerCase() === stripped);
   if (match) return match;

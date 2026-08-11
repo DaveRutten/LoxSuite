@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.13.8-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.13.9-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -487,11 +487,15 @@ in-memory only (cleared on a gateway restart):
   dynamic-security bootstrap, and any ad-hoc Test button use — each with a stable `loxsuite-...`
   client ID, so real IoT traffic isn't buried among them). The **Device** column shows the topic
   prefix seen in that device's own MQTT traffic when one is known (hover to see the raw MQTT
-  client ID), falling back to the raw client ID otherwise — there's no protocol-level way to ask
-  the broker "who published this topic", so this is a best-effort match, not a guarantee. Devices
-  that look like a Shelly get a "Suggest commands" shortcut. **Clear list** removes disconnected
-  entries only — clients that are still actually connected stay listed, since they won't send a
-  new "connected" event just because the view was cleared.
+  client ID), falling back to the raw client ID otherwise. Renaming a Shelly's MQTT topic prefix in
+  its own web UI never changes its underlying connect client ID (that stays the factory
+  model+MAC value forever), so the two can end up sharing no text in common — resolved anyway using
+  the MAC address the device itself broadcasts on `shellies/announce` whenever it (re)connects,
+  matched against the same MAC embedded in that factory client ID. Anything short of that confirmed
+  link falls back to a best-effort text match, since there's no protocol-level way to ask the broker
+  "who published this topic". Devices that look like a Shelly get a "Suggest commands" shortcut.
+  **Clear list** removes disconnected entries only — clients that are still actually connected stay
+  listed, since they won't send a new "connected" event just because the view was cleared.
 
 Any device resolved to a known **Common Commands** family (see below) also gets a **Schedule
 command** shortcut, opening its own page to have one of that family's commands re-sent on a

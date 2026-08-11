@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.9-alpha.1] - 2026-08-11
+
+### Fixed
+- Connected Clients' Device column could never learn a Shelly's real name once it had been renamed
+  away from the factory topic prefix in the device's own web UI: device discovery only recognized a
+  topic prefix as "known" if it still matched that model's exact factory pattern (e.g.
+  `shellyplug-s-<mac>`), which a custom name like `shellyplug-ZWEMBADVerwarming` no longer does —
+  same effect on the Schedule command device dropdown and Suggest Commands. Fixed by also
+  registering any topic prefix seen under a known root namespace (`shellies/`, `zigbee2mqtt/`,
+  `homeassistant/`) regardless of which (if any) family pattern matched.
+- On top of that, a renamed Shelly's topic prefix and its MQTT client ID can end up sharing no text
+  at all — renaming only changes the topic prefix, never the client ID (which stays the factory
+  model+MAC value forever) — so the existing best-effort text match had nothing to work from. Now
+  resolved using the MAC address the device itself broadcasts on `shellies/announce` whenever it
+  (re)connects, matched against that same MAC embedded in its factory client ID: a confirmed fact
+  reported by the device, not a guess.
+
 ## [0.13.8-alpha.1] - 2026-08-11
 
 ### Added

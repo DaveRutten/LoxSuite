@@ -46,9 +46,9 @@ function isSystemClient(clientId) {
 }
 
 router.get('/clients', asyncHandler(async (req, res) => {
-  const { allDevices, deviceFamily } = discoverDevices();
+  const { allDevices, deviceFamily, announcedByMacSuffix } = discoverDevices();
   const allClients = getClients().map((c) => {
-    const prefix = resolveTopicPrefix(c.clientId, allDevices);
+    const prefix = resolveTopicPrefix(c.clientId, allDevices, announcedByMacSuffix);
     return { ...c, displayName: prefix || c.clientId, resolvedFromTopic: !!prefix };
   });
   const deviceClients = allClients.filter((c) => !isSystemClient(c.clientId));
