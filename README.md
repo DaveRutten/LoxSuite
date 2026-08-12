@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.14.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.15.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -184,6 +184,12 @@ unread badge, same as opening the popover already does on its own.
 </picture>
 
 *(Demo data.)*
+
+### Support LoxSuite
+
+A heart button next to Help/Notifications in the topbar opens a small **Support LoxSuite** dialog
+— a star on [GitHub](https://github.com/DaveRutten/LoxSuite) and a one-time
+[PayPal](https://paypal.me/LoxSuite) donation, the project's only two asks anywhere in the app.
 
 ### Monitor
 
@@ -377,6 +383,11 @@ briefly looking "offline" at once. A **battery** reading of 127 means mains-powe
 not a real percentage, and is shown as **External power** instead; weak-battery flags
 (`BattWeak`/`BatTooWeakForUpdate`) come straight from the Miniserver's own judgment, not a threshold
 this app invented.
+
+An Audioserver and its zones are the one exception to `/data/status` alone: that endpoint never
+reports an online status for either, so both come from the Structure File's own `AudioZoneV2`
+control instead — a real Online/Offline per zone, which Audioserver it belongs to (**Zone of**
+column, grouped together), and a **Stereo** badge when a Stereo Extension is physically attached.
 
 One rule already covers every device of a given kind automatically — current and any added
 later — there's no per-device setup. The 3 buttons next to the search bar create (first click) or

@@ -180,7 +180,7 @@ a { color: var(--accent); }
    this margin off, otherwise it throws off centering (the icon sits visibly left of true center) —
    exactly the bug a real screenshot measurement caught on the notification bell: SVG vertically
    centered to within a sub-pixel, but 0.35rem off horizontally, matching this margin exactly. */
-button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35rem; }
+button:not(.icon-btn):not(.notification-center-btn):not(.topbar-support-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35rem; }
 
 /* ---- App shell ---- */
 .app-shell {
@@ -436,6 +436,155 @@ button:not(.icon-btn):not(.notification-center-btn) .icon, a button:not(.icon-bt
 .topbar-help:hover {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* Support-this-project trigger — same circular chrome as .topbar-help right next to it, but it's a
+   real <button> (not an <a>, which has no UA chrome to begin with) so it also needs the same
+   background/cursor reset .notification-center-btn already gives itself for the same reason.
+   The heart itself stays --danger (a warm red) at rest, not just on hover like .topbar-help's
+   muted default — it only reads as "support us" if it's noticeable before the user even hovers
+   it — but the ring around it stays the same neutral --border as every other topbar icon until
+   hover, same as .topbar-help right next to it. */
+.topbar-support-btn {
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--danger);
+}
+/* Deliberately no .topbar-support-btn:hover override — .topbar-help:hover (shared class, above)
+   already flips color/border-color to --accent on hover same as every other topbar icon button;
+   a same-specificity override here just for this one button was fighting that shared rule on
+   border-color (winning on source order) while leaving color to switch to --accent anyway, so the
+   heart and its own border visibly disagreed on hover. Letting the shared rule win keeps this
+   button's hover consistent with the rest of the row. */
+
+/* Heartbeat pulse (double-beat, same shape as a real heartbeat) — same infinite-loop convention as
+   badge-pulse above, kept subtle (peaks at 1.15x) so it reads as "alive" rather than distracting. */
+.topbar-support-btn .icon { animation: support-heartbeat 2.4s ease-in-out infinite; }
+@keyframes support-heartbeat {
+  0%, 40%, 100% { transform: scale(1); }
+  15% { transform: scale(1.15); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.1); }
+}
+
+/* Wrapper around the heart button (see partials/head.ejs) that holds two purely decorative extras
+   — an expanding "ping" ring and two twinkling sparkles — same idea as .notification-center (a
+   position:relative wrapper) further below, just for layered decoration here instead of a dropdown
+   panel. The button itself gets its own stacking context (z-index:1) so it always paints above
+   the ring/sparkles — otherwise the button's own :hover background would sit UNDER them, but the
+   ring's starting edge would still read as fused with the button's now-red hover border, killing
+   the visible contrast between "ring" and "button". Starting the ring 4px outside the button's own
+   edge (inset: -4px, rather than flush with it at inset: 0) keeps it visibly a separate ring in the
+   surrounding gap at all times, hover or not. */
+.support-trigger { position: relative; display: inline-flex; }
+.support-trigger .topbar-support-btn { position: relative; z-index: 1; }
+
+/* Toned down from an earlier, more eye-catching version — smaller opacity peak, thinner border,
+   less growth — so it reads as a quiet "still alive" cue instead of demanding attention. */
+.support-ping {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--danger);
+  z-index: 0;
+  animation: support-ping 2.4s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes support-ping {
+  0% { transform: scale(1); opacity: 0.35; }
+  100% { transform: scale(1.3); opacity: 0; }
+}
+
+/* Three nested layers turn a plain circular orbit into a wobbling, precessing ellipse — the way an
+   orbiting body's path looks when its whole orbital plane is also slowly tilting, rather than a
+   fixed circle traced over and over. Outermost first (each is a parent of the next, see
+   partials/head.ejs):
+   1. .support-sparkle-precess — rotates slowly back and forth (alternate direction, so it visibly
+      reverses instead of just spinning one way), tilting the ellipse's orientation over time.
+   2. .support-sparkle-ellipse — a fixed vertical squish. Applied OUTSIDE the fast rotation below,
+      not inside it: squishing a full traced circle from the outside turns it into a true ellipse;
+      squishing first and rotating a single already-on-axis point inside that would do nothing.
+   3. .support-sparkle-orbit — the fast constant spin (unchanged from before) that actually sweeps
+      the sparkle around; its output is what layers 1-2 then reshape and re-orient.
+   The two sparkles get different speeds/phases/amplitudes on all three layers so they never fall
+   into a synchronized-looking loop with each other. */
+.support-sparkle-precess {
+  position: absolute;
+  inset: 0;
+  animation: support-sparkle-precess-1 11s ease-in-out infinite alternate;
+}
+.support-sparkle-precess-2 { animation-name: support-sparkle-precess-2; animation-duration: 8s; }
+@keyframes support-sparkle-precess-1 {
+  0% { transform: rotate(-25deg); }
+  100% { transform: rotate(25deg); }
+}
+@keyframes support-sparkle-precess-2 {
+  0% { transform: rotate(35deg); }
+  100% { transform: rotate(-15deg); }
+}
+
+.support-sparkle-ellipse {
+  position: absolute;
+  inset: 0;
+  transform: scaleY(0.5);
+}
+.support-sparkle-precess-2 .support-sparkle-ellipse { transform: scaleY(0.62); }
+
+.support-sparkle-orbit {
+  position: absolute;
+  inset: 0;
+  animation: support-sparkle-orbit 7s linear infinite;
+}
+.support-sparkle-orbit-2 { animation-duration: 5s; animation-direction: reverse; }
+@keyframes support-sparkle-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* A plain CSS-drawn 4-point star (clip-path) rather than a Unicode star glyph — the glyph rendered
+   inconsistently across sizes/platforms (color font substitution at small sizes turning it into an
+   oversized colored blob instead of a small currentColor shape), so this draws the exact same shape
+   everywhere via a background-color instead of relying on any font. Tucked in tight (-2px) so it
+   reads as sitting ON the button's corner, not floating beside it. */
+.support-sparkle {
+  position: absolute;
+  z-index: 1;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  clip-path: polygon(50% 0%, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0% 50%, 37% 37%);
+  pointer-events: none;
+  animation: support-sparkle-twinkle 1.8s ease-in-out infinite;
+}
+.support-sparkle-2 { bottom: -1px; left: -2px; top: auto; right: auto; width: 4px; height: 4px; animation-delay: 0.9s; }
+
+/* Third sparkle doesn't orbit at all — it drifts/bobs diagonally in place instead, so all three
+   move in visibly different ways rather than three copies of the same motion at different phases.
+   Sits outside any orbit wrapper, positioned directly on .support-trigger. */
+.support-sparkle-3 {
+  top: -3px;
+  left: -3px;
+  width: 5px;
+  height: 5px;
+  animation: support-sparkle-drift 2.6s ease-in-out infinite;
+}
+
+/* Soft pastel accents, one per sparkle — pink and blue are one-off decorative colors (no sitewide
+   variable for either), purple reuses the app's existing --purple token (see badge-purple above)
+   since that one already exists and is theme-aware. */
+.support-sparkle-pink { background: #f472b6; }
+.support-sparkle-purple { background: var(--purple); }
+.support-sparkle-blue { background: #60a5fa; }
+
+@keyframes support-sparkle-twinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.6) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1) rotate(20deg); }
+}
+@keyframes support-sparkle-drift {
+  0%, 100% { opacity: 0.3; transform: translate(0, 0) scale(0.7); }
+  50% { opacity: 1; transform: translate(-3px, 3px) scale(1.05); }
 }
 
 .topbar-right {
@@ -2344,6 +2493,30 @@ summary.btn-edit::-webkit-details-marker, summary.btn-test::-webkit-details-mark
   box-shadow: var(--shadow);
 }
 .update-changelog-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+
+/* Support dialog (see partials/head.ejs) reuses .update-changelog-dialog's card chrome; this just
+   styles the two link "cards" (GitHub / PayPal) inside it. */
+.support-dialog p.hint { margin-top: 0.4rem; }
+.support-dialog-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+.support-dialog-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+}
+.support-dialog-link:hover { border-color: var(--accent); background: var(--accent-soft); }
+.support-dialog-link .icon { flex-shrink: 0; width: 1.3rem; height: 1.3rem; color: var(--accent); }
+.support-dialog-link span { display: flex; flex-direction: column; gap: 0.1rem; }
+.support-dialog-link small { color: var(--text-muted); }
 
 /* Miniservers' own diagnostics dialog (see miniservers.ejs) reuses .update-changelog-dialog's card
    chrome but needs more room than a changelog text popup — its .ms-diagnostics stat grid (up to 8

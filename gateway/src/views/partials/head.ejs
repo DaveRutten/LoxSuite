@@ -245,6 +245,48 @@
             <%- icon('help') %>
           </a>
         <% } %>
+        <span class="support-trigger">
+          <span class="support-ping" aria-hidden="true"></span>
+          <span class="support-sparkle-precess support-sparkle-precess-1" aria-hidden="true"><span class="support-sparkle-ellipse"><span class="support-sparkle-orbit support-sparkle-orbit-1"><span class="support-sparkle support-sparkle-pink"></span></span></span></span>
+          <span class="support-sparkle-precess support-sparkle-precess-2" aria-hidden="true"><span class="support-sparkle-ellipse"><span class="support-sparkle-orbit support-sparkle-orbit-2"><span class="support-sparkle support-sparkle-2 support-sparkle-purple"></span></span></span></span>
+          <span class="support-sparkle support-sparkle-3 support-sparkle-blue" aria-hidden="true"></span>
+          <button type="button" id="support-open-btn" class="topbar-help topbar-support-btn" title="Support this project" aria-label="Support this project">
+            <%- icon('heart') %>
+          </button>
+        </span>
+        <dialog id="support-dialog" class="update-changelog-dialog support-dialog">
+          <h2>Support LoxSuite</h2>
+          <p class="hint">LoxSuite is built and maintained by a solo developer. If it's made managing your Loxone/MQTT setup easier, here's how you can help keep it going.</p>
+          <div class="support-dialog-links">
+            <a href="https://github.com/DaveRutten/LoxSuite" target="_blank" rel="noopener" class="support-dialog-link">
+              <%- icon('star') %>
+              <span>
+                <strong>Star on GitHub</strong>
+                <small>Helps new people find LoxSuite and keeps me motivated.</small>
+              </span>
+            </a>
+            <a href="https://paypal.me/LoxSuite" target="_blank" rel="noopener" class="support-dialog-link">
+              <%- icon('heart') %>
+              <span>
+                <strong>Donate via PayPal</strong>
+                <small>A one-time tip to fuel late-night coding sessions.</small>
+              </span>
+            </a>
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
+            <button type="button" class="btn-soft" id="support-dialog-close">Close</button>
+          </div>
+        </dialog>
+        <script>
+          (function () {
+            var dialog = document.getElementById('support-dialog');
+            var openBtn = document.getElementById('support-open-btn');
+            var closeBtn = document.getElementById('support-dialog-close');
+            if (!dialog || !openBtn) return;
+            openBtn.addEventListener('click', function () { dialog.showModal(); });
+            if (closeBtn) closeBtn.addEventListener('click', function () { dialog.close(); });
+          })();
+        </script>
         <% if (currentUser) { %>
           <div class="notification-center">
             <button type="button" id="notification-center-btn" class="notification-center-btn" title="Notifications" aria-label="Notifications">

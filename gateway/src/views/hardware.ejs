@@ -60,6 +60,7 @@
         <th>Type</th>
         <th>Name</th>
         <th>Place</th>
+        <% if (hasAudioZones) { %><th>Zone of</th><th>Output</th><% } %>
         <th>Serial</th>
         <th>MAC</th>
         <% if (miniservers.length > 1) { %><th>Miniserver</th><% } %>
@@ -78,6 +79,14 @@
           <td><%= d.type || '-' %></td>
           <td><%= d.name || '-' %></td>
           <td><%= d.place || '-' %></td>
+          <% if (hasAudioZones) { %>
+            <td><%= d.zone_of || '-' %></td>
+            <td>
+              <% if (d.audio_output) { %>
+                <% d.audio_output.split(', ').forEach(function (label) { %><span class="badge badge-purple"><%= label %></span> <% }) %>
+              <% } else { %>-<% } %>
+            </td>
+          <% } %>
           <td><span class="truncate" title="<%= d.serial || '' %>"><%= d.serial || '-' %></span></td>
           <td><span class="truncate" title="<%= d.mac || '' %>"><%= d.mac || '-' %></span></td>
           <% if (miniservers.length > 1) { %><td><%= d.miniserver_name %></td><% } %>
@@ -110,7 +119,7 @@
         </tr>
       <% }) %>
       <% if (devices.length === 0) { %>
-        <tr><td colspan="<%= miniservers.length > 1 ? 13 : 12 %>" class="empty">No hardware seen yet &mdash; make sure a Miniserver is configured and its <code>/data/status</code> is reachable.</td></tr>
+        <tr><td colspan="<%= 12 + (miniservers.length > 1 ? 1 : 0) + (hasAudioZones ? 2 : 0) %>" class="empty">No hardware seen yet &mdash; make sure a Miniserver is configured and its <code>/data/status</code> is reachable.</td></tr>
       <% } %>
     </tbody>
   </table>
@@ -130,7 +139,10 @@
       var q = queryInput.value.trim().toLowerCase();
       if (clearBtn) clearBtn.hidden = !q;
       tbody.querySelectorAll('tr').forEach(function (row) {
-        var categoryMatch = !category || row.dataset.category === category;
+        // categories (routes/hardware.js) groups every key sharing one label into a single
+        // comma-joined option value (e.g. the three audio_* categories under "Audio") — split
+        // back out here so one dropdown pick still matches any of that group's actual rows.
+        var categoryMatch = !category || category.split(',').indexOf(row.dataset.category) !== -1;
         var textMatch = !q || row.textContent.toLowerCase().indexOf(q) !== -1;
         row.style.display = (categoryMatch && textMatch) ? '' : 'none';
       });

@@ -12,8 +12,13 @@ const router = express.Router();
 const CATEGORY_LABELS = {
   miniserver: 'Miniserver',
   extension: 'Extension',
-  audio_server: 'Audioserver',
-  audio_zone: 'Audio zone',
+  // All three share one label — unlike every other category here, their own Type column already
+  // says exactly this ("Audioserver"/"Audio extension"/"Audio zone"), so keeping distinct Category
+  // labels too was pure duplication; the category filter dropdown below groups all three back
+  // into one "Audio" option rather than showing it three times.
+  audio_server: 'Audio',
+  audio_extension: 'Audio',
+  audio_zone: 'Audio',
   tree: 'Tree device',
   air: 'Air device',
   onewire: '1-Wire device',
@@ -24,7 +29,7 @@ const CATEGORY_LABELS = {
   // identically-labeled "Plugin device" options with no way to tell which is which.
   gendev: 'Plugin sub-device',
 };
-const CATEGORY_ORDER = ['miniserver', 'extension', 'audio_server', 'audio_zone', 'tree', 'air', 'onewire', 'plugin', 'gendev'];
+const CATEGORY_ORDER = ['miniserver', 'extension', 'audio_server', 'audio_extension', 'audio_zone', 'tree', 'air', 'onewire', 'plugin', 'gendev'];
 
 router.get('/', asyncHandler(async (req, res) => {
   const miniservers = await db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all();
@@ -79,17 +84,25 @@ router.get('/', asyncHandler(async (req, res) => {
   // of each Client separately reporting that same hardware from its own /data/status. Not just
   // Audioservers/zones, potentially anything with a real Serial or MAC (Extensions, Tree/Air/1-Wire
   // devices, ...) — so this dedups on whichever of those two a row actually has, not one specific
-  // category. hwRows is ordered with any explicit Gateway Client (see the Miniserver edit page)
-  // sorted after its own Gateway first, then by the shared miniserver sort_order — so this keeps
-  // whichever Miniserver is the real Gateway when that relationship is known, and otherwise
-  // whichever sorts first. Serial/MAC alone are enough to tell two rows are the same hardware,
-  // since either one only ever exists on this one physical device — a category:name fallback key
-  // (see loxoneHardware.js's own deviceKeyFor) is deliberately NOT used here: two distinct devices
-  // on two distinct Miniservers can plausibly share a generic name, and wrongly dropping one of
-  // them would be far worse than occasionally leaving a genuine duplicate in the list.
+  // category. Confirmed the same is true for an AudioZoneV2 room zone whose Structure File entry
+  // lives in the Gateway's own project while its actual player is configured on a Client's: both
+  // Miniservers report it independently, but with the EXACT same control uuidAction (device_key)
+  // and identical live state — audio_zone rows have no serial/MAC to fall back to (see
+  // loxoneHardware.js's own getAudioZoneItems), so their device_key is used instead; that's always
+  // the control's real Loxone UUID for this category specifically, never the risky category:name
+  // fallback deviceKeyFor() uses as its own last resort for OTHER categories (see below), so this
+  // doesn't reintroduce the coincidental-name-collision risk that fallback exists to avoid. hwRows
+  // is ordered with any explicit Gateway Client (see the Miniserver edit page) sorted after its own
+  // Gateway first, then by the shared miniserver sort_order — so this keeps whichever Miniserver is
+  // the real Gateway when that relationship is known, and otherwise whichever sorts first.
+  // Serial/MAC/this UUID are enough to tell two rows are the same hardware, since any one of them
+  // only ever exists on this one physical device/control — a category:name fallback key (see
+  // loxoneHardware.js's own deviceKeyFor) is deliberately NOT used here: two distinct devices on two
+  // distinct Miniservers can plausibly share a generic name, and wrongly dropping one of them would
+  // be far worse than occasionally leaving a genuine duplicate in the list.
   const seenIdentities = new Set();
   const hardwareRows = hardwareRowsRaw.filter((r) => {
-    const identity = r.serial || r.mac;
+    const identity = r.serial || r.mac || (r.category === 'audio_zone' ? r.device_key : null);
     if (!identity) return true;
     const key = `${identity}`;
     if (seenIdentities.has(key)) return false;
@@ -106,10 +119,32 @@ router.get('/', asyncHandler(async (req, res) => {
     const orderDiff = CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category);
     if (orderDiff !== 0) return orderDiff;
     if (a.category === 'miniserver') return 0;
+    // Zones grouped by their parent Audioserver first (there's no visual nesting on this page —
+    // see routes/hardware.js's own Gateway/Client dedup comment above for the same "flat table,
+    // sorted" approach already used there), then place/name within that server same as everything
+    // else — a null zone_of (audio_zone rows are the only category that can have one at all) sorts
+    // no differently than any other category here.
+    if (a.category === 'audio_zone') {
+      const zoneOfDiff = (a.zone_of || '').localeCompare(b.zone_of || '');
+      if (zoneOfDiff !== 0) return zoneOfDiff;
+    }
     return (a.place || '').localeCompare(b.place || '') || (a.name || '').localeCompare(b.name || '');
   });
 
-  const categories = CATEGORY_ORDER.map((key) => ({ key, label: CATEGORY_LABELS[key] }));
+  // Grouped by label, not one entry per key — the three audio_* categories share the "Audio"
+  // label above, so without this the filter dropdown would show "Audio" three times over with no
+  // way to tell the identical-looking options apart. A grouped option's own value is every one of
+  // its underlying category keys joined by comma; the client-side filter (see this page's own
+  // script below) matches a row's data-category against that comma-split list instead of a single
+  // exact key, so selecting "Audio" once still shows every audio_server/audio_extension/audio_zone
+  // row together.
+  const categoriesByLabel = new Map();
+  for (const key of CATEGORY_ORDER) {
+    const label = CATEGORY_LABELS[key];
+    if (!categoriesByLabel.has(label)) categoriesByLabel.set(label, []);
+    categoriesByLabel.get(label).push(key);
+  }
+  const categories = Array.from(categoriesByLabel.entries()).map(([label, keys]) => ({ key: keys.join(','), label }));
 
   // Enabled/disabled/not-yet-created state per hardware rule type, for the toolbar's own
   // enable/disable toggle buttons (see routes/notifications.js's POST /rules/toggle-hardware) —
@@ -123,7 +158,12 @@ router.get('/', asyncHandler(async (req, res) => {
     if (!hardwareRuleStates.has(r.trigger_type)) hardwareRuleStates.set(r.trigger_type, !!r.enabled);
   }
 
-  res.render('hardware', { devices, miniservers, miniserverId, categories, hardwareRuleStates });
+  // "Zone of" is only ever set on audio_zone rows (see loxoneHardware.js's getAudioZoneItems) —
+  // conditionally shown same as the Miniserver column above, so an install with no Audioserver at
+  // all doesn't carry a permanently-empty column.
+  const hasAudioZones = devices.some((d) => d.zone_of);
+
+  res.render('hardware', { devices, miniservers, miniserverId, categories, hardwareRuleStates, hasAudioZones });
 }));
 
 module.exports = router;

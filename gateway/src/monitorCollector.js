@@ -18,6 +18,47 @@ const DIAG_FIELD_LABELS = {
 const LOXONE_POLL_TICK_MS = 5000;
 const RETENTION_TICK_MS = 60 * 60 * 1000;
 
+// Same reasoning as liveData.js's own CONCURRENCY limit, for the exact same reason: a Miniserver's
+// HTTP server only handles a small number of simultaneous connections well. That route-level limit
+// only covers interactive page loads, though — this background poll loop had none at all, so a
+// Miniserver going unreachable (offline, mid firmware-update, ...) turned every 5s tick into an
+// uncapped burst of one HTTP attempt per due monitor (dozens on a real install), each held open up
+// to 8s. Confirmed live against a production instance mid-firmware-update: bursts of ~90
+// simultaneous "aborted due to timeout" errors every ~16-18s, severe enough that even the
+// gateway's own loopback connection to its bundled Mosquitto broker (127.0.0.1:1883) and its own
+// /healthz check started timing out too — not just Miniserver polling, the whole container's HTTP
+// responsiveness.
+//
+// This queue+worker-pool (rather than a fresh per-tick concurrency helper) is what makes the cap
+// hold across ticks, not just within one: pollLoxoneMonitors() is fired by a bare setInterval
+// (see startMonitorCollector below), which does NOT wait for one call to finish before the next —
+// during a prolonged outage, several ticks' worth of "due" monitors would otherwise each spin up
+// their OWN independent batch of concurrent requests, stacking back up to an unbounded total. A
+// persistent pool of LOXONE_POLL_CONCURRENCY workers draining one shared queue keeps the total
+// in-flight count capped at all times, no matter how many ticks have fired. pendingLoxonePolls
+// additionally stops the same monitor from being queued a second time while its first attempt is
+// still waiting its turn — without it, a monitor whose queued attempt outlives its own
+// poll_interval_ms would get re-queued every tick, growing the backlog considerably faster than
+// LOXONE_POLL_CONCURRENCY workers could ever drain it.
+const LOXONE_POLL_CONCURRENCY = 4;
+const loxonePollQueue = [];
+const pendingLoxonePolls = new Set(); // monitor id -> queued or currently being polled
+let loxoneActivePolls = 0;
+
+function runLoxonePollWorkers() {
+  while (loxoneActivePolls < LOXONE_POLL_CONCURRENCY && loxonePollQueue.length > 0) {
+    const monitor = loxonePollQueue.shift();
+    loxoneActivePolls++;
+    pollLoxoneMonitor(monitor)
+      .catch((err) => console.error(`pollLoxoneMonitor(${monitor.id}) failed:`, err.message))
+      .finally(() => {
+        loxoneActivePolls--;
+        pendingLoxonePolls.delete(monitor.id);
+        runLoxonePollWorkers();
+      });
+  }
+}
+
 // Defensive, not a fix for any confirmed incident: a Miniserver's live websocket connection
 // (loxoneWebSocket.js) gets its whole current-value cache from ONE initial burst right after
 // connecting — verified directly against a real Miniserver, a fresh connection has every state
@@ -218,14 +259,14 @@ async function pollLoxoneMonitors() {
   const now = Date.now();
 
   for (const monitor of monitors) {
+    if (pendingLoxonePolls.has(monitor.id)) continue; // still queued/in flight from an earlier tick
     const last = lastPolledAt.get(monitor.id);
     if (last !== undefined && now - last < monitor.poll_interval_ms) continue;
     lastPolledAt.set(monitor.id, now);
-    // Not awaited on purpose — each monitor's own HTTP round trip (or live-cache read) should not
-    // block the others; this tick just needs to have kicked every due monitor off before the next
-    // setInterval fire, same "fire and forget per item" shape as before this conversion.
-    pollLoxoneMonitor(monitor).catch((err) => console.error(`pollLoxoneMonitor(${monitor.id}) failed:`, err.message));
+    pendingLoxonePolls.add(monitor.id);
+    loxonePollQueue.push(monitor);
   }
+  runLoxonePollWorkers();
 }
 
 const HISTORY_PURGE_BATCH_SIZE = 5000;

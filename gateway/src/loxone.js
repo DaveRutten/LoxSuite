@@ -78,7 +78,9 @@ async function fetchMiniserver(miniserver, path, options = {}) {
 }
 
 async function sendHttpVirtualInput(miniserver, target, value) {
-  const res = await fetchMiniserver(miniserver, `/dev/sps/io/${encodeURIComponent(target)}/${encodeURIComponent(value)}`);
+  const res = await fetchMiniserver(miniserver, `/dev/sps/io/${encodeURIComponent(target)}/${encodeURIComponent(value)}`, {
+    timeoutMs: 8000,
+  });
 
   if (!res.ok) {
     throw new Error(`Miniserver responded with HTTP ${res.status}`);

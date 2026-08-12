@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.15.0-alpha.1] - 2026-08-12
+
+### Added
+- Hardware page: Audioserver rows and their Audio zones now show a real **Online**/Offline status
+  — the Miniserver's own `/data/status` (this page's usual source) never reports one for either,
+  confirmed in Loxone's own Structure File documentation as a real, separate control type
+  (`AudioZoneV2`) with its own `serverState`/`clientState`, read the same way every other live
+  Loxone value already is in this app (the existing websocket push cache, HTTP as a fallback).
+- Each Audio zone now shows which Audioserver it belongs to (**Zone of** column, grouped together
+  in the table) and a **Stereo** badge when a Stereo Extension is physically attached to that
+  zone, both read from the same Structure File data.
+- Topbar: a heart button next to Help/Notifications opens a **Support LoxSuite** dialog linking to
+  a GitHub star and a one-time PayPal donation.
+
+### Fixed
+- A Miniserver going unreachable (offline, mid firmware-update, ...) could make the whole app's own
+  page loads stall, not just Loxone monitor polling. The background poll loop fired one HTTP
+  request per due monitor with no concurrency limit at all, and no cap carried over between ticks —
+  an outage turned every 5s tick into an uncapped burst of dozens of simultaneous requests, each
+  held open up to 8s, piling further on top with every subsequent tick for as long as the outage
+  lasted. Confirmed live on a production instance mid firmware-update: bursts of ~90 simultaneous
+  timeouts every ~16-18s, severe enough that even the gateway's own loopback connection to its
+  bundled MQTT broker, and its own Docker health check, started timing out too. Polling now goes
+  through a small persistent worker pool (4 concurrent requests, the same limit Live Data already
+  uses for the exact same reason) shared across every tick, so it can never stack up further the
+  longer an outage lasts. The MQTT→Loxone command-forwarding path (`sendHttpVirtualInput`) had no
+  timeout at all; now capped at 8s like every other Miniserver request.
+
 ## [0.14.0-alpha.1] - 2026-08-12
 
 ### Added
