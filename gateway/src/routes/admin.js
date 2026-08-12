@@ -320,4 +320,37 @@ router.post('/security', asyncHandler(async (req, res) => {
   res.render('admin-security', { ...(await loadSecurityPageData()), error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
 }));
 
+async function loadAiSettings() {
+  return db.prepare('SELECT * FROM ai_settings WHERE id = 1').get();
+}
+
+router.get('/ai', asyncHandler(async (req, res) => {
+  res.render('admin-ai', { settings: await loadAiSettings(), error: null, saved: false });
+}));
+
+router.post('/ai', asyncHandler(async (req, res) => {
+  const { enabled, model, effort, api_key, suggestions_mode } = req.body;
+
+  // Blank key field = keep the existing one; it's never shown back to the browser, same
+  // convention as Miniserver/SSO secrets.
+  const existing = await db.prepare('SELECT api_key FROM ai_settings WHERE id = 1').get();
+  const newApiKey = api_key ? encrypt(api_key) : existing?.api_key;
+
+  const validEfforts = ['low', 'medium', 'high', 'xhigh', 'max'];
+  const suggestionsMode = [0, 1, 2].includes(Number(suggestions_mode)) ? Number(suggestions_mode) : 0;
+
+  await db.prepare(
+    `UPDATE ai_settings SET enabled = ?, model = ?, effort = ?, api_key = ?, suggestions_mode = ? WHERE id = 1`
+  ).run(
+    enabled ? 1 : 0,
+    (model || '').trim() || 'claude-opus-5',
+    validEfforts.includes(effort) ? effort : 'medium',
+    newApiKey || null,
+    suggestionsMode
+  );
+
+  await logSystemEvent(`"${req.user.username}" updated AI Assistant settings.`);
+  res.render('admin-ai', { settings: await loadAiSettings(), error: null, saved: true });
+}));
+
 module.exports = router;

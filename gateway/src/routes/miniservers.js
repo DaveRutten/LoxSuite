@@ -8,6 +8,7 @@ const { testConnection: testLiveConnection, resetConnection: resetLiveConnection
 const { requirePermission } = require('../middleware/requirePermission');
 const { logSystemEvent } = require('../auditLog');
 const { encrypt } = require('../secretCrypto');
+const mcpClient = require('../mcpClient');
 const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
@@ -253,7 +254,7 @@ router.get('/:id/edit', asyncHandler(async (req, res) => {
 }));
 
 router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
-  const { name, host, http_port, udp_port, username, password, use_https, external_url, gateway_client_of, clients_json } = req.body;
+  const { name, host, http_port, udp_port, username, password, use_https, external_url, gateway_client_of, clients_json, ai_enabled, ai_allow_write_commands, mcp_url } = req.body;
   const msId = Number(req.params.id);
 
   // Blank password field = keep the existing one; the current value is never
@@ -272,9 +273,14 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandle
   const gatewayClientOf = req.body.is_client && gateway_client_of && Number.isInteger(gatewayId) && gatewayId !== msId ? gatewayId : null;
 
   await db.prepare(
-    `UPDATE miniservers SET name = ?, host = ?, http_port = ?, udp_port = ?, username = ?, password = ?, use_https = ?, external_url = ?, gateway_client_of = ?
+    `UPDATE miniservers SET name = ?, host = ?, http_port = ?, udp_port = ?, username = ?, password = ?, use_https = ?, external_url = ?, gateway_client_of = ?,
+     ai_enabled = ?, ai_allow_write_commands = ?, mcp_url = ?
      WHERE id = ?`
-  ).run(name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, newPassword, use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null, gatewayClientOf, msId);
+  ).run(
+    name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, newPassword, use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null, gatewayClientOf,
+    ai_enabled ? 1 : 0, ai_allow_write_commands ? 1 : 0, mcp_url ? mcp_url.trim().replace(/\/+$/, '') : null,
+    msId
+  );
   resetLiveConnection(msId);
   await logSystemEvent(`"${req.user.username}" updated Miniserver "${name}" (${host}).`);
 
@@ -341,6 +347,64 @@ router.post('/:id/delete', requirePermission('miniservers', 'edit'), asyncHandle
   res.redirect('/miniservers');
 }));
 
+// One-time browser-based OAuth 2.1 authorization of this Miniserver's own native MCP server
+// plugin, for the optional AI Assistant feature — see mcpClient.js's own header comment for why
+// this uses @modelcontextprotocol/sdk's auth() orchestrator (RFC 9728/8414-aware) rather than the
+// openid-client-based flow routes/auth.js/ssoClient.js use for the unrelated SSO login feature.
+router.get('/:id/mcp/authorize', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
+  if (!miniserver) return res.status(404).send('Miniserver not found');
+
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const provider = new mcpClient.LoxoneOAuthProvider({ miniserver, baseUrl, session: req.session, res, username: req.user.username });
+  try {
+    // On success this calls provider.redirectToAuthorization() internally, which already sends
+    // the redirect response — nothing left to do here in that case.
+    await mcpClient.runMcpAuthFlow(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
+  } catch (err) {
+    await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
+    res.redirect(`/miniservers/${miniserver.id}/edit`);
+  }
+}));
+
+router.get('/:id/mcp/callback', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
+  if (!miniserver) return res.status(404).send('Miniserver not found');
+
+  // Validated here, not left to auth()'s own code-exchange leg (which never re-checks state) —
+  // same explicit check ssoClient.js's own callback route does for the unrelated SSO login flow.
+  const pending = req.session.mcpOAuth;
+  if (!pending || pending.miniserverId !== miniserver.id || pending.state !== req.query.state) {
+    return res.status(400).send('Your authorization attempt expired or does not match this Miniserver — please try again from its edit page.');
+  }
+
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const provider = new mcpClient.LoxoneOAuthProvider({ miniserver, baseUrl, session: req.session, res, username: req.user.username });
+  try {
+    await mcpClient.runMcpAuthFlow(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver), authorizationCode: req.query.code });
+    delete req.session.mcpOAuth;
+    mcpClient.resetMcpClient(miniserver.id);
+    await logSystemEvent(`"${req.user.username}" authorized the AI Assistant's MCP connection to Miniserver "${miniserver.name}".`);
+  } catch (err) {
+    await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
+  }
+  res.redirect(`/miniservers/${miniserver.id}/edit`);
+}));
+
+// Temporary, PR2-only review aid — dumps listTools()'s raw output so this MCP client + OAuth flow
+// can be reviewed end-to-end against a real Miniserver before the chat UI (a later PR) exists to
+// exercise it any other way. Remove once that UI lands.
+router.get('/:id/mcp/debug-tools', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
+  if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
+  try {
+    const tools = await mcpClient.listTools(miniserver);
+    res.json({ miniserverId: miniserver.id, allowWriteCommands: !!miniserver.ai_allow_write_commands, toolCount: tools.length, tools });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+}));
+
 router.post('/:id/check', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
   const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
   if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
@@ -352,10 +416,14 @@ router.post('/:id/check', requirePermission('miniservers', 'edit'), asyncHandler
   // whole flow exists to wait for, so it always gets a real, fresh attempt.
   resetLiveConnection(miniserver.id);
 
-  const [, detail, live] = await Promise.all([
+  const [, detail, live, mcp] = await Promise.all([
     checkMiniserver(miniserver),
     runDetailedCheck(miniserver),
     testLiveConnection(miniserver),
+    // Only when AI Assistant is actually enabled for this Miniserver — otherwise there's nothing
+    // to test, and `null` here (vs. an object) is exactly what the edit page's own script uses to
+    // decide whether to render this row at all.
+    miniserver.ai_enabled ? mcpClient.testConnection(miniserver) : Promise.resolve(null),
   ]);
   // Also persisted here, not just from loxoneLog.js's own periodic poll (up to a minute behind) —
   // this is the same /dev/fsget/log/def.log probe, so a "Test now" click confirming the Logbook
@@ -366,6 +434,7 @@ router.post('/:id/check', requirePermission('miniservers', 'edit'), asyncHandler
   res.json({
     ...detail,
     live,
+    mcp,
     status: updated.status,
     lastCheckedAt: updated.last_checked_at,
     firmwareVersion: updated.firmware_version,

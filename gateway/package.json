@@ -1,6 +1,6 @@
 {
   "name": "loxsuite",
-  "version": "0.16.1-alpha.1",
+  "version": "0.17.0-alpha.1",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "description": "LoxSuite: MQTT gateway, logging, monitoring, and backup/restore for Loxone Miniservers",
@@ -13,6 +13,8 @@
     "brace-expansion": "^5.0.8"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "adm-zip": "^0.6.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.3.0",

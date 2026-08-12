@@ -42,6 +42,12 @@ const AREAS = [
   // owner-only no matter how permissive the share is, since deleting someone else's dashboard is
   // a step beyond editing its panels; a role granted this can go that one step further.
   { key: 'dashboard_manage_shared', label: 'Dashboard: rename/delete dashboards shared with you' },
+  // A new area added after this app's original baseline — no backfill migration needed for
+  // existing installs: loadUserContext.js's canView/canEdit already default to false when a role
+  // has no row for a given area, and an Administrator bypasses the matrix entirely via isAdmin. So
+  // every existing custom role simply has no access to this until an admin explicitly grants it,
+  // which is also the safe default for a brand new AI-powered feature.
+  { key: 'ai_chat', label: 'AI Assistant' },
 ];
 
 const AREA_KEYS = AREAS.map((a) => a.key);

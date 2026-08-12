@@ -72,6 +72,66 @@
       explicit, and prefers keeping the Gateway's own copy over the Client's.
     </p>
 
+    <h2 style="margin-top:1.5rem;">AI Assistant (optional)</h2>
+    <div class="form-grid">
+      <div>
+        <label>Enabled for this Miniserver</label>
+        <%- toggleSwitch('ai_enabled', miniserver.ai_enabled, { id: 'edit-ms-ai-enabled' }) %>
+      </div>
+    </div>
+    <div class="form-grid" style="margin-top:0.6rem;" id="edit-ms-ai-properties-wrap" <%= miniserver.ai_enabled ? '' : 'hidden' %>>
+      <div>
+        <label>Allow the assistant to send commands</label>
+        <%- toggleSwitch('ai_allow_write_commands', miniserver.ai_allow_write_commands) %>
+      </div>
+      <div>
+        <label>MCP URL override (optional)</label>
+        <input type="text" name="mcp_url" value="<%= miniserver.mcp_url || '' %>" placeholder="Auto-detected from Host/IP + /mcp">
+      </div>
+      <div>
+        <label>MCP connection</label>
+        <%
+          // Button comes right after the label — same row as the sibling cells' own toggle/input —
+          // with the status line below it, same "control, then a short line about it" order as
+          // every other field here. Having the status text ABOVE the button (tried first) pushed
+          // the button a line lower than the Allow-commands toggle and MCP URL fields beside it.
+        %>
+        <a href="/miniservers/<%= miniserver.id %>/mcp/authorize" class="btn-soft">
+          <%- icon('refresh') %> <%= miniserver.mcp_access_token ? 'Re-authorize' : 'Authorize' %>
+        </a>
+        <%
+          // Deliberately NOT a .hint — .hint is user-declutterable (body.panel-hints-hidden hides
+          // every .hint inside #edit-ms-form, see style.css), which would make this status readout
+          // disappear right along with it. This is a status, not supplementary help text, so it
+          // stays visible regardless of that preference.
+        %>
+        <p style="margin:0.35rem 0 0; color:var(--text-muted); font-size:0.85rem;">
+          <% if (miniserver.mcp_access_token) { %>
+            Authorized<% if (miniserver.mcp_authorized_by) { %> by <strong><%= miniserver.mcp_authorized_by %></strong><% } %>.
+          <% } else { %>
+            Not yet authorized.
+          <% } %>
+        </p>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:0.5rem;">
+      Requires the MCP Server plugin enabled in Loxone Config, and the global AI provider turned
+      on under <a href="/admin/ai">Administration &gt; AI Assistant</a>. Loxone recommends a
+      separate, minimally-privileged Loxone user account dedicated to the assistant rather than
+      reusing this Miniserver's own login above. <strong>Allow the assistant to send commands</strong>
+      defaults off, independent of whatever Read/Write access that Loxone user itself has &mdash;
+      leave it off for a read-only assistant that can only report on the installation.
+      <strong>Save first</strong> if you just changed anything above &mdash; Authorize navigates
+      away from this page without saving unsaved changes, same as Test below.
+    </p>
+    <% if (miniserver.mcp_last_error) { %>
+      <%
+        // Not a .hint either, same reasoning as the "Authorized by" status above — an error is
+        // never something the declutter preference should be able to hide.
+      %>
+      <p style="margin-top:0.5rem; color:var(--danger); font-size:0.85rem;">Last MCP connection error: <%= miniserver.mcp_last_error %></p>
+    <% } %>
+
     <%
       // This lists Miniservers that are CLIENTS OF this one (this one acting as their Gateway) —
       // the mirror image of the "This Miniserver is a Client of another Gateway" toggle above, not
@@ -156,6 +216,9 @@
           html += renderLine('Loxone API', data.api);
           html += renderLine('Logbook reachable', data.logbook);
           html += renderLine('Live data (websocket)', data.live);
+          // Only present at all when this Miniserver has AI Assistant enabled — see routes/
+          // miniservers.js's own POST /:id/check, which sends null otherwise.
+          html += data.mcp ? renderLine('AI Assistant (MCP)', data.mcp) : '';
           html += '</div>';
           wrap.innerHTML = html;
         })
@@ -252,6 +315,17 @@
       wrap.hidden = !toggle.checked;
       select.disabled = !toggle.checked;
       if (clientsSection) clientsSection.hidden = toggle.checked;
+    });
+  })();
+</script>
+
+<script>
+  (function () {
+    var toggle = document.getElementById('edit-ms-ai-enabled');
+    var wrap = document.getElementById('edit-ms-ai-properties-wrap');
+    if (!toggle || !wrap) return;
+    toggle.addEventListener('change', function () {
+      wrap.hidden = !toggle.checked;
     });
   })();
 </script>

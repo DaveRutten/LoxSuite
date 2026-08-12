@@ -69,6 +69,7 @@
     %>
     <nav>
       <% if (canView('dashboard')) { %><a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>">Dashboard</a><% } %>
+      <% if (canView('ai_chat')) { %><a href="/ai-chat" class="<%= active === 'ai-chat' ? 'active' : '' %>">AI Assistant</a><% } %>
 
       <% const monitorExpanded = active === 'monitor' || active === 'dashboards'; %>
       <button type="button" class="nav-section-label" data-nav-section="monitor" aria-expanded="<%= isCollapsed('monitor', monitorExpanded) ? 'false' : 'true' %>">

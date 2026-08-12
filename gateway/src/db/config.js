@@ -39,12 +39,23 @@ function parseDatabaseUrl(url, expectedProtocols) {
   if (!parsed.hostname || !database) {
     fail('DATABASE_URL must include both a host and a database name, e.g. "postgres://user:password@host:5432/dbname".');
   }
+  let user, password;
+  try {
+    user = decodeURIComponent(parsed.username || '');
+    password = decodeURIComponent(parsed.password || '');
+  } catch {
+    fail(
+      'DATABASE_URL\'s username or password contains a "%" that is not a valid URL-encoding escape. ' +
+      'Either percent-encode it properly (e.g. a literal "%" becomes "%25"), or avoid DATABASE_URL and ' +
+      'set DB_HOST/DB_NAME/DB_USER/DB_PASSWORD instead, which take the password as-is.'
+    );
+  }
   return {
     host: parsed.hostname,
     port: parsed.port ? Number(parsed.port) : null,
     database,
-    user: decodeURIComponent(parsed.username || ''),
-    password: decodeURIComponent(parsed.password || ''),
+    user,
+    password,
   };
 }
 

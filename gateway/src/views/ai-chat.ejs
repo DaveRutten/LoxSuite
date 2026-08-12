@@ -1,0 +1,66 @@
+<%- include('partials/head', { pageTitle: 'AI Assistant', active: 'ai-chat' }) %>
+
+<p class="hint">
+  Chat with an AI assistant that can read (and, if you've allowed it, control) a connected
+  Miniserver via its MCP server. Off by default and entirely optional — see
+  <a href="/admin/ai">Administration &gt; AI Assistant</a> to enable it, and a Miniserver's own
+  edit page to connect that Miniserver's MCP server.
+</p>
+
+<div class="ai-chat-layout">
+  <aside class="ai-chat-sidebar card">
+    <form method="post" action="/ai-chat" class="ai-chat-new-form">
+      <select name="miniserver_id">
+        <option value="">No Miniserver (chat only)</option>
+        <% miniservers.forEach(ms => { %>
+          <option value="<%= ms.id %>"><%= ms.name %></option>
+        <% }) %>
+      </select>
+      <button type="submit" class="btn-soft"><%- icon('plus') %> New chat</button>
+    </form>
+    <% if (!miniservers.length) { %>
+      <p class="hint">
+        No Miniserver has AI Assistant connected yet — see its edit page's own Authorize button.
+      </p>
+    <% } %>
+    <div class="ai-chat-list">
+      <% conversations.forEach(c => { %>
+        <a href="/ai-chat/<%= c.id %>" class="ai-chat-list-item <%= conversation && conversation.id === c.id ? 'active' : '' %>">
+          <%= c.title || 'New conversation' %>
+        </a>
+      <% }) %>
+      <% if (!conversations.length) { %>
+        <p class="hint" style="padding:0 0.2rem;">No conversations yet.</p>
+      <% } %>
+    </div>
+  </aside>
+
+  <section class="ai-chat-main card">
+    <% if (!conversation) { %>
+      <p class="hint">Pick a conversation on the left, or start a new one.</p>
+    <% } else { %>
+      <div class="ai-chat-messages" id="ai-chat-messages" data-conversation-id="<%= conversation.id %>">
+        <% messages.forEach(m => { %>
+          <div class="ai-chat-message ai-chat-message-<%= m.role %>" data-message-id="<%= m.id %>">
+            <div class="ai-chat-message-content"><%= m.content %></div>
+          </div>
+        <% }) %>
+      </div>
+      <% if (!conversation.miniserver_id) { %>
+        <p class="hint">This conversation has no Miniserver attached — the assistant can only chat, not read or control anything.</p>
+      <% } %>
+      <form id="ai-chat-composer" class="ai-chat-composer">
+        <textarea name="content" placeholder="Ask about your Loxone installation…" rows="2" required></textarea>
+        <button type="submit" class="btn-edit"><%- icon('edit') %> Send</button>
+      </form>
+      <div class="btn-row" style="margin-top:0.6rem;">
+        <form method="post" action="/ai-chat/<%= conversation.id %>/delete" data-confirm="Delete this conversation?">
+          <button type="submit" class="danger"><%- icon('trash') %> Delete conversation</button>
+        </form>
+      </div>
+    <% } %>
+  </section>
+</div>
+
+<script src="/ai-chat.js"></script>
+<%- include('partials/foot') %>

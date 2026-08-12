@@ -1,0 +1,102 @@
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+
+<div class="tabs">
+  <a href="/admin/general">General</a>
+  <a href="/admin/users">Users</a>
+  <a href="/admin/roles">Access Roles</a>
+  <a href="/admin/backup">Backups</a>
+  <a href="/admin/notifications">Notifications</a>
+  <a href="/admin/security">Security</a>
+  <a class="active" href="/admin/ai">AI Assistant</a>
+</div>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+<% if (saved) { %>
+  <p class="hint" style="color: var(--success);">Saved.</p>
+<% } %>
+
+<p class="hint">
+  Lets a Loxone Miniserver's native MCP server plugin power an AI chat assistant and richer
+  dashboard suggestions &mdash; entirely optional, and off by default. With this disabled, LoxSuite
+  behaves exactly as it does today. Enabling it here only turns on the global connection to your
+  chosen AI provider; each Miniserver still needs its own MCP connection authorized from its own
+  <a href="/miniservers">Miniservers</a> edit page.
+</p>
+
+<div class="card">
+  <h2>AI provider</h2>
+
+  <form method="post" action="/admin/ai">
+    <div class="form-grid">
+      <div>
+        <label>Enabled</label>
+        <%- toggleSwitch('enabled', settings.enabled, { id: 'ai-enabled-toggle' }) %>
+      </div>
+    </div>
+
+    <%
+      // Everything below only matters once AI is actually turned on — same hidden-until-enabled
+      // pattern as SSO/Backups above.
+    %>
+    <div id="ai-properties" class="form-grid" style="margin-top:0.85rem; <%= settings.enabled ? '' : 'display:none;' %>">
+      <div>
+        <label>Model</label>
+        <input type="text" name="model" value="<%= settings.model %>">
+        <p class="hint">E.g. <code>claude-opus-5</code> or <code>claude-sonnet-5</code>.</p>
+      </div>
+      <div>
+        <label>Effort</label>
+        <select name="effort">
+          <% ['low', 'medium', 'high', 'xhigh', 'max'].forEach(level => { %>
+            <option value="<%= level %>" <%= level === settings.effort ? 'selected' : '' %>><%= level %></option>
+          <% }) %>
+        </select>
+        <p class="hint">Trades cost/latency for depth of reasoning on every chat turn.</p>
+      </div>
+      <div>
+        <label>API key</label>
+        <input type="password" name="api_key" placeholder="<%= settings.api_key ? 'Leave blank to keep the current key' : '' %>">
+        <p class="hint">
+          A <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>
+          API key &mdash; separate from any claude.ai or Claude Code subscription.
+        </p>
+      </div>
+      <div>
+        <label>Suggested dashboards</label>
+        <select name="suggestions_mode">
+          <option value="0" <%= settings.suggestions_mode === 0 ? 'selected' : '' %>>Heuristic only (unchanged)</option>
+          <option value="1" <%= settings.suggestions_mode === 1 ? 'selected' : '' %>>AI only</option>
+          <option value="2" <%= settings.suggestions_mode === 2 ? 'selected' : '' %>>AI + heuristic combined</option>
+        </select>
+        <p class="hint">
+          Whether <a href="/live-data">Live Data</a>'s "Suggest dashboard" button asks the AI
+          provider for richer suggestions. Falls back to the heuristic automatically if the AI
+          request fails.
+        </p>
+      </div>
+    </div>
+
+    <div id="ai-save-row" style="margin-top:0.9rem; <%= settings.enabled ? '' : 'display:none;' %>">
+      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+    </div>
+  </form>
+
+  <script>
+    (function () {
+      var toggle = document.getElementById('ai-enabled-toggle');
+      var properties = document.getElementById('ai-properties');
+      var saveRow = document.getElementById('ai-save-row');
+      toggle.addEventListener('change', function () {
+        properties.style.display = toggle.checked ? '' : 'none';
+        saveRow.style.display = toggle.checked ? '' : 'none';
+        // Same reasoning as SSO's own toggle above: turning it off has nothing left to fill in,
+        // so save that state immediately rather than hiding it along with the Save button.
+        if (!toggle.checked) toggle.closest('form').submit();
+      });
+    })();
+  </script>
+</div>
+
+<%- include('partials/foot') %>

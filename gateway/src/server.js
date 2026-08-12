@@ -52,6 +52,7 @@ const { startMonitorCollector } = require('./monitorCollector');
 const { startLogCollector } = require('./logCollector');
 const { startHardwarePolling } = require('./loxoneHardware');
 const { startLiveConnections } = require('./loxoneWebSocket');
+const mcpClient = require('./mcpClient');
 const requireAuth = require('./middleware/requireAuth');
 const loadUserContext = require('./middleware/loadUserContext');
 const { requirePermission, requireAdmin } = require('./middleware/requirePermission');
@@ -74,6 +75,7 @@ const monitorRoutes = require('./routes/monitor');
 const hardwareRoutes = require('./routes/hardware');
 const logsRoutes = require('./routes/logs');
 const dashboardsRoutes = require('./routes/dashboards');
+const aiChatRoutes = require('./routes/aiChat');
 // Requires routes/dashboards itself (for serializeThresholdLadder/serializeAnnotations) — kept
 // below dashboardsRoutes above so that module is already fully loaded first: dashboards.js's own
 // top-level require('./monitor') would otherwise see monitor.js's exports still mid-assembly if
@@ -256,6 +258,7 @@ async function main() {
   // the shared home Dashboard's panel mutations (gated internally by the `dashboard` area) — see
   // loadAccessibleDashboard/canMutate in routes/dashboards.js.
   app.use('/dashboards', requireAuth, dashboardsRoutes);
+  app.use('/ai-chat', requireAuth, requirePermission('ai_chat', 'view'), aiChatRoutes);
   app.use('/api/table-prefs', requireAuth, tablePrefsRoutes);
   app.use('/api/nav-prefs', requireAuth, navPrefsRoutes);
   // Mounted before the general '/admin' router below so their routes take precedence without
@@ -295,6 +298,7 @@ async function main() {
   startLogCollector().catch((err) => console.error('Failed to start log collector:', err.message));
   startHardwarePolling();
   startLiveConnections().catch((err) => console.error('Failed to start live Loxone connections:', err.message));
+  mcpClient.startMcpClients().catch((err) => console.error('Failed to start MCP clients:', err.message));
   backup.startScheduler();
   scheduledDeviceCommands.startScheduler();
   startVersionCheck();

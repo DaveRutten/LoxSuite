@@ -49,18 +49,21 @@ exports.up = async function up(knex) {
     );
     await knex.schema.dropTable('notification_rules');
     await knex.raw('ALTER TABLE notification_rules_new RENAME TO notification_rules');
-  } else if (backend === 'mysql2') {
-    await knex.raw(`ALTER TABLE notification_rules DROP CHECK ??`, [CONSTRAINT_NAME]);
-    await knex.raw(
-      `ALTER TABLE notification_rules ADD CONSTRAINT ?? CHECK (${checkSql})`,
-      [CONSTRAINT_NAME, ...checkBindings]
-    );
   } else {
-    await knex.raw(`ALTER TABLE notification_rules DROP CONSTRAINT ??`, [CONSTRAINT_NAME]);
-    await knex.raw(
-      `ALTER TABLE notification_rules ADD CONSTRAINT ?? CHECK (${checkSql})`,
-      [CONSTRAINT_NAME, ...checkBindings]
-    );
+    // Postgres and MySQL/MariaDB both reject bound ($1.../?) parameters inside an ALTER TABLE ...
+    // CHECK (...) expression — found running this for real against Postgres: "bind message
+    // supplies 11 parameters, but prepared statement requires 0". Postgres's DDL parser simply
+    // doesn't support parameter placeholders inside a CHECK expression the way it does for a DML
+    // statement's literals, and MySQL/MariaDB's own DDL parser has the same restriction even where
+    // mysql2's client-side text-protocol substitution might otherwise have papered over it. These
+    // 11 values are fixed constants defined above in this file, not external input, so inlining
+    // them as escaped SQL string literals directly in the DDL text — via knex.raw('?', [v])'s own
+    // dialect-aware escaping, not hand-rolled quoting — is safe, and is the only form either
+    // backend actually accepts here.
+    const dropVerb = backend === 'mysql2' ? 'DROP CHECK' : 'DROP CONSTRAINT';
+    await knex.raw(`ALTER TABLE notification_rules ${dropVerb} ??`, [CONSTRAINT_NAME]);
+    const valueList = NEW_TRIGGER_TYPES.map((v) => knex.raw('?', [v]).toString()).join(', ');
+    await knex.raw(`ALTER TABLE notification_rules ADD CONSTRAINT ?? CHECK (?? IN (${valueList}))`, [CONSTRAINT_NAME, 'trigger_type']);
   }
 };
 

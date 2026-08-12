@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.17.0-alpha.1] - 2026-08-12
+
+### Added
+- **AI Assistant (optional)**: LoxSuite can now connect to a Loxone Gen2 Miniserver's own MCP
+  server plugin and to Claude (Anthropic), to power a chat page that can read — and, if you
+  explicitly allow it per Miniserver, control — a connected installation. Off by default at two
+  independent levels (Administration > AI Assistant's own enable switch, and a per-Miniserver
+  toggle on its edit page) — with nothing configured, nothing changes: no new outbound calls, no
+  new nav item, existing dashboard suggestions unaffected. Connecting a Miniserver's MCP server is
+  a one-time Loxone-account OAuth login from that Miniserver's edit page; every write-capable tool
+  call the assistant makes is logged in Logs > Loxone commands like any other command, tagged with
+  its own source.
+
+### Fixed
+- **Postgres**: migration `003_backup_succeeded_trigger.js` (first shipped in 0.13.8-alpha.1)
+  failed on Postgres with `bind message supplies 11 parameters, but prepared statement "" requires
+  0` — Postgres's DDL parser doesn't accept bound parameters inside an `ALTER TABLE ... ADD
+  CONSTRAINT ... CHECK (...)` expression the way it does for ordinary statements. Only surfaced now
+  because Postgres had apparently never actually been run through this migration before. Fixed by
+  inlining the fixed trigger-type list as escaped literals instead of bind parameters; SQLite and
+  MySQL/MariaDB were unaffected.
+- A `DATABASE_URL` whose username or password contains a raw, non-percent-encoded `%` crashed the
+  whole process with an uncaught `URIError` at boot instead of the clear, boxed configuration error
+  every other misconfiguration on this path already gets.
+
 ## [0.16.1-alpha.1] - 2026-08-12
 
 ### Fixed
