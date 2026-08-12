@@ -79,9 +79,9 @@ async function queryLogs({ source, sourceId, filters }) {
 
   const limit = filters.level ? FILTER_CANDIDATE_ROWS : MAX_ROWS;
   const rawRows = await db.prepare(
-    `SELECT line, source_label AS sourceLabel, recorded_at AS recordedAt,
-            command_topic AS commandTopic, value_from AS valueFrom, value_to AS valueTo,
-            source_id AS sourceMiniserverId, transport
+    `SELECT line, source_label AS "sourceLabel", recorded_at AS "recordedAt",
+            command_topic AS "commandTopic", value_from AS "valueFrom", value_to AS "valueTo",
+            source_id AS "sourceMiniserverId", transport
      FROM log_entries
      WHERE ${conditions.join(' AND ')} ORDER BY id DESC LIMIT ?`
   ).all(...params, limit);
@@ -133,8 +133,8 @@ async function queryNotificationEvents(filters) {
   if (filters.category) { conditions.push('event_type = ?'); params.push(filters.category); }
 
   return db.prepare(
-    `SELECT id, event_type AS eventType, severity, title, message, source_label AS sourceLabel,
-            source_id AS sourceId, created_at AS createdAt
+    `SELECT id, event_type AS "eventType", severity, title, message, source_label AS "sourceLabel",
+            source_id AS "sourceId", created_at AS "createdAt"
      FROM notification_events WHERE ${conditions.join(' AND ')} ORDER BY id DESC LIMIT ?`
   ).all(...params, MAX_ROWS);
 }
@@ -158,7 +158,7 @@ router.get('/mqtt', requirePermission('logs_mqtt', 'view'), asyncHandler(async (
 }));
 
 router.get('/mqtt/export.txt', requirePermission('logs_mqtt', 'edit'), asyncHandler(async (req, res) => {
-  const rows = await db.prepare('SELECT recorded_at AS recordedAt, line FROM log_entries WHERE source = ? ORDER BY id ASC').all('mqtt');
+  const rows = await db.prepare('SELECT recorded_at AS "recordedAt", line FROM log_entries WHERE source = ? ORDER BY id ASC').all('mqtt');
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="mqtt.log"');
   res.send(rows.map((r) => r.line).join('\n'));
@@ -279,8 +279,8 @@ router.post('/loxone-commands/test-send', requirePermission('logs_loxone_command
 
 router.get('/loxone-commands/export.txt', requirePermission('logs_loxone_commands', 'edit'), asyncHandler(async (req, res) => {
   const rows = await db.prepare(
-    `SELECT recorded_at AS recordedAt, source_label AS sourceLabel, line,
-            command_topic AS commandTopic, value_from AS valueFrom, value_to AS valueTo
+    `SELECT recorded_at AS "recordedAt", source_label AS "sourceLabel", line,
+            command_topic AS "commandTopic", value_from AS "valueFrom", value_to AS "valueTo"
      FROM log_entries WHERE source = 'loxone_commands' ORDER BY id ASC`
   ).all();
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -314,7 +314,7 @@ router.get('/notifications', requirePermission('logs_notifications', 'view'), as
 
 router.get('/notifications/export.txt', requirePermission('logs_notifications', 'edit'), asyncHandler(async (req, res) => {
   const rows = await db.prepare(
-    'SELECT created_at AS createdAt, event_type AS eventType, severity, title, message, source_label AS sourceLabel FROM notification_events ORDER BY id ASC'
+    'SELECT created_at AS "createdAt", event_type AS "eventType", severity, title, message, source_label AS "sourceLabel" FROM notification_events ORDER BY id ASC'
   ).all();
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="notifications.log"');

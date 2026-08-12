@@ -217,8 +217,8 @@ router.get('/', asyncHandler(async (req, res) => {
   const rawMonitors = await db
     .prepare(
       `SELECT monitors.*, miniservers.name AS miniserver_name,
-              COUNT(DISTINCT dashboard_panel_monitors.panel_id) AS panelCount,
-              ${dashboardPairsExpr()} AS dashboardPairs
+              COUNT(DISTINCT dashboard_panel_monitors.panel_id) AS "panelCount",
+              ${dashboardPairsExpr()} AS "dashboardPairs"
        FROM monitors
        LEFT JOIN miniservers ON miniservers.id = monitors.miniserver_id
        LEFT JOIN dashboard_panel_monitors ON dashboard_panel_monitors.monitor_id = monitors.id
@@ -581,7 +581,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
   // monitor_history's MAX_ROWS cap keeps) doesn't leave a big blank gap eating most of the chart.
   const { until } = rangeToWindow(range);
 
-  const rows = await db.prepare(`SELECT recorded_at AS recordedAt, value, numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS);
+  const rows = await db.prepare(`SELECT recorded_at AS "recordedAt", value, numeric_value AS "numericValue" FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS);
 
   const hasNumeric = rows.some((r) => r.numericValue !== null);
   const groupMode = chooseGroupMode(range);
@@ -699,7 +699,7 @@ router.get('/:id/export.csv', asyncHandler(async (req, res) => {
   const range = resolveRange(req.query.range);
   const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
 
-  const rows = await db.prepare(`SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC`).all(monitor.id, ...rangeParams);
+  const rows = await db.prepare(`SELECT recorded_at AS "recordedAt", value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC`).all(monitor.id, ...rangeParams);
 
   const filename = `${monitor.label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.csv`;
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');

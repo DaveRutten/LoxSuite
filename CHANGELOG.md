@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.17.1-alpha.1] - 2026-08-12
+
+### Fixed
+- **Postgres**: opening a Monitor's detail page (and several other pages — Dashboards' own sharing
+  lists, Logs export, Transformations' mapping lists, the Monitor list's Dashboard/panel-count
+  columns, and every panel's "current value") crashed or silently showed missing data, because
+  Postgres folds an *unquoted* SQL alias to lowercase while SQLite preserves it as written — a
+  hand-written query aliasing a column as `recordedAt` came back from Postgres as `recordedat`,
+  so the app's own `row.recordedAt` read `undefined`. Only surfaced now because this is the first
+  time an existing install's real data has actually round-tripped through Postgres. Every affected
+  alias across the app is now explicitly quoted so its case survives on Postgres too; SQLite and
+  MySQL/MariaDB are unaffected either way.
+
 ## [0.17.0-alpha.1] - 2026-08-12
 
 ### Added

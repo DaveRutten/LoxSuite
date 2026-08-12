@@ -28,9 +28,9 @@ router.get('/', asyncHandler(async (req, res) => {
 
 router.get('/data/mqtt-to-loxone.json', asyncHandler(async (req, res) => {
   const rows = (await db.prepare(
-    `SELECT m.id, m.mqtt_topic AS mqttTopic, ms.name AS miniserverName, m.target,
-       m.transport, m.enabled, m.min_interval_ms AS minIntervalMs,
-       (SELECT COUNT(*) FROM mapping_translations t WHERE t.mapping_id = m.id) AS translationCount
+    `SELECT m.id, m.mqtt_topic AS "mqttTopic", ms.name AS "miniserverName", m.target,
+       m.transport, m.enabled, m.min_interval_ms AS "minIntervalMs",
+       (SELECT COUNT(*) FROM mapping_translations t WHERE t.mapping_id = m.id) AS "translationCount"
      FROM mappings_mqtt_to_loxone m
      JOIN miniservers ms ON ms.id = m.miniserver_id
      WHERE m.value_transform = 'translation_table'
@@ -41,9 +41,9 @@ router.get('/data/mqtt-to-loxone.json', asyncHandler(async (req, res) => {
 
 router.get('/data/loxone-to-mqtt.json', asyncHandler(async (req, res) => {
   const rows = (await db.prepare(
-    `SELECT l.id, l.mqtt_topic AS mqttTopic, ms.name AS miniserverName,
+    `SELECT l.id, l.mqtt_topic AS "mqttTopic", ms.name AS "miniserverName",
        l.token, l.transport, l.qos, l.retain, l.enabled,
-       (SELECT COUNT(*) FROM loxone_mapping_translations t WHERE t.mapping_id = l.id) AS translationCount
+       (SELECT COUNT(*) FROM loxone_mapping_translations t WHERE t.mapping_id = l.id) AS "translationCount"
      FROM mappings_loxone_to_mqtt l
      LEFT JOIN miniservers ms ON ms.id = l.miniserver_id
      WHERE l.value_transform = 'translation_table'

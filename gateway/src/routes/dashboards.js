@@ -802,7 +802,7 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
       const decimals = config.decimals != null ? config.decimals : await getDefaultPanelDecimals();
       const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
       const rawRows = monitor
-        ? await db.prepare(`SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS)
+        ? await db.prepare(`SELECT recorded_at AS "recordedAt", value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS)
         : [];
       const rows = rawRows.map((r) => {
         const scaledNumeric = applyScale(r.value, scale);
@@ -847,7 +847,7 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
         let sparkline = null;
         if (config.sparkline) {
           const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
-          const rows = await db.prepare(`SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS);
+          const rows = await db.prepare(`SELECT numeric_value AS "numericValue" FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT ?`).all(monitor.id, ...rangeParams, MAX_ROWS);
           const values = rows.map((r) => r.numericValue).filter((v) => Number.isFinite(v));
           if (values.length >= 2) {
             const sparkMin = Math.min(...values);
@@ -898,7 +898,7 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
         // Any truncation this still causes lands at the OLD end, which the "gap before the first
         // reading" logic below already renders as an explicit No data stretch.
         const rows = (await db.prepare(
-          `SELECT recorded_at AS recordedAt, value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`
+          `SELECT recorded_at AS "recordedAt", value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`
         ).all(monitor.id, ...rangeParams, MAX_ROWS)).reverse();
         // One segment per RUN of consecutive readings sharing the same mapped label+color — not
         // one per raw row, which would draw an invisible-thin, unclickable sliver for every single
@@ -949,7 +949,7 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
       let comparison = null;
       if (monitor) {
         const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
-        comparison = await db.prepare(`SELECT numeric_value AS numericValue FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT 1`).get(monitor.id, ...rangeParams);
+        comparison = await db.prepare(`SELECT numeric_value AS "numericValue" FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at ASC LIMIT 1`).get(monitor.id, ...rangeParams);
       }
       const currentNumeric = current ? applyScale(current.value, scale) : null;
       const comparisonNumeric = comparison ? applyScale(comparison.numericValue, scale) : null;
@@ -968,8 +968,8 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
 async function listOwnedDashboards(userId) {
   return db
     .prepare(
-      `SELECT custom_dashboards.*, COUNT(dashboard_panels.id) AS panelCount,
-              (SELECT COUNT(*) FROM dashboard_shares WHERE dashboard_shares.dashboard_id = custom_dashboards.id) AS shareCount
+      `SELECT custom_dashboards.*, COUNT(dashboard_panels.id) AS "panelCount",
+              (SELECT COUNT(*) FROM dashboard_shares WHERE dashboard_shares.dashboard_id = custom_dashboards.id) AS "shareCount"
        FROM custom_dashboards LEFT JOIN dashboard_panels ON dashboard_panels.dashboard_id = custom_dashboards.id
        WHERE custom_dashboards.user_id = ?
        GROUP BY custom_dashboards.id ORDER BY custom_dashboards.position, custom_dashboards.id`
@@ -983,25 +983,31 @@ async function listOwnedDashboards(userId) {
 async function listSharedWithMe(userId, roleId) {
   return db
     .prepare(
-      `SELECT d.id, d.name, MAX(d.canEdit) AS canEdit, d.ownerName,
-              (SELECT COUNT(*) FROM dashboard_panels WHERE dashboard_panels.dashboard_id = d.id) AS panelCount
+      `SELECT d.id, d.name, MAX(d.can_edit) AS "canEdit", d.owner_name AS "ownerName",
+              (SELECT COUNT(*) FROM dashboard_panels WHERE dashboard_panels.dashboard_id = d.id) AS "panelCount"
        FROM (
-         SELECT custom_dashboards.id, custom_dashboards.name, dashboard_shares.can_edit AS canEdit,
-                COALESCE(users.display_name, users.username) AS ownerName
+         SELECT custom_dashboards.id, custom_dashboards.name, dashboard_shares.can_edit,
+                COALESCE(users.display_name, users.username) AS owner_name
          FROM dashboard_shares
          JOIN custom_dashboards ON custom_dashboards.id = dashboard_shares.dashboard_id
          JOIN users ON users.id = custom_dashboards.user_id
          WHERE dashboard_shares.user_id = ?
          UNION
-         SELECT custom_dashboards.id, custom_dashboards.name, dashboard_role_shares.can_edit AS canEdit,
-                COALESCE(users.display_name, users.username) AS ownerName
+         SELECT custom_dashboards.id, custom_dashboards.name, dashboard_role_shares.can_edit,
+                COALESCE(users.display_name, users.username) AS owner_name
          FROM dashboard_role_shares
          JOIN custom_dashboards ON custom_dashboards.id = dashboard_role_shares.dashboard_id
          JOIN users ON users.id = custom_dashboards.user_id
          WHERE dashboard_role_shares.role_id = ?
        ) d
-       GROUP BY d.id, d.name, d.ownerName ORDER BY d.name`
-      // SQLite tolerates selecting d.name/d.ownerName ungrouped (it just picks a row per d.id's
+       GROUP BY d.id, d.name, d.owner_name ORDER BY d.name`
+      // Kept snake_case (can_edit/owner_name) through every reference inside this query, and only
+      // renamed to camelCase (quoted, so Postgres doesn't fold it) in the outermost SELECT — an
+      // outer reference to an inner ALIAS's camelCase name would need quoting too on Postgres, but
+      // a quoted identifier there is a syntax error on MySQL/MariaDB (without ANSI_QUOTES, which
+      // this app doesn't set); staying snake_case until the very last SELECT sidesteps that
+      // entirely, since an already-lowercase name never needs quoting or folds to anything else.
+      // SQLite tolerates selecting d.name/d.owner_name ungrouped (it just picks a row per d.id's
       // own group without complaint); Postgres requires every selected column to be in the GROUP
       // BY or wrapped in an aggregate. Safe to add both here — they're derived from the exact same
       // custom_dashboards/users join in both UNION halves, so they can never actually differ for
@@ -1034,7 +1040,7 @@ async function listOtherUsers(userId) {
 async function listShares(dashboardId) {
   return db
     .prepare(
-      `SELECT users.id AS userId, COALESCE(users.display_name, users.username) AS name, dashboard_shares.can_edit AS canEdit
+      `SELECT users.id AS "userId", COALESCE(users.display_name, users.username) AS name, dashboard_shares.can_edit AS "canEdit"
        FROM dashboard_shares JOIN users ON users.id = dashboard_shares.user_id
        WHERE dashboard_shares.dashboard_id = ? ORDER BY name`
     )
@@ -1046,7 +1052,7 @@ async function listShares(dashboardId) {
 async function listRoleShares(dashboardId) {
   return db
     .prepare(
-      `SELECT access_roles.id AS roleId, access_roles.name, dashboard_role_shares.can_edit AS canEdit
+      `SELECT access_roles.id AS "roleId", access_roles.name, dashboard_role_shares.can_edit AS "canEdit"
        FROM dashboard_role_shares JOIN access_roles ON access_roles.id = dashboard_role_shares.role_id
        WHERE dashboard_role_shares.dashboard_id = ? ORDER BY access_roles.name`
     )

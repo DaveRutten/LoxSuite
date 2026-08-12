@@ -46,7 +46,7 @@ async function isLastAdmin(userId) {
   if (adminCount > 1) return false;
 
   const user = await db.prepare(
-    `SELECT r.is_admin AS isAdmin FROM users u LEFT JOIN access_roles r ON r.id = u.role_id WHERE u.id = ?`
+    `SELECT r.is_admin AS "isAdmin" FROM users u LEFT JOIN access_roles r ON r.id = u.role_id WHERE u.id = ?`
   ).get(userId);
   return !!(user && user.isAdmin && adminCount === 1);
 }
