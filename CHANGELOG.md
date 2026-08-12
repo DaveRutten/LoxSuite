@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.16.1-alpha.1] - 2026-08-12
+
+### Fixed
+- Some Loxone readings (weather-server values like Current Humidity/Temperature/Precipitation)
+  now report their value pre-formatted with the unit already appended ("33 %", "28.6 °C")
+  instead of a bare number. Parsing that with `Number()` returned `NaN` and treated the whole
+  reading as non-numeric — breaking its chart history, threshold coloring, and notifications, and
+  showing the panel's own configured unit stacked on top of Loxone's own ("33 % %"). Value/Gauge/
+  Stat delta/Threshold panels now correctly parse the leading number regardless of a trailing
+  unit, and only fall back to displaying Loxone's own unit when the panel has no Unit field of
+  its own configured — an explicit Unit override still always wins.
+
 ## [0.16.0-alpha.1] - 2026-08-12
 
 ### Added

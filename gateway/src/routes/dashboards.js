@@ -89,11 +89,34 @@ function clampDecimals(value) {
 // entirely in the already-scaled unit, rather than each needing its own scale-aware branch.
 // Rounded to 6 decimal places purely to avoid floating point noise (e.g. 0.1 * 3 = 0.30000000000000004)
 // showing up in a panel that itself displays plenty of decimals.
+// parseFloat, not Number: some Loxone states (e.g. weather-server readings) report their value
+// pre-formatted with the unit already appended ("33 %", "28.6 °C") rather than a bare number.
+// Number() rejects the whole string over that trailing unit and returns NaN — parseFloat reads
+// the leading number and ignores the rest, same fix as monitorCollector.js's own toNumeric.
 function applyScale(rawValue, scale) {
-  const numeric = Number(rawValue);
+  const numeric = parseFloat(rawValue);
   if (!Number.isFinite(numeric)) return null;
   if (scale === 1) return numeric;
   return Math.round(numeric * scale * 1e6) / 1e6;
+}
+
+// The other half of that same Loxone quirk: a raw reading of "33 %" carries a unit worth
+// showing, not just a number worth parsing. A panel with its own Unit field set (override.unit
+// or config.unit) always wins — the user's explicit choice (e.g. relabeling a 0-1 fraction as
+// "W") overrules whatever Loxone happened to send — but when no unit is configured at all, this
+// recovers the one Loxone already provided instead of silently dropping it. Only ever consulted
+// as that last-resort fallback (see effectiveUnit below), never combined with a configured unit,
+// so there's no risk of the double-unit bug this exists to fix ("33 % %").
+function extractLoxoneUnit(rawValue) {
+  if (rawValue === null || rawValue === undefined) return null;
+  const str = String(rawValue).trim();
+  // Matched WITHOUT a $ anchor deliberately — anchoring the whole pattern to end-of-string makes
+  // the optional decimal group backtrack away for a plain "33.5" (no unit at all) so the trailing
+  // ".5" satisfies the tail instead, misreporting ".5" as the unit. Consuming the number greedily
+  // first and treating whatever's left over as the unit avoids that.
+  const match = /^-?\d+(?:[.,]\d+)?/.exec(str);
+  if (!match) return null;
+  return str.slice(match[0].length).trim() || null;
 }
 
 async function getDefaultPanelDecimals() {
@@ -745,13 +768,13 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
         monitors: await Promise.all(monitors.map(async (m) => {
           const override = series[m.id] || {};
           const displayLabel = override.name || m.label;
-          const effectiveUnit = override.unit || config.unit;
           // Every monitor in a value panel can be a completely different kind of reading (unlike
           // chart's single shared Y-axis), so scale/decimals are per-monitor only — no panel-wide
           // default to fall back to besides "unscaled" / the Settings-page global.
           const scale = override.scale != null ? override.scale : 1;
           const decimals = override.decimals != null ? override.decimals : defaultDecimals;
           const current = await getCurrentValue(m.id);
+          const effectiveUnit = override.unit || config.unit || (current ? extractLoxoneUnit(current.value) : null);
           if (!current) return { ...m, displayLabel, effectiveUnit, current: null };
           // An exact match against the value-mapping list takes priority over decimal formatting
           // — a translated "1" -> "Actief" is a label, not a rounded number, so it skips toFixed()
@@ -806,11 +829,11 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
       const series = config.series || {};
       const gauges = await Promise.all(monitors.map(async (monitor) => {
         const override = series[monitor.id] || {};
-        const effectiveUnit = override.unit || config.unit;
         const effectiveThresholds = override.thresholds && override.thresholds.length ? override.thresholds : config.thresholds;
         const effectiveMin = override.min != null ? override.min : config.min;
         const effectiveMax = override.max != null ? override.max : config.max;
         const current = await getCurrentValue(monitor.id);
+        const effectiveUnit = override.unit || config.unit || (current ? extractLoxoneUnit(current.value) : null);
         const scaledNumeric = current ? applyScale(current.value, scale) : null;
         const hasNumeric = Number.isFinite(scaledNumeric);
         const displayCurrent = current ? { ...current, displayValue: hasNumeric ? formatPanelValue(scaledNumeric, decimals) : current.value } : null;
@@ -846,7 +869,8 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
       const scaledNumeric = current ? applyScale(current.value, scale) : null;
       const hasNumeric = Number.isFinite(scaledNumeric);
       const displayCurrent = current ? { ...current, displayValue: hasNumeric ? formatPanelValue(scaledNumeric, decimals) : current.value } : null;
-      return { ...base, monitor, current: displayCurrent, isAlert: evaluateThreshold(hasNumeric ? scaledNumeric : null, config) };
+      const effectiveUnit = config.unit || (current ? extractLoxoneUnit(current.value) : null);
+      return { ...base, monitor, current: displayCurrent, effectiveUnit, isAlert: evaluateThreshold(hasNumeric ? scaledNumeric : null, config) };
     }
 
     if (panel.panel_type === 'state_bar') {
@@ -933,7 +957,8 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
       const thresholdColor = Number.isFinite(currentNumeric) ? colorForThresholdLadder(currentNumeric, config.thresholds) : null;
       const displayCurrent = current ? { ...current, displayValue: Number.isFinite(currentNumeric) ? formatPanelValue(currentNumeric, decimals) : current.value } : null;
       const displayDelta = delta !== null ? formatPanelValue(Math.abs(delta), decimals) : null;
-      return { ...base, monitor, current: displayCurrent, delta, displayDelta, thresholdColor };
+      const effectiveUnit = config.unit || (current ? extractLoxoneUnit(current.value) : null);
+      return { ...base, monitor, current: displayCurrent, delta, displayDelta, thresholdColor, effectiveUnit };
     }
 
     return base; // chart: rendered client-side via /monitor/series.json

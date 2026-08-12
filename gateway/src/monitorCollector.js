@@ -113,8 +113,14 @@ async function reloadMqttMonitors() {
   mqttTopicMonitors = map;
 }
 
+// parseFloat, not Number: some Loxone states (e.g. weather-server text states) report their
+// value pre-formatted with the unit already appended ("33 %", "28.6 °C") rather than a bare
+// number. Number() rejects the whole string over that trailing unit and returns NaN, which would
+// null out numeric_value entirely — breaking charts/thresholds and forcing every downstream
+// display to fall back to the raw "33 %" string, which then gets the panel's own configured unit
+// appended a second time ("33 % %"). parseFloat reads the leading number and ignores the rest.
 function toNumeric(value) {
-  const n = Number(value);
+  const n = parseFloat(value);
   return Number.isFinite(n) ? n : null;
 }
 

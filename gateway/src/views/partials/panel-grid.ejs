@@ -992,19 +992,19 @@
            }
         %>
         <div class="stat-delta" data-live-id="panel-<%= p.id %>-body">
-          <div class="stat-delta-value" <% if (p.thresholdColor) { %>style="color: <%= p.thresholdColor %>;"<% } %>><%= p.current ? p.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+          <div class="stat-delta-value" <% if (p.thresholdColor) { %>style="color: <%= p.thresholdColor %>;"<% } %>><%= p.current ? p.current.displayValue : '-' %><%= p.effectiveUnit ? ' ' + p.effectiveUnit : '' %></div>
           <% if (p.delta === null) { %>
             <p class="hint" style="margin:0;">No comparison reading yet.</p>
           <% } else { %>
             <div class="stat-delta-change <%= deltaClass %>">
-              <%- p.delta > 0 ? '&#9650;' : (p.delta < 0 ? '&#9660;' : '&#8212;') %> <%= p.displayDelta %><%= p.config.unit ? ' ' + p.config.unit : '' %>
+              <%- p.delta > 0 ? '&#9650;' : (p.delta < 0 ? '&#9660;' : '&#8212;') %> <%= p.displayDelta %><%= p.effectiveUnit ? ' ' + p.effectiveUnit : '' %>
             </div>
             <p class="hint" style="margin:0;">vs <%= RANGE_LABELS[p.displayRange || p.range] || p.displayRange || p.range %> ago</p>
           <% } %>
         </div>
       <% } else if (p.panel_type === 'threshold') { %>
         <div class="threshold-wrap" data-live-id="panel-<%= p.id %>-body">
-          <div class="gauge-value"><%= p.current ? p.current.displayValue : '-' %><%= p.config.unit ? ' ' + p.config.unit : '' %></div>
+          <div class="gauge-value"><%= p.current ? p.current.displayValue : '-' %><%= p.effectiveUnit ? ' ' + p.effectiveUnit : '' %></div>
           <span class="badge <%= p.isAlert ? 'badge-off' : 'badge-ok' %>"><%= p.isAlert ? p.config.labelAlert : p.config.labelOk %></span>
         </div>
       <% } else if (p.panel_type === 'state_bar') { %>
