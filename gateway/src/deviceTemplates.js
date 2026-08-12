@@ -13,16 +13,15 @@ const path = require('path');
 const { XMLParser } = require('fast-xml-parser');
 
 const TEMPLATES_DIR = process.env.DEVICE_TEMPLATES_PATH || path.join(__dirname, '../device-templates');
-// Docker image only (see Dockerfile's `COPY device-templates ./device-templates-defaults` and
-// docker-entrypoint.sh's first-boot seeding of the bind-mounted TEMPLATES_DIR from this same
-// folder) — doesn't exist at all outside the image (a bare `node src/server.js` checkout has no
-// "-defaults" copy, only the tracked device-templates/ folder that TEMPLATES_DIR already points
-// at by default). Scanned unconditionally alongside TEMPLATES_DIR below specifically so a
-// misconfigured or not-yet-updated bind mount (stale docker-compose.yml/Unraid template missing
-// the new volume line, wrong host path, ...) degrades to "the built-ins still work, your own
-// customizations just aren't picked up yet" instead of silently emptying the ENTIRE Common
-// Commands catalog — every device in it, including every built-in one, used to live only in
-// TEMPLATES_DIR once the hardcoded arrays in commandCatalog.js were removed.
+// Docker image only (see Dockerfile's `COPY device-templates ./device-templates-defaults`) —
+// doesn't exist at all outside the image (a bare `node src/server.js` checkout has no "-defaults"
+// copy, only the tracked device-templates/ folder that TEMPLATES_DIR already points at by
+// default). Read directly and unconditionally, every time (see loadDeviceTemplates below) — never
+// copied into the bind-mounted TEMPLATES_DIR, so it's always current with whatever image is
+// actually running, immune to a misconfigured/stale bind mount, and never at risk of a stale
+// on-disk copy shadowing a newer built-in (see docker-entrypoint.sh's migration comment for the
+// bug this fixed: TEMPLATES_DIR/user and TEMPLATES_DIR/synced, below, used to be one single flat
+// folder that only ever got seeded from this exact directory once, on first boot ever).
 const BUNDLED_DEFAULTS_DIR = path.join(__dirname, '../device-templates-defaults');
 
 // parseAttributeValue/parseTagValue both off: this schema uses plain numeric-looking strings all
@@ -139,18 +138,74 @@ function scanDir(dir, sourceLabel) {
   return families;
 }
 
+// TEMPLATES_DIR/user existing marks the new split layout (see docker-entrypoint.sh's one-time
+// migration): bundled defaults, then anything fetched from GitHub into TEMPLATES_DIR/synced (see
+// deviceTemplatesUpdate.js), then the user's own files in TEMPLATES_DIR/user — each tier able to
+// override an earlier one's same key, last-one-wins. Without that subfolder (a bare/local run
+// outside Docker, where TEMPLATES_DIR defaults to the tracked gateway/device-templates/ itself and
+// there's no entrypoint step at all) falls back to exactly the old flat-directory behavior,
+// unchanged — this only ever activates for a real Docker deployment.
+function getTemplateDirs() {
+  const userDir = path.join(TEMPLATES_DIR, 'user');
+  const syncedDir = path.join(TEMPLATES_DIR, 'synced');
+  const splitLayout = fs.existsSync(userDir) && fs.statSync(userDir).isDirectory();
+  return { bundledDir: BUNDLED_DEFAULTS_DIR, syncedDir, userDir, splitLayout };
+}
+
 function loadDeviceTemplates() {
-  // Bundled defaults load FIRST — a baseline that's always there inside the Docker image, immune
-  // to a stale/missing/misconfigured bind mount at TEMPLATES_DIR (an out-of-date docker-compose.yml
-  // or Unraid template still pointing nowhere, a typo'd host path, ...). TEMPLATES_DIR loads SECOND
-  // so a file there with the same key — including a deliberately edited copy of a built-in — wins
-  // (mergeDeviceTemplates below is last-one-wins by key), while a TEMPLATES_DIR that doesn't exist
-  // or resolve correctly just means "no customizations yet," not "no devices at all."
-  const families = [...scanDir(BUNDLED_DEFAULTS_DIR, 'bundled defaults'), ...scanDir(TEMPLATES_DIR, 'device-templates')];
+  const dirs = getTemplateDirs();
+  // Bundled defaults always load FIRST — a baseline that's always there inside the Docker image,
+  // immune to a stale/missing/misconfigured bind mount (an out-of-date docker-compose.yml or
+  // Unraid template still pointing nowhere, a typo'd host path, ...). Each later tier's same key
+  // wins over an earlier one (mergeDeviceTemplates below is last-one-wins by key).
+  const sources = dirs.splitLayout
+    ? [[dirs.bundledDir, 'bundled defaults'], [dirs.syncedDir, 'device-templates/synced'], [dirs.userDir, 'device-templates/user']]
+    : [[BUNDLED_DEFAULTS_DIR, 'bundled defaults'], [TEMPLATES_DIR, 'device-templates']];
+  const families = sources.flatMap(([dir, label]) => scanDir(dir, label));
   // Stable sort (V8's Array#sort is stable) — same-order families keep the load order they were
   // already in; only a family that explicitly set a non-zero "order" moves relative to that. See
   // normalizeFamily's own comment on why this has to be a thing at all.
   return families.sort((a, b) => a.order - b.order);
+}
+
+// Same per-file parsing as scanDir, but keeps the file/family breakdown instead of flattening —
+// for the admin "Device templates" card (routes/admin.js), which needs to show what's actually
+// sitting in each tier, not just the final merged catalog.
+function scanDirDetailed(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const entries = fs.readdirSync(dir).filter((f) => ['.json', '.xml'].includes(path.extname(f).toLowerCase())).sort();
+  return entries.map((entry) => {
+    const filePath = path.join(dir, entry);
+    try {
+      return { file: entry, families: parseTemplateFile(filePath) || [], error: null };
+    } catch (err) {
+      return { file: entry, families: [], error: err.message };
+    }
+  });
+}
+
+// For the admin UI: per-tier file listing, plus flagging a user/ file whose content is byte-for-
+// byte identical to a same-key bundled/synced family — almost certainly a stale leftover copy of
+// an old built-in (see docker-entrypoint.sh's migration comment) rather than a deliberate
+// customization, safe to point out without guessing wrong and silently deleting anything.
+function listTemplateSources() {
+  const dirs = getTemplateDirs();
+  const bundled = scanDirDetailed(dirs.bundledDir);
+  const synced = scanDirDetailed(dirs.syncedDir);
+  const user = scanDirDetailed(dirs.userDir);
+
+  const referenceByKey = new Map();
+  [...bundled, ...synced].forEach((f) => f.families.forEach((fam) => referenceByKey.set(fam.key, fam)));
+
+  const annotatedUser = user.map((f) => ({
+    ...f,
+    families: f.families.map((fam) => {
+      const ref = referenceByKey.get(fam.key);
+      return { ...fam, possiblyStale: !!ref && JSON.stringify(ref) === JSON.stringify(fam) };
+    }),
+  }));
+
+  return { splitLayout: dirs.splitLayout, bundled, synced, user: annotatedUser };
 }
 
 // Merges loaded families on top of the built-in arrays, by key — a family providing "commands"
@@ -181,4 +236,12 @@ function mergeDeviceTemplates(commandsCatalog, dataCatalog, families) {
   return { commandsCatalog: Array.from(commandsByKey.values()), dataCatalog: Array.from(dataByKey.values()) };
 }
 
-module.exports = { TEMPLATES_DIR, loadDeviceTemplates, mergeDeviceTemplates, normalizeFamily };
+module.exports = {
+  TEMPLATES_DIR,
+  loadDeviceTemplates,
+  mergeDeviceTemplates,
+  normalizeFamily,
+  parseTemplateFile,
+  getTemplateDirs,
+  listTemplateSources,
+};

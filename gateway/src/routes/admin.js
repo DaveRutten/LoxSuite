@@ -6,6 +6,9 @@ const { logSystemEvent } = require('../auditLog');
 const { reloadLoginLimiter } = require('./auth');
 const { encrypt } = require('../secretCrypto');
 const { checkForUpdate } = require('../versionCheck');
+const { listTemplateSources } = require('../deviceTemplates');
+const { reloadDeviceTemplates } = require('../commandCatalog');
+const { fetchBuiltinTemplatesFromGitHub } = require('../deviceTemplatesUpdate');
 const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
@@ -51,7 +54,10 @@ async function isLastAdmin(userId) {
 router.get('/', (req, res) => res.redirect('/admin/general'));
 
 router.get('/general', asyncHandler(async (req, res) => {
-  res.render('admin-general', { error: null, justChecked: false, dbInfo: await db.getInfo() });
+  res.render('admin-general', {
+    error: null, justChecked: false, dbInfo: await db.getInfo(),
+    templateSources: listTemplateSources(), templateResult: null,
+  });
 }));
 
 // On-demand version of the same check startVersionCheck() already runs once at boot and every 24h
@@ -60,7 +66,37 @@ router.get('/general', asyncHandler(async (req, res) => {
 // call itself, so a "Check now" button needs this instead.
 router.post('/check-update', asyncHandler(async (req, res) => {
   await checkForUpdate();
-  res.render('admin-general', { error: null, justChecked: true, dbInfo: await db.getInfo() });
+  res.render('admin-general', {
+    error: null, justChecked: true, dbInfo: await db.getInfo(),
+    templateSources: listTemplateSources(), templateResult: null,
+  });
+}));
+
+// Re-scans device-templates/ (bundled + synced + user) without a restart — for when a file was
+// just hand-edited under the bind-mounted user/ folder, or right after the fetch-github action
+// below. reloadDeviceTemplates (commandCatalog.js) mutates CATALOG/DATA_CATALOG in place so every
+// other module already holding that reference (deviceDiscovery.js, ...) sees the refreshed data
+// immediately, no restart needed.
+router.post('/device-templates/reload', asyncHandler(async (req, res) => {
+  const result = reloadDeviceTemplates();
+  res.render('admin-general', {
+    error: null, justChecked: false, dbInfo: await db.getInfo(),
+    templateSources: listTemplateSources(),
+    templateResult: { action: 'reload', ...result },
+  });
+}));
+
+// Fetches this project's own device-templates straight from GitHub's main branch (ahead of any
+// tagged release — see deviceTemplatesUpdate.js) into device-templates/synced/, then reloads —
+// same two-step shape as a manual edit + Reload above, just with the fetch in between.
+router.post('/device-templates/fetch-github', asyncHandler(async (req, res) => {
+  const fetchResult = await fetchBuiltinTemplatesFromGitHub();
+  const reloadResult = reloadDeviceTemplates();
+  res.render('admin-general', {
+    error: null, justChecked: false, dbInfo: await db.getInfo(),
+    templateSources: listTemplateSources(),
+    templateResult: { action: 'fetch-github', ...fetchResult, ...reloadResult },
+  });
 }));
 
 router.get('/users', asyncHandler(async (req, res) => {

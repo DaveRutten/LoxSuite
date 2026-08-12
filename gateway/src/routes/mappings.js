@@ -2,7 +2,7 @@ const express = require('express');
 const dgram = require('dgram');
 const { nanoid } = require('nanoid');
 const db = require('../db');
-const { loadCommandCatalogs } = require('../commandCatalog');
+const { loadCommandCatalogs, mergeMissingBuiltins } = require('../commandCatalog');
 const { getClient } = require('../mqttClient');
 const { applyLoxoneToMqttTransform } = require('../loxone');
 const { discoverDevices } = require('../deviceDiscovery');
@@ -173,6 +173,7 @@ router.get('/commands', asyncHandler(async (req, res) => {
     presetFamily: req.query.family || (catalog[0] && catalog[0].key) || '',
     presetDevice: req.query.device || '',
     saved: req.query.saved === '1',
+    synced: req.query.synced,
   });
 }));
 
@@ -206,6 +207,23 @@ router.post('/commands/catalog', requirePermission('commands', 'edit'), asyncHan
 router.post('/commands/catalog/reset', requirePermission('commands', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('DELETE FROM command_catalog_overrides WHERE id = 1').run();
   res.redirect('/mappings/commands');
+}));
+
+// See mergeMissingBuiltins's own comment (commandCatalog.js) — only meaningful once a customized
+// override actually exists; a no-op (0 added, same redirect) otherwise since loadCommandCatalogs
+// already falls back to the built-ins directly in that case.
+router.post('/commands/catalog/sync-builtin', requirePermission('commands', 'edit'), asyncHandler(async (req, res) => {
+  const { catalog, dataCatalog, isCustomized } = await loadCommandCatalogs();
+  if (!isCustomized) return res.redirect('/mappings/commands?synced=0');
+
+  const merged = mergeMissingBuiltins(catalog, dataCatalog);
+  await db.upsert('command_catalog_overrides', {
+    id: 1,
+    commands_json: JSON.stringify(merged.catalog),
+    data_json: JSON.stringify(merged.dataCatalog),
+    updated_at: new Date().toISOString(),
+  }, ['id']);
+  res.redirect(`/mappings/commands?synced=${merged.added}`);
 }));
 
 // "Create RGB + White mappings" button (mappings-commands.ejs, shown only for a family with

@@ -1842,7 +1842,8 @@ body.panel-hints-hidden .panel-settings-form .hint:not(.panel-save-status),
 body.panel-hints-hidden #add-ms-form .hint,
 body.panel-hints-hidden #edit-ms-form .hint,
 body.panel-hints-hidden #mqtt-broker-card .hint,
-body.panel-hints-hidden #settings-form .hint { display: none; }
+body.panel-hints-hidden #settings-form .hint,
+body.panel-hints-hidden #device-templates-hint { display: none; }
 
 /* Shared on/off switch (see toggleSwitch() in src/toggleSwitch.js) — every plain boolean setting
    in the app (SSO/rclone/backup-schedule Enabled, MQTT TLS, Retain, Miniserver HTTPS, ...) used to

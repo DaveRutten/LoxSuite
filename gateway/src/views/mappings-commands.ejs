@@ -83,7 +83,12 @@
   </form>
 </div>
 
-<% if (isCustomized) { %><p class="hint"><strong>Catalog is customized</strong> — kept even after an app update.</p><% } %>
+<% if (isCustomized) { %><p class="hint"><strong>Catalog is customized</strong> — kept even after an app update. New built-in commands/data points (added by an app update, e.g. Shelly's Reboot command) won't show up here on their own; use <strong>Sync new built-in commands</strong> below to add whatever's missing without touching your own edits.</p><% } %>
+<% if (typeof synced !== 'undefined' && synced !== null) { %>
+  <p class="hint" style="color: var(--success);">
+    <% if (synced === '0') { %>Nothing to sync — catalog isn't customized, it already reads straight from the built-ins.<% } else { %>Synced <%= synced %> new built-in command<%= synced === '1' ? '' : 's' %>/data point<%= synced === '1' ? '' : 's' %> into your customized catalog.<% } %>
+  </p>
+<% } %>
 
 <form method="post" action="/mappings/commands/catalog" id="catalog-editor-form">
   <textarea name="commands_json" id="commands-editor-hidden" hidden></textarea>
@@ -226,6 +231,11 @@
 </form>
 <div class="row-actions" style="margin-top:0.5rem;">
   <button type="submit" form="catalog-editor-form" class="btn-edit"><%- icon('edit') %> Save catalog</button>
+  <% if (isCustomized) { %>
+  <form method="post" action="/mappings/commands/catalog/sync-builtin" style="margin:0;">
+    <button type="submit" class="btn-soft"><%- icon('refresh') %> Sync new built-in commands</button>
+  </form>
+  <% } %>
   <form method="post" action="/mappings/commands/catalog/reset" style="margin:0;" data-confirm="Reset to the built-in defaults? Any edits you've made here will be lost.">
     <button type="submit" class="btn-soft">Reset to built-in defaults</button>
   </form>

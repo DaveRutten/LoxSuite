@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.13.9-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.14.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -443,14 +443,22 @@ or re-imported from — JSON or XML, or reset back to the built-in defaults at a
 traffic** → *Connected Clients*, devices that look like a Shelly link here with the device
 pre-selected; a data point's "Use as Monitor" link jumps straight to a pre-filled Monitor form.
 
-A separate, file-based way to add or override a device: drop a `.json` or `.xml` file into
-`device-templates/` (same shape this page's own export/import already uses — see that folder's own
-`README.md`), read once at gateway startup. Meant for a device definition you'd rather hand-write,
-keep in version control, or share, without going through the UI at all; a file naming an existing
-key (built-in or another file's) replaces that device, and an invalid file is skipped with a
-message in the gateway's log naming the file and the problem, rather than failing the whole catalog.
-`device-templates/heatmeister.json` and `heatmeister-ha.json` (see below) are real, working examples
-of the format, not placeholders.
+A separate, file-based way to add or override a device: drop a `.json` or `.xml` file into the
+bind-mounted `device-templates/user/` folder next to `docker-compose.yml` (same shape this page's
+own export/import already uses — see `gateway/device-templates/README.md`). Meant for a device
+definition you'd rather hand-write, keep in version control, or share, without going through the UI
+at all; a file naming an existing key (built-in or another file's) replaces that device, and an
+invalid file is skipped with a message in the gateway's log naming the file and the problem, rather
+than failing the whole catalog. `gateway/device-templates/heatmeister.json` and `heatmeister-ha.json`
+(see below) are real, working examples of the format, not placeholders.
+
+Built-in devices load from three tiers, each able to override an earlier one's same device: this
+app's own built-ins (always current with whatever image you're running), anything fetched via
+**Administration → General → Device templates**' "Fetch latest built-ins from GitHub" button
+(pulls straight from the project's `main` branch, ahead of a full app release — into
+`device-templates/synced/`), then your own files in `device-templates/user/` above. Neither of the
+first two is something you edit by hand; "Reload from disk" on that same page picks up any of the
+three without needing a restart.
 
 A Loxone → MQTT mapping also has a **Shelly RGBW/White/Tunable-white** value transform, which
 converts Loxone's own RGB ("H,S,V") or Lumitech tunable-white ("brightness,kelvin") output format

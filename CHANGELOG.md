@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.14.0-alpha.1] - 2026-08-12
+
+### Added
+- **Administration → General → Device templates**: device definitions now load from three tiers —
+  this app's own built-ins, anything fetched from GitHub, then your own files — each able to
+  override an earlier one's same device. A **Fetch latest built-ins from GitHub** button pulls
+  straight from the project's `main` branch (ahead of a full app release), and **Reload from disk**
+  picks up either that or a hand-edited file without a restart. Every fetched file is parsed and
+  validated before it's written, so a malformed/truncated fetch can never clobber a previously-good
+  one. Lists what's actually loaded from each tier, flagging any of your own files that are
+  byte-identical to a current built-in/GitHub-fetched device — almost certainly a stale leftover,
+  safe to delete so the built-in takes over again.
+- Mappings → Common Commands: a **Sync new built-in commands** button (shown once the catalog is
+  customized) adds whatever's missing from the built-ins — a new device family, or a new
+  command/data point on an existing one (e.g. Shelly's Reboot command) — without touching or
+  reintroducing anything already edited or deliberately removed.
+
+### Fixed
+- A device-templates file bind-mounted into a real install only ever got copied in **once**, on
+  the very first boot ever — any file already sitting there, from whenever that was, permanently
+  shadowed a newer built-in with the same name, forever, even after every later update. The
+  built-ins are now read directly from the image itself, always current; the bind-mounted folder
+  is migrated (once, safely — nothing is ever deleted, only moved) into its own `user/` subfolder
+  on upgrade, and only ever holds what you actually put there yourself.
+- The point-and-click Common Commands catalog editor has the exact same failure mode one layer
+  up — once customized, saved as one complete snapshot that never automatically gained a
+  since-added built-in command either, even after an app update. See "Sync new built-in commands"
+  above.
+
 ## [0.13.9-alpha.1] - 2026-08-11
 
 ### Fixed

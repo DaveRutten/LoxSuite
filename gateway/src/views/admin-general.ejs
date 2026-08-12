@@ -84,24 +84,88 @@
 
 <div class="card">
   <h2>Database</h2>
+  <%
+    // Postgres and MySQL/MariaDB are both real network servers (Server: host:port/db); only
+    // SQLite is a local file (File: path) — everything non-sqlite takes the network-server
+    // branch, so this doesn't need a third arm added if/when another backend ever lands.
+    const dbBackendLabels = { postgres: 'PostgreSQL', mysql: 'MySQL/MariaDB', sqlite: 'SQLite' };
+  %>
+  <div style="margin-bottom:0.6rem; padding:0.6rem 0.9rem; border-radius:var(--radius); background:var(--surface-alt); border:1px solid var(--border);">
+    <p class="hint" style="margin:0;">
+      <span style="display:block;">Backend: <strong style="color:var(--text);"><%= dbBackendLabels[dbInfo.backend] || dbInfo.backend %></strong><% if (dbInfo.version) { %> (v<%= dbInfo.version %>)<% } %></span>
+      <% if (dbInfo.backend !== 'sqlite') { %>
+        <span style="display:block;">Server: <strong style="color:var(--text);"><%= dbInfo.host %>:<%= dbInfo.port %>/<%= dbInfo.database %></strong></span>
+      <% } else { %>
+        <span style="display:block;">File: <strong style="color:var(--text);"><%= dbInfo.dbPath %></strong></span>
+      <% } %>
+    </p>
+  </div>
   <p class="hint">
-    <%
-      // Postgres and MySQL/MariaDB are both real network servers (Server: host:port/db); only
-      // SQLite is a local file (File: path) — everything non-sqlite takes the network-server
-      // branch, so this doesn't need a third arm added if/when another backend ever lands.
-      const dbBackendLabels = { postgres: 'PostgreSQL', mysql: 'MySQL/MariaDB', sqlite: 'SQLite' };
-    %>
-    <span style="display:block;">Backend: <strong style="color:var(--text);"><%= dbBackendLabels[dbInfo.backend] || dbInfo.backend %></strong><% if (dbInfo.version) { %> (v<%= dbInfo.version %>)<% } %></span>
-    <% if (dbInfo.backend !== 'sqlite') { %>
-      <span style="display:block;">Server: <strong style="color:var(--text);"><%= dbInfo.host %>:<%= dbInfo.port %>/<%= dbInfo.database %></strong></span>
-    <% } else { %>
-      <span style="display:block;">File: <strong style="color:var(--text);"><%= dbInfo.dbPath %></strong></span>
-    <% } %>
-    <span style="display:block; margin-top:0.2rem;">
-      Set via the <code>DB_BACKEND</code>/<code>DATABASE_URL</code> (or <code>DB_HOST</code>/<code>DB_NAME</code>/<code>DB_USER</code>/...) environment
-      variables — restart required to change, not a setting on this page.
-    </span>
+    Set via the <code>DB_BACKEND</code>/<code>DATABASE_URL</code> (or <code>DB_HOST</code>/<code>DB_NAME</code>/<code>DB_USER</code>/...) environment
+    variables — restart required to change, not a setting on this page.
   </p>
+</div>
+
+<div class="card">
+  <h2>Device templates</h2>
+  <p class="hint" id="device-templates-hint">
+    "Common commands"/"Common data" device definitions (Shelly, HeatMeister, ...), loaded from
+    three tiers, each able to override an earlier one's same device: this app's own built-ins,
+    anything fetched from GitHub below, then your own files in the bind-mounted
+    <code>device-templates/user/</code> folder — see <a href="/mappings/commands">Common Commands</a>
+    for the point-and-click editor instead.
+  </p>
+  <p class="hint">
+    <span style="display:block;">Built-in: <strong style="color:var(--text);"><%= templateSources.bundled.reduce((n, f) => n + f.families.length, 0) %> device(s)</strong></span>
+    <span style="display:block;">Fetched from GitHub: <strong style="color:var(--text);"><%= templateSources.synced.reduce((n, f) => n + f.families.length, 0) %> device(s)</strong></span>
+    <span style="display:block;">Your own (<code>device-templates/user/</code>): <strong style="color:var(--text);"><%= templateSources.user.reduce((n, f) => n + f.families.length, 0) %> device(s)</strong></span>
+    <% if (!templateSources.splitLayout) { %>
+      <span style="display:block; margin-top:0.2rem;">
+        Running the old flat <code>device-templates/</code> layout still (a bare/local run outside
+        Docker, or a Docker install that hasn't restarted since updating to this version yet) —
+        the built-in vs. your-own split above isn't active yet; everything above is read from that
+        one folder together.
+      </span>
+    <% } %>
+  </p>
+  <% const staleUserFiles = templateSources.user.flatMap((f) => f.families.filter((fam) => fam.possiblyStale).map((fam) => ({ file: f.file, key: fam.key }))); %>
+  <% if (staleUserFiles.length > 0) { %>
+    <div style="margin-bottom:1rem; padding:0.6rem 0.9rem; border-radius:var(--radius); background:var(--warning-soft); border:1px solid var(--warning);">
+      <p class="hint" style="color:var(--warning); margin:0 0 0.4rem;">
+        <strong><%= staleUserFiles.length %> file(s) in <code>device-templates/user/</code> look identical to a current built-in/GitHub-fetched device</strong>
+        — almost certainly a leftover copy from before the built-in/synced split existed, silently
+        shadowing whatever that device's built-in definition is updated to next. Safe to delete
+        from <code>user/</code> so the built-in (or a GitHub-synced update) takes over again.
+      </p>
+      <p class="hint" style="margin:0; display:flex; flex-wrap:wrap; gap:0.4rem;">
+        <% staleUserFiles.forEach((f) => { %>
+          <code style="font-size:0.8rem;"><%= f.file %></code>
+        <% }) %>
+      </p>
+    </div>
+  <% } %>
+  <% if (templateResult) { %>
+    <% if (templateResult.action === 'reload') { %>
+      <p class="hint" style="color: var(--success);">Reloaded — <%= templateResult.deviceCount %> device(s) loaded (<%= templateResult.familyCount %> with commands, <%= templateResult.dataFamilyCount %> with data points).</p>
+    <% } else if (templateResult.action === 'fetch-github') { %>
+      <% if (templateResult.error) { %>
+        <p class="hint" style="color: var(--error);">Could not fetch from GitHub — <%= templateResult.error %></p>
+      <% } else { %>
+        <p class="hint" style="color: var(--success);">
+          Fetched <%= templateResult.written.length %> file(s) from GitHub into <code>device-templates/synced/</code><% if (templateResult.failed.length > 0) { %>, <%= templateResult.failed.length %> skipped (failed to parse: <%= templateResult.failed.map((f) => f.file).join(', ') %>)<% } %>.
+          Now <%= templateResult.deviceCount %> device(s) loaded total (<%= templateResult.familyCount %> with commands, <%= templateResult.dataFamilyCount %> with data points).
+        </p>
+      <% } %>
+    <% } %>
+  <% } %>
+  <div class="row-actions" style="justify-content:flex-start;">
+    <form method="post" action="/admin/device-templates/fetch-github" style="margin:0;">
+      <button type="submit" class="btn-test"><%- icon('link') %> Fetch latest built-ins from GitHub</button>
+    </form>
+    <form method="post" action="/admin/device-templates/reload" style="margin:0;">
+      <button type="submit" class="btn-soft"><%- icon('refresh') %> Reload from disk</button>
+    </form>
+  </div>
 </div>
 
 <div class="card">

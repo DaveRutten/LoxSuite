@@ -10,16 +10,49 @@ DYNSEC_FILE=/mosquitto/config/dynamic-security.json
 
 mkdir -p /mosquitto/data /mosquitto/log
 
-# First boot only, on a fresh/empty bind-mounted device-templates volume — same "seed once, never
-# again" idempotency as mosquitto.conf above, just checked by directory emptiness instead of one
-# file's existence (there's no single fixed filename to check for here). The image's own copy at
-# device-templates-defaults (see Dockerfile) stays untouched either way, so it's always there to
-# reseed from if this volume is ever wiped.
+# One-time migration, on a bind-mounted device-templates volume that predates the user/synced
+# split (see deviceTemplates.js's getTemplateDirs): this volume used to get seeded ONCE, ever, from
+# the image's own built-in defaults, then never touched again — so any file already sitting here
+# permanently shadowed a newer built-in with the same name, forever, even after every later update.
+# The built-ins are read directly from device-templates-defaults now (see Dockerfile), never
+# copied in here at all, so this volume only ever needs to hold what the user actually put there.
+# Staged into user.migrating/ then renamed into user/ as one atomic last step (mv within the same
+# filesystem is atomic) specifically so this is safe to interrupt and retry: a kill mid-loop leaves
+# some files already moved (skipped on retry, since they're no longer at the top level) while
+# user/ still doesn't exist — so the whole block just runs again next boot instead of leaving a
+# half-migrated, never-finished state. Every step is `|| true` (like the old seed line already
+# was) so a read-only or unusually-permissioned bind mount degrades to "migration didn't run, the
+# built-ins still work" rather than `set -e` aborting the whole entrypoint — which would also take
+# mosquitto down with it.
 mkdir -p /device-templates
-if [ -z "$(ls -A /device-templates 2>/dev/null)" ]; then
-  echo "Seeding device-templates with built-in examples..."
-  cp /app/device-templates-defaults/* /device-templates/ 2>/dev/null || true
+if [ ! -d /device-templates/user ] && [ -n "$(ls -A /device-templates 2>/dev/null)" ]; then
+  echo "Migrating existing device-templates into device-templates/user/ ..."
+  mkdir -p /device-templates/user.migrating 2>/dev/null || true
+  moved=0
+  discarded=0
+  for f in /device-templates/*; do
+    base=$(basename "$f")
+    case "$base" in user|user.migrating|synced) continue ;; esac
+    # A file byte-for-byte identical to what this exact image already ships as a built-in adds
+    # nothing — it's just an old, never-edited seed copy, not a customization — so it's dropped
+    # here rather than migrated, instead of moving it in only to flag it as stale afterward (see
+    # deviceTemplates.js's listTemplateSources, which still catches this same case for anything
+    # already migrated before this check existed). Anything that DIFFERS still gets migrated,
+    # deliberately erring toward keeping it: a file that's stale because the built-in changed SINCE
+    # it was seeded looks exactly like a genuine customization from content alone — there's no way
+    # to tell them apart here, only the admin looking at it can.
+    if [ -f "/app/device-templates-defaults/$base" ] && cmp -s "$f" "/app/device-templates-defaults/$base"; then
+      rm -f "$f" 2>/dev/null || true
+      discarded=$((discarded + 1))
+      continue
+    fi
+    mv "$f" /device-templates/user.migrating/ 2>/dev/null || true
+    moved=$((moved + 1))
+  done
+  mv /device-templates/user.migrating /device-templates/user 2>/dev/null || true
+  echo "Migrated $moved existing device-template file(s) into device-templates/user/ (discarded $discarded identical to a current built-in) - see the Device templates card under Administration -> General: any file flagged there as identical to a current built-in is safe to delete so the built-in (or a GitHub-synced update) takes over again."
 fi
+mkdir -p /device-templates/user /device-templates/synced 2>/dev/null || true
 
 # First boot only, on a fresh/empty bind-mounted config volume (e.g. a brand new Unraid appdata
 # folder, or any host directory that's never had this stack running against it before). The image

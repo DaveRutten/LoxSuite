@@ -1,10 +1,15 @@
 # Device templates
 
-Drop a `.json` or `.xml` file in this folder to add (or override) a "Common commands"/"Common
-data" device on the Mappings → Commands page — read once at gateway startup (restart the container
-to pick up a new or edited file). One file = one device family. A file whose `key` matches an
-existing device (built-in or from another file) replaces that device's fields; anything else
-becomes a new entry in the picker.
+This folder (`gateway/device-templates/`, tracked in git) is where LoxSuite's own **built-in**
+device definitions live — it gets baked into every Docker image and isn't the place to add your
+own. **For a real deployment, drop your own `.json`/`.xml` file into the bind-mounted
+`device-templates/user/` folder next to your `docker-compose.yml`** (not this one) — see that
+folder's own README, or the shape below (identical format either way).
+
+One file = one device family. A file whose `key` matches an existing device (built-in, or one
+fetched from GitHub via Administration → General → Device templates) replaces that device's
+fields; anything else becomes a new entry in the picker. No restart needed to pick up a change —
+use the **Reload from disk** button on that same admin page.
 
 An invalid file (malformed JSON/XML, or missing a required field) is skipped with a message in the
 gateway's own log naming the file and the problem — it never takes the rest of the catalog down
