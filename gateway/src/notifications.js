@@ -469,10 +469,14 @@ async function checkMiniserverStatus(miniserver, newStatus) {
     if (state[key] === newStatus) continue;
     await updateRuleState(rule.id, { ...state, [key]: newStatus });
 
+    // 'auth_failed' reads oddly as raw status text ("is now auth_failed") next to the naturally
+    // readable 'online'/'offline' — a friendlier phrase just for the message body, without
+    // changing newStatus itself (still what's compared/stored in last_state above).
+    const statusPhrase = newStatus === 'auth_failed' ? 'rejecting its configured credentials' : newStatus;
     await fireRule(rule, {
-      title: `${miniserver.name}: ${newStatus}`,
-      message: `Miniserver "${miniserver.name}" (${miniserver.host}) is now ${newStatus}.`,
-      severity: newStatus === 'offline' ? 'critical' : 'info',
+      title: `${miniserver.name}: ${newStatus === 'auth_failed' ? 'Auth failed' : newStatus}`,
+      message: `Miniserver "${miniserver.name}" (${miniserver.host}) is now ${statusPhrase}.`,
+      severity: (newStatus === 'offline' || newStatus === 'auth_failed') ? 'critical' : 'info',
       fields: [{ label: 'Miniserver', value: miniserver.name }, { label: 'Host', value: miniserver.host }, { label: 'Status', value: newStatus }],
       sourceId: miniserver.id,
       sourceLabel: miniserver.name,

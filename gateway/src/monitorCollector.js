@@ -1,7 +1,7 @@
 const db = require('./db');
 const { fetchMiniserver } = require('./loxone');
 const { ensureConnection, getLiveValue, resetConnection } = require('./loxoneWebSocket');
-const { checkMonitorThreshold, checkThresholdLadderNotify } = require('./notifications');
+const { checkMonitorThreshold, checkThresholdLadderNotify, checkMiniserverStatus } = require('./notifications');
 const { parseHeapStatus } = require('./format');
 
 // Shared between the Add-monitor form, the Miniservers page's "Add to Dashboard"/"Add to Monitor"
@@ -198,9 +198,31 @@ async function findOrCreateDiagMonitor(miniserver, diagField, labelOverride) {
   return monitorId;
 }
 
+// A 401/403 from a Miniserver is deterministic — the exact same request will fail identically
+// every single time until the underlying Loxone user account is fixed (re-enabled, password
+// reset, ...), unlike a timeout/network error, which may well be transient. Recording this here
+// (the same `miniservers.status` column healthcheck.js's own checkMiniserver owns, so the
+// Miniservers page badge and its automatic check-loop skip both see it immediately, not up to 60s
+// later on the next healthcheck tick) stops every one of this Miniserver's monitors from being
+// hammered with doomed requests forever — see the `status === 'auth_failed'` guard in
+// pollLoxoneMonitor below. The only way out is the user explicitly asking again, via the
+// Miniservers page's "Test now" or by saving new settings — both call checkMiniserver directly,
+// bypassing this status entirely, so they always get a real, fresh attempt.
+async function markMiniserverAuthFailed(miniserver, message) {
+  if (miniserver.status === 'auth_failed') return;
+  await db.prepare('UPDATE miniservers SET status = ?, last_error = ?, last_checked_at = ? WHERE id = ?')
+    .run('auth_failed', message, new Date().toISOString(), miniserver.id);
+  await checkMiniserverStatus(miniserver, 'auth_failed');
+}
+
 async function pollLoxoneMonitor(monitor) {
   const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(monitor.miniserver_id);
   if (!miniserver) return;
+  // Already known to be rejecting these exact credentials on every request — retrying would fail
+  // identically every time until the user fixes the account and re-tests/re-saves the Miniserver,
+  // so there's nothing productive to do here, not even worth touching the live websocket cache
+  // (ensureConnection would just re-attempt the same doomed handshake).
+  if (miniserver.status === 'auth_failed') return;
 
   // The live websocket cache (loxoneWebSocket.js) is checked first and is right almost all of the
   // time — it's not just faster than an HTTP round trip, it's the ONLY way most states are
@@ -219,6 +241,10 @@ async function pollLoxoneMonitor(monitor) {
     const res = await fetchMiniserver(miniserver, `/jdev/sps/io/${encodeURIComponent(monitor.loxone_uuid)}`, {
       timeoutMs: 8000,
     });
+    if (res.status === 401 || res.status === 403) {
+      await markMiniserverAuthFailed(miniserver, `Miniserver rejected the configured credentials (HTTP ${res.status})`);
+      return;
+    }
     if (!res.ok) throw new Error(`Miniserver responded with HTTP ${res.status}`);
     const body = await res.json();
     const value = body?.LL?.value;

@@ -13,8 +13,8 @@
 <% if (liveStatus) { %>
   <p class="hint" id="live-status-hint" style="margin-bottom:1.25rem;">
     <strong>Live connection:</strong>
-    <span class="badge badge-live <%= liveStatus.status === 'open' ? 'badge-ok' : liveStatus.status === 'connecting' ? 'badge-neutral' : 'badge-off' %>">
-      <%= liveStatus.status === 'open' ? 'Connected' : liveStatus.status === 'connecting' ? 'Connecting…' : 'Not connected' %>
+    <span class="badge badge-live <%= liveStatus.status === 'open' ? 'badge-ok' : liveStatus.status === 'connecting' ? 'badge-neutral' : liveStatus.status === 'auth_failed' ? 'badge-warning' : 'badge-off' %>">
+      <%= liveStatus.status === 'open' ? 'Connected' : liveStatus.status === 'connecting' ? 'Connecting…' : liveStatus.status === 'auth_failed' ? 'Auth failed' : 'Not connected' %>
     </span>
     <span id="live-status-detail">
       <% if (liveStatus.status === 'open') { %>&mdash; <%= liveStatus.valueCount %> values live<% } %>
@@ -601,8 +601,8 @@
         fetch('/live-data/status?miniserver_id=<%= miniserverId %>')
           .then(function (r) { return r.json(); })
           .then(function (s) {
-            badge.className = 'badge ' + (s.status === 'open' ? 'badge-ok' : s.status === 'connecting' ? 'badge-neutral' : 'badge-off');
-            badge.textContent = s.status === 'open' ? 'Connected' : s.status === 'connecting' ? 'Connecting…' : 'Not connected';
+            badge.className = 'badge ' + (s.status === 'open' ? 'badge-ok' : s.status === 'connecting' ? 'badge-neutral' : s.status === 'auth_failed' ? 'badge-warning' : 'badge-off');
+            badge.textContent = s.status === 'open' ? 'Connected' : s.status === 'connecting' ? 'Connecting…' : s.status === 'auth_failed' ? 'Auth failed' : 'Not connected';
             detail.textContent = s.status === 'open' ? ('— ' + s.valueCount + ' values live') : (s.error ? '— ' + s.error : '');
           })
           .catch(function () { /* leave the last known status showing */ });

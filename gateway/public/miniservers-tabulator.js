@@ -21,7 +21,7 @@
 
   function statusFormatter(cell) {
     var v = cell.getRow().getData();
-    var cls = v.status === 'online' ? 'badge-ok' : v.status === 'offline' ? 'badge-off' : 'badge-neutral';
+    var cls = v.status === 'online' ? 'badge-ok' : v.status === 'offline' ? 'badge-off' : v.status === 'auth_failed' ? 'badge-warning' : 'badge-neutral';
     var wrap = document.createElement('span');
     wrap.className = 'badge badge-live ' + cls;
     wrap.textContent = v.statusLabel;

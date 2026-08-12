@@ -42,8 +42,8 @@
     </div>
   </td>
   <td data-ms-status-id="<%= ms.id %>">
-    <% const badgeClass = ms.status === 'online' ? 'badge-ok' : ms.status === 'offline' ? 'badge-off' : 'badge-neutral'; %>
-    <% const badgeText = ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown'; %>
+    <% const badgeClass = ms.status === 'online' ? 'badge-ok' : ms.status === 'offline' ? 'badge-off' : ms.status === 'auth_failed' ? 'badge-warning' : 'badge-neutral'; %>
+    <% const badgeText = ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : ms.status === 'auth_failed' ? 'Auth failed' : 'Unknown'; %>
     <span class="badge badge-live <%= badgeClass %>"><%= badgeText %></span>
   </td>
   <td>

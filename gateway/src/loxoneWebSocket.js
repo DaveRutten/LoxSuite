@@ -97,7 +97,7 @@ class MiniserverLiveConnection {
       const waiters = this.waiters;
       this.waiters = [];
       waiters.forEach((w) => w.resolve({ ok: true }));
-    } else if (status === 'error' || status === 'closed') {
+    } else if (status === 'error' || status === 'closed' || status === 'auth_failed') {
       const waiters = this.waiters;
       this.waiters = [];
       waiters.forEach((w) => w.resolve({ ok: false, error: this.lastError }));
@@ -214,7 +214,14 @@ class MiniserverLiveConnection {
       );
       const tokenResp = await tokenPromise;
       const tokenCode = String(tokenResp?.LL?.Code ?? tokenResp?.LL?.code);
-      if (tokenCode !== '200') throw new Error(`Authentication failed (code ${tokenCode})`);
+      if (tokenCode !== '200') {
+        // Flagged (rather than just a plain Error) so the catch below can tell this apart from a
+        // network-level handshake failure — this one is deterministic, the exact same credentials
+        // rejection would happen again immediately on retry, unlike a genuine connectivity hiccup.
+        const err = new Error(`Authentication failed (code ${tokenCode})`);
+        err.authFailed = true;
+        throw err;
+      }
 
       const enablePromise = waitForLL((b) => b?.LL?.control?.includes('enablebinstatusupdate'));
       this.send('jdev/sps/enablebinstatusupdate');
@@ -238,9 +245,18 @@ class MiniserverLiveConnection {
       });
     } catch (err) {
       console.error(`[loxoneWebSocket] Miniserver ${this.miniserver.id} handshake failed:`, err.message);
-      this.updateStatus('error', err.message);
       try { this.ws?.close(); } catch { /* already closing */ }
-      this.scheduleReconnect();
+      if (err.authFailed) {
+        // Deliberately no scheduleReconnect() here — the exact same credentials would be
+        // rejected again immediately, forever. This connection object just sits idle in
+        // 'auth_failed' from here on; ensureConnection() only ever creates a NEW one when none
+        // exists yet, so it won't touch this one again until resetConnection() (called from
+        // saving the Miniserver's settings or its "Test now" action) destroys it outright.
+        this.updateStatus('auth_failed', err.message);
+      } else {
+        this.updateStatus('error', err.message);
+        this.scheduleReconnect();
+      }
     }
   }
 

@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.15.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.16.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -183,7 +183,7 @@ unread badge, same as opening the popover already does on its own.
   <img src="docs/screenshots/notification-center-light.png" alt="The notification center popover open, showing recent events with severity-colored bars">
 </picture>
 
-*(Demo data.)*
+
 
 ### Support LoxSuite
 
@@ -300,7 +300,18 @@ background on an interval you set (Settings, default 60s) and shows an Online/Of
 badge plus its firmware version; **Test now** runs that check immediately, plus a **Loxone API**
 line specifically confirming the response actually looks like a Loxone Miniserver's own API
 (distinct from the plain Local/External reachability checks, which only prove *something*
-answered HTTP there). A **Generation** column (Miniserver Gen 1/Gen 2, Miniserver Go Gen 1/Gen 2, or
+answered HTTP there).
+
+A Miniserver that's reachable but rejecting its configured credentials (the account was disabled,
+its password changed on the Miniserver side, ...) gets its own **Auth failed** badge instead of a
+plain Offline — reachable and unreachable have different, useful meanings here, and unlike a
+Miniserver that's genuinely offline (worth quietly re-checking every cycle in case it comes back
+on its own), a credentials rejection won't resolve itself. Both the background check and Monitor
+polling stop retrying it automatically the moment this happens, rather than hammering it with the
+exact same doomed request forever; **Test now** (or saving new credentials) always retries for
+real regardless, since that's an explicit ask.
+
+A **Generation** column (Miniserver Gen 1/Gen 2, Miniserver Go Gen 1/Gen 2, or
 Compact) reads `msInfo.miniserverType` from the structure file once per Miniserver — confirmed
 against Loxone's own Structure File documentation — and never needs fetching again, since a
 physical device's generation doesn't change. Editing a Miniserver never displays its stored

@@ -153,10 +153,22 @@ async function checkMiniserver(miniserver) {
   const now = new Date().toISOString();
 
   try {
-    // Any HTTP response (even 401/404) means the Miniserver is reachable.
-    // Only a network-level failure (timeout, refused, DNS) counts as offline
-    // — and fetchMiniserver already tries external_url as a fallback for that case.
-    await fetchMiniserver(miniserver, '/', { timeoutMs: TIMEOUT_MS });
+    // Any HTTP response (even 404) means the Miniserver is reachable — only a network-level
+    // failure (timeout, refused, DNS) counts as offline, and fetchMiniserver already tries
+    // external_url as a fallback for that case. 401/403 is the one exception: reachable, but
+    // rejecting the configured credentials outright, which every other endpoint below would too
+    // (there's nothing to gain from still trying firmware/PLC-state/stats), and — unlike a
+    // genuinely offline Miniserver, which is worth quietly re-checking every cycle in case it
+    // comes back on its own — this is deterministic and won't resolve itself, so it gets its own
+    // status entirely (see markMiniserverAuthFailed in monitorCollector.js for the retry-storm
+    // this specifically prevents) rather than folding into plain 'offline'.
+    const reachRes = await fetchMiniserver(miniserver, '/', { timeoutMs: TIMEOUT_MS });
+    if (reachRes.status === 401 || reachRes.status === 403) {
+      await db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = ? WHERE id = ?')
+        .run('auth_failed', now, `Miniserver rejected the configured credentials (HTTP ${reachRes.status})`, miniserver.id);
+      await checkMiniserverStatus(miniserver, 'auth_failed');
+      return;
+    }
     const firmwareVersion = await fetchFirmwareVersion(miniserver);
     const plcState = await fetchPlcState(miniserver);
     const { cpuLoad, heapStatus, numTasks, firmwareDate } = await fetchSystemStats(miniserver);
@@ -198,7 +210,12 @@ async function checkMiniserver(miniserver) {
 
 async function checkAllMiniservers() {
   const miniservers = await db.prepare('SELECT * FROM miniservers').all();
-  await Promise.all(miniservers.map(checkMiniserver));
+  // A Miniserver already known to be rejecting its configured credentials stays that way until
+  // the user does something about it — re-testing automatically every cycle would just repeat the
+  // exact same rejection forever. checkMiniserver() itself is left able to run unconditionally
+  // (called directly, bypassing this filter, from the Miniservers page's "Test now" and from
+  // saving a Miniserver's settings) — this filter only affects the automatic recurring sweep.
+  await Promise.all(miniservers.filter((ms) => ms.status !== 'auth_failed').map(checkMiniserver));
   // After every Miniserver's own row has this cycle's fresh firmware_version/plc_state — needs
   // the whole set settled first, since it compares pairs across two independent per-Miniserver
   // checks above rather than reacting to any single one's own result.

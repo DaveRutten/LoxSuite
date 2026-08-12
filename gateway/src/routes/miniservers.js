@@ -98,7 +98,7 @@ router.get('/data.json', asyncHandler(async (req, res) => {
       id: ms.id,
       diagFullyMonitored: (diagMonitorCounts.get(ms.id) || 0) >= DIAG_MONITOR_BUNDLE_FIELDS.length,
       status: ms.status,
-      statusLabel: ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : 'Unknown',
+      statusLabel: ms.status === 'online' ? 'Online' : ms.status === 'offline' ? 'Offline' : ms.status === 'auth_failed' ? 'Auth failed' : 'Unknown',
       stateLabel: plc ? plc[0] : null,
       stateBadgeClass: plc ? plc[1] : null,
       firmwareVersion: ms.firmware_version,
@@ -344,6 +344,13 @@ router.post('/:id/delete', requirePermission('miniservers', 'edit'), asyncHandle
 router.post('/:id/check', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
   const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
   if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
+
+  // A prior auth rejection leaves its live connection object sitting inertly in 'auth_failed'
+  // (see loxoneWebSocket.js) — ensureConnection() only creates a fresh one when none exists yet,
+  // so testLiveConnection() below would otherwise just report that same stale rejection straight
+  // back without actually retrying anything. "Test now" is exactly the explicit user action this
+  // whole flow exists to wait for, so it always gets a real, fresh attempt.
+  resetLiveConnection(miniserver.id);
 
   const [, detail, live] = await Promise.all([
     checkMiniserver(miniserver),

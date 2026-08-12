@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.16.0-alpha.1] - 2026-08-12
+
+### Added
+- Miniservers: a Miniserver that's reachable but rejecting its configured credentials (HTTP
+  401/403 — the Loxone user account was disabled, its password changed on the Miniserver side,
+  ...) now gets its own **Auth failed** badge, distinct from a plain Offline, on the Miniservers
+  list, the Home dashboard's Miniservers widget, and Live Data's connection status.
+
+### Fixed
+- The 0.15.0-alpha.1 poll-storm fix bounded *concurrency*, but a Miniserver rejecting credentials
+  outright was still retried automatically forever — every poll cycle, every healthcheck cycle,
+  every websocket reconnect — even though the exact same request would fail identically every
+  single time until the account itself is fixed, unlike a transient network blip. Monitor polling,
+  the background healthcheck sweep, and the live websocket's own reconnect loop now all stop
+  retrying a Miniserver the moment a 401/403 is seen, and only try again once the user explicitly
+  asks — the Miniservers page's **Test now**, or saving that Miniserver's settings.
+
 ## [0.15.0-alpha.1] - 2026-08-12
 
 ### Added
