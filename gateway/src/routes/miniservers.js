@@ -397,8 +397,9 @@ router.get('/:id/mcp/authorize', requirePermission('miniservers', 'edit'), async
     // interactive browser round trip is actually needed. That path used to leave this request with
     // no response ever sent — the click would just hang forever with no error, no redirect,
     // nothing — since res.headersSent was the only signal telling the two cases apart, and nothing
-    // here ever checked it.
-    await mcpClient.runMcpAuthFlow(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
+    // here ever checked it. runMcpAuthFlowWithTimeout also bounds the whole thing at a fixed
+    // ceiling — see its own comment for why that's a separate concern from the above.
+    await mcpClient.runMcpAuthFlowWithTimeout(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
     if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit?authorized=1`);
   } catch (err) {
     await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
@@ -427,10 +428,9 @@ router.get('/:id/mcp/restart-login', requirePermission('miniservers', 'edit'), a
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const provider = new mcpClient.LoxoneOAuthProvider({ miniserver, baseUrl, session: req.session, res, username: req.user.username });
   try {
-    // Same "auth() can resolve without ever calling redirectToAuthorization()" case the plain
-    // Authorize route above guards against — normally moot here (tokens were just wiped, so there's
-    // nothing to silently refresh), but cheap insurance against res never getting a response.
-    await mcpClient.runMcpAuthFlow(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
+    // Same "auth() can resolve without ever calling redirectToAuthorization(), and the whole thing
+    // needs a hard ceiling regardless" reasoning as the plain Authorize route above.
+    await mcpClient.runMcpAuthFlowWithTimeout(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
     if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit`);
   } catch (err) {
     await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
@@ -452,7 +452,10 @@ router.get('/:id/mcp/callback', requirePermission('miniservers', 'edit'), asyncH
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const provider = new mcpClient.LoxoneOAuthProvider({ miniserver, baseUrl, session: req.session, res, username: req.user.username });
   try {
-    await mcpClient.runMcpAuthFlow(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver), authorizationCode: req.query.code });
+    // Same hard ceiling as the other two MCP OAuth routes — this one's own unconditional
+    // res.redirect() below would otherwise never run either, on the same kind of network-level
+    // hang (see runMcpAuthFlowWithTimeout's own comment).
+    await mcpClient.runMcpAuthFlowWithTimeout(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver), authorizationCode: req.query.code });
     delete req.session.mcpOAuth;
     mcpClient.resetMcpClient(miniserver.id);
     await logSystemEvent(`"${req.user.username}" authorized the AI Assistant's MCP connection to Miniserver "${miniserver.name}".`);

@@ -243,6 +243,27 @@ async function testConnection(miniserver) {
   }
 }
 
+// The one-time authorize/re-authorize/restart-login routes all call runMcpAuthFlow() directly —
+// the SDK's own auth() orchestrator, which makes its own network calls (OAuth discovery, Dynamic
+// Client Registration, a token refresh) with no timeout of its own. Verified against a real
+// Miniserver that a SUCCESSFUL run completes in under a second; if it's instead silently hanging
+// (packets dropped rather than a clean connection refusal — plausible on a different host's
+// network path to the Miniserver/Loxone's cloud than the one this was tested from), nothing ever
+// settles that promise, and the caller's own `await` waits forever right along with it — no
+// response, no error, nothing to show the user, no matter how long they wait. This bounds that at
+// a fixed ceiling so the request always eventually finishes one way or the other.
+const AUTH_FLOW_TIMEOUT_MS = 25000;
+
+function runMcpAuthFlowWithTimeout(provider, opts) {
+  return Promise.race([
+    runMcpAuthFlow(provider, opts),
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error(`Timed out after ${AUTH_FLOW_TIMEOUT_MS / 1000}s waiting for the Miniserver/Loxone's cloud service to respond — check that this container can actually reach it over the network.`)),
+      AUTH_FLOW_TIMEOUT_MS
+    )),
+  ]);
+}
+
 async function startMcpClients() {
   async function scan() {
     const rows = await db.prepare('SELECT * FROM miniservers WHERE ai_enabled = 1 AND mcp_access_token IS NOT NULL').all();
@@ -272,4 +293,5 @@ module.exports = {
   getStatus,
   testConnection,
   runMcpAuthFlow,
+  runMcpAuthFlowWithTimeout,
 };

@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.3-alpha.1] - 2026-08-13
+
+### Fixed
+- **Authorize/Re-authorize/Start new login could still hang forever on some hosts**, even after
+  0.18.2-alpha.1. That fix only covered the case where the OAuth SDK's `auth()` call *resolves*
+  without redirecting; it did nothing for a network path where the request is silently dropped
+  (packets never come back at all, rather than a clean refusal) — the underlying call has no
+  timeout of its own, so nothing ever settled and the click just sat there with zero error, zero
+  log output, forever. Now bounded at a hard 25-second ceiling: a genuine network-reachability
+  problem now surfaces as a clear "Timed out... check that this container can actually reach it
+  over the network" error under "Last MCP connection error" instead of hanging silently.
+
 ## [0.18.2-alpha.1] - 2026-08-13
 
 ### Fixed
