@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.9-alpha.1] - 2026-08-13
+
+### Fixed
+- **Backups silently stopped landing on persistent storage after unsetting `DB_PATH`** (the
+  reasonable thing to do once switching from SQLite to Postgres/MySQL, since nothing about the
+  actual DB connection needs it then) — `BACKUP_DIR` used to be derived from `DB_PATH`'s own
+  directory, so once that variable was gone, every backup silently fell back to a path inside the
+  container's own writable layer instead of the bind-mounted `/data` volume. `createBackup()` still
+  reported success (a real, downloadable file existed — right up until the next deploy/recreate
+  wiped it along with the rest of that layer, with nothing anywhere having said so). `BACKUP_DIR`
+  is now its own setting (`/data/backups` by default, or `BACKUP_DIR` to override), completely
+  independent of `DB_PATH`/the DB backend. **If you run Postgres/MySQL with `DB_PATH` unset: check
+  whether your actual backups since that switch still exist under `/data/backups` on the host — if
+  they don't, they were never really there.**
+- Manual and scheduled backups now log to Logs > System (success and failure alike) — previously
+  silent there, visible only via a configured notification channel (if any) or the Backups page's
+  own "Last run" line.
+
 ## [0.18.8-alpha.1] - 2026-08-13
 
 ### Added

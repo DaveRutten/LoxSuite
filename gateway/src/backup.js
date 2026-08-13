@@ -6,6 +6,7 @@ const AdmZip = require('adm-zip');
 const cronParser = require('cron-parser');
 const db = require('./db');
 const { notifyBackupFailed, notifyBackupSucceeded } = require('./notifications');
+const { logSystemEvent } = require('./auditLog');
 const { encrypt, decrypt } = require('./secretCrypto');
 const sqliteEngine = require('./backup/engines/sqlite');
 const postgresEngine = require('./backup/engines/postgres');
@@ -13,11 +14,22 @@ const mysqlEngine = require('./backup/engines/mysql');
 
 // Recomputed independently rather than imported from db.js, same convention already used by
 // mosquittoLog.js/loxone.js for their own env-configured paths (see MOSQUITTO_LOG_PATH there) —
-// db.js exports the open Database instance itself, not its path. Stays meaningful even on Postgres,
-// where there's no gateway.db file at all: BACKUP_DIR (everything under it) is still exactly where
-// backups/staged restores live either way.
+// db.js exports the open Database instance itself, not its path. Only meaningful for SQLite (the
+// pending-restore staging file below has to sit next to the real gateway.db) — on Postgres/MySQL
+// this is never actually a real file on disk at all, and DB_PATH itself is often left unset there
+// entirely (nothing else needs it once the DB connection is over the network instead).
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'gateway.db');
-const BACKUP_DIR = path.join(path.dirname(DB_PATH), 'backups');
+// Deliberately its OWN setting, not derived from DB_PATH's directory — backups belong under the
+// one persistent volume every deployment already mounts (see docker-compose.yml/the Dockerfile's
+// own VOLUME ["/data"]/the Unraid template's Data path) regardless of DB backend, and regardless of
+// whether DB_PATH itself happens to be set. It used to be derived from DB_PATH's own directory,
+// which quietly broke the moment DB_PATH got commented out (a completely reasonable thing to do
+// when switching to Postgres/MySQL, since nothing about the actual DB connection needs it then):
+// every backup after that silently landed inside the container's own writable layer instead of
+// this bind mount — createBackup() still succeeded (no error, "ok" status, right there in the UI),
+// the file was real and downloadable right up until the next deploy/recreate, and then gone for
+// good, with nothing anywhere having ever said so.
+const BACKUP_DIR = process.env.BACKUP_DIR || '/data/backups';
 // One pending-restore staging path per backend — see each engine's own validateAndStage()/db/
 // index.js's initSqlite()/initPostgres() for how each side of the handoff picks the matching one.
 // The SQLite one has to sit next to the live db FILE (db/index.js's initSqlite() swaps it in before
@@ -439,12 +451,14 @@ async function scheduleNext() {
     if (isActualRun) {
       const settingsNow = await getSettings();
       try {
-        await createBackup({ includeMqttConfig: !!settingsNow.include_mqtt_config, reason: 'scheduled' });
+        const result = await createBackup({ includeMqttConfig: !!settingsNow.include_mqtt_config, reason: 'scheduled' });
         await updateSettings({ last_run_at: new Date().toISOString(), last_status: 'ok', last_error: null });
         await notifyBackupSucceeded('scheduled backup');
+        await logSystemEvent(`Scheduled backup completed (${result.filename}).`);
       } catch (err) {
         await updateSettings({ last_run_at: new Date().toISOString(), last_status: 'error', last_error: err.message });
         await notifyBackupFailed(err.message, 'scheduled backup');
+        await logSystemEvent(`Scheduled backup failed: ${err.message}`);
       }
     }
     scheduleNext();

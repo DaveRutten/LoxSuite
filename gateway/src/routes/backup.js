@@ -4,6 +4,7 @@ const multer = require('multer');
 const backup = require('../backup');
 const db = require('../db');
 const { notifyBackupFailed, notifyBackupSucceeded } = require('../notifications');
+const { logSystemEvent } = require('../auditLog');
 const { verifyCsrfToken } = require('../middleware/csrf');
 const asyncHandler = require('../middleware/asyncHandler');
 
@@ -98,13 +99,15 @@ router.post('/rclone/test', asyncHandler(async (req, res) => {
 router.post('/run', asyncHandler(async (req, res) => {
   try {
     const settings = await backup.getSettings();
-    await backup.createBackup({ includeMqttConfig: !!settings.include_mqtt_config, reason: 'manual' });
+    const result = await backup.createBackup({ includeMqttConfig: !!settings.include_mqtt_config, reason: 'manual' });
     await backup.updateSettings({ last_run_at: new Date().toISOString(), last_status: 'ok', last_error: null });
     await notifyBackupSucceeded('manual backup');
+    await logSystemEvent(`"${req.user.username}" ran a manual backup (${result.filename}).`);
     res.redirect('/admin/backup');
   } catch (err) {
     await backup.updateSettings({ last_run_at: new Date().toISOString(), last_status: 'error', last_error: err.message });
     await notifyBackupFailed(err.message, 'manual backup');
+    await logSystemEvent(`Manual backup failed: ${err.message}`);
     await renderPage(res, { error: `Backup failed: ${err.message}` });
   }
 }));
