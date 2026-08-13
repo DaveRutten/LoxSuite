@@ -7,6 +7,9 @@ set -e
 
 MOSQUITTO_CONF=/mosquitto/config/mosquitto.conf
 DYNSEC_FILE=/mosquitto/config/dynamic-security.json
+TLS_DIR=/data/tls
+TLS_CERT="$TLS_DIR/cert.pem"
+TLS_KEY="$TLS_DIR/key.pem"
 
 mkdir -p /mosquitto/data /mosquitto/log
 
@@ -97,6 +100,21 @@ fi
 # UID (a different base image, so "mosquitto" in /etc/passwd didn't mean the same number there).
 chown -R mosquitto:mosquitto /mosquitto/config /mosquitto/data /mosquitto/log
 chmod 600 "$DYNSEC_FILE"
+
+# First boot only — self-signed, used solely so LoxSuite can register an https:// redirect_uri for
+# the AI Assistant's Loxone MCP OAuth flow: Loxone's cloud rejects any redirect_uri that's neither
+# HTTPS nor literally http://localhost (see mcpClient.js), which a typical LAN-IP-over-plain-HTTP
+# deployment is neither. Loxone's registration step only checks the redirect_uri's scheme, never
+# the cert's validity, so self-signed is enough — a browser shows a one-time warning when the
+# callback itself actually loads. Stored on the bind-mounted /data volume (not /mosquitto/config,
+# unrelated to Mosquitto), so it's generated once, ever, and survives every later restart with the
+# same cert rather than invalidating itself on every deploy.
+if [ ! -f "$TLS_CERT" ] || [ ! -f "$TLS_KEY" ]; then
+  echo "Generating a self-signed TLS certificate for the optional HTTPS listener..."
+  mkdir -p "$TLS_DIR"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout "$TLS_KEY" -out "$TLS_CERT" -subj "/CN=loxsuite" 2>/dev/null
+  chmod 600 "$TLS_KEY"
+fi
 
 mosquitto -c "$MOSQUITTO_CONF" &
 MOSQ_PID=$!

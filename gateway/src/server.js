@@ -41,6 +41,8 @@ const express = require('express');
 const session = require('express-session');
 const KnexSessionStore = require('connect-session-knex')(session);
 const path = require('path');
+const https = require('https');
+const fs = require('fs');
 
 const db = require('./db');
 const mqttClient = require('./mqttClient');
@@ -124,6 +126,23 @@ async function main() {
   await startSqliteImportCheck();
 
   const app = express();
+
+  // Opt-in only — Express's own req.protocol/req.ip trust nothing by default, so a reverse proxy
+  // or tunnel (Cloudflare Tunnel, Nginx, Traefik...) that terminates TLS and forwards over plain
+  // HTTP internally leaves every request looking like plain HTTP with the proxy's own address as
+  // the client, no matter what the real visitor used. That silently breaks two things: SSO/MCP
+  // OAuth callback URLs get built as http://... (most identity providers, including Loxone's
+  // cloud, reject a redirect_uri that isn't HTTPS — see mcpClient.js), and the SSO break-glass
+  // local-login exemption (see network.js's isPrivateNetworkRequest) looks permanently "private"
+  // since the proxy's own address is always local, silently defeating that check for every real
+  // remote visitor. Any value Express's own trust-proxy setting accepts works here — e.g. "1" for
+  // exactly one hop back (most single-proxy/tunnel setups), "loopback"/"uniquelocal" to trust any
+  // proxy on a private address, or a specific proxy IP/CIDR. Left unset (the default), nothing
+  // about how requests are read changes from today.
+  if (process.env.TRUST_PROXY) {
+    const trustProxy = process.env.TRUST_PROXY;
+    app.set('trust proxy', /^-?\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
+  }
 
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'views'));
@@ -319,6 +338,21 @@ async function main() {
   app.listen(port, () => {
     console.log(`LoxSuite listening on port ${port}.`);
   });
+
+  // Self-signed, bootstrapped once by docker-entrypoint.sh into /data/tls — exists purely so
+  // Authorize on a Miniserver's edit page can be done over HTTPS (via this port, not the plain-HTTP
+  // one above) instead of hitting Loxone cloud's "redirect_uri must be HTTPS or literally
+  // http://localhost" rejection (see mcpClient.js). Not required for anything else LoxSuite does;
+  // silently skipped if the cert somehow isn't there (e.g. a host without openssl, or /data not
+  // writable) rather than failing boot over a feature nothing else depends on.
+  const tlsCertPath = '/data/tls/cert.pem';
+  const tlsKeyPath = '/data/tls/key.pem';
+  if (fs.existsSync(tlsCertPath) && fs.existsSync(tlsKeyPath)) {
+    const httpsPort = process.env.HTTPS_PORT || 5583;
+    https.createServer({ cert: fs.readFileSync(tlsCertPath), key: fs.readFileSync(tlsKeyPath) }, app).listen(httpsPort, () => {
+      console.log(`LoxSuite also listening on HTTPS port ${httpsPort} (self-signed — only needed for Loxone MCP authorization).`);
+    });
+  }
 }
 
 process.on('SIGTERM', () => {

@@ -45,6 +45,7 @@
   <Requires/>
 
   <Config Name="WebUI Port" Target="5582" Default="5582" Mode="tcp" Description="Web UI / HTTP port" Type="Port" Display="always" Required="true" Mask="false">5582</Config>
+  <Config Name="WebUI HTTPS Port" Target="5583" Default="5583" Mode="tcp" Description="Self-signed HTTPS - only needed to Authorize a Miniserver's AI Assistant MCP connection, since Loxone's cloud rejects a plain-HTTP-over-LAN redirect_uri. Visit this port instead of the WebUI Port above just for that one step; everything else works the same over either port" Type="Port" Display="always" Required="true" Mask="false">5583</Config>
   <Config Name="MQTT Port" Target="1883" Default="1883" Mode="tcp" Description="MQTT broker port - point every device/integration that publishes or subscribes directly at this" Type="Port" Display="always" Required="true" Mask="false">1883</Config>
   <Config Name="MQTT WebSocket Port" Target="9001" Default="9001" Mode="tcp" Description="MQTT-over-WebSocket port - for browser-based MQTT clients/dashboards that can't open a raw TCP socket. Same broker, same accounts/ACLs as the plain MQTT port above" Type="Port" Display="always" Required="true" Mask="false">9001</Config>
   <Config Name="Loxone UDP Port" Target="11885" Default="11885" Mode="udp" Description="Port the gateway listens on for inbound Loxone Virtual UDP Output - set this same port in Loxone Config's Virtual UDP Output" Type="Port" Display="always" Required="true" Mask="false">11885</Config>
@@ -69,5 +70,7 @@
   <Config Name="DEVICE_TEMPLATES_PATH" Target="DEVICE_TEMPLATES_PATH" Default="/device-templates" Mode="" Description="Path to the device templates directory inside the container - must match the container-side value of the Device Templates mapping above" Type="Variable" Display="advanced" Required="false" Mask="false">/device-templates</Config>
   <Config Name="LOXONE_UDP_PORT" Target="LOXONE_UDP_PORT" Default="11885" Mode="" Description="Must match the container-side value of the Loxone UDP Port mapping above" Type="Variable" Display="advanced" Required="false" Mask="false">11885</Config>
   <Config Name="PORT" Target="PORT" Default="5582" Mode="" Description="Port the web UI listens on inside the container - must match the container-side value of the WebUI Port mapping above" Type="Variable" Display="advanced" Required="false" Mask="false">5582</Config>
+  <Config Name="HTTPS_PORT" Target="HTTPS_PORT" Default="5583" Mode="" Description="Port the self-signed HTTPS listener listens on inside the container - must match the container-side value of the WebUI HTTPS Port mapping above" Type="Variable" Display="advanced" Required="false" Mask="false">5583</Config>
+  <Config Name="TRUST_PROXY" Target="TRUST_PROXY" Default="" Mode="" Description="Only set this if LoxSuite sits behind a reverse proxy/tunnel (Cloudflare Tunnel, Nginx Proxy Manager, Traefik...) that terminates HTTPS and forwards over plain HTTP internally - e.g. 1 for a single-hop proxy/tunnel, or uniquelocal to trust any proxy on a private address. Leave empty if you access LoxSuite directly" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>
 

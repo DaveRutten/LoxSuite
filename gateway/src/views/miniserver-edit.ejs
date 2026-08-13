@@ -145,6 +145,10 @@
       leave it off for a read-only assistant that can only report on the installation.
       <strong>Save first</strong> if you just changed anything above &mdash; Authorize navigates
       away from this page without saving unsaved changes, same as Test below.
+      <strong>Authorize over HTTPS</strong>: Loxone's cloud rejects the login redirect unless
+      you're visiting LoxSuite over HTTPS (or literally at http://localhost) &mdash; open this same
+      page at <code>https://&lt;this host&gt;:5583/...</code> (self-signed; your browser will show a
+      one-time certificate warning) before clicking Authorize/Re-authorize/Start new login.
     </p>
     <% if (miniserver.mcp_last_error) { %>
       <%

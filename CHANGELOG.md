@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.8-alpha.1] - 2026-08-13
+
+### Added
+- **Self-signed HTTPS listener**, on port 5583 by default (`HTTPS_PORT`), bootstrapped once by
+  docker-entrypoint.sh into `/data/tls` and never regenerated afterward. Root cause finally traced
+  (via the 0.18.6/0.18.7 diagnostics, now removed) for the AI Assistant's MCP Authorize failing
+  outright on some deployments: Loxone's cloud rejects any OAuth redirect_uri that isn't HTTPS or
+  literally `http://localhost` — a Miniserver reached over a plain-HTTP LAN address (the normal
+  case for a self-hosted instance with no reverse proxy) will never satisfy that. Visiting the
+  Miniserver edit page at `https://<host>:5583/...` instead of the usual `:5582` and clicking
+  Authorize from there now registers an `https://` redirect_uri Loxone actually accepts — one-time
+  self-signed-certificate browser warning, no external domain or reverse proxy required.
+- **`TRUST_PROXY` environment variable** (unset/off by default — see .env.example) for anyone
+  running LoxSuite behind a reverse proxy or tunnel (Cloudflare Tunnel, Nginx Proxy Manager,
+  Traefik...) that terminates HTTPS and forwards over plain HTTP internally. Without it, LoxSuite
+  has no way to know the outside world sees HTTPS: SSO (Pocket ID, etc.) and Loxone MCP OAuth
+  callback URLs get built as `http://...` and get rejected, and the SSO break-glass "always allow
+  local login from the local network" exemption looks permanently true for every visitor — local or
+  remote — since every request's visible address is the proxy's own local one.
+
 ## [0.18.6-alpha.1] - 2026-08-13
 
 ### Changed

@@ -17,6 +17,12 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Only set this in .env if LoxSuite sits behind a reverse proxy/tunnel (Cloudflare Tunnel,
+      # Nginx Proxy Manager, Traefik...) that terminates HTTPS and forwards over plain HTTP
+      # internally — see .env.example for why this matters (SSO/Loxone MCP callback URLs, the SSO
+      # break-glass check) and which value to use. Left empty (the default) if you access LoxSuite
+      # directly, with no proxy in front.
+      TRUST_PROXY: ${TRUST_PROXY:-}
       DB_PATH: /data/gateway.db
       # SQLite (above) is the zero-config default — nothing else below is needed for it, and every
       # one of these vars passes straight through from .env (see .env.example): left unset there,
@@ -40,6 +46,12 @@ services:
       MOSQUITTO_CONFIG_PATH: /mosquitto/config
       LOXONE_UDP_PORT: 11885
       PORT: 5582
+      # Self-signed HTTPS, only needed to Authorize a Miniserver's AI Assistant MCP connection —
+      # Loxone's cloud rejects a plain-HTTP-over-LAN-IP redirect_uri (see gateway/src/mcpClient.js).
+      # Visit https://<this-host>:5583/... instead of the usual :5582 port just for that one step;
+      # your browser will show a one-time self-signed-certificate warning. Everything else about
+      # LoxSuite works exactly the same over :5582 as always.
+      HTTPS_PORT: 5583
       DEVICE_TEMPLATES_PATH: /device-templates
     volumes:
       - ./data:/data
@@ -49,6 +61,7 @@ services:
       - mosquitto_log:/mosquitto/log
     ports:
       - "5582:5582"
+      - "5583:5583"
       - "1883:1883"
       - "9001:9001"
       - "11885:11885/udp"

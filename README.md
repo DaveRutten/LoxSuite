@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.18.7-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.18.8-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -159,7 +159,13 @@ plugin. Still experimental — see the warning shown on Administration → AI As
 - **Connect a Miniserver**: that Miniserver's own edit page has an "Authorize" button (a one-time
   Loxone-account OAuth login) and its own read-only/read-write toggle, independent of the global
   switch above — a Miniserver isn't reachable by the assistant just because AI Assistant is on
-  globally.
+  globally. **Authorize needs HTTPS**: Loxone's cloud rejects the login redirect unless you're
+  visiting LoxSuite over HTTPS (or literally at `http://localhost`) — visit the same edit page at
+  `https://<host>:5583/...` (the self-signed HTTPS port, bootstrapped automatically — see
+  `HTTPS_PORT`) instead of the usual `:5582` just for that one step; your browser shows a one-time
+  self-signed-certificate warning. Already behind a reverse proxy/tunnel with real HTTPS
+  (Cloudflare Tunnel, etc.)? Set `TRUST_PROXY` instead (see `.env.example`) and Authorize over that
+  hostname directly.
 - **Provider — Ollama / OpenWebUI (default)**: runs entirely on your own hardware, no API key
   needed for a bare local instance, no per-token billing. `docker-compose.yml` bundles an `ollama`
   service by default for exactly this — nothing to enable, it's just already there. Point it at

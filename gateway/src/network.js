@@ -1,9 +1,13 @@
 // Best-effort "is this request coming from our own local network" check — used only for the SSO
-// break-glass local-login setting (see routes/auth.js). Based on the raw socket address, not any
-// client-supplied header (X-Forwarded-For etc. would be trivially spoofable by anyone who can
-// reach the gateway directly, which defeats the whole point of the check). If the gateway is
-// deployed behind a reverse proxy, every request arrives from the proxy's own address — set
-// TRUSTED_PROXY_HEADER handling up explicitly there rather than trusting client headers by default.
+// break-glass local-login setting (see routes/auth.js). req.ip (not the raw socket address) so
+// this respects the TRUST_PROXY opt-in (see server.js): with it unset (the default), Express's own
+// req.ip is identical to the raw socket address, so nothing changes for a direct deployment. Behind
+// a reverse proxy/tunnel WITHOUT that opt-in, every request's raw socket address is the proxy's own
+// — always "private" regardless of the real client, which silently defeats this whole check by
+// making the break-glass exemption permanent. Not X-Forwarded-For read directly here: that's
+// trivially spoofable by anyone who can reach the gateway directly, which is exactly why Express's
+// own trust-proxy setting (rather than a homegrown header read) gates whether req.ip trusts it at
+// all.
 const PRIVATE_V4_RANGES = [
   /^127\./, // loopback
   /^10\./, // RFC1918
@@ -24,7 +28,7 @@ function isPrivateAddress(address) {
 }
 
 function isPrivateNetworkRequest(req) {
-  return isPrivateAddress(req.socket && req.socket.remoteAddress);
+  return isPrivateAddress(req.ip);
 }
 
 module.exports = { isPrivateNetworkRequest, isPrivateAddress };

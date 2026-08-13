@@ -106,7 +106,11 @@
             When on, the username/password login form is hidden for anyone NOT connecting from a
             private/local-network address — they must sign in with SSO instead. Local-network
             requests can still always use local login as a break-glass fallback, so you're never
-            locked out if Pocket ID itself becomes unreachable.
+            locked out if Pocket ID itself becomes unreachable. <strong>Behind a reverse proxy or
+            tunnel</strong> (Cloudflare Tunnel, Nginx Proxy Manager, Traefik...): every request
+            looks like it's coming from that proxy's own local address unless it's told to trust
+            the proxy's forwarded headers — set <code>TRUST_PROXY</code> (see .env.example) or this
+            stays permanently "on" for every visitor, local or not.
           </span>
         </span>
       </label>

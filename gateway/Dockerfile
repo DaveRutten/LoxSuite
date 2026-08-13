@@ -16,6 +16,14 @@ ENV NODE_ENV=production
 # our own to maintain.
 RUN apk add --no-cache rclone
 
+# Backs the optional self-signed HTTPS listener docker-entrypoint.sh bootstraps into /data/tls —
+# needed solely so LoxSuite can register an https:// redirect_uri for the AI Assistant's Loxone MCP
+# OAuth flow (see mcpClient.js: Loxone's cloud rejects any redirect_uri that's neither HTTPS nor
+# literally http://localhost, and a typical LAN-IP-over-plain-HTTP deployment is neither). Shelled
+# out to rather than reimplemented with a Node cert-generation library, same philosophy as rclone
+# above.
+RUN apk add --no-cache openssl
+
 # Backs Postgres backup/restore (see backup/engines/postgres.js) — pg_dump/pg_restore, shelled out
 # to rather than reimplemented, same philosophy as rclone/apprise here. pg_dump refuses to dump a
 # server NEWER than itself, so this installs the newest client Alpine currently packages. If the
@@ -99,7 +107,7 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
 VOLUME ["/data"]
-EXPOSE 5582 1883
+EXPOSE 5582 5583 1883
 # Checks the gateway's own HTTP server only — Mosquitto's own listener isn't probed here, but a
 # wedged Node process (which also carries mosquitto's supervision loop, see
 # docker-entrypoint.sh) is the failure mode that actually matters for auto-recovery.
