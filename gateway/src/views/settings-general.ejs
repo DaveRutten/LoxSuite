@@ -48,6 +48,20 @@
           automatically — keeps the database from growing forever on monitors polled frequently.
         </p>
       </div>
+      <label class="toggle-row">
+        <input type="checkbox" name="monitor_chart_downsample_enabled" <%= gatewaySettings.monitor_chart_downsample_enabled ? 'checked' : '' %>>
+        <span>
+          <strong>Downsample large chart series</strong>
+          <span class="hint">
+            A monitor with far more readings than a chart's own point budget (2000) otherwise shows
+            only its newest slice within the requested range, with nothing indicating older data in
+            that range even exists. On (recommended), it averages down to that budget instead, so
+            the chart always covers the full range you asked for. Off shows exact raw readings with
+            no averaging, at the cost of a fast-changing monitor's older history silently missing
+            from a wide range.
+          </span>
+        </span>
+      </label>
       <div class="settings-field">
         <label>Notification history (days)</label>
         <input type="number" name="notification_retention_days" min="1" value="<%= gatewaySettings.notification_retention_days %>">

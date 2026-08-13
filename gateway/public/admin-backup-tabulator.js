@@ -8,6 +8,19 @@
   var rowsEl = document.getElementById('backup-rows');
   var rows = rowsEl ? JSON.parse(rowsEl.textContent) : [];
 
+  // Auto-scaled unit (KB/MB/GB) rather than always KB — a multi-GB backup used to print as an
+  // unreadable 6-digit KB figure with no obvious way to tell its actual scale at a glance.
+  function formatSize(bytes) {
+    var units = ['KB', 'MB', 'GB'];
+    var value = bytes / 1024;
+    var i = 0;
+    while (value >= 1024 && i < units.length - 1) {
+      value /= 1024;
+      i++;
+    }
+    return value.toFixed(1) + ' ' + units[i];
+  }
+
   var ICONS = {
     download: '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
     upload: '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
@@ -80,7 +93,7 @@
     tableKey: '/admin/backup',
     columns: [
       { title: 'Created', field: 'createdAt', headerSort: true, sorter: 'string' },
-      { title: 'Size', field: 'size', formatter: function (cell) { return (cell.getValue() / 1024).toFixed(1) + ' KB'; }, headerSort: true, sorter: 'number', hozAlign: 'left' },
+      { title: 'Size', field: 'size', formatter: function (cell) { return formatSize(cell.getValue()); }, headerSort: true, sorter: 'number', hozAlign: 'left' },
       { title: 'Contents', field: 'includesMqttConfig', formatter: contentsFormatter, headerSort: false },
       { title: 'Reason', field: 'reason', formatter: function (cell) { return cell.getValue() === 'scheduled' ? 'Scheduled' : 'Manual'; }, headerSort: true, sorter: 'string' },
       { title: 'Actions', field: 'actions', formatter: actionsFormatter, headerSort: false, resizable: false, minWidth: 320 },

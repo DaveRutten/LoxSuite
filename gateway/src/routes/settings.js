@@ -82,6 +82,7 @@ router.post('/', requirePermission('settings', 'edit'), asyncHandler(async (req,
     await db.prepare('UPDATE gateway_settings SET default_panel_decimals = ? WHERE id = 1').run(Math.min(6, Math.round(panelDecimals)));
   }
   await db.prepare('UPDATE gateway_settings SET dashboard_suggestions_enabled = ? WHERE id = 1').run(req.body.dashboard_suggestions_enabled ? 1 : 0);
+  await db.prepare('UPDATE gateway_settings SET monitor_chart_downsample_enabled = ? WHERE id = 1').run(req.body.monitor_chart_downsample_enabled ? 1 : 0);
 
   // One state name per line — plain textarea rather than individual add/remove rows, since this
   // is a short, infrequently-edited list. Always overwritten (not skipped when empty) so clearing

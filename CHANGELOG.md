@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.10-alpha.1] - 2026-08-13
+
+### Added
+- **Downsample large chart series** setting (Settings → General, on by default). A monitor with far
+  more readings than a chart's own point budget (2000) used to silently show only its newest slice
+  within whatever range was requested — a fast-changing reading (a live power draw, say) could blow
+  through that budget within just the last few hours of a 24h+ chart, with nothing indicating the
+  rest of the range's older data even existed. On, each series is now averaged down to that budget
+  instead, so a chart always covers the full requested range. Off restores the old exact-raw-values
+  behavior (no averaging), at the cost of that same silent truncation for a fast monitor on a wide
+  range.
+
+### Changed
+- Backup file sizes on Administration → Backups now show as KB/MB/GB (auto-scaled), not always KB —
+  a multi-GB backup used to print as an unreadable 6+ digit KB figure.
+
 ## [0.18.9-alpha.1] - 2026-08-13
 
 ### Fixed

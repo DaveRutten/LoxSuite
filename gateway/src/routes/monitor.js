@@ -523,6 +523,37 @@ router.get('/loxone-structure/:miniserverId', asyncHandler(async (req, res) => {
   }
 }));
 
+// A raw LIMIT alone (as every other MAX_ROWS-bounded query in this file uses) silently keeps only
+// the newest MAX_ROWS rows within the requested range — fine for a slow-changing monitor, but a
+// monitor that reports every few seconds (a live power reading, say) can blow through 2000 rows
+// within just the last few hours of a 24h+ range, leaving everything OLDER than that within the
+// range simply absent from the chart with no indication it ever existed. Fetched up to this much
+// higher ceiling (still index-backed via idx_monitor_history_monitor_time, so cheap even when a
+// monitor doesn't need it) specifically so downsampleToTarget below has enough real data to
+// average across the FULL requested range instead of only whatever fits in the last MAX_ROWS rows.
+const CHART_RAW_CAP = 20000;
+
+// Buckets rows (ascending) down to at most `target` points by averaging each bucket's numeric
+// values — a monitor with far more real readings than the chart can usefully plot still shows the
+// FULL requested range (each bucket's average), instead of silently only the newest slice of it.
+// A no-op (returns rows unchanged) whenever there's nothing to reduce.
+function downsampleToTarget(rowsAscending, target) {
+  if (rowsAscending.length <= target) return rowsAscending;
+  const bucketSize = Math.ceil(rowsAscending.length / target);
+  const out = [];
+  for (let i = 0; i < rowsAscending.length; i += bucketSize) {
+    const chunk = rowsAscending.slice(i, i + bucketSize);
+    const numerics = chunk.map((r) => r.numeric).filter((n) => n !== null && n !== undefined);
+    const avg = numerics.length ? numerics.reduce((a, b) => a + b, 0) / numerics.length : null;
+    // The chunk's OWN most recent reading's timestamp — not the bucket's nominal midpoint — so the
+    // last bucket's point still lands close to "now" (matters for monitor-chart.js's own "hold flat
+    // to the axis's right edge" logic, which compares the last point's x against axisMaxMs).
+    const last = chunk[chunk.length - 1];
+    out.push({ t: last.t, value: avg !== null ? String(avg) : last.value, numeric: avg });
+  }
+  return out;
+}
+
 // Multi-monitor time series for chart panels on a custom dashboard (see routes/dashboards.js) —
 // registered before /:id so "series.json" isn't swallowed as a monitor id.
 router.get('/series.json', asyncHandler(async (req, res) => {
@@ -534,12 +565,18 @@ router.get('/series.json', asyncHandler(async (req, res) => {
 
   const range = resolveRange(req.query.range);
   const { sql: rangeSql, params: rangeParams } = historyWindowClause(range);
+  const gatewaySettings = await db.prepare('SELECT monitor_chart_downsample_enabled FROM gateway_settings WHERE id = 1').get();
+  const downsampleEnabled = !!gatewaySettings?.monitor_chart_downsample_enabled;
+  const rawCap = downsampleEnabled ? CHART_RAW_CAP : MAX_ROWS;
   const stmt = db.prepare(`SELECT recorded_at AS t, value, numeric_value AS numeric FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`);
 
   const series = (await Promise.all(ids.map(async (id) => {
     const monitor = await db.prepare('SELECT id, label FROM monitors WHERE id = ?').get(id);
     if (!monitor) return null;
-    const rows = await stmt.all(id, ...rangeParams, MAX_ROWS);
+    const rowsDesc = await stmt.all(id, ...rangeParams, rawCap);
+    if (!downsampleEnabled) return { monitorId: id, label: monitor.label, rows: rowsDesc };
+    const rowsAscending = rowsDesc.slice().reverse();
+    const rows = downsampleToTarget(rowsAscending, MAX_ROWS).reverse();
     return { monitorId: id, label: monitor.label, rows };
   }))).filter(Boolean);
 
@@ -718,3 +755,4 @@ module.exports.historyWindowClause = historyWindowClause;
 module.exports.resolveRange = resolveRange;
 module.exports.buildAbsoluteRange = buildAbsoluteRange;
 module.exports.MAX_ROWS = MAX_ROWS;
+module.exports.downsampleToTarget = downsampleToTarget;
