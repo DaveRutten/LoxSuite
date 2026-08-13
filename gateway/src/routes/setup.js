@@ -11,6 +11,9 @@ const { sendTestMessage } = require('../notifications');
 const { encrypt, decrypt } = require('../secretCrypto');
 const mqttClient = require('../mqttClient');
 const asyncHandler = require('../middleware/asyncHandler');
+const { resolveDbConfig } = require('../db/config');
+const transfer = require('../db/transfer');
+const { getSqliteImportStatus, markResolved: markSqliteImportResolved } = require('../sqliteImportStatus');
 
 const router = express.Router();
 const TIMEZONES = Intl.supportedValuesOf('timeZone');
@@ -69,6 +72,66 @@ async function render(req, res, extra = {}) {
 async function markCompleted() {
   await db.prepare('UPDATE gateway_settings SET setup_wizard_completed = 1 WHERE id = 1').run();
 }
+
+// The "existing SQLite data found" gate — see sqliteImportStatus.js for when this actually applies
+// (a real, already-used SQLite file still sitting at DB_PATH while this install now boots against
+// an otherwise-fresh Postgres/MySQL database). Deliberately its own page rather than a step in the
+// STEPS wizard above: running the import wholesale-replaces the users table (including whichever
+// row the CURRENTLY-logged-in session belongs to), so it can't sensibly be "step 1 of 9" in a flow
+// that otherwise assumes the logged-in admin's own identity stays stable across steps — see
+// postLoginRedirect() in routes/auth.js, which routes here ahead of the normal wizard whenever this
+// applies, on every login (not just the first ever one).
+router.get('/import', asyncHandler(async (req, res) => {
+  const status = getSqliteImportStatus();
+  if (!status.available) return res.redirect('/setup');
+  const scan = await transfer.scanSource(status.sqlitePath);
+  res.render('setup-import', { sqlitePath: status.sqlitePath, scan, error: null });
+}));
+
+router.post('/import/dismiss', asyncHandler(async (req, res) => {
+  await markSqliteImportResolved();
+  await logSystemEvent(`"${req.user.username}" dismissed the existing-SQLite-data import prompt without importing.`);
+  res.redirect('/setup');
+}));
+
+// Streamed the same way the AI Assistant's own chat turn is (see routes/aiChat.js) — the response
+// body itself IS the live progress log, consumed on the browser side with a plain
+// fetch()+ReadableStream reader (see the inline script in setup-import.ejs), not a polling endpoint
+// or a new SSE/WebSocket connection this app has never otherwise needed. force:true always — by
+// the time this page is reachable at all, the target has already been migrated+seeded with its own
+// default roles/admin user (that's exactly what made this install bootable in the first place), so
+// "the target already has non-default data" is expected, not a reason to refuse.
+router.post('/import/run', asyncHandler(async (req, res) => {
+  const status = getSqliteImportStatus();
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  if (!status.available) {
+    res.write('Nothing to import (already resolved, or no existing SQLite data was found).\n__ERROR__\n');
+    return res.end();
+  }
+
+  const targetConfig = resolveDbConfig();
+  try {
+    const { mismatch } = await transfer.runTransfer({
+      fromSqlitePath: status.sqlitePath,
+      targetConfig,
+      backend: targetConfig.backend,
+      pruneOrphans: !!req.body.prune_orphans,
+      force: true,
+      onLog: (line) => res.write(`${line}\n`),
+    });
+    if (mismatch) {
+      res.write('\nFinished with row-count mismatches — see above. Not marking this resolved; you can try again.\n__ERROR__\n');
+      return res.end();
+    }
+    await markSqliteImportResolved();
+    await logSystemEvent(`"${req.user.username}" imported existing SQLite data via the setup wizard.`);
+    res.write('\n__DONE__\n');
+  } catch (err) {
+    res.write(`\nImport failed: ${err.message}\n__ERROR__\n`);
+  }
+  res.end();
+}));
 
 router.get('/', asyncHandler(async (req, res) => render(req, res)));
 

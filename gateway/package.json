@@ -1,6 +1,6 @@
 {
   "name": "loxsuite",
-  "version": "0.17.1-alpha.1",
+  "version": "0.18.0-alpha.1",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "description": "LoxSuite: MQTT gateway, logging, monitoring, and backup/restore for Loxone Miniservers",
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
+    "@google/genai": "^2.16.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "adm-zip": "^0.6.0",
     "bcryptjs": "^2.4.3",
@@ -31,6 +32,8 @@
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.11.3",
     "nanoid": "^3.3.7",
+    "ollama": "^0.6.3",
+    "openai": "^7.4.0",
     "openid-client": "^5.7.1",
     "pg": "^8.13.0",
     "undici": "^6.19.8",

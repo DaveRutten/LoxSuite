@@ -6,7 +6,7 @@ const { formatDateTime } = require('../dateFormat');
 const { fetchMiniserver } = require('../loxone');
 const { testConnection: testLiveConnection, resetConnection: resetLiveConnection } = require('../loxoneWebSocket');
 const { requirePermission } = require('../middleware/requirePermission');
-const { logSystemEvent } = require('../auditLog');
+const { logSystemEvent, describeChanges } = require('../auditLog');
 const { encrypt } = require('../secretCrypto');
 const mcpClient = require('../mcpClient');
 const asyncHandler = require('../middleware/asyncHandler');
@@ -257,9 +257,11 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandle
   const { name, host, http_port, udp_port, username, password, use_https, external_url, gateway_client_of, clients_json, ai_enabled, ai_allow_write_commands, mcp_url } = req.body;
   const msId = Number(req.params.id);
 
+  // Full row (not just password) — also feeds the describeChanges() audit line below, so the
+  // System log shows what actually changed instead of a bare "updated Miniserver X."
+  const existing = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(msId);
   // Blank password field = keep the existing one; the current value is never
   // shown back to the browser, so re-typing is only needed to actually change it.
-  const existing = await db.prepare('SELECT password FROM miniservers WHERE id = ?').get(msId);
   const newPassword = password ? encrypt(password) : existing?.password;
 
   // Empty string ("None"), a self-reference, or the "This miniserver is a client" toggle itself
@@ -272,17 +274,43 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandle
   const gatewayId = Number(gateway_client_of);
   const gatewayClientOf = req.body.is_client && gateway_client_of && Number.isInteger(gatewayId) && gatewayId !== msId ? gatewayId : null;
 
+  const resolved = {
+    name, host,
+    http_port: Number(http_port) || 80,
+    udp_port: udp_port ? Number(udp_port) : null,
+    username, password: newPassword,
+    use_https: use_https ? 1 : 0,
+    external_url: external_url ? external_url.trim().replace(/\/+$/, '') : null,
+    gateway_client_of: gatewayClientOf,
+    ai_enabled: ai_enabled ? 1 : 0,
+    ai_allow_write_commands: ai_allow_write_commands ? 1 : 0,
+    mcp_url: mcp_url ? mcp_url.trim().replace(/\/+$/, '') : null,
+  };
   await db.prepare(
     `UPDATE miniservers SET name = ?, host = ?, http_port = ?, udp_port = ?, username = ?, password = ?, use_https = ?, external_url = ?, gateway_client_of = ?,
      ai_enabled = ?, ai_allow_write_commands = ?, mcp_url = ?
      WHERE id = ?`
   ).run(
-    name, host, Number(http_port) || 80, udp_port ? Number(udp_port) : null, username, newPassword, use_https ? 1 : 0, external_url ? external_url.trim().replace(/\/+$/, '') : null, gatewayClientOf,
-    ai_enabled ? 1 : 0, ai_allow_write_commands ? 1 : 0, mcp_url ? mcp_url.trim().replace(/\/+$/, '') : null,
+    resolved.name, resolved.host, resolved.http_port, resolved.udp_port, resolved.username, resolved.password, resolved.use_https,
+    resolved.external_url, resolved.gateway_client_of, resolved.ai_enabled, resolved.ai_allow_write_commands, resolved.mcp_url,
     msId
   );
   resetLiveConnection(msId);
-  await logSystemEvent(`"${req.user.username}" updated Miniserver "${name}" (${host}).`);
+  const changes = describeChanges(existing, resolved, [
+    { key: 'name', label: 'Name' },
+    { key: 'host', label: 'Host' },
+    { key: 'http_port', label: 'HTTP port' },
+    { key: 'udp_port', label: 'UDP port' },
+    { key: 'username', label: 'Username' },
+    { key: 'password', label: 'Password', secret: true },
+    { key: 'use_https', label: 'HTTPS' },
+    { key: 'external_url', label: 'External URL' },
+    { key: 'gateway_client_of', label: 'Gateway' },
+    { key: 'ai_enabled', label: 'AI Assistant enabled' },
+    { key: 'ai_allow_write_commands', label: 'AI Assistant can send commands' },
+    { key: 'mcp_url', label: 'MCP URL override' },
+  ]);
+  await logSystemEvent(`"${req.user.username}" updated Miniserver "${name}" (${host}).${changes ? ` (${changes})` : ''}`);
 
   // This Miniserver's own Client Miniservers (see miniserver-edit.ejs) — same shared-credentials
   // reasoning as the Add form. An existing Client (has an id) is updated in place; a new row (no
@@ -360,6 +388,34 @@ router.get('/:id/mcp/authorize', requirePermission('miniservers', 'edit'), async
   try {
     // On success this calls provider.redirectToAuthorization() internally, which already sends
     // the redirect response — nothing left to do here in that case.
+    await mcpClient.runMcpAuthFlow(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
+  } catch (err) {
+    await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
+    res.redirect(`/miniservers/${miniserver.id}/edit`);
+  }
+}));
+
+// "Start new login" — for when Re-authorize (above) is stuck silently repeating a failed token
+// refresh instead of ever reaching a fresh browser login: the SDK's own auth() orchestrator
+// opportunistically tries to refresh whatever's already stored before falling back to a full
+// Dynamic-Client-Registration + redirect flow, and if the Miniserver has invalidated our refresh
+// token server-side (revoked, already rotated by a concurrent request, etc.), that refresh attempt
+// can error out on its own rather than ever reaching that fallback. Wiping every stored credential
+// first — tokens AND the client registration — forces auth() to start completely from scratch.
+router.get('/:id/mcp/restart-login', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
+  if (!miniserver) return res.status(404).send('Miniserver not found');
+
+  await db.prepare(
+    `UPDATE miniservers SET mcp_access_token = NULL, mcp_refresh_token = NULL, mcp_token_expires_at = NULL,
+     mcp_oauth_client_id = NULL, mcp_oauth_client_secret = NULL, mcp_authorized_by = NULL, mcp_last_error = NULL
+     WHERE id = ?`
+  ).run(miniserver.id);
+  mcpClient.resetMcpClient(miniserver.id);
+
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const provider = new mcpClient.LoxoneOAuthProvider({ miniserver, baseUrl, session: req.session, res, username: req.user.username });
+  try {
     await mcpClient.runMcpAuthFlow(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
   } catch (err) {
     await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);

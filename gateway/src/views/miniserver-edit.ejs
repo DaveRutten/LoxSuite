@@ -99,6 +99,20 @@
         <a href="/miniservers/<%= miniserver.id %>/mcp/authorize" class="btn-soft">
           <%- icon('refresh') %> <%= miniserver.mcp_access_token ? 'Re-authorize' : 'Authorize' %>
         </a>
+        <% if (miniserver.mcp_access_token) { %>
+          <%
+            // Re-authorize opportunistically tries to refresh the token already stored before
+            // falling back to a fresh login — if the Miniserver has invalidated that stored
+            // refresh token server-side (revoked, or rotated away by an overlapping request),
+            // that refresh attempt can itself error out rather than ever reaching the fallback,
+            // which looks from here like Re-authorize "does nothing." This button skips the
+            // refresh attempt entirely by wiping every stored credential first, forcing a truly
+            // fresh login every time — the thing to reach for when Re-authorize alone doesn't work.
+          %>
+          <a href="/miniservers/<%= miniserver.id %>/mcp/restart-login" class="btn-soft">
+            <%- icon('refresh') %> Start new login
+          </a>
+        <% } %>
         <%
           // Deliberately NOT a .hint — .hint is user-declutterable (body.panel-hints-hidden hides
           // every .hint inside #edit-ms-form, see style.css), which would make this status readout

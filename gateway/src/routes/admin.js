@@ -2,13 +2,15 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { AREAS, MAIN_AREAS, LOG_AREAS } = require('../permissionAreas');
-const { logSystemEvent } = require('../auditLog');
+const { logSystemEvent, describeChanges } = require('../auditLog');
 const { reloadLoginLimiter } = require('./auth');
 const { encrypt } = require('../secretCrypto');
 const { checkForUpdate } = require('../versionCheck');
 const { listTemplateSources } = require('../deviceTemplates');
 const { reloadDeviceTemplates } = require('../commandCatalog');
 const { fetchBuiltinTemplatesFromGitHub } = require('../deviceTemplatesUpdate');
+const ollama = require('../llm/ollama');
+const ollamaPullState = require('../ollamaPullState');
 const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
@@ -329,28 +331,151 @@ router.get('/ai', asyncHandler(async (req, res) => {
 }));
 
 router.post('/ai', asyncHandler(async (req, res) => {
-  const { enabled, model, effort, api_key, suggestions_mode } = req.body;
+  const { enabled, provider, model, effort, api_key, base_url, suggestions_mode } = req.body;
 
+  // Full row (not just api_key) — also feeds the describeChanges() audit line below, so the
+  // System log shows what actually changed instead of a bare "updated AI Assistant settings."
+  const existing = await db.prepare('SELECT * FROM ai_settings WHERE id = 1').get();
   // Blank key field = keep the existing one; it's never shown back to the browser, same
-  // convention as Miniserver/SSO secrets.
-  const existing = await db.prepare('SELECT api_key FROM ai_settings WHERE id = 1').get();
+  // convention as Miniserver/SSO secrets. Meaningful for Ollama too, not just Anthropic — a remote
+  // Ollama-compatible server behind a reverse proxy can require a bearer token of its own.
   const newApiKey = api_key ? encrypt(api_key) : existing?.api_key;
 
+  // Deliberately conservative, well-established names rather than a guess at whichever is
+  // currently the newest flagship (OpenAI/Google both ship new model names often enough that a
+  // guessed "latest" one baked in here would likely be stale or simply wrong by the time this
+  // runs) — this is only ever the SILENT fallback for a blank Model field; the picker in
+  // admin-ai.ejs lists more choices, and typing a specific one always wins over this.
+  const DEFAULT_MODELS = {
+    anthropic: 'claude-opus-5',
+    ollama: 'llama3.1',
+    openai: 'gpt-4o',
+    gemini: 'gemini-2.5-flash',
+  };
+  const validProviders = Object.keys(DEFAULT_MODELS);
   const validEfforts = ['low', 'medium', 'high', 'xhigh', 'max'];
   const suggestionsMode = [0, 1, 2].includes(Number(suggestions_mode)) ? Number(suggestions_mode) : 0;
+  const resolvedProvider = validProviders.includes(provider) ? provider : 'ollama';
+  const resolvedModel = (model || '').trim() || DEFAULT_MODELS[resolvedProvider];
+  const resolvedEffort = validEfforts.includes(effort) ? effort : 'medium';
+  // Only meaningful for Ollama — cleared out for every other provider rather than left stale, so
+  // the settings row never has a base_url sitting around that nothing reads. Left blank, this
+  // defaults to the bundled docker-compose.yml service's own hostname rather than the adapter's
+  // own bare-localhost fallback (127.0.0.1, meaningless from inside THIS container, which has no
+  // Ollama of its own listening there) — a blank field otherwise silently pointed nowhere, which
+  // is exactly what made a first "just enable Ollama and save" attempt fail to pull anything.
+  const resolvedBaseUrl = resolvedProvider === 'ollama' ? ((base_url || '').trim() || 'http://ollama:11434') : null;
 
   await db.prepare(
-    `UPDATE ai_settings SET enabled = ?, model = ?, effort = ?, api_key = ?, suggestions_mode = ? WHERE id = 1`
-  ).run(
-    enabled ? 1 : 0,
-    (model || '').trim() || 'claude-opus-5',
-    validEfforts.includes(effort) ? effort : 'medium',
-    newApiKey || null,
-    suggestionsMode
-  );
+    `UPDATE ai_settings SET enabled = ?, provider = ?, model = ?, effort = ?, api_key = ?, base_url = ?, suggestions_mode = ? WHERE id = 1`
+  ).run(enabled ? 1 : 0, resolvedProvider, resolvedModel, resolvedEffort, newApiKey || null, resolvedBaseUrl, suggestionsMode);
 
-  await logSystemEvent(`"${req.user.username}" updated AI Assistant settings.`);
+  const changes = describeChanges(existing, {
+    enabled: enabled ? 1 : 0, provider: resolvedProvider, model: resolvedModel, effort: resolvedEffort,
+    api_key: newApiKey || null, base_url: resolvedBaseUrl, suggestions_mode: suggestionsMode,
+  }, [
+    { key: 'enabled', label: 'Enabled' },
+    { key: 'provider', label: 'Provider' },
+    { key: 'model', label: 'Model' },
+    { key: 'effort', label: 'Effort' },
+    { key: 'api_key', label: 'API key', secret: true },
+    { key: 'base_url', label: 'Base URL' },
+    { key: 'suggestions_mode', label: 'Suggested dashboards' },
+  ]);
+  await logSystemEvent(`"${req.user.username}" updated AI Assistant settings.${changes ? ` (${changes})` : ''}`);
   res.render('admin-ai', { settings: await loadAiSettings(), error: null, saved: true });
+}));
+
+// Whether the currently-saved model is already pulled into the currently-saved Ollama/OpenWebUI
+// instance — polled by admin-ai.ejs's own script on page load (and after a save) to decide whether
+// to show "Available", join an already-running pull in progress, or start a new one, without the
+// admin ever needing to `docker exec ... ollama pull` by hand. `pulling: true` specifically covers
+// the case where a PREVIOUS page load (or a different tab, or an admin who's since navigated away
+// entirely) already kicked one off — see ollamaPullState.js for why that keeps running regardless.
+router.get('/ai/ollama-status', asyncHandler(async (req, res) => {
+  const settings = await loadAiSettings();
+  if (settings.provider !== 'ollama' || !settings.model) return res.json({ available: false });
+  const pull = ollamaPullState.getState();
+  if (pull.status === 'pulling' && pull.model === settings.model) {
+    return res.json({ available: false, pulling: true });
+  }
+  try {
+    const available = await ollama.isModelAvailable(settings.base_url, null, settings.model);
+    res.json({ available });
+  } catch (err) {
+    res.json({ available: false, error: err.message });
+  }
+}));
+
+// Streams the model pull's own progress straight through, same shape as routes/setup.js's own
+// import step (a plain chunked text response, __DONE__/__ERROR__ sentinels, consumed by a
+// fetch()+ReadableStream reader — see admin-ai.ejs's inline script). The actual pull itself lives
+// in ollamaPullState.js, entirely independent of this one request/response — closing this tab, or
+// this whole request failing to write (the browser navigated away), only ever stops THIS response
+// from hearing about further progress; it does not cancel the download. Safe to call whether this
+// is the first request to notice the model is missing (starts a real pull) or a later one joining
+// an already-running pull from an earlier page load (just tails it) — startPull() itself tells
+// the two apart.
+router.post('/ai/ollama-pull', asyncHandler(async (req, res) => {
+  const settings = await loadAiSettings();
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  if (settings.provider !== 'ollama' || !settings.model) {
+    res.write('Nothing to pull — provider isn\'t Ollama, or no model is set.\n__ERROR__\n');
+    return res.end();
+  }
+
+  ollamaPullState.startPull({ baseUrl: settings.base_url, model: settings.model });
+  // Replay everything that already happened — whether THIS call just started the pull (nothing
+  // to replay yet) or it's joining one already partway through from an earlier page load.
+  ollamaPullState.getState().lines.forEach((line) => res.write(`${line}\n`));
+
+  const current = ollamaPullState.getState();
+  if (current.status !== 'pulling') {
+    res.write(current.status === 'done' ? '\n__DONE__\n' : '\n__ERROR__\n');
+    return res.end();
+  }
+
+  const unsubscribe = ollamaPullState.subscribe(
+    (line) => res.write(`${line}\n`),
+    (status) => {
+      res.write(status === 'done' ? '\n__DONE__\n' : '\n__ERROR__\n');
+      res.end();
+    }
+  );
+  req.on('close', unsubscribe);
+}));
+
+// Every model currently pulled into the configured Ollama instance, with its on-disk size — for
+// admin-ai.ejs's own "Downloaded models" list (a Delete button per row). Independent of which
+// model ai_settings.model currently points at; lists everything Ollama itself has, not just the
+// one this app happens to be configured to use.
+router.get('/ai/ollama-models', asyncHandler(async (req, res) => {
+  const settings = await loadAiSettings();
+  if (settings.provider !== 'ollama') return res.json({ models: [] });
+  try {
+    const models = await ollama.listModelsDetailed(settings.base_url, null);
+    res.json({ models });
+  } catch (err) {
+    res.json({ models: [], error: err.message });
+  }
+}));
+
+// Removes one pulled model from disk via Ollama's own DELETE /api/delete — the UI counterpart to
+// `docker exec ollama ollama rm <model>`. Deleting the model ai_settings.model currently points at
+// is allowed same as it would be from the CLI — the next /ai/ollama-status check simply reports it
+// missing again and admin-ai.ejs's own script offers to re-pull it, no special guard needed here.
+router.post('/ai/ollama-models/delete', asyncHandler(async (req, res) => {
+  const settings = await loadAiSettings();
+  const model = (req.body.model || '').trim();
+  if (settings.provider !== 'ollama' || !model) return res.status(400).json({ error: 'Nothing to delete.' });
+  try {
+    await ollama.deleteModel(settings.base_url, null, model);
+    await logSystemEvent(`"${req.user.username}" deleted the Ollama model "${model}".`);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 }));
 
 module.exports = router;

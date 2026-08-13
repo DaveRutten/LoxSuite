@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.17.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.18.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -144,6 +144,50 @@ is generated from the topic (e.g. `shellies/shellyplug-ZWEMBADVerwarming/relay/0
 "Zwembad Verwarming - Power") — this is a heuristic (splitting on case changes, stripping
 brand/channel noise), so it won't always be perfect, especially for topics that are just an opaque
 device ID with no descriptive words in them at all — rename the panel by hand in that case.
+
+### AI Assistant (experimental)
+
+Entirely optional, off by default at two independent levels — with nothing configured, LoxSuite
+behaves exactly as it does without this section existing at all. A floating chat launcher
+(bottom-right, on every page) that can read — and, if you explicitly allow it per Miniserver —
+control a connected Loxone installation, backed by a Gen2 Miniserver's own native MCP server
+plugin. Still experimental — see the warning shown on Administration → AI Assistant itself.
+
+- **Turn it on**: Administration → AI Assistant — pick a provider, a model (a short recommended
+  list per provider, or type any custom one), and an API key if the provider needs one. Off
+  entirely until this is enabled; the widget itself doesn't render at all otherwise.
+- **Connect a Miniserver**: that Miniserver's own edit page has an "Authorize" button (a one-time
+  Loxone-account OAuth login) and its own read-only/read-write toggle, independent of the global
+  switch above — a Miniserver isn't reachable by the assistant just because AI Assistant is on
+  globally.
+- **Provider — Ollama / OpenWebUI (default)**: runs entirely on your own hardware, no API key
+  needed for a bare local instance, no per-token billing. `docker-compose.yml` bundles an `ollama`
+  service by default for exactly this — nothing to enable, it's just already there. Point it at
+  your own existing Ollama/OpenWebUI instance instead by changing Base URL, or remove the bundled
+  service entirely (comment out/delete its block in `docker-compose.yml`) if you'd rather use one
+  of the hosted providers below. Once a model is chosen and saved, Administration → AI Assistant
+  itself checks whether it's already pulled into the target Ollama and — if not — pulls it right
+  there, with a live progress log, instead of a manual `docker exec ... ollama pull`.
+- **Provider — Claude (Anthropic) / ChatGPT (OpenAI) / Gemini (Google)**: hosted APIs, each billed
+  per token, each needing their own API key
+  ([console.anthropic.com](https://console.anthropic.com),
+  [platform.openai.com](https://platform.openai.com/api-keys),
+  [Google AI Studio](https://aistudio.google.com/apikey)) — separate from any consumer
+  claude.ai/ChatGPT Plus/Gemini app subscription.
+- Whichever provider, pick a model that actually supports tool/function calling if you want the
+  assistant to read/control a Miniserver — one that doesn't will only ever be able to chat.
+- Every write-capable action the assistant takes lands in **Logs → Loxone Commands** like any
+  other command, tagged with its own source — nothing it does is invisible.
+- **Local-data fast path**: for "what's the current value of X" questions, LoxSuite tries to
+  answer straight from its own already-live data (the same cache Live Data/dashboards use) before
+  ever involving a tool call — faster, and doesn't depend on the model getting a tool call right.
+  Falls back to the model's own tools (control_find/control_state and friends, or history/
+  statistics) for anything that isn't a simple current-value lookup.
+- **Testing status**: exercised end-to-end against a real Miniserver with both Ollama and Claude.
+  Small/local models in particular have been observed skipping a lookup step, inventing a value,
+  or narrating a tool call instead of making one — double-check anything it reports before acting
+  on it. ChatGPT/Gemini are built against each SDK's own real, installed type definitions but not
+  yet run against a live API key.
 
 ### Notification Center
 
@@ -786,10 +830,13 @@ whatever channel(s) they already send to.
 - **Optional: external PostgreSQL or MySQL/MariaDB.** If you'd rather point LoxSuite at a database
   server you already run (e.g. alongside other self-hosted services), set `DB_BACKEND=postgres` or
   `DB_BACKEND=mysql` (works against MySQL or MariaDB servers alike) and either `DATABASE_URL` or
-  the discrete `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` vars — see the commented-out
-  example in `docker-compose.yml`/`.env.example`. This is read once at boot (restart required to
+  the discrete `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` vars in `.env` — see the
+  commented-out example in `.env.example` (`docker-compose.yml` itself passes all of these through
+  automatically, no editing it directly required). This is read once at boot (restart required to
   change), not a live Settings-page toggle. Administration → General shows which backend is
-  active.
+  active. **Recommended for larger installations** — many Monitors polled often, a long retention
+  window, a busy Loxone Commands log — since SQLite is a single local file with no concurrent-
+  writer support of its own; Postgres/MySQL handle that write load better.
   - **Moving an existing SQLite install over**: `docker compose exec loxsuite node
     src/db/transfer.js --from-sqlite /data/gateway.db --to "$DATABASE_URL" [--backend mysql]`
     builds the schema on the target, copies every table over, and resets the target's own

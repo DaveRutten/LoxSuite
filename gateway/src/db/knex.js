@@ -52,7 +52,28 @@ function buildSqliteKnexConfig(dbPath) {
   };
 }
 
+// node-postgres returns BIGINT columns (COUNT(*), SUM() over an integer, ...) as a STRING by
+// default — a real, driver-level precision-safety default (a bigint can exceed
+// Number.MAX_SAFE_INTEGER, which a plain JS number can't represent exactly), but one this app never
+// needs: every count/sum here is a row tally or similar, nowhere near that range. Left at the
+// driver's default, a genuine bug surfaced twice already once Postgres was actually exercised for
+// real: "0" is a non-empty string, so JS's own falsy check (`if (!count)`, e.g. foot.ejs's
+// notification badge) treats a real zero as truthy, and a strict `===` comparison against a plain
+// number (e.g. routes/monitor.js's own `panelCount === 0` unused-monitor filter) never matches at
+// all regardless of the actual count — both silently correct on SQLite (better-sqlite3 returns a
+// real number there) and silently wrong on Postgres. Fixed once, globally, at the driver level
+// (pg's own type-parser registry, OID 20 = int8/bigint) rather than auditing/patching every
+// individual call site this could affect. Guarded so calling buildPostgresKnexConfig() more than
+// once (the app's own knex instance, transfer.js's separate one, ...) only registers it once.
+let pgBigintParserSet = false;
+function ensurePgBigintParser() {
+  if (pgBigintParserSet) return;
+  require('pg').types.setTypeParser(20, (val) => parseInt(val, 10));
+  pgBigintParserSet = true;
+}
+
 function buildPostgresKnexConfig(config) {
+  ensurePgBigintParser();
   return {
     client: 'pg',
     connection: {

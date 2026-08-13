@@ -105,6 +105,15 @@
     Set via the <code>DB_BACKEND</code>/<code>DATABASE_URL</code> (or <code>DB_HOST</code>/<code>DB_NAME</code>/<code>DB_USER</code>/...) environment
     variables — restart required to change, not a setting on this page.
   </p>
+  <% if (dbInfo.backend === 'sqlite') { %>
+    <p class="hint">
+      SQLite is fine for most installs, but a large one — many Monitors polled often, a long
+      retention window, a busy Loxone Commands log — writes every one of those to a single local
+      file with no concurrent-writer support of its own; Postgres or MySQL/MariaDB handle that
+      load better and are worth switching to once things start feeling slow (see
+      <code>gateway/src/db/transfer.js</code> to move your existing data over).
+    </p>
+  <% } %>
 </div>
 
 <div class="card">

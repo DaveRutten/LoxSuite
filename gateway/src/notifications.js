@@ -767,6 +767,13 @@ module.exports = {
   checkDeviceOffline,
   notifyBackupFailed,
   notifyBackupSucceeded,
+  // Not a formal rule-driven trigger type (no notification_rules.trigger_type CHECK entry, no
+  // Apprise channel delivery, no admin-facing rule to create) — just the bell/Notification Center
+  // history half of that, for a one-off event with no configured rule behind it at all. See
+  // ollamaPullState.js's own use of this for exactly that: "tell whoever's using LoxSuite, in the
+  // one place every page already polls for it" without inventing a whole rule-configuration UI for
+  // a single background job's own completion.
+  recordNotificationEvent,
   // Pure helpers, exported mainly so test/notifications.test.js can exercise them directly rather
   // than only indirectly through the DB-driven check*/fireRule functions above.
   compareThreshold,

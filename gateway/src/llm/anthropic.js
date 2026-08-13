@@ -8,6 +8,7 @@
 // directly.
 const Anthropic = require('@anthropic-ai/sdk');
 const { mcpTools } = require('@anthropic-ai/sdk/helpers/beta/mcp');
+const { listCombinedTools, callCombinedTool } = require('./toolSources');
 
 // Built lazily per call, not a module singleton — the API key can change via Administration > AI
 // Assistant without needing a server restart to pick it up.
@@ -15,25 +16,25 @@ function buildClient(apiKey) {
   return new Anthropic({ apiKey });
 }
 
-async function buildToolsFor(miniserver, mcpClient) {
-  if (!miniserver) return [];
-  const rawTools = await mcpClient.listTools(miniserver);
+async function buildToolsFor(miniserver, mcpClient, localDataTools) {
+  const rawTools = await listCombinedTools(miniserver, mcpClient, localDataTools);
   if (!rawTools.length) return [];
   // Satisfies mcpTools()'s own MCPClientLike interface ({callTool({name, arguments})}) while every
-  // actual call still goes through mcpClient.callTool() — which is what enforces
-  // ai_allow_write_commands and writes the Logs > Loxone commands audit trail. Passing the raw MCP
-  // SDK Client instance directly here would bypass both.
+  // actual call still routes through callCombinedTool() — which sends local_find/local_state to
+  // localDataTools.js and everything else to mcpClient.callTool(), the latter still being what
+  // enforces ai_allow_write_commands and writes the Logs > Loxone commands audit trail. Passing the
+  // raw MCP SDK Client instance directly here would bypass both, for the MCP-sourced tools.
   const guardedClient = {
-    callTool: ({ name, arguments: args }) => mcpClient.callTool(miniserver, name, args),
+    callTool: ({ name, arguments: args }) => callCombinedTool(miniserver, mcpClient, localDataTools, name, args),
   };
   return mcpTools(rawTools, guardedClient);
 }
 
 // onToken(delta) is called for every streamed text chunk, across however many tool-use iterations
 // the turn takes — the caller doesn't need to know or care how many round trips happened.
-async function runTurn({ apiKey, model, effort, system, messages, miniserver, mcpClient, onToken, maxToolCalls }) {
+async function runTurn({ apiKey, model, effort, system, messages, miniserver, mcpClient, localDataTools, onToken, maxToolCalls }) {
   const client = buildClient(apiKey);
-  const tools = await buildToolsFor(miniserver, mcpClient);
+  const tools = await buildToolsFor(miniserver, mcpClient, localDataTools);
 
   const runner = client.beta.messages.toolRunner({
     model,

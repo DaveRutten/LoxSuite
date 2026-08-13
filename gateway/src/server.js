@@ -97,6 +97,7 @@ const { formatDateTime, getDisplayTimezone, loadTimezoneCache } = require('./dat
 const { formatCount, formatHeapStatus, miniserverGenerationLabel, formatDuration, PLC_STATE_LABELS, plcStateLabel } = require('./format');
 const panelTypeDefaults = require('./panelTypeDefaults');
 const { getVersionStatus, startVersionCheck } = require('./versionCheck');
+const { startSqliteImportCheck, getSqliteImportStatus } = require('./sqliteImportStatus');
 const { notificationSourceLink } = require('./notificationLinks');
 
 // Everything from here down used to run at plain module-load time — safe when the DB was a
@@ -118,6 +119,9 @@ async function main() {
   // app starts accepting login attempts. Also reloaded from Administration whenever those settings
   // are saved (see routes/admin.js).
   await authRoutes.reloadLoginLimiter();
+  // See sqliteImportStatus.js — a no-op unless this backend just switched away from SQLite while a
+  // real, already-used SQLite file is still sitting at DB_PATH.
+  await startSqliteImportCheck();
 
   const app = express();
 
@@ -139,6 +143,7 @@ async function main() {
   app.locals.plcStateLabel = plcStateLabel;
   app.locals.formatDuration = formatDuration;
   app.locals.getVersionStatus = getVersionStatus;
+  app.locals.getSqliteImportStatus = getSqliteImportStatus;
   app.locals.notificationSourceLink = notificationSourceLink;
   app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
   app.locals.serializeThresholdLadder = dashboardsRoutes.serializeThresholdLadder;
@@ -299,6 +304,13 @@ async function main() {
   startHardwarePolling();
   startLiveConnections().catch((err) => console.error('Failed to start live Loxone connections:', err.message));
   mcpClient.startMcpClients().catch((err) => console.error('Failed to start MCP clients:', err.message));
+  // A restart mid-turn (deploy, crash) abandons any AI Assistant reply still marked 'streaming' —
+  // nothing will ever finalize that row otherwise, since the code path that would (routes/aiChat.js's
+  // own try/catch around llm.runTurn) never got to run its `finally`-equivalent before the process
+  // died. Left alone, the widget would show a reply that looks perpetually "still typing".
+  db.prepare(`UPDATE ai_messages SET status = 'error', error = 'Interrupted by a server restart.' WHERE status = 'streaming'`)
+    .run()
+    .catch((err) => console.error('Failed to clean up interrupted AI messages:', err.message));
   backup.startScheduler();
   scheduledDeviceCommands.startScheduler();
   startVersionCheck();

@@ -51,6 +51,7 @@ module.exports = asyncHandler(async function loadUserContext(req, res, next) {
   res.locals.unreadNotificationCount = 0; // ditto — the topbar bell's badge (see partials/head.ejs)
   res.locals.recentNotifications = []; // ditto — the bell popover's own list (see partials/foot.ejs)
   res.locals.tablePageSize = 25; // ditto — client-side pagination's own default (see public/tables.js), overridden below once a user (and their own saved preference, if any) is known
+  res.locals.aiChatEnabled = false; // ditto — gates the floating AI Assistant widget (partials/ai-chat-widget.ejs), on top of canView('ai_chat') below
   Object.assign(res.locals, makeHelpers(null));
 
   if (!req.session || !req.session.userId) return next();
@@ -82,6 +83,14 @@ module.exports = asyncHandler(async function loadUserContext(req, res, next) {
   };
   res.locals.currentUser = req.user;
   Object.assign(res.locals, makeHelpers(req.user));
+  // Only queried for a user who could even see the widget at all (canView('ai_chat')) — the global
+  // Administration > AI Assistant toggle is the SECOND, independent off switch (see the AI
+  // Assistant feature's own "two independent switches" design): the widget must stay invisible for
+  // everyone, not just error out when clicked, while the feature itself is off.
+  if (req.user.isAdmin || permissions.ai_chat?.view) {
+    const aiSettings = await db.prepare('SELECT enabled FROM ai_settings WHERE id = 1').get();
+    res.locals.aiChatEnabled = !!(aiSettings && aiSettings.enabled);
+  }
   res.locals.collapsedSections = (await db.prepare('SELECT section_key FROM user_nav_prefs WHERE user_id = ? AND collapsed = 1')
     .all(user.id)).map((r) => r.section_key);
   res.locals.favoriteDashboards = await loadFavoriteDashboards(user.id, req.user.roleId);

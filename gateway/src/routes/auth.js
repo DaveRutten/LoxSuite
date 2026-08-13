@@ -6,6 +6,7 @@ const db = require('../db');
 const ssoClient = require('../ssoClient');
 const { isPrivateNetworkRequest } = require('../network');
 const { logSystemEvent } = require('../auditLog');
+const { getSqliteImportStatus } = require('../sqliteImportStatus');
 const asyncHandler = require('../middleware/asyncHandler');
 
 // Local username/password login is refused when SSO's break-glass restriction is on AND the
@@ -21,10 +22,16 @@ async function localLoginAllowed(req) {
 // global settings/adding Miniservers. The wizard itself stays reachable any time afterward from
 // Settings, this is just the one-time nudge toward it.
 async function postLoginRedirect(user) {
+  const role = user.role_id ? await db.prepare('SELECT is_admin FROM access_roles WHERE id = ?').get(user.role_id) : null;
+  const isAdmin = !!(role && role.is_admin);
+  // Takes priority over setup_wizard_completed below and fires on every login, not just the very
+  // first one ever — unlike the rest of the wizard, this can become relevant on an install that
+  // finished setup long ago (whenever DB_BACKEND actually gets switched away from SQLite), so it
+  // can't be gated behind the same "only once, ever" flag. See sqliteImportStatus.js.
+  if (isAdmin && getSqliteImportStatus().available) return '/setup/import';
   const settings = await db.prepare('SELECT setup_wizard_completed FROM gateway_settings WHERE id = 1').get();
   if (settings.setup_wizard_completed) return '/';
-  const role = user.role_id ? await db.prepare('SELECT is_admin FROM access_roles WHERE id = ?').get(user.role_id) : null;
-  return role && role.is_admin ? '/setup' : '/';
+  return isAdmin ? '/setup' : '/';
 }
 
 const router = express.Router();

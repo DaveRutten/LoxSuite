@@ -1,10 +1,14 @@
 #!/usr/bin/env node
-// One-time SQLite -> Postgres/MySQL data transfer CLI — the thing that makes an external-database
+// One-time SQLite -> Postgres/MySQL data transfer — the thing that makes an external-database
 // backend actually usable to an existing user, not just to a brand-new install (see the project's
 // own db-backend plan, Phase 4b: "without this, Postgres support is unusable to every existing
-// user" — the same reasoning applies to Phase 5's MySQL/MariaDB support).
+// user" — the same reasoning applies to Phase 5's MySQL/MariaDB support). Reachable two ways: this
+// file run directly as a CLI (see main() below), or its scanSource()/hasImportableData()/
+// runTransfer() exports called from the setup wizard's own "existing SQLite data found" step (see
+// routes/setup.js) — same logic either way, just a different source of inputs and a different sink
+// for progress lines (console.log vs. a streamed HTTP response).
 //
-// Usage (matches the plan's own example):
+// CLI usage (unchanged from before the wizard reused this logic):
 //   node src/db/transfer.js --from-sqlite /data/gateway.db --to "postgres://user:pass@host:5432/db" [options]
 //   node src/db/transfer.js --from-sqlite /data/gateway.db --to "mysql://user:pass@host:3306/db" --backend mysql [options]
 //
@@ -314,6 +318,132 @@ async function resetSequences(targetKnex, backend) {
   }
 }
 
+// Read-only pre-flight report (row counts + orphan findings) — what --dry-run prints, and what the
+// setup wizard's own "existing SQLite data found" step shows before offering to actually run the
+// import. Never opens the target at all.
+async function scanSource(fromSqlitePath) {
+  if (!fs.existsSync(fromSqlitePath)) {
+    throw new Error(`Source SQLite file not found: ${fromSqlitePath}`);
+  }
+  const sourceKnex = createKnex(fromSqlitePath);
+  try {
+    const idSets = await loadIdSets(sourceKnex);
+    const orphanFindings = await scanForOrphans(sourceKnex, idSets);
+    const rowCounts = [];
+    for (const table of TABLES) {
+      const [{ count }] = await sourceKnex(table.name).count({ count: '*' });
+      rowCounts.push({ table: table.name, count: Number(count) });
+    }
+    return { rowCounts, orphanFindings };
+  } finally {
+    await sourceKnex.destroy();
+  }
+}
+
+// Cheap existence-and-"has real data" check — just enough to decide whether the setup wizard should
+// even mention an import is possible, without the fuller (slower) scan scanSource() above does on
+// every FK. "Real data" mirrors assertTargetIsBlank's own "looks used" rule below: more than the two
+// seed roles, or an actual user — the same bar a genuinely-fresh SQLite file would never clear.
+async function hasImportableData(fromSqlitePath) {
+  if (!fromSqlitePath || !fs.existsSync(fromSqlitePath)) return false;
+  const knex = createKnex(fromSqlitePath);
+  try {
+    const [{ count: roleCount }] = await knex('access_roles').count({ count: '*' });
+    const [{ count: userCount }] = await knex('users').count({ count: '*' });
+    return Number(roleCount) > 2 || Number(userCount) > 0;
+  } catch {
+    return false; // not a LoxSuite database, or a schema too old for these tables to exist yet
+  } finally {
+    await knex.destroy();
+  }
+}
+
+// The write path itself — connects to both databases, validates, truncates, copies, resets
+// sequences, verifies. Used identically by main()'s CLI run and by the setup wizard's own streaming
+// route (routes/setup.js); onLog is the only thing that differs between them (console.log vs. a
+// callback that writes into a chunked HTTP response). Throws on any abort condition (orphans found
+// without pruneOrphans, target not blank without force, a connectivity error) instead of exiting the
+// process itself — only the CLI wrapper below does that. Returns { report, mismatch }.
+async function runTransfer({ fromSqlitePath, targetConfig, backend, pruneOrphans, force, onLog = () => {} }) {
+  if (!fs.existsSync(fromSqlitePath)) {
+    throw new Error(`Source SQLite file not found: ${fromSqlitePath}`);
+  }
+
+  const sourceKnex = createKnex(fromSqlitePath);
+  let targetKnex = null;
+  try {
+    onLog('Scanning source for orphaned foreign-key values (SQLite never enforced these)...');
+    const idSets = await loadIdSets(sourceKnex);
+    const orphanFindings = await scanForOrphans(sourceKnex, idSets);
+
+    if (orphanFindings.length > 0) {
+      onLog('');
+      onLog('Found rows whose foreign key points at a row that no longer exists:');
+      for (const f of orphanFindings) {
+        onLog(`  ${f.table}.${f.column} -> ${f.refTable}.id: ${f.count} row(s), e.g. ${f.sample.join(', ')}`);
+      }
+      if (!pruneOrphans) {
+        throw new Error(
+          'Found orphaned foreign-key rows — pass --prune-orphans to skip them and transfer ' +
+          'everything else, or clean them up in the source database first.'
+        );
+      }
+      onLog('--prune-orphans given — these rows will be skipped.');
+    } else {
+      onLog('No orphaned foreign-key values found.');
+    }
+
+    onLog('');
+    onLog('Row counts (source):');
+    for (const table of TABLES) {
+      const [{ count }] = await sourceKnex(table.name).count({ count: '*' });
+      onLog(`  ${table.name}: ${count}`);
+    }
+
+    onLog('');
+    onLog('Connecting to target and building schema (migrate.latest)...');
+    targetKnex = createKnex(targetConfig);
+    await targetKnex.raw('SELECT 1'); // fail fast with a clear error before anything destructive
+    // Must run BEFORE assertTargetIsBlank() below — on a genuinely fresh target there's no
+    // access_roles/users table to even query yet; migrate.latest() creates them (seeded with the
+    // same default rows every fresh install gets) and is a no-op if the schema's already there.
+    await targetKnex.migrate.latest();
+    await assertTargetIsBlank(targetKnex, force, backend);
+
+    onLog('Clearing default-seeded data from the target so the source data replaces it...');
+    await truncateAllTables(targetKnex, backend);
+
+    onLog('');
+    onLog('Copying tables...');
+    const report = [];
+    for (const table of TABLES) {
+      const result = await copyTable(sourceKnex, targetKnex, table, idSets);
+      report.push({ table: table.name, ...result });
+      onLog(`  ${table.name}: copied ${result.copied}/${result.total}${result.skipped ? ` (skipped ${result.skipped} orphaned)` : ''}`);
+    }
+
+    onLog('');
+    onLog(backend === 'mysql' ? 'Resetting AUTO_INCREMENT counters past the highest transferred id...' : 'Resetting Postgres sequences past the highest transferred id...');
+    await resetSequences(targetKnex, backend);
+
+    onLog('');
+    onLog('Verifying row counts on target...');
+    let mismatch = false;
+    for (const row of report) {
+      const [{ count }] = await targetKnex(row.table).count({ count: '*' });
+      const targetCount = Number(count);
+      const ok = targetCount === row.copied;
+      if (!ok) mismatch = true;
+      onLog(`  ${row.table}: source ${row.total} -> copied ${row.copied} -> target has ${targetCount}${ok ? '' : '  <-- MISMATCH'}`);
+    }
+
+    return { report, mismatch };
+  } finally {
+    await sourceKnex.destroy();
+    if (targetKnex) await targetKnex.destroy();
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -346,90 +476,33 @@ async function main() {
   if (args.dryRun) console.log('DRY RUN — the target will not be touched.');
   console.log('');
 
-  const sourceKnex = createKnex(fromSqlitePath);
-  let targetKnex = null;
-
-  try {
+  if (args.dryRun) {
+    const { rowCounts, orphanFindings } = await scanSource(fromSqlitePath);
     console.log('Scanning source for orphaned foreign-key values (SQLite never enforced these)...');
-    const idSets = await loadIdSets(sourceKnex);
-    const orphanFindings = await scanForOrphans(sourceKnex, idSets);
-
     if (orphanFindings.length > 0) {
       console.log('');
       console.log('Found rows whose foreign key points at a row that no longer exists:');
       for (const f of orphanFindings) {
         console.log(`  ${f.table}.${f.column} -> ${f.refTable}.id: ${f.count} row(s), e.g. ${f.sample.join(', ')}`);
       }
-      if (!args.pruneOrphans) {
-        console.log('');
-        // A real (non-dry) run without --prune-orphans stops here — silently dropping someone's
-        // data is never the default. --dry-run never writes anything regardless, so there's nothing
-        // to protect by aborting early; it falls through to the row-count report below instead, same
-        // as the --prune-orphans path, so the report always shows the full picture.
-        if (!args.dryRun) {
-          console.log('Aborting — pass --prune-orphans to skip these rows and transfer everything else,');
-          console.log('or clean them up in the source database first.');
-          process.exit(1);
-        }
-        console.log('Re-run without --dry-run and pass --prune-orphans to skip these rows (or clean them up first).');
-      } else {
-        console.log('--prune-orphans given — these rows will be skipped.');
-      }
+      console.log('');
+      console.log('Re-run without --dry-run and pass --prune-orphans to skip these rows (or clean them up first).');
     } else {
       console.log('No orphaned foreign-key values found.');
     }
-
-    // Row-count report happens even in dry-run mode — it's the other half of "what would happen".
     console.log('');
     console.log('Row counts (source):');
-    for (const table of TABLES) {
-      const [{ count }] = await sourceKnex(table.name).count({ count: '*' });
-      console.log(`  ${table.name}: ${count}`);
-    }
-
-    if (args.dryRun) {
-      console.log('');
-      console.log('Dry run complete — nothing was written.');
-      return;
-    }
-
+    for (const row of rowCounts) console.log(`  ${row.table}: ${row.count}`);
     console.log('');
-    console.log('Connecting to target and building schema (migrate.latest)...');
-    targetKnex = createKnex(targetConfig);
-    await targetKnex.raw('SELECT 1'); // fail fast with a clear error before anything destructive
-    // Must run BEFORE assertTargetIsBlank() below — on a genuinely fresh target there's no
-    // access_roles/users table to even query yet; migrate.latest() creates them (seeded with the
-    // same default rows every fresh install gets) and is a no-op if the schema's already there.
-    await targetKnex.migrate.latest();
-    await assertTargetIsBlank(targetKnex, args.force, args.backend);
+    console.log('Dry run complete — nothing was written.');
+    return;
+  }
 
-    console.log('Clearing default-seeded data from the target so the source data replaces it...');
-    await truncateAllTables(targetKnex, args.backend);
-
-    console.log('');
-    console.log('Copying tables...');
-    const report = [];
-    for (const table of TABLES) {
-      const result = await copyTable(sourceKnex, targetKnex, table, idSets);
-      report.push({ table: table.name, ...result });
-      console.log(`  ${table.name}: copied ${result.copied}/${result.total}${result.skipped ? ` (skipped ${result.skipped} orphaned)` : ''}`);
-    }
-
-    console.log('');
-    console.log(args.backend === 'mysql' ? 'Resetting AUTO_INCREMENT counters past the highest transferred id...' : 'Resetting Postgres sequences past the highest transferred id...');
-    await resetSequences(targetKnex, args.backend);
-
-    console.log('');
-    console.log('Verifying row counts on target...');
-    let mismatch = false;
-    for (const row of report) {
-      const [{ count }] = await targetKnex(row.table).count({ count: '*' });
-      const targetCount = Number(count);
-      const ok = targetCount === row.copied;
-      if (!ok) mismatch = true;
-      console.log(`  ${row.table}: source ${row.total} -> copied ${row.copied} -> target has ${targetCount}${ok ? '' : '  <-- MISMATCH'}`);
-    }
-
+  try {
+    const { mismatch } = await runTransfer({
+      fromSqlitePath, targetConfig, backend: args.backend,
+      pruneOrphans: args.pruneOrphans, force: args.force, onLog: console.log,
+    });
     console.log('');
     if (mismatch) {
       console.log('Transfer finished with row-count mismatches — see above. Do not switch DB_BACKEND to');
@@ -439,9 +512,10 @@ async function main() {
       console.log(`Transfer complete. Set DB_BACKEND=${args.backend} (and DATABASE_URL/DB_* as used above) and`);
       console.log('restart LoxSuite to switch over.');
     }
-  } finally {
-    await sourceKnex.destroy();
-    if (targetKnex) await targetKnex.destroy();
+  } catch (err) {
+    console.error('');
+    console.error('Transfer failed:', err.message);
+    process.exitCode = 1;
   }
 }
 
@@ -453,4 +527,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { TABLES, FOREIGN_KEYS, parseArgs };
+module.exports = { TABLES, FOREIGN_KEYS, parseArgs, scanSource, hasImportableData, runTransfer };

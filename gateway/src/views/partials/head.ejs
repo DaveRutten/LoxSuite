@@ -30,6 +30,11 @@
       <span class="brand-icon"><%- icon('logo', { size: 18 }) %></span>
       <span>LoxSuite</span>
     </div>
+    <% if (currentUser && currentUser.isAdmin && getSqliteImportStatus().available) { %>
+      <a href="/setup/import" style="display:flex; align-items:center; gap:0.4rem; margin:0 0 0.75rem; padding:0.5rem 0.7rem; border-radius:var(--radius); background:var(--surface-alt); border:1px solid var(--danger); color:var(--danger); font-size:0.8rem; font-weight:500; text-decoration:none;">
+        <%- icon('refresh', { size: 13 }) %> Existing SQLite data found — import it
+      </a>
+    <% } %>
     <%
       // canView/canEdit come from res.locals (see middleware/loadUserContext.js) — hiding a nav
       // item or button a role can't use is UX only, requirePermission on the server is the actual
@@ -69,7 +74,6 @@
     %>
     <nav>
       <% if (canView('dashboard')) { %><a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>">Dashboard</a><% } %>
-      <% if (canView('ai_chat')) { %><a href="/ai-chat" class="<%= active === 'ai-chat' ? 'active' : '' %>">AI Assistant</a><% } %>
 
       <% const monitorExpanded = active === 'monitor' || active === 'dashboards'; %>
       <button type="button" class="nav-section-label" data-nav-section="monitor" aria-expanded="<%= isCollapsed('monitor', monitorExpanded) ? 'false' : 'true' %>">

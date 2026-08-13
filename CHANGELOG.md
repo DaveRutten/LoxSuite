@@ -2,6 +2,53 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.0-alpha.1] - 2026-08-13
+
+### Added
+- **AI Assistant: multi-provider support**. Ollama/OpenWebUI is now the bundled default
+  (`docker-compose.yml` ships an `ollama` service out of the box, no API key, no per-token
+  billing) — Claude (Anthropic), ChatGPT (OpenAI), and Gemini (Google) are optional alternatives,
+  each with their own API key field and a short recommended-model list (or type any custom one).
+  Administration → AI Assistant checks whether the chosen Ollama model is already pulled and, if
+  not, pulls it right there with a live progress log — survives navigating away, and a
+  Notification Center entry fires once it's ready. Downloaded Ollama models can also be deleted
+  from the same page.
+- **AI Assistant: local-data fast path**. For "what's the current value of X" questions, LoxSuite
+  now tries to resolve the answer directly from its own already-live data (the same cache Live
+  Data/dashboards use) before the model ever makes a tool call — no network round trip to the
+  Miniserver on a hit. Two new tools (`local_find`/`local_state`) are offered to every provider
+  alongside the Miniserver's own MCP tools, and a deterministic pre-fetch step resolves the common
+  single-room/single-value case in plain code, handing the model a ready-made fact instead of
+  relying on it to fetch one correctly. Falls back to the Miniserver's own MCP tools for anything
+  else (history/statistics, writes, or a value not yet reflected in the live cache).
+- **AI Assistant: chat widget polish** — Markdown rendering (bold/lists/code) instead of literal
+  `**asterisks**`; a Retry button on any failed reply; message timestamps that reflect when a
+  reply actually finished, not when it started; an unread badge on the launcher for a reply that
+  finished while the panel was closed or showing a different conversation; new conversations
+  pre-select the first available Miniserver; the panel now only closes via its own close button or
+  Escape (not by clicking elsewhere), so it reliably stays open across page navigation.
+- Miniserver edit page: a **Start new login** button next to Re-authorize, for when a stuck token
+  refresh needs a clean slate instead of repeating the same failing refresh. The Miniservers list's
+  own row-level "Test now" popover now shows the AI Assistant (MCP) check result too, with the same
+  colored icons as the edit page.
+- System log entries for Miniserver and AI Assistant settings saves now show what actually
+  changed (`field: old → new`) instead of a bare "updated X."
+
+### Fixed
+- **Slow query**: `Logs → Loxone Commands` (and any other Logs tab where its own source is a small
+  fraction of a much larger `log_entries` table) could take 3+ seconds — the existing index
+  supported the date-range filter, not the `ORDER BY id DESC` this page's own query actually needs,
+  so a rare source in an otherwise huge table forced a near-full-table scan. Added the missing
+  `(source, id)` index.
+- Ollama performance tuning for CPU-only inference: keeps the model resident far longer
+  (`OLLAMA_KEEP_ALIVE`), quantized KV cache + flash attention, a capped context length, trimmed
+  tool descriptions, a hard cap on how much of an oversized tool result gets fed back to the model,
+  and a cap on reply length — together, these cut a cold multi-tool-call turn from 100+ seconds to
+  a small fraction of that in testing.
+- The AI Assistant's system prompt now explicitly forbids stating a value it didn't literally see
+  in a tool result, and requires it to actually call a tool rather than describe or narrate one —
+  both verified against real (if imperfect, especially on small local models) improvements.
+
 ## [0.17.1-alpha.1] - 2026-08-12
 
 ### Fixed

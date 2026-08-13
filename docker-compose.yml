@@ -18,16 +18,24 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       DB_PATH: /data/gateway.db
-      # SQLite (above) is the zero-config default — nothing else below is needed for it. To point
-      # LoxSuite at an external PostgreSQL or MySQL/MariaDB server instead, set DB_BACKEND to
-      # postgres or mysql and either DATABASE_URL or the discrete DB_HOST/DB_PORT/DB_NAME/DB_USER/
-      # DB_PASSWORD vars (DB_PATH above is simply ignored then). See .env.example for the full list
-      # (DB_SSL, DB_POOL_MAX, DB_CONNECT_TIMEOUT_MS/DB_CONNECT_RETRIES) and gateway/src/db/
+      # SQLite (above) is the zero-config default — nothing else below is needed for it, and every
+      # one of these vars passes straight through from .env (see .env.example): left unset there,
+      # Compose fills them in as an empty string, which db/config.js's own resolveDbConfig() already
+      # treats identically to "not set" throughout. To point LoxSuite at an external PostgreSQL or
+      # MySQL/MariaDB server instead, set DB_BACKEND and the connection details below in .env — no
+      # editing this file itself required. DB_PATH above is simply ignored then. See gateway/src/db/
       # transfer.js for moving an existing SQLite install's data over first.
-      # DB_BACKEND: postgres
-      # DATABASE_URL: postgres://loxsuite:changeme@postgres-host:5432/loxsuite
-      # DB_BACKEND: mysql
-      # DATABASE_URL: mysql://loxsuite:changeme@mysql-host:3306/loxsuite
+      DB_BACKEND: ${DB_BACKEND:-sqlite}
+      DATABASE_URL: ${DATABASE_URL:-}
+      DB_HOST: ${DB_HOST:-}
+      DB_PORT: ${DB_PORT:-}
+      DB_NAME: ${DB_NAME:-}
+      DB_USER: ${DB_USER:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_SSL: ${DB_SSL:-}
+      DB_POOL_MAX: ${DB_POOL_MAX:-}
+      DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-}
+      DB_CONNECT_RETRIES: ${DB_CONNECT_RETRIES:-}
       MOSQUITTO_LOG_PATH: /mosquitto/log/mosquitto.log
       MOSQUITTO_CONFIG_PATH: /mosquitto/config
       LOXONE_UDP_PORT: 11885
@@ -45,6 +53,62 @@ services:
       - "9001:9001"
       - "11885:11885/udp"
 
+  # Bundled by default so the AI Assistant's Ollama provider (Administration > AI Assistant) works
+  # out of the box with zero extra setup — LoxSuite talks to it over this project's own default
+  # network at http://ollama:11434 (the service name below, resolvable as a hostname; no extra
+  # network config needed). Already running Ollama/OpenWebUI elsewhere, or would rather use a
+  # hosted provider (Claude/ChatGPT/Gemini) instead? DON'T DELETE ANYTHING — just leave this
+  # service running unused (it costs nothing but a bit of idle disk/RAM until a model is actually
+  # pulled into it) and pick a different Provider in Administration > AI Assistant, or point Base
+  # URL at your own external instance instead. To actually remove this container: comment out or
+  # delete this whole `ollama:` service block (and its `ollama_data` volume below), then
+  # `docker compose up -d` again.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    environment:
+      # Tuned for CPU-only inference (no GPU passthrough into Docker on most setups, this project's
+      # own dev machine included) — verified against a real slow turn: the bulk of the wall-clock
+      # time wasn't token generation itself (a plain benchmark measured ~7 tok/s, unremarkable for a
+      # 3B model on CPU) but (a) reloading the model from disk every time it had been idle a few
+      # minutes, and (b) reprocessing a very large context (a big MCP tool result) from scratch on
+      # every request, since Ollama's chat API is stateless across calls.
+      #
+      # Keeps the model resident far longer than the 5-minute default, so a chat reply doesn't pay a
+      # ~15-20s reload tax just because nobody asked anything for a few minutes.
+      OLLAMA_KEEP_ALIVE: 30m
+      # Quantized KV cache + flash attention cut the memory bandwidth needed per token — a real win
+      # on CPU too, not just GPU, and directly reduces how punishing a large tool-result context is.
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_KV_CACHE_TYPE: q8_0
+      # Caps how much context a request can grow to before this app's own tool-result truncation
+      # (see llm/ollama.js) — a hard backstop against one outsized MCP tool result ballooning the
+      # KV cache and turning every subsequent reply in that conversation slow. Raise this if you
+      # have RAM to spare and want longer conversations to stay fully in context.
+      OLLAMA_CONTEXT_LENGTH: "8192"
+      # Only ever pull one model into memory at a time — relevant once more than one has been
+      # pulled (e.g. trying out a lighter model alongside the original) so they don't both sit
+      # loaded, splitting the same limited RAM/CPU between them.
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Only needed if you also want to reach Ollama directly from outside Docker (e.g. `ollama pull`
+    # from the host instead of `docker exec`) — the loxsuite container itself reaches it over the
+    # shared internal network regardless of this.
+    ports:
+      - "11434:11434"
+    # Uncomment to cap how many CPU cores Ollama can use — worth setting on a shared box (e.g. an
+    # Unraid server also running other containers/VMs) so one long AI chat reply can't starve
+    # everything else on it; leave commented to use every core the host has, which is the default
+    # and usually what you want on a box dedicated to this. Fractional values work too.
+    # cpus: "4"        # e.g. a 4-CPU Unraid allocation
+    # cpus: "8"        # give it every core on an 8-CPU box
+    #
+    # A per-core pin (which physical cores, not just how many) instead of/alongside the above:
+    # cpuset: "0-3"
+
 volumes:
   mosquitto_data:
   mosquitto_log:
+  ollama_data:

@@ -75,6 +75,19 @@
       e.stopPropagation();
       openTabulatorRowActionsPopover(toggle, function (actions, closePopover, ctx) { buildRowActions(actions, closePopover, ctx, v); });
     });
+    // Same movableRows-vs-click guard the table's own rowFormatter (below) already applies to a
+    // whole Client row (which isn't meant to be draggable at all) — a top-level Gateway/standalone
+    // row IS meant to stay draggable everywhere else on it, so that same whole-row guard can't
+    // apply here without also killing the reorder feature. Scoped to just this button instead:
+    // Tabulator's own row-move listener lives directly on the <tr>, registered in the default
+    // bubble phase, and only starts its drag (removing the row's real element from the DOM,
+    // exactly the symptom reported — a transient scrollbar flash as a ghost row briefly inflates
+    // the scrollable body) once a mousedown has stayed pressed ~150ms. Without this, a press-and-
+    // hold on THIS button reaching that threshold — completely ordinary, not a deliberate drag —
+    // tore the row out from under the very popover this same press was trying to open, so it
+    // never stayed open at all. stopPropagation() here (before Tabulator's own tr-level listener
+    // ever sees the mousedown) leaves the click handler above completely unaffected.
+    toggle.addEventListener('mousedown', function (e) { e.stopPropagation(); }, true);
     wrap.appendChild(toggle);
     return wrap;
   }
@@ -91,7 +104,10 @@
     // which is what actually put it in the top-left corner of the page.
     var testResultBar = null;
     var testResultText = null;
-    function setTestResult(text) {
+    // html=false (the default) treats text as plain text (the "Testing…"/failure placeholders) —
+    // html=true is for the actual renderTestLine() result, which needs its markup to render, not
+    // show up as literal angle brackets.
+    function setTestResult(text, html) {
       if (!testResultBar) {
         testResultBar = document.createElement('div');
         testResultBar.className = 'row-actions-popover-extra';
@@ -101,7 +117,7 @@
         testResultBar.appendChild(testResultText);
         ctx.panel.appendChild(testResultBar);
       }
-      testResultText.textContent = text;
+      if (html) testResultText.innerHTML = text; else testResultText.textContent = text;
       ctx.reposition();
     }
 
@@ -148,12 +164,18 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.error) { setTestResult(data.error); return; }
-          var parts = [];
-          if (data.local) parts.push('Local: ' + (data.local.ok ? data.local.ms + ' ms' : (data.local.error || 'failed')));
-          if (data.external) parts.push('External: ' + (data.external.ok ? data.external.ms + ' ms' : (data.external.error || 'failed')));
-          if (data.api) parts.push('Loxone API: ' + (data.api.ok ? 'ok' : (data.api.error || 'failed')));
-          if (data.logbook) parts.push('Logbook: ' + (data.logbook.ok ? 'ok' : (data.logbook.error || 'failed')));
-          setTestResult(parts.join(' · '));
+          // Same set of lines, same icons/colors, as the edit page's own renderLine() — this
+          // popover used to fall back to plain "Label: detail · Label: detail" text instead.
+          var html = '<div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:center;">';
+          html += renderTestLine('Local', data.local);
+          html += data.external ? renderTestLine('External', data.external) : '<span class="hint" style="margin:0;">External: not configured</span>';
+          html += renderTestLine('Loxone API', data.api);
+          html += renderTestLine('Logbook reachable', data.logbook);
+          html += renderTestLine('Live data (websocket)', data.live);
+          // data.mcp is only present when this row has AI Assistant enabled (see POST /:id/check).
+          html += data.mcp ? renderTestLine('AI Assistant (MCP)', data.mcp) : '';
+          html += '</div>';
+          setTestResult(html, true);
           // Fresh status/firmware/generation for this row (and any other row, e.g. a Gateway whose
           // Client just got tested) — simplest correct refresh given the table's rows are backed by
           // one shared ajax source, same as any other cross-row-effect action already does (Delete).
@@ -191,7 +213,21 @@
     plus: '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
     chevronsDown: '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>',
     chevronsUp: '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>',
+    check: '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    x: '<svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   };
+
+  // Same visual shape as the Miniserver edit page's own renderLine() (see miniserver-edit.ejs's
+  // inline script) — a checkmark/cross icon, colored by ok/fail, label in normal text, detail
+  // (ms or the error) after it. Kept in sync by hand since one lives in a plain public/*.js file
+  // and the other in an .ejs template's own inline <script> — no shared module between them.
+  function renderTestLine(label, result) {
+    if (!result) return '';
+    var color = result.ok ? 'var(--accent)' : 'var(--danger)';
+    var detail = result.ok ? (result.ms + ' ms') : (result.error || 'failed');
+    return '<div style="display:flex; align-items:center; gap:0.35rem; color:' + color + ';">' + (result.ok ? ICONS.check : ICONS.x)
+      + '<strong style="color:var(--text);">' + label + '</strong><span>' + detail + '</span></div>';
+  }
 
   // ---- Diagnostics dialog: Check for update / Update to latest release / Add to Dashboard/Monitor
   // — the 4 action buttons the old table's own expand-row carried, moved into a dialog instead of

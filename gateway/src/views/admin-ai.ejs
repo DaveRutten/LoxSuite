@@ -17,6 +17,18 @@
   <p class="hint" style="color: var(--success);">Saved.</p>
 <% } %>
 
+
+<p class="hint" style="background:var(--warning-soft); color:var(--warning); padding:0.75rem 1rem; border-radius:8px; margin-bottom:1.25rem;">
+  <strong>Experimental.</strong> This feature works, but small/local models in particular (Ollama's
+  default <code>llama3.2</code>, for instance) have been observed skipping a needed lookup step,
+  inventing a value instead of reading a real tool result, or narrating a tool call in plain text
+  instead of actually making one. The underlying data is correct when read directly &mdash; the
+  model doesn't always use it correctly. Treat anything the assistant reports as worth
+  double-checking before acting on it. A larger local model or a hosted provider
+  (Claude/ChatGPT/Gemini) tends to follow instructions more reliably than a small local one, at
+  the cost of speed or a per-token bill.
+</p>
+
 <p class="hint">
   Lets a Loxone Miniserver's native MCP server plugin power an AI chat assistant and richer
   dashboard suggestions &mdash; entirely optional, and off by default. With this disabled, LoxSuite
@@ -42,26 +54,61 @@
     %>
     <div id="ai-properties" class="form-grid" style="margin-top:0.85rem; <%= settings.enabled ? '' : 'display:none;' %>">
       <div>
-        <label>Model</label>
-        <input type="text" name="model" value="<%= settings.model %>">
-        <p class="hint">E.g. <code>claude-opus-5</code> or <code>claude-sonnet-5</code>.</p>
+        <label>Provider</label>
+        <select name="provider" id="ai-provider-select">
+          <%
+            // Ollama listed first — it's the recommended default (self-hosted, no API key, no
+            // per-token billing; the bundled docker-compose.yml service ships it out of the box).
+            // The other three are the "extra option" hosted APIs, in the order this feature added
+            // support for them.
+          %>
+          <option value="ollama" <%= settings.provider === 'ollama' ? 'selected' : '' %>>Ollama / OpenWebUI (self-hosted, default)</option>
+          <option value="anthropic" <%= settings.provider === 'anthropic' ? 'selected' : '' %>>Claude (Anthropic)</option>
+          <option value="openai" <%= settings.provider === 'openai' ? 'selected' : '' %>>ChatGPT (OpenAI)</option>
+          <option value="gemini" <%= settings.provider === 'gemini' ? 'selected' : '' %>>Gemini (Google)</option>
+        </select>
+        <p class="hint">
+          Ollama/OpenWebUI runs entirely on your own hardware (or any Ollama-compatible server you
+          already have) &mdash; no API key, no per-token billing. Claude/ChatGPT/Gemini are hosted
+          APIs, each billed per token and needing their own key.
+        </p>
       </div>
       <div>
+        <label>Model</label>
+        <select id="ai-model-select"></select>
+        <input type="text" name="model" id="ai-model-custom-input" placeholder="Model name" value="<%= settings.model %>" style="margin-top:0.35rem; display:none;">
+        <p class="hint" id="ai-model-hint"></p>
+      </div>
+      <div id="ai-base-url-wrap" style="<%= settings.provider === 'ollama' ? '' : 'display:none;' %>">
+        <label>Base URL</label>
+        <input type="text" name="base_url" value="<%= settings.base_url || '' %>" placeholder="http://ollama:11434">
+        <p class="hint">
+          Where your Ollama/OpenWebUI server is reachable from this container &mdash;
+          <code>http://ollama:11434</code> for the bundled Ollama service already in
+          <code>docker-compose.yml</code> (comment that service out if you don't want it, or point
+          this at a different/external instance instead), or an external host's own address.
+        </p>
+      </div>
+      <div id="ai-ollama-model-status-wrap" style="<%= settings.provider === 'ollama' && settings.enabled ? '' : 'display:none;' %>">
+        <label>Model status</label>
+        <p id="ai-ollama-model-status" class="hint">Checking&hellip;</p>
+        <pre id="ai-ollama-pull-log" class="ai-ollama-pull-log" hidden></pre>
+        <p class="hint" style="margin-top:0.7rem;">Downloaded models</p>
+        <div id="ai-ollama-models-list" class="ai-ollama-models-list"></div>
+      </div>
+      <div id="ai-effort-wrap" style="<%= settings.provider === 'anthropic' ? '' : 'display:none;' %>">
         <label>Effort</label>
         <select name="effort">
           <% ['low', 'medium', 'high', 'xhigh', 'max'].forEach(level => { %>
             <option value="<%= level %>" <%= level === settings.effort ? 'selected' : '' %>><%= level %></option>
           <% }) %>
         </select>
-        <p class="hint">Trades cost/latency for depth of reasoning on every chat turn.</p>
+        <p class="hint">Trades cost/latency for depth of reasoning on every chat turn. Claude only.</p>
       </div>
       <div>
         <label>API key</label>
         <input type="password" name="api_key" placeholder="<%= settings.api_key ? 'Leave blank to keep the current key' : '' %>">
-        <p class="hint">
-          A <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>
-          API key &mdash; separate from any claude.ai or Claude Code subscription.
-        </p>
+        <p class="hint" id="ai-api-key-hint"></p>
       </div>
       <div>
         <label>Suggested dashboards</label>
@@ -95,6 +142,283 @@
         // so save that state immediately rather than hiding it along with the Save button.
         if (!toggle.checked) toggle.closest('form').submit();
       });
+    })();
+  </script>
+  <script>
+    // Provider-specific fields/hints AND the Model picker's own preset list — all keyed off the
+    // Provider select's value, swapped client-side rather than requiring a save+reload to see them
+    // (same show/hide idiom as the enabled-toggle above). The Model field itself follows the same
+    // select-a-preset-or-type-your-own shape as chartFieldHelpers.js's unitField/scaleField
+    // (dashboard panels' Unit/Scale fields) — just built directly here since the preset LIST itself
+    // has to change with the provider, which that shared helper has no notion of.
+    (function () {
+      var providerSelect = document.getElementById('ai-provider-select');
+      var baseUrlWrap = document.getElementById('ai-base-url-wrap');
+      var baseUrlInput = baseUrlWrap.querySelector('input[name="base_url"]');
+      var effortWrap = document.getElementById('ai-effort-wrap');
+      var modelSelect = document.getElementById('ai-model-select');
+      var modelCustomInput = document.getElementById('ai-model-custom-input');
+      var modelHint = document.getElementById('ai-model-hint');
+      var apiKeyHint = document.getElementById('ai-api-key-hint');
+      if (!providerSelect) return;
+
+      // Short, deliberately conservative starting points — not necessarily each vendor's newest
+      // release (Claude/ChatGPT/Gemini all ship new model names often enough that a "latest" list
+      // baked in here would drift stale) — Custom always covers whatever's actually current.
+      var PROVIDERS = {
+        ollama: {
+          models: ['llama3.1', 'llama3.2', 'qwen2.5', 'qwen2.5-coder', 'mistral-nemo'],
+          modelHint: 'Must already be pulled into your Ollama/OpenWebUI server — Custom lets you type any tag, and the Model status box below offers to pull it automatically once saved. Pick one that supports tool/function calling if you want the assistant to read/control a Miniserver.',
+          apiKeyHint: 'Optional — only needed if your Ollama/OpenWebUI server sits behind a reverse proxy that requires a bearer token. A bare local Ollama needs nothing here.',
+        },
+        anthropic: {
+          models: ['claude-opus-5', 'claude-sonnet-5', 'claude-fable-5', 'claude-haiku-4-5'],
+          modelHint: 'See <a href="https://docs.anthropic.com/en/docs/about-claude/models" target="_blank" rel="noopener">docs.anthropic.com</a> for the current full list and pricing.',
+          apiKeyHint: 'A <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> API key — separate from any claude.ai or Claude Code subscription.',
+        },
+        openai: {
+          models: ['gpt-4o', 'gpt-4o-mini'],
+          modelHint: 'See <a href="https://platform.openai.com/docs/models" target="_blank" rel="noopener">platform.openai.com</a> for the current full list and pricing.',
+          apiKeyHint: 'An <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a> API key — separate from any ChatGPT Plus subscription.',
+        },
+        gemini: {
+          models: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+          modelHint: 'See <a href="https://ai.google.dev/gemini-api/docs/models" target="_blank" rel="noopener">ai.google.dev</a> for the current full list and pricing.',
+          apiKeyHint: 'A <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> API key.',
+        },
+      };
+
+      // Filled in once /admin/ai/ollama-models resolves (see below) — every model actually pulled
+      // into the configured Ollama instance, e.g. a custom model typed in once, then downloaded,
+      // shouldn't keep falling back to "Custom…" forever just because it isn't one of the few
+      // static presets baked into PROVIDERS.ollama.models above.
+      var pulledOllamaModels = [];
+
+      function presetsFor(providerKey) {
+        var base = PROVIDERS[providerKey].models;
+        if (providerKey !== 'ollama' || !pulledOllamaModels.length) return base;
+        var merged = base.slice();
+        pulledOllamaModels.forEach(function (m) { if (merged.indexOf(m) === -1) merged.push(m); });
+        return merged;
+      }
+
+      function rebuildModelSelect(providerKey, currentModel) {
+        var presets = presetsFor(providerKey);
+        var isCustom = !!currentModel && presets.indexOf(currentModel) === -1;
+        modelSelect.innerHTML = '';
+        presets.forEach(function (m) {
+          var opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = m;
+          if (!isCustom && currentModel === m) opt.selected = true;
+          modelSelect.appendChild(opt);
+        });
+        var customOpt = document.createElement('option');
+        customOpt.value = '__custom__';
+        customOpt.textContent = 'Custom…';
+        if (isCustom) customOpt.selected = true;
+        modelSelect.appendChild(customOpt);
+
+        modelCustomInput.style.display = isCustom ? '' : 'none';
+        modelCustomInput.value = isCustom ? currentModel : '';
+        if (!isCustom) modelCustomInput.removeAttribute('name');
+        modelSelect.name = isCustom ? '' : 'model';
+        if (isCustom) modelCustomInput.name = 'model';
+      }
+
+      modelSelect.addEventListener('change', function () {
+        var isCustom = modelSelect.value === '__custom__';
+        modelCustomInput.style.display = isCustom ? '' : 'none';
+        modelSelect.removeAttribute('name');
+        modelCustomInput.removeAttribute('name');
+        if (isCustom) {
+          modelCustomInput.name = 'model';
+          modelCustomInput.focus();
+        } else {
+          modelSelect.name = 'model';
+        }
+      });
+
+      function applyProvider(providerKey, currentModel) {
+        var isOllama = providerKey === 'ollama';
+        var isAnthropic = providerKey === 'anthropic';
+        baseUrlWrap.style.display = isOllama ? '' : 'none';
+        effortWrap.style.display = isAnthropic ? '' : 'none';
+        var cfg = PROVIDERS[providerKey];
+        modelHint.innerHTML = cfg.modelHint;
+        apiKeyHint.innerHTML = cfg.apiKeyHint;
+        rebuildModelSelect(providerKey, currentModel);
+
+        // Pre-fills an actual VALUE, not just the input's own placeholder text — a placeholder
+        // LOOKS filled in at a glance but submits as genuinely empty, which routes/admin.js's own
+        // POST /ai now also defaults server-side; doing it here too means the field visibly shows
+        // what's about to be saved instead of only the server silently substituting it afterward.
+        if (isOllama && !baseUrlInput.value.trim()) baseUrlInput.value = 'http://ollama:11434';
+      }
+
+      providerSelect.addEventListener('change', function () {
+        applyProvider(providerSelect.value, null); // switching provider — don't carry the old model over as if it were a deliberate custom choice
+      });
+
+      // Initial render, from whatever's actually saved.
+      var savedModel = <%- JSON.stringify(settings.model || '') %>;
+      applyProvider(providerSelect.value, savedModel);
+
+      // Fetched once, independent of whichever provider happens to be selected right now — cheap,
+      // and means switching TO Ollama later in the same page view already has the real list ready
+      // instead of a second round-trip. Re-renders the Model select only if Ollama is still the
+      // one showing, so a model that finished downloading mid-visit (or was typed as Custom last
+      // save and has since been pulled) shows up as a real option instead of staying "Custom…".
+      fetch('/admin/ai/ollama-models').then(function (r) { return r.json(); }).then(function (data) {
+        pulledOllamaModels = (data.models || []).map(function (m) { return m.name; });
+        if (providerSelect.value === 'ollama') rebuildModelSelect('ollama', modelSelect.value === '__custom__' ? modelCustomInput.value : modelSelect.value);
+      }).catch(function () {});
+    })();
+  </script>
+  <script>
+    // Automatically checks whether the currently-SAVED Ollama model is already pulled into the
+    // currently-SAVED Ollama/OpenWebUI instance, and — if not — starts pulling it right here, with
+    // a live streamed log, instead of requiring `docker exec ... ollama pull <model>` by hand.
+    // Reflects settings as of the last real save+reload (not whatever's currently typed into the
+    // form but unsaved) — same reasoning as every other "only matters once saved" field on this
+    // page. A no-op entirely unless this install is actually configured for Ollama right now.
+    (function () {
+      var statusWrap = document.getElementById('ai-ollama-model-status-wrap');
+      var statusText = document.getElementById('ai-ollama-model-status');
+      var log = document.getElementById('ai-ollama-pull-log');
+      if (!statusWrap || statusWrap.style.display === 'none') return;
+
+      function appendLine(text) {
+        log.hidden = false;
+        log.textContent += text + '\n';
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function startPull(alreadyRunning) {
+        // Same endpoint either way — routes/admin.js's own POST /ai/ollama-pull safely tells "start
+        // a new pull" and "join one already running" apart itself, and either way the pull keeps
+        // going on the server even if this tab is later closed or navigated away from; a bell
+        // notification (Notification Center) fires once it finishes regardless of who's watching.
+        statusText.textContent = alreadyRunning
+          ? 'A pull is already in progress — resuming the log…'
+          : 'Not downloaded yet — pulling now (this can take a while for a large model; you can safely leave this page, it keeps going, and you\'ll get a notification when it\'s ready)…';
+        statusText.style.color = '';
+        fetch('/admin/ai/ollama-pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+          .then(function (resp) {
+            var reader = resp.body.getReader();
+            var decoder = new TextDecoder();
+            var buffer = '';
+            function handleLine(line) {
+              if (line === '__DONE__') {
+                statusText.textContent = 'Available ✓';
+                statusText.style.color = 'var(--success)';
+                return;
+              }
+              if (line === '__ERROR__') {
+                statusText.textContent = 'Pull failed — see the log below.';
+                statusText.style.color = 'var(--danger)';
+                return;
+              }
+              if (line) appendLine(line);
+            }
+            function read() {
+              return reader.read().then(function (result) {
+                if (result.done) { if (buffer) handleLine(buffer); return; }
+                buffer += decoder.decode(result.value, { stream: true });
+                var lines = buffer.split('\n');
+                buffer = lines.pop();
+                lines.forEach(handleLine);
+                return read();
+              });
+            }
+            return read();
+          }).catch(function (err) {
+            statusText.textContent = 'Pull failed: ' + err.message;
+            statusText.style.color = 'var(--danger)';
+          });
+      }
+
+      fetch('/admin/ai/ollama-status').then(function (r) { return r.json(); }).then(function (data) {
+        if (data.available) {
+          statusText.textContent = 'Available ✓';
+          statusText.style.color = 'var(--success)';
+        } else {
+          startPull(!!data.pulling);
+        }
+      }).catch(function () {
+        statusText.textContent = 'Could not check model status.';
+        statusText.style.color = 'var(--danger)';
+      });
+    })();
+  </script>
+  <script>
+    // "Downloaded models" list under the Model status box above — every model already pulled into
+    // the configured Ollama instance, each with a Delete button (routes/admin.js's own POST
+    // /ai/ollama-models/delete, the UI counterpart to `docker exec ollama ollama rm <model>`).
+    // Independent of whichever single model ai_settings.model currently points at.
+    (function () {
+      var list = document.getElementById('ai-ollama-models-list');
+      if (!list) return;
+
+      function formatSize(bytes) {
+        if (!bytes) return '';
+        var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        var i = 0;
+        while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+        return bytes.toFixed(bytes >= 10 || i === 0 ? 0 : 1) + ' ' + units[i];
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      function render(models) {
+        if (!models.length) {
+          list.innerHTML = '<p class="hint ai-ollama-models-empty">No models downloaded yet.</p>';
+          return;
+        }
+        list.innerHTML = models.map(function (m) {
+          return '<div class="ai-ollama-models-row">'
+            + '<span class="ai-ollama-models-name">' + escapeHtml(m.name) + '</span>'
+            + '<span class="ai-ollama-models-size">' + formatSize(m.size) + '</span>'
+            + '<button type="button" class="icon-btn icon-btn-danger ai-ollama-models-delete" data-model="' + escapeHtml(m.name) + '" title="Delete model" aria-label="Delete model"><%- icon('trash', { size: 14 }) %></button>'
+            + '</div>';
+        }).join('');
+      }
+
+      function loadModelsList() {
+        fetch('/admin/ai/ollama-models').then(function (r) { return r.json(); }).then(function (data) {
+          render(data.models || []);
+        }).catch(function () {
+          list.innerHTML = '<p class="hint ai-ollama-models-empty">Could not load downloaded models.</p>';
+        });
+      }
+
+      list.addEventListener('click', function (e) {
+        var btn = e.target.closest('.ai-ollama-models-delete');
+        if (!btn) return;
+        var model = btn.getAttribute('data-model');
+        if (!window.confirm('Delete "' + model + '" from Ollama? This removes it from disk — it can always be pulled again later.')) return;
+        btn.disabled = true;
+        fetch('/admin/ai/ollama-models/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: model }),
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (data.error) throw new Error(data.error);
+          // A full reload also re-runs the Model status check above — relevant if the model just
+          // deleted was the one ai_settings.model currently points at, since that box would
+          // otherwise still be showing a stale "Available ✓" until the next page load anyway.
+          location.reload();
+        }).catch(function (err) {
+          window.alert('Could not delete model: ' + err.message);
+          btn.disabled = false;
+        });
+      });
+
+      loadModelsList();
     })();
   </script>
 </div>

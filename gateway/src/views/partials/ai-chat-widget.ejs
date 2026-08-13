@@ -1,0 +1,54 @@
+<%
+  // The AI Assistant's persistent floating launcher — replaces what used to be a plain "AI
+  // Assistant" sidebar nav item (partials/head.ejs) pointing at a full page. Lives here (included
+  // from foot.ejs, same as the Help drawer/notification bell) so it's present on every page
+  // regardless of which one is active. Gated on BOTH canView('ai_chat') (this role can see it) AND
+  // aiChatEnabled (the global Administration > AI Assistant toggle — see loadUserContext.js) — the
+  // feature's own "two independent off switches" design means the widget itself must stay
+  // completely invisible while EITHER one is off, not just error out once clicked.
+  // conversations/miniservers are fetched lazily by public/ai-chat-widget.js the first time the
+  // panel is actually opened, not queried again here.
+%>
+<% if (canView('ai_chat') && aiChatEnabled) { %>
+<div id="ai-chat-widget" class="ai-chat-widget">
+  <button type="button" id="ai-chat-launcher" class="ai-chat-launcher" title="AI Assistant" aria-label="Open AI Assistant">
+    <%- icon('chat', { size: 22 }) %>
+    <span id="ai-chat-launcher-badge" class="ai-chat-launcher-badge" hidden></span>
+  </button>
+
+  <div id="ai-chat-panel" class="ai-chat-panel" hidden>
+    <span id="ai-chat-panel-resize-handle" class="ai-chat-panel-resize-handle" title="Drag to resize"></span>
+    <div class="ai-chat-panel-head">
+      <button type="button" id="ai-chat-widget-back" class="icon-btn" title="Conversations" hidden><%- icon('chevron', { size: 15 }) %></button>
+      <span class="ai-chat-panel-title">AI Assistant</span>
+      <div class="ai-chat-panel-head-actions">
+        <button type="button" id="ai-chat-widget-new" class="icon-btn" title="New conversation"><%- icon('plus', { size: 15 }) %></button>
+        <button type="button" id="ai-chat-widget-close" class="icon-btn" title="Close"><%- icon('x', { size: 15 }) %></button>
+      </div>
+    </div>
+
+    <div id="ai-chat-widget-list-view" class="ai-chat-widget-list">
+      <div id="ai-chat-widget-list-items" class="ai-chat-widget-list-items"></div>
+      <button type="button" id="ai-chat-widget-clear-all" class="ai-chat-widget-clear-all" hidden>
+        <%- icon('trash', { size: 13 }) %> Clear all conversations
+      </button>
+    </div>
+
+    <div id="ai-chat-widget-thread-view" class="ai-chat-widget-thread-view" hidden>
+      <div id="ai-chat-widget-messages" class="ai-chat-widget-messages"></div>
+      <form id="ai-chat-widget-composer" class="ai-chat-widget-composer">
+        <textarea name="content" rows="1" placeholder="Ask about your Loxone installation…"></textarea>
+        <button type="submit" class="icon-btn ai-chat-widget-send" title="Send" aria-label="Send"><%- icon('send', { size: 15 }) %></button>
+      </form>
+    </div>
+
+    <div id="ai-chat-widget-new-form" class="ai-chat-widget-new-form" hidden>
+      <p class="hint" style="margin:0 0 0.5rem;">Optionally attach a Miniserver so the assistant can read (and, if allowed, control) it.</p>
+      <select id="ai-chat-widget-miniserver-select">
+        <option value="">No Miniserver (chat only)</option>
+      </select>
+      <button type="button" id="ai-chat-widget-new-create" class="primary" style="width:100%; margin-top:0.6rem;">Start chat</button>
+    </div>
+  </div>
+</div>
+<% } %>

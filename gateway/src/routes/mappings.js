@@ -3,7 +3,7 @@ const dgram = require('dgram');
 const { nanoid } = require('nanoid');
 const db = require('../db');
 const { loadCommandCatalogs, mergeMissingBuiltins } = require('../commandCatalog');
-const { getClient } = require('../mqttClient');
+const { getClient, reloadMappings } = require('../mqttClient');
 const { applyLoxoneToMqttTransform } = require('../loxone');
 const { discoverDevices } = require('../deviceDiscovery');
 const { requirePermission } = require('../middleware/requirePermission');
@@ -89,6 +89,7 @@ router.post('/mqtt-to-loxone', requirePermission('mqtt_to_loxone', 'edit'), asyn
     `INSERT INTO mappings_mqtt_to_loxone (miniserver_id, mqtt_topic, transport, target, value_transform, transform_arg, min_interval_ms)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(miniserver_id, mqtt_topic, transport, target, value_transform, transform_arg || null, Number(min_interval_ms) || 0);
+  await reloadMappings();
 
   res.redirect('/mappings/mqtt-to-loxone');
 }));
@@ -108,27 +109,32 @@ router.post('/mqtt-to-loxone/:id/update', requirePermission('mqtt_to_loxone', 'e
      SET miniserver_id = ?, mqtt_topic = ?, transport = ?, target = ?, value_transform = ?, transform_arg = ?, min_interval_ms = ?
      WHERE id = ?`
   ).run(miniserver_id, mqtt_topic, transport, target, value_transform, transform_arg || null, Number(min_interval_ms) || 0, req.params.id);
+  await reloadMappings();
 
   res.redirect('/mappings/mqtt-to-loxone');
 }));
 
 router.post('/mqtt-to-loxone/:id/toggle', requirePermission('mqtt_to_loxone', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('UPDATE mappings_mqtt_to_loxone SET enabled = 1 - enabled WHERE id = ?').run(req.params.id);
+  await reloadMappings();
   res.redirect('/mappings/mqtt-to-loxone');
 }));
 
 router.post('/mqtt-to-loxone/enable-all', requirePermission('mqtt_to_loxone', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('UPDATE mappings_mqtt_to_loxone SET enabled = 1').run();
+  await reloadMappings();
   res.redirect('/mappings/mqtt-to-loxone');
 }));
 
 router.post('/mqtt-to-loxone/disable-all', requirePermission('mqtt_to_loxone', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('UPDATE mappings_mqtt_to_loxone SET enabled = 0').run();
+  await reloadMappings();
   res.redirect('/mappings/mqtt-to-loxone');
 }));
 
 router.post('/mqtt-to-loxone/:id/delete', requirePermission('mqtt_to_loxone', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('DELETE FROM mappings_mqtt_to_loxone WHERE id = ?').run(req.params.id);
+  await reloadMappings();
   res.redirect('/mappings/mqtt-to-loxone');
 }));
 
