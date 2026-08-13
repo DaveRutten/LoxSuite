@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.1-alpha.1] - 2026-08-13
+
+### Fixed
+- **False "device firmware changed" alerts** for an Audioserver: its own `/version` endpoint
+  ("17.02.08.11") and the Miniserver status XML's fallback (used whenever that direct fetch
+  fails — different subnet, firewalled, a transient blip — "MINISERVER V 17.2.08.11 &lt;mac&gt; |
+  ~API:2.0~") describe the identical firmware differently; comparing them verbatim fired a
+  notification every time reachability happened to flip. Now compared by their actual dotted
+  version number, normalized for each segment's own leading zeros, so the two representations of
+  one unchanged version no longer read as a change.
+- Monitor/Dashboard charts: a value that stays unchanged for a long stretch (change-only history
+  dedup, especially for an MQTT-sourced monitor that only publishes on change) drew as a diagonal
+  line to whenever it was next recorded instead of a flat one. A gap over 30 minutes between two
+  real readings now gets a synthetic point holding the prior value right before the next real one,
+  so the line reads as flat across it — without forcing every other, normally-sampled series into
+  a stepped look. An axis with every one of its series toggled off in the legend now hides itself
+  instead of falling back to Chart.js's own broken-looking 0-1 default range.
+- Raised the System log's "Slow query" threshold from 200ms to 3000ms — a brief burst of
+  contention right after boot (retention purges + MQTT/websocket reconnects all firing at once)
+  routinely pushed even trivial single-row lookups into the hundreds-of-ms range for a few
+  seconds, drowning out the genuinely slow (multi-second) queries this log exists to surface.
+
 ## [0.18.0-alpha.1] - 2026-08-13
 
 ### Added

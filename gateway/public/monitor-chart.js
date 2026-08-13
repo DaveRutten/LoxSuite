@@ -81,6 +81,24 @@
   // beside the plot, via canvas's own flex-container parent — see .chart-canvas-inner/
   // .monitor-chart-canvas-wrap in style.css), never its own internal layout. Click-to-toggle a
   // series' visibility, same as Chart.js's own default legend already did.
+  // Chart.js's own LinearScale falls back to a bare 0-1 range whenever every dataset assigned to
+  // an axis is currently hidden (getMinMax() skips hidden datasets entirely, and determineDataLimits
+  // has nothing left to compute from) — with decimals rounded to whole units, that reads as a wall
+  // of repeated "1 °C"/"0 °C" ticks, not as "nothing to show here". Hiding the axis outright once
+  // nothing visible uses it (and restoring it the moment something does again) reads correctly
+  // either way, instead of showing a scale that never had real data behind it to begin with.
+  function updateAxisVisibility(chart) {
+    var visibleAxes = {};
+    chart.data.datasets.forEach(function (ds, i) {
+      if (chart.getDatasetMeta(i).hidden) return;
+      visibleAxes[ds.yAxisID || 'y'] = true;
+    });
+    ['y', 'y1'].forEach(function (axisId) {
+      var scale = chart.options.scales[axisId];
+      if (scale) scale.display = !!visibleAxes[axisId];
+    });
+  }
+
   function buildCustomLegend(canvas, chart, show, position, align, stats, decimals) {
     // NOT canvas.parentElement any more — that's .chart-canvas-box now, the canvas's own dedicated
     // sizing box (see style.css's own comment on why that layer exists at all). The legend has to
@@ -109,6 +127,7 @@
         var meta = chart.getDatasetMeta(index);
         var nowHidden = !meta.hidden;
         chart.setDatasetVisibility(index, !nowHidden);
+        updateAxisVisibility(chart);
         chart.update();
         row.classList.toggle('chart-legend-hidden', nowHidden);
       });
@@ -432,6 +451,22 @@
           });
           stats = { min: min, max: max, avg: sum / points.length, current: points[points.length - 1].y };
         }
+        // A gap this large between two consecutive REAL readings is far more likely to be
+        // change-only dedup skipping a long unchanged stretch (see monitorCollector.js's own
+        // 30-minute heartbeat, which doesn't help an MQTT-sourced monitor that only gets a fresh
+        // row when a message actually arrives) than genuine sampling cadence — inserting a point
+        // that holds the PRIOR value right before the next real one makes a plain (non-stepped)
+        // line draw flat across the gap instead of a diagonal straight to whatever the next real
+        // value happens to be, without forcing every other, normally-sampled series into a
+        // stepped look it never asked for. Excluded from stats above for the same reason the
+        // "hold flat to now" point below already is: it only repeats a real value, so counting it
+        // again would double-weight that reading in the average.
+        var GAP_HOLD_MS = 30 * 60 * 1000;
+        for (var gi = points.length - 1; gi > 0; gi--) {
+          if (points[gi].x - points[gi - 1].x > GAP_HOLD_MS) {
+            points.splice(gi, 0, { x: points[gi].x - 1, y: points[gi - 1].y });
+          }
+        }
         if (points.length) {
           if (earliestMs === null || points[0].x < earliestMs) earliestMs = points[0].x;
           var last = points[points.length - 1];
@@ -494,6 +529,7 @@
         chart.data.datasets = datasets;
         chart.options.scales.x.max = axisMaxMs;
         if (axisMinMs !== null) chart.options.scales.x.min = axisMinMs;
+        updateAxisVisibility(chart);
         chart.update('none');
         buildCustomLegend(canvas, chart, showLegend, resolvedPosition, legendAlign, legendStats, decimals);
         // The legend is a flex SIBLING of this canvas (see buildCustomLegend/.chart-canvas-inner in

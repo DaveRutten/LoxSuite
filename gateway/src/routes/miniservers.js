@@ -250,7 +250,7 @@ router.get('/:id/edit', asyncHandler(async (req, res) => {
   const existingClients = await db
     .prepare('SELECT id, name, host, http_port, use_https FROM miniservers WHERE gateway_client_of = ? ORDER BY sort_order, id')
     .all(miniserver.id);
-  res.render('miniserver-edit', { miniserver, otherMiniservers, existingClients, error: null });
+  res.render('miniserver-edit', { miniserver, otherMiniservers, existingClients, error: null, saved: req.query.saved === '1' });
 }));
 
 router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
@@ -349,7 +349,11 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandle
   const newClients = await Promise.all(newClientIds.map((id) => db.prepare('SELECT * FROM miniservers WHERE id = ?').get(id)));
   await Promise.all(newClients.map((ms) => checkMiniserver(ms)));
 
-  res.redirect('/miniservers');
+  // Back to THIS Miniserver's own edit page, not the list — Save used to bounce you back to the
+  // overview, so testing/authorizing a value you just changed meant Edit → change → Save → Edit
+  // again before Test/Authorize would even see it (both act on the saved row, not the form's own
+  // unsaved state). Staying here means the field you just saved is immediately what Test sees.
+  res.redirect(`/miniservers/${msId}/edit?saved=1`);
 }));
 
 // Persists the Miniservers page's own drag-and-drop row reorder in one shot — every other page

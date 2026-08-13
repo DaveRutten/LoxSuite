@@ -3,6 +3,9 @@
 <% if (error) { %>
   <p class="error"><%= error %></p>
 <% } %>
+<% if (saved) { %>
+  <p class="hint" style="color: var(--success);">Saved.</p>
+<% } %>
 
 <% if (canEdit('miniservers')) { %>
 <div class="card">

@@ -255,6 +255,21 @@ async function fetchAudioserverVersion(host) {
   }
 }
 
+// An Audioserver's item.version alternates, poll to poll, between this function's own plain
+// firmware number ("17.02.08.11") and /data/status's verbose descriptive string ("MINISERVER V
+// 17.2.08.11 <mac> | ~API:2.0~") whenever the direct fetch above happens to fail (different
+// subnet, firewalled, a transient blip) and pollMiniserver's own fallback below keeps the XML's
+// version instead — see that fallback's own comment. Comparing those two representations of the
+// identical firmware verbatim fired a false "firmware changed" notification every time reachability
+// flipped one way then back; extracting just the dotted version number (and normalizing away each
+// segment's own leading zeros — "17.2.08.11" vs "17.02.08.11" is the same version, not a bump from
+// 2 to 02) makes the comparison recognize them as equal either way.
+function extractFirmwareVersion(version) {
+  const match = String(version || '').match(/\d+(?:\.\d+){2,3}/);
+  if (!match) return version || null;
+  return match[0].split('.').map((n) => String(Number(n))).join('.');
+}
+
 // Reads the Structure File (LoxAPP3.json, cached indefinitely per Miniserver by
 // loxoneStructure.js — cheap to call every poll) for AudioZoneV2 controls, resolving each one's
 // live online status and its parent mediaServer's own name/MAC/online/firmware. Returns
@@ -428,7 +443,7 @@ async function pollMiniserver(miniserver) {
       if (!prev) continue;
       const label = item.name || item.type || item.deviceKey;
 
-      if (item.version && prev.version && item.version !== prev.version) {
+      if (item.version && prev.version && extractFirmwareVersion(item.version) !== extractFirmwareVersion(prev.version)) {
         await insertLogLine.run('loxone', miniserver.id, miniserver.name, `Hardware: "${label}" firmware changed from ${prev.version} to ${item.version}.`, now);
         if (!skipNotify) await checkDeviceFirmwareChanged(miniserver, item, prev.version);
       }

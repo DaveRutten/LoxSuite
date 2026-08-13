@@ -28,7 +28,12 @@ let dbConfig = null;
 // legacy-sqlite-schema.js's own plain, unwrapped db.prepare/db.exec, exactly as it always was,
 // deliberately not routed through this timer at all — a migration function running slowly once at
 // boot isn't the "sometimes slow in production" signal this exists to catch).
-const SLOW_QUERY_MS = 200;
+// Raised from the original 200ms: verified in practice that a brief burst right after boot
+// (retention purges + MQTT/websocket reconnects all firing at once, see startMonitorCollector()/
+// startLiveConnections()) routinely pushes even trivial single-row lookups into the hundreds-of-ms
+// range for a few seconds — real, but not "structurally slow", and it drowned out the genuinely
+// slow queries (multi-second ones) this log exists to surface at all.
+const SLOW_QUERY_MS = 3000;
 function logSlowQuery(sql, durationMs) {
   // Fire-and-forget — the caller that triggered this already got its own result; logging the fact
   // it was slow shouldn't make it wait even longer. Errors here (e.g. log_entries mid-restore) are
