@@ -105,15 +105,17 @@
         <a href="/miniservers/<%= miniserver.id %>/mcp/authorize" class="btn-soft">
           <%- icon('refresh') %> <%= miniserver.mcp_access_token ? 'Re-authorize' : 'Authorize' %>
         </a>
-        <% if (miniserver.mcp_access_token) { %>
+        <% if (miniserver.mcp_access_token || miniserver.mcp_refresh_token || miniserver.mcp_oauth_client_id) { %>
           <%
-            // Re-authorize opportunistically tries to refresh the token already stored before
-            // falling back to a fresh login — if the Miniserver has invalidated that stored
-            // refresh token server-side (revoked, or rotated away by an overlapping request),
-            // that refresh attempt can itself error out rather than ever reaching the fallback,
-            // which looks from here like Re-authorize "does nothing." This button skips the
-            // refresh attempt entirely by wiping every stored credential first, forcing a truly
-            // fresh login every time — the thing to reach for when Re-authorize alone doesn't work.
+            // Authorize/Re-authorize opportunistically tries to reuse whatever's already stored —
+            // a refresh token, or even just a prior Dynamic Client Registration — before falling
+            // back to a fresh login. If the Miniserver has invalidated any of that server-side
+            // (revoked, rotated away by an overlapping request, or the registration itself expired)
+            // that reuse attempt can error out rather than ever reaching the fallback, which looks
+            // from here like the button "does nothing" — including a Miniserver that never even
+            // finished authorizing (mcp_access_token still null) if it got as far as registering a
+            // client before failing. This button skips all of that by wiping every stored credential
+            // first, forcing a truly fresh login every time.
           %>
           <a href="/miniservers/<%= miniserver.id %>/mcp/restart-login" class="btn-soft">
             <%- icon('refresh') %> Start new login

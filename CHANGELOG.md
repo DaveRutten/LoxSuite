@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.6-alpha.1] - 2026-08-13
+
+### Changed
+- **Temporary diagnostics** for the "server_error" a specific Miniserver's MCP OAuth endpoint
+  returns with no description: every discovery/registration/token request the MCP OAuth flow
+  makes is now traced (method, URL, status, response body) to stdout as `[MCP-OAUTH-TRACE]` lines,
+  to see which exact leg is failing and what that server actually sent back. Will be removed once
+  diagnosed — not meant to stay past the next version.
+- **"Start new login" now also appears** for a Miniserver that never finished authorizing at all
+  (`mcp_access_token` still null) as long as *any* OAuth state got stored along the way — a prior
+  Dynamic Client Registration or refresh token — since Authorize/Re-authorize can still try to
+  reuse that stale state and fail the same "does nothing" way. Previously only shown once an
+  access token existed.
+
 ## [0.18.5-alpha.1] - 2026-08-13
 
 ### Fixed

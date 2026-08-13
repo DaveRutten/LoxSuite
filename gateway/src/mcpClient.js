@@ -254,9 +254,28 @@ async function testConnection(miniserver) {
 // a fixed ceiling so the request always eventually finishes one way or the other.
 const AUTH_FLOW_TIMEOUT_MS = 25000;
 
+// TEMPORARY — diagnosing a real "server_error" with no description coming back from a specific
+// Miniserver's MCP OAuth endpoint. auth() gives no other way to see which leg (discovery, Dynamic
+// Client Registration, or a token request) is actually failing, or what that server sent back.
+// Remove once diagnosed.
+async function tracedFetch(input, init) {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const method = init?.method || 'GET';
+  try {
+    const response = await fetch(input, init);
+    const clone = response.clone();
+    const bodyText = await clone.text().catch(() => '<unreadable body>');
+    console.error(`[MCP-OAUTH-TRACE] ${method} ${url} -> ${response.status} ${bodyText.slice(0, 500)}`);
+    return response;
+  } catch (err) {
+    console.error(`[MCP-OAUTH-TRACE] ${method} ${url} -> THREW ${err.name}: ${err.message}`);
+    throw err;
+  }
+}
+
 function runMcpAuthFlowWithTimeout(provider, opts) {
   return Promise.race([
-    runMcpAuthFlow(provider, opts),
+    runMcpAuthFlow(provider, { ...opts, fetchFn: tracedFetch }),
     new Promise((_, reject) => setTimeout(
       () => reject(new Error(`Timed out after ${AUTH_FLOW_TIMEOUT_MS / 1000}s waiting for the Miniserver/Loxone's cloud service to respond — check that this container can actually reach it over the network.`)),
       AUTH_FLOW_TIMEOUT_MS
