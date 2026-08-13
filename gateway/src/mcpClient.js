@@ -261,6 +261,7 @@ const AUTH_FLOW_TIMEOUT_MS = 25000;
 async function tracedFetch(input, init) {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const method = init?.method || 'GET';
+  if (init?.body) console.error(`[MCP-OAUTH-TRACE] ${method} ${url} body: ${String(init.body).slice(0, 500)}`);
   try {
     const response = await fetch(input, init);
     const clone = response.clone();
