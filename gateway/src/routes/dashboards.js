@@ -900,10 +900,26 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
         const rows = (await db.prepare(
           `SELECT recorded_at AS "recordedAt", value FROM monitor_history WHERE monitor_id = ?${rangeSql} ORDER BY recorded_at DESC LIMIT ?`
         ).all(monitor.id, ...rangeParams, MAX_ROWS)).reverse();
+        // The state in effect AT the range's own start is whatever the monitor's last reading
+        // BEFORE it was — not "unknown" just because that particular reading happens to sit outside
+        // the window. A state that hasn't changed in days (only recorded on change, per
+        // monitorCollector.js's dedup) can easily have zero rows within a short range like 24h,
+        // reading as "No data" despite a perfectly well-known, unchanged value the whole time — a
+        // longer range happens to reach far enough back to include that same still-relevant reading
+        // and shows it correctly, which is what actually exposed this: identical real state, two
+        // different (and disagreeing) answers depending only on which range was picked. Meaningless
+        // for an unbounded "All" range (rangeStartMs null) — there's no fixed start to seed at.
+        const priorRow = rangeStartMs != null
+          ? await db.prepare('SELECT value FROM monitor_history WHERE monitor_id = ? AND recorded_at < ? ORDER BY recorded_at DESC LIMIT 1').get(monitor.id, since)
+          : null;
         // One segment per RUN of consecutive readings sharing the same mapped label+color — not
         // one per raw row, which would draw an invisible-thin, unclickable sliver for every single
         // poll even while the underlying state hadn't actually changed at all.
         const segments = [];
+        if (priorRow) {
+          const mapping = effectiveValueLabels.find((vm) => vm.value === String(priorRow.value));
+          segments.push({ label: mapping ? mapping.label : String(priorRow.value), color: (mapping && mapping.color) || defaultColor, startMs: rangeStartMs, endMs: null });
+        }
         rows.forEach((r) => {
           const mapping = effectiveValueLabels.find((vm) => vm.value === String(r.value));
           const label = mapping ? mapping.label : String(r.value);
@@ -916,10 +932,10 @@ async function loadPanelsWithMonitors(dashboardId, rangeOverride) {
         // reading that changed it — and the last one runs to the range's own end (still in effect
         // right now), not to its own last-seen timestamp.
         segments.forEach((seg, i) => { seg.endMs = i + 1 < segments.length ? segments[i + 1].startMs : rangeEndMs; });
-        // A gap before the very first reading (or the whole range, if there's no history at all
-        // yet) reads as an explicit "no data" stretch instead of silently starting the bar
-        // part-way with nothing to its left. Meaningless for an unbounded "All" range — there's no
-        // fixed start to measure the gap from.
+        // A gap before the very first reading (or the whole range, if there's no history at all —
+        // prior or in-window) reads as an explicit "no data" stretch instead of silently starting
+        // the bar part-way with nothing to its left. Only still reachable now when there's truly no
+        // reading at all before this point, since priorRow above already seeds the common case.
         if (rangeStartMs != null) {
           const firstStart = segments.length ? segments[0].startMs : rangeEndMs;
           if (firstStart > rangeStartMs) segments.unshift({ label: 'No data', color: 'var(--border)', startMs: rangeStartMs, endMs: firstStart, noData: true });

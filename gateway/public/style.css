@@ -3923,8 +3923,15 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
   min-height: 0;
 }
 
-.dash-panel .panel-table-scroll,
-.dash-panel .panel-value-list {
+.dash-panel .panel-table-scroll {
+  overflow-y: auto;
+}
+
+/* Only when there's genuinely more than one value to scroll through — a single-monitor value
+   panel's one row can end up 1-2px taller than the flex box gives it (line-height/padding
+   rounding), and overflow-y:auto unconditionally turned that into a real, visible scrollbar with
+   up/down arrows for content that plainly never needs to scroll at all. */
+.dash-panel .panel-value-list:has(.panel-value-row ~ .panel-value-row) {
   overflow-y: auto;
 }
 

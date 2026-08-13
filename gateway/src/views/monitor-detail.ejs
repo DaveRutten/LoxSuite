@@ -71,7 +71,7 @@
 
 <% if (hasNumeric) { %>
   <% if (truncated) { %>
-    <p class="hint">This chart and the list below only cover the most recent <%= rows.length %> readings &mdash; a monitor polled every few seconds can log more than that within "<%= range %>", so the plotted line may start partway through the range instead of at its very left edge. Export CSV for the full history, or pick a shorter range for a complete picture.</p>
+    <p class="hint">The list below only covers the most recent <%= rows.length %> readings &mdash; a monitor polled every few seconds can log more than that within "<%= range %>". The chart above isn't affected (it averages down to a fixed number of points instead, so it always covers the full range) &mdash; this only limits the raw, exact readings listed below it. Export CSV for the full history, or pick a shorter range to see every reading listed.</p>
   <% } %>
   <% if (canEdit('monitor')) { %>
     <%

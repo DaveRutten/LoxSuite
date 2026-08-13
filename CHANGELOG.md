@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.11-alpha.1] - 2026-08-13
+
+### Fixed
+- **State bar panels could show "No data" at the start of a short range even when the real state
+  was well known** — a state that hasn't changed in days (recorded only on change) can have zero
+  readings within a short range like 24h, and the query never looked further back to check what
+  was actually in effect at the range's start. A longer range (e.g. 7 days) happened to reach far
+  enough back to include that same still-relevant reading and showed it correctly — same real
+  state, two disagreeing answers depending only on which range was picked. Now seeds the first
+  segment from the last known reading before the range starts.
+- **A current-value panel could show an unwanted scrollbar** for a single value that was a pixel or
+  two taller than its available space (line-height/padding rounding) — content that plainly never
+  needed to scroll. Scrolling now only turns on for a panel that actually holds more than one value.
+- The Monitor detail page's chart-truncation notice now correctly describes only the raw list below
+  it — the chart itself isn't limited by that anymore since 0.18.10's downsampling fix.
+
 ## [0.18.10-alpha.1] - 2026-08-13
 
 ### Added
