@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.2-alpha.1] - 2026-08-13
+
+### Fixed
+- **Miniserver edit page's Authorize/Re-authorize/Start new login buttons could hang forever with
+  no error.** The MCP OAuth SDK's `auth()` call can succeed by silently refreshing the stored token
+  internally, without ever redirecting the browser anywhere — and nothing else in these routes sent
+  a response in that case, so the click just sat there indefinitely. Now redirects back to the edit
+  page itself (showing "Authorized.") whenever `auth()` resolves without already having redirected.
+
 ## [0.18.1-alpha.1] - 2026-08-13
 
 ### Fixed

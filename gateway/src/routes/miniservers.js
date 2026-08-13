@@ -250,7 +250,7 @@ router.get('/:id/edit', asyncHandler(async (req, res) => {
   const existingClients = await db
     .prepare('SELECT id, name, host, http_port, use_https FROM miniservers WHERE gateway_client_of = ? ORDER BY sort_order, id')
     .all(miniserver.id);
-  res.render('miniserver-edit', { miniserver, otherMiniservers, existingClients, error: null, saved: req.query.saved === '1' });
+  res.render('miniserver-edit', { miniserver, otherMiniservers, existingClients, error: null, saved: req.query.saved === '1', authorized: req.query.authorized === '1' });
 }));
 
 router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
@@ -390,12 +390,19 @@ router.get('/:id/mcp/authorize', requirePermission('miniservers', 'edit'), async
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const provider = new mcpClient.LoxoneOAuthProvider({ miniserver, baseUrl, session: req.session, res, username: req.user.username });
   try {
-    // On success this calls provider.redirectToAuthorization() internally, which already sends
-    // the redirect response — nothing left to do here in that case.
+    // On success this USUALLY calls provider.redirectToAuthorization() internally, which already
+    // sends the response — but verified (via temporary tracing against a real Miniserver) that
+    // auth() can ALSO resolve successfully without ever calling it: when the stored refresh token
+    // is still good, it silently refreshes and returns instead of redirecting anywhere, since no
+    // interactive browser round trip is actually needed. That path used to leave this request with
+    // no response ever sent — the click would just hang forever with no error, no redirect,
+    // nothing — since res.headersSent was the only signal telling the two cases apart, and nothing
+    // here ever checked it.
     await mcpClient.runMcpAuthFlow(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
+    if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit?authorized=1`);
   } catch (err) {
     await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
-    res.redirect(`/miniservers/${miniserver.id}/edit`);
+    if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit`);
   }
 }));
 
@@ -420,10 +427,14 @@ router.get('/:id/mcp/restart-login', requirePermission('miniservers', 'edit'), a
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const provider = new mcpClient.LoxoneOAuthProvider({ miniserver, baseUrl, session: req.session, res, username: req.user.username });
   try {
+    // Same "auth() can resolve without ever calling redirectToAuthorization()" case the plain
+    // Authorize route above guards against — normally moot here (tokens were just wiped, so there's
+    // nothing to silently refresh), but cheap insurance against res never getting a response.
     await mcpClient.runMcpAuthFlow(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
+    if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit`);
   } catch (err) {
     await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
-    res.redirect(`/miniservers/${miniserver.id}/edit`);
+    if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit`);
   }
 }));
 

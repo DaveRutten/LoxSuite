@@ -6,6 +6,9 @@
 <% if (saved) { %>
   <p class="hint" style="color: var(--success);">Saved.</p>
 <% } %>
+<% if (authorized) { %>
+  <p class="hint" style="color: var(--success);">Authorized.</p>
+<% } %>
 
 <% if (canEdit('miniservers')) { %>
 <div class="card">
