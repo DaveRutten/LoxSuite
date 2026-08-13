@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.4-alpha.1] - 2026-08-13
+
+### Fixed
+- **Authorize/Re-authorize/Start new login never logged anything to Logs > System**, success or
+  failure, on two of the three routes — only the OAuth callback route did. So after a failed (or
+  timed-out) attempt, the one place a user would naturally go to check "what happened" showed
+  nothing at all, regardless of whether the fix in 0.18.3-alpha.1 actually did anything. All three
+  routes now log both outcomes there.
+
 ## [0.18.3-alpha.1] - 2026-08-13
 
 ### Fixed

@@ -400,9 +400,13 @@ router.get('/:id/mcp/authorize', requirePermission('miniservers', 'edit'), async
     // here ever checked it. runMcpAuthFlowWithTimeout also bounds the whole thing at a fixed
     // ceiling — see its own comment for why that's a separate concern from the above.
     await mcpClient.runMcpAuthFlowWithTimeout(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
-    if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit?authorized=1`);
+    if (!res.headersSent) {
+      await logSystemEvent(`"${req.user.username}" authorized the AI Assistant's MCP connection to Miniserver "${miniserver.name}".`);
+      res.redirect(`/miniservers/${miniserver.id}/edit?authorized=1`);
+    }
   } catch (err) {
     await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
+    await logSystemEvent(`MCP authorization for Miniserver "${miniserver.name}" failed: ${err.message}`);
     if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit`);
   }
 }));
@@ -431,9 +435,13 @@ router.get('/:id/mcp/restart-login', requirePermission('miniservers', 'edit'), a
     // Same "auth() can resolve without ever calling redirectToAuthorization(), and the whole thing
     // needs a hard ceiling regardless" reasoning as the plain Authorize route above.
     await mcpClient.runMcpAuthFlowWithTimeout(provider, { serverUrl: mcpClient.deriveMcpUrl(miniserver) });
-    if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit`);
+    if (!res.headersSent) {
+      await logSystemEvent(`"${req.user.username}" restarted the AI Assistant's MCP login for Miniserver "${miniserver.name}".`);
+      res.redirect(`/miniservers/${miniserver.id}/edit`);
+    }
   } catch (err) {
     await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
+    await logSystemEvent(`MCP login restart for Miniserver "${miniserver.name}" failed: ${err.message}`);
     if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit`);
   }
 }));
@@ -461,6 +469,7 @@ router.get('/:id/mcp/callback', requirePermission('miniservers', 'edit'), asyncH
     await logSystemEvent(`"${req.user.username}" authorized the AI Assistant's MCP connection to Miniserver "${miniserver.name}".`);
   } catch (err) {
     await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
+    await logSystemEvent(`MCP authorization callback for Miniserver "${miniserver.name}" failed: ${err.message}`);
   }
   res.redirect(`/miniservers/${miniserver.id}/edit`);
 }));
