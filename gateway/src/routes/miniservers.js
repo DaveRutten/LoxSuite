@@ -13,6 +13,18 @@ const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
+// The MCP OAuth SDK's error classes (InvalidClientError, InvalidGrantError, etc. — see
+// @modelcontextprotocol/sdk's server/auth/errors.js) build their .message from the OAuth server's
+// own error_description field, which is optional — a server that omits it produces a real Error
+// with an entirely empty .message. Falling back to err.name (the class name: "InvalidGrantError")
+// and its errorCode getter (the wire error code: "invalid_grant") keeps that case from logging as
+// a blank, useless string.
+function describeMcpAuthError(err) {
+  const detail = err.message || '(the Miniserver/Loxone did not provide a description with this error)';
+  const label = err.errorCode ? `${err.name} (${err.errorCode})` : err.name || 'Error';
+  return `${label}: ${detail}`;
+}
+
 // Same bundle quick-add-diag/the Miniservers-page "Add to Monitor" button pins in one click (see
 // routes/dashboards.js's own QUICK_ADD_DIAG_FIELDS) — kept as its own copy rather than exported
 // from there, matching that file's own comment on why DIAG_FIELD_LABELS is the one thing shared
@@ -405,8 +417,9 @@ router.get('/:id/mcp/authorize', requirePermission('miniservers', 'edit'), async
       res.redirect(`/miniservers/${miniserver.id}/edit?authorized=1`);
     }
   } catch (err) {
-    await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
-    await logSystemEvent(`MCP authorization for Miniserver "${miniserver.name}" failed: ${err.message}`);
+    const description = describeMcpAuthError(err);
+    await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(description, miniserver.id);
+    await logSystemEvent(`MCP authorization for Miniserver "${miniserver.name}" failed: ${description}`);
     if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit`);
   }
 }));
@@ -440,8 +453,9 @@ router.get('/:id/mcp/restart-login', requirePermission('miniservers', 'edit'), a
       res.redirect(`/miniservers/${miniserver.id}/edit`);
     }
   } catch (err) {
-    await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
-    await logSystemEvent(`MCP login restart for Miniserver "${miniserver.name}" failed: ${err.message}`);
+    const description = describeMcpAuthError(err);
+    await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(description, miniserver.id);
+    await logSystemEvent(`MCP login restart for Miniserver "${miniserver.name}" failed: ${description}`);
     if (!res.headersSent) res.redirect(`/miniservers/${miniserver.id}/edit`);
   }
 }));
@@ -468,8 +482,9 @@ router.get('/:id/mcp/callback', requirePermission('miniservers', 'edit'), asyncH
     mcpClient.resetMcpClient(miniserver.id);
     await logSystemEvent(`"${req.user.username}" authorized the AI Assistant's MCP connection to Miniserver "${miniserver.name}".`);
   } catch (err) {
-    await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(err.message, miniserver.id);
-    await logSystemEvent(`MCP authorization callback for Miniserver "${miniserver.name}" failed: ${err.message}`);
+    const description = describeMcpAuthError(err);
+    await db.prepare('UPDATE miniservers SET mcp_last_error = ? WHERE id = ?').run(description, miniserver.id);
+    await logSystemEvent(`MCP authorization callback for Miniserver "${miniserver.name}" failed: ${description}`);
   }
   res.redirect(`/miniservers/${miniserver.id}/edit`);
 }));

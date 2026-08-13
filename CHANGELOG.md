@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.5-alpha.1] - 2026-08-13
+
+### Fixed
+- **MCP Authorize/Re-authorize/Start new login failures logged a blank error message.** The OAuth
+  SDK's error classes (`InvalidClientError`, `InvalidGrantError`, etc.) build their `.message` from
+  the server's own `error_description` field, which is optional — a Miniserver/Loxone response that
+  omits it produced a real `Error` with a genuinely empty message, so "Last MCP connection error"
+  and the System log both showed nothing useful ("...failed: " with nothing after it). Now falls
+  back to the error's own class name and OAuth error code (e.g. "InvalidGrantError
+  (invalid_grant)") when the server doesn't send a description.
+
 ## [0.18.4-alpha.1] - 2026-08-13
 
 ### Fixed
