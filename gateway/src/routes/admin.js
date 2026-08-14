@@ -11,6 +11,7 @@ const { reloadDeviceTemplates } = require('../commandCatalog');
 const { fetchBuiltinTemplatesFromGitHub } = require('../deviceTemplatesUpdate');
 const ollama = require('../llm/ollama');
 const ollamaPullState = require('../ollamaPullState');
+const techReport = require('../techReport');
 const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
@@ -99,6 +100,22 @@ router.post('/device-templates/fetch-github', asyncHandler(async (req, res) => {
     templateSources: listTemplateSources(),
     templateResult: { action: 'fetch-github', ...fetchResult, ...reloadResult },
   });
+}));
+
+// A single diagnostic snapshot (version/DB info, recent logs, config counts, live MQTT/Miniserver
+// status) — see techReport.js's own header for why this exists at all. Viewable here, and
+// downloadable as one JSON file below — same data built fresh each time either is requested
+// (never cached/stored), so it's never stale by the time someone actually looks at it.
+router.get('/tech-report', asyncHandler(async (req, res) => {
+  res.render('admin-tech-report', { report: await techReport.buildReport() });
+}));
+
+router.get('/tech-report/download', asyncHandler(async (req, res) => {
+  const report = await techReport.buildReport();
+  const filename = `loxsuite-tech-report-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(JSON.stringify(report, null, 2));
 }));
 
 router.get('/users', asyncHandler(async (req, res) => {

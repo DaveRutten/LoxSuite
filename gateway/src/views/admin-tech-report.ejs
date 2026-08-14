@@ -1,0 +1,122 @@
+<%- include('partials/head', { pageTitle: 'Tech report', active: 'admin' }) %>
+
+<div class="tabs">
+  <a href="/admin/general">General</a>
+  <a href="/admin/users">Users</a>
+  <a href="/admin/roles">Access Roles</a>
+  <a href="/admin/backup">Backups</a>
+  <a href="/admin/notifications">Notifications</a>
+  <a href="/admin/security">Security</a>
+  <a href="/admin/ai">AI Assistant</a>
+</div>
+
+<p class="hint">
+  Generated fresh just now — <%= formatDateTime(report.generatedAt) %>. Usernames in every
+  structured field (Miniservers, connected devices, MQTT log lines) are partially masked (first +
+  last character only), and no passwords, tokens, or other secrets are ever included. One
+  exception: a System-log audit line (e.g. <em>"admin" created user "newuser".</em>) is free text
+  and can still name a real username in its own sentence — skim the Recent logs section below
+  before sharing if that matters to you.
+</p>
+
+<div class="row-actions" style="justify-content:flex-start; margin-bottom:1rem;">
+  <a class="inline" href="/admin/tech-report/download"><button type="button" class="btn-soft"><%- icon('download') %> Download JSON</button></a>
+  <a class="inline" href="/admin/tech-report"><button type="button" class="btn-soft"><%- icon('refresh') %> Regenerate</button></a>
+</div>
+
+<div class="card">
+  <h2>System</h2>
+  <p class="hint">
+    <span style="display:block;">LoxSuite version: <strong style="color:var(--text);">v<%= report.system.loxsuiteVersion %></strong><% if (report.system.updateAvailable) { %> (v<%= report.system.latestKnownVersion %> available)<% } %></span>
+    <span style="display:block;">Database: <strong style="color:var(--text);"><%= report.system.dbBackend %></strong><% if (report.system.dbVersion) { %> (v<%= report.system.dbVersion %>)<% } %> — <%= report.system.dbLocation %></span>
+    <span style="display:block;">Node.js: <strong style="color:var(--text);"><%= report.system.nodeVersion %></strong></span>
+    <span style="display:block;">Platform: <strong style="color:var(--text);"><%= report.system.platform %></strong> (<%= report.system.hostname %>)</span>
+    <span style="display:block;">Gateway process uptime: <strong style="color:var(--text);"><%= formatDuration(report.system.processUptimeSeconds) %></strong></span>
+  </p>
+</div>
+
+<div class="card">
+  <h2>Config overview</h2>
+  <p class="hint">
+    <span style="display:block;">Miniservers: <strong style="color:var(--text);"><%= report.config.counts.miniservers %></strong></span>
+    <span style="display:block;">Loxone &rarr; MQTT mappings: <strong style="color:var(--text);"><%= report.config.counts.loxoneToMqttMappings %></strong></span>
+    <span style="display:block;">MQTT &rarr; Loxone mappings: <strong style="color:var(--text);"><%= report.config.counts.mqttToLoxoneMappings %></strong></span>
+    <span style="display:block;">Monitors: <strong style="color:var(--text);"><%= report.config.counts.monitors %></strong></span>
+    <span style="display:block;">Dashboards: <strong style="color:var(--text);"><%= report.config.counts.dashboards %></strong> (<%= report.config.counts.dashboardPanels %> panels)</span>
+    <span style="display:block;">Users: <strong style="color:var(--text);"><%= report.config.counts.users %></strong> across <%= report.config.counts.accessRoles %> Access Roles</span>
+    <span style="display:block;">Notification rules: <strong style="color:var(--text);"><%= report.config.counts.notificationRules %></strong></span>
+  </p>
+
+  <% if (report.config.miniservers.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Host</th><th>User</th><th>Configured status</th><th>Live connection</th><th>Firmware</th></tr>
+        </thead>
+        <tbody>
+          <% report.config.miniservers.forEach(ms => { %>
+            <tr>
+              <td><%= ms.name %><% if (ms.isGatewayClient) { %> <span class="hint" style="margin:0;">(Client)</span><% } %></td>
+              <td><%= ms.host %>:<%= ms.httpPort %><% if (ms.udpPort) { %> / udp <%= ms.udpPort %><% } %></td>
+              <td><%= ms.username %></td>
+              <td><%= ms.configuredStatus %><% if (ms.lastError) { %><br><span class="hint" style="margin:0;"><%= ms.lastError %></span><% } %></td>
+              <td><%= ms.liveConnection.status %><% if (ms.liveConnection.error) { %><br><span class="hint" style="margin:0;"><%= ms.liveConnection.error %></span><% } %></td>
+              <td><%= ms.firmwareVersion || '-' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<div class="card">
+  <h2>Live status</h2>
+  <p class="hint">
+    <span style="display:block;">MQTT broker connection: <strong style="color:var(--text);"><%= report.live.mqtt.connected ? 'Connected' : 'Disconnected' %></strong><% if (report.live.mqtt.host) { %> (<%= report.live.mqtt.host %>:<%= report.live.mqtt.port %>)<% } %></span>
+    <span style="display:block;">Throughput: <strong style="color:var(--text);"><%= report.live.mqtt.messagesPerSecond %> msg/s</strong>, <%= formatCount(report.live.mqtt.totalMessages) %> total, <%= formatCount(report.live.mqtt.topicsSeen) %> topics seen</span>
+    <span style="display:block;">Connected devices: <strong style="color:var(--text);"><%= report.live.connectedDeviceCount %></strong> of <%= report.live.devices.length %> known</span>
+  </p>
+
+  <% if (report.live.devices.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Device</th><th>User</th><th>Status</th><th>Since</th></tr>
+        </thead>
+        <tbody>
+          <% report.live.devices.forEach(d => { %>
+            <tr>
+              <td><%= d.device %></td>
+              <td><%= d.username || '-' %></td>
+              <td><%= d.status %></td>
+              <td><%= formatDateTime(d.status === 'connected' ? d.connectedAt : d.disconnectedAt) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<div class="card">
+  <h2>Recent logs <span class="hint" style="margin:0;">(System / MQTT / Loxone Commands, most recent <%= report.recentLogs.length %>)</span></h2>
+  <div class="table-wrap" style="max-height:24rem; overflow-y:auto;">
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Source</th><th>Line</th></tr>
+      </thead>
+      <tbody>
+        <% report.recentLogs.forEach(l => { %>
+          <tr>
+            <td class="truncate"><%= formatDateTime(l.recorded_at) %></td>
+            <td><%= l.source %><% if (l.source_label) { %> <span class="hint" style="margin:0;">(<%= l.source_label %>)</span><% } %></td>
+            <td class="truncate" title="<%= l.line %>"><%= l.line %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('partials/foot') %>

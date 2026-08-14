@@ -121,9 +121,9 @@ test('logging in with the seeded admin account succeeds and redirects', async ()
 const PAGES = [
   '/', '/miniservers', '/miniservers/data.json', '/monitor', '/monitor/series.json?ids=', '/monitor/current.json?ids=',
   '/mappings/mqtt-to-loxone', '/mappings/mqtt-to-loxone/data.json', '/mappings/loxone-to-mqtt', '/mappings/loxone-to-mqtt/data.json',
-  '/mappings/commands', '/transformations', '/logs/mqtt', '/logs/loxone', '/logs/loxone-commands', '/logs/system', '/logs/notifications',
+  '/mappings/known-topics.json', '/mappings/commands', '/transformations', '/logs/mqtt', '/logs/loxone', '/logs/loxone-commands', '/logs/system', '/logs/notifications',
   '/dashboards', '/settings', '/settings/broker', '/settings/live-data-state-names', '/admin/general', '/admin/users', '/admin/roles',
-  '/admin/security', '/admin/backup', '/admin/notifications', '/live-data', '/hardware', '/incoming/messages', '/incoming/clients',
+  '/admin/security', '/admin/backup', '/admin/notifications', '/admin/tech-report', '/live-data', '/hardware', '/incoming/messages', '/incoming/clients',
   '/mqtt-users', '/mqtt-roles', '/profile', '/setup', '/help',
 ];
 

@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.15-alpha.1] - 2026-08-14
+
+### Added
+- **Tech report** (Administration → General → Tech report) — a single diagnostic snapshot: LoxSuite/
+  DB/Node versions, the most recent System/MQTT/Loxone Commands log lines, config counts (mappings,
+  monitors, Miniservers, dashboards, ...), and live MQTT/Miniserver connection status. Viewable in
+  the browser or downloadable as one JSON file, admin-only, generated fresh every time (never
+  cached/stored). Passwords/tokens/secrets are never included; usernames are partially masked
+  (first + last character) everywhere except a System-log audit line's own free-text sentence
+  (e.g. `"admin" created user "newuser".`), which can still name a real username in its prose.
+
 ## [0.18.14-alpha.1] - 2026-08-14
 
 ### Fixed

@@ -117,6 +117,20 @@
 </div>
 
 <div class="card">
+  <h2>Tech report</h2>
+  <p class="hint">
+    A single diagnostic snapshot — LoxSuite/DB/Node versions, recent System/MQTT/Loxone Commands
+    log lines, config counts (mappings, monitors, Miniservers, ...), and live MQTT/Miniserver
+    connection status. Usernames are partially masked and passwords/secrets are never included —
+    safe to share when asking for help diagnosing a config mistake or a real bug.
+  </p>
+  <div class="row-actions" style="justify-content:flex-start;">
+    <a class="inline" href="/admin/tech-report"><button type="button" class="btn-soft"><%- icon('list') %> View tech report</button></a>
+    <a class="inline" href="/admin/tech-report/download"><button type="button" class="btn-soft"><%- icon('download') %> Download JSON</button></a>
+  </div>
+</div>
+
+<div class="card">
   <h2>Device templates</h2>
   <p class="hint" id="device-templates-hint">
     "Common commands"/"Common data" device definitions (Shelly, HeatMeister, ...), loaded from
