@@ -16,6 +16,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
 
 const PORT = 15582;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -55,6 +57,14 @@ before(async () => {
       ADMIN_PASSWORD: 'admin12345678',
       // No MQTT_ADMIN_PASSWORD — dynamic-security bootstrap just logs a warning and skips itself,
       // same as any install that hasn't set it, rather than needing a real broker for this test.
+      // backup.js defaults BACKUP_DIR to the real production mount point, /data/backups — every
+      // request to /admin/backup unconditionally mkdir's it first (see listBackups()). The real
+      // Docker image runs as root, which can always create a fresh top-level directory; a bare
+      // `node src/server.js` run as an unprivileged user (this test, and CI's own runner) cannot,
+      // so that mkdir throws EACCES and /admin/backup 500s — only ever caught by running this
+      // exact test as a non-root user, which a local root-in-Docker repro doesn't reproduce at
+      // all. A fresh tmp dir this process definitely owns sidesteps that entirely.
+      BACKUP_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'loxsuite-httpsmoke-backups-')),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

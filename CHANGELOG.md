@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.13-alpha.1] - 2026-08-14
+
+### Fixed
+- CI: `Test` workflow's own `/admin/backup` smoke test failed on GitHub's runner (though never
+  locally) — `backup.js` defaults `BACKUP_DIR` to the real production mount point, `/data/backups`,
+  and every request to that page unconditionally `mkdir`s it first. The real Docker image runs as
+  root, which can always create a fresh top-level directory; the bare `node src/server.js` this
+  test spawns runs as whichever user invokes `npm test` — root locally, but GitHub Actions' own
+  unprivileged runner user, which can't create `/data` at all. Verified against the actual failure
+  mode (reproduced locally by running the exact same test as a non-root user, confirmed fixed
+  the same way): the test now points `BACKUP_DIR` at its own throwaway temp directory instead.
+
 ## [0.18.12-alpha.1] - 2026-08-14
 
 ### Fixed
