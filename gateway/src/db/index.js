@@ -46,9 +46,79 @@ function logSlowQuery(sql, durationMs) {
     .catch(() => {});
 }
 
+// A Postgres SERIAL/MySQL AUTO_INCREMENT column's own id-generator can fall behind the table's
+// real MAX(id) whenever a row was inserted WITH an explicit id (preserving a source's own primary
+// keys — the SQLite -> Postgres/MySQL transfer tool does exactly this, see transfer.js's own
+// resetSequences(), which calls this same per-table logic). Every KNOWN such path already resyncs
+// afterward, but "every known path" is exactly the kind of invariant a future one can quietly miss
+// — this is that same fix applied reactively instead of proactively: whichever table's
+// id-generation actually just collided is, by definition, exactly the one that needs it, no
+// enumeration required. SQLite has no separate sequence/counter to desync in the first place (its
+// INTEGER PRIMARY KEY just reads MAX(rowid)+1), so this only ever applies to the other two backends.
+async function resyncIdCounter(executor, table, backend) {
+  if (backend === 'mysql') {
+    const [{ maxId }] = await executor(table).max({ maxId: 'id' });
+    if (maxId !== null) await executor.raw('ALTER TABLE ?? AUTO_INCREMENT = ?', [table, maxId + 1]);
+    return;
+  }
+  await executor.raw(
+    `SELECT setval(pg_get_serial_sequence(?, 'id'), COALESCE((SELECT MAX(id) FROM ??), 1), (SELECT MAX(id) FROM ??) IS NOT NULL)`,
+    [table, table, table]
+  );
+}
+
+// Postgres: node-pg sets both `.code` (SQLSTATE — 23505 is unique_violation) and `.constraint` (the
+// violated constraint's own name) directly on the thrown error; every id column in this codebase
+// uses Postgres's own default `<table>_pkey` naming (never renamed by any migration — grepped), so
+// that suffix is what distinguishes an id-sequence collision from a genuine business-level
+// duplicate (a different, differently-named unique constraint) hitting the SAME error code, which
+// this must NOT try to "fix" by resyncing something unrelated. MySQL/MariaDB (mysql2 driver) has no
+// equivalent structured field — ER_DUP_ENTRY's own message is the only place PRIMARY shows up, e.g.
+// "Duplicate entry '5' for key 'mappings_loxone_to_mqtt.PRIMARY'" (MySQL 8+) or "...key 'PRIMARY'"
+// (older/MariaDB) — verified against both message shapes.
+function primaryKeyCollisionTable(err, backend, sql) {
+  const isPkViolation = backend === 'postgres'
+    ? err.code === '23505' && !!err.constraint && err.constraint.endsWith('_pkey')
+    : backend === 'mysql'
+      ? err.code === 'ER_DUP_ENTRY' && /for key '(?:\w+\.)?PRIMARY'/i.test(err.sqlMessage || err.message || '')
+      : false;
+  if (!isPkViolation) return null;
+  // Every real call site this can fire for is a plain `INSERT INTO table (...)` (see
+  // insertReturningIdVia's own comment on that same assumption elsewhere in this file) — table name
+  // is exactly the first identifier after INTO, optionally quoted.
+  const match = /^\s*insert\s+into\s+["`]?(\w+)["`]?/i.exec(sql);
+  return match ? match[1] : null;
+}
+
+// Fire-and-forget, same treatment as logSlowQuery above — the insert this triggered on already
+// succeeded via the retry below by the time this runs, so a failure logging IT shouldn't undo that.
+function logSequenceRepair(table) {
+  knex
+    .raw(
+      'INSERT INTO log_entries (source, source_label, line, recorded_at) VALUES (?, ?, ?, ?)',
+      ['system', null, `Auto-repaired an out-of-sync id counter on "${table}" after a primary-key collision.`, new Date().toISOString()]
+    )
+    .catch(() => {});
+}
+
 async function execTimed(executor, sql, params) {
   const start = Date.now();
-  const result = await executor.raw(sql, params || []);
+  let result;
+  try {
+    result = await executor.raw(sql, params || []);
+  } catch (err) {
+    const table = primaryKeyCollisionTable(err, getBackend(), sql);
+    // Only ever retried once: resyncIdCounter() throwing, or the SAME statement colliding again
+    // right after a resync, both mean something else is actually wrong (e.g. application code
+    // passing an explicit id) — that's a real bug to surface, not something to retry forever.
+    if (table) {
+      await resyncIdCounter(executor, table, getBackend());
+      logSequenceRepair(table);
+      result = await executor.raw(sql, params || []);
+    } else {
+      throw err;
+    }
+  }
   const duration = Date.now() - start;
   if (duration >= SLOW_QUERY_MS) logSlowQuery(sql, duration);
   return result;
@@ -483,4 +553,9 @@ async function close() {
   knex = null;
 }
 
-module.exports = { init, close, prepare, transaction, insertReturningId, upsert, insertIgnore, raw, getBackend, getInfo, getKnex, withRawConnection };
+module.exports = {
+  init, close, prepare, transaction, insertReturningId, upsert, insertIgnore, raw, getBackend, getInfo, getKnex, withRawConnection,
+  // Exported for transfer.js's own resetSequences() — same per-table fix, reused there proactively
+  // (right after copying a whole table's worth of explicit-id rows) instead of reactively.
+  resyncIdCounter,
+};

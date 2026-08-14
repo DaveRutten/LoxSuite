@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.12-alpha.1] - 2026-08-14
+
+### Fixed
+- **A Postgres/MySQL install could get "Internal Server Error" on an otherwise-ordinary insert**
+  (e.g. adding a Loxone → MQTT mapping) if that table's id-generator (a Postgres sequence /
+  MySQL AUTO_INCREMENT counter) had fallen behind the table's real data — the classic aftermath of
+  rows being copied in with their own explicit ids (the SQLite → Postgres/MySQL transfer tool does
+  exactly this) without also resyncing the counter afterward. Every currently-known path already
+  did that resync, but that's an easy invariant for some future path to quietly miss, and once it
+  happens the failure just sits there until whoever's first to insert into that specific table hits
+  it. Now handled centrally and reactively instead of per-path: the DB facade itself recognizes this
+  exact failure (a primary-key collision, not a real duplicate), repairs the counter, and
+  transparently retries the same insert once — self-healing on the very next request that hits it,
+  no manual SQL or migration step required, regardless of which table or what caused the drift.
+- CI: `actions/checkout@v4` and `actions/setup-node@v4` in both GitHub Actions workflows bumped to
+  v5 — the v4 releases are pinned to the Node 20 action runtime GitHub is deprecating (runs now get
+  forced onto Node 24 with a warning instead).
+
 ## [0.18.11-alpha.1] - 2026-08-13
 
 ### Fixed

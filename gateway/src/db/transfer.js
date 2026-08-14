@@ -41,6 +41,7 @@ const path = require('path');
 const fs = require('fs');
 const { createKnex } = require('./knex');
 const { resolveDbConfig, describeConfig } = require('./config');
+const { resyncIdCounter } = require('./index');
 
 // Every app table the baseline schema creates, in FK-safe dependency order — this is deliberately
 // the SAME order db/migrations/001_baseline.js's own `exports.up` creates them in (a table only
@@ -294,27 +295,14 @@ async function copyTable(sourceKnex, targetKnex, table, idSets) {
 // correct), which never touches an auto-increment column's own counter — that counter only advances
 // on inserts that let the DB pick the id. Left alone, the very first ordinary app-level insert after
 // this transfer (which does NOT specify an id) starts back at 1 and collides with a row this
-// transfer just created. Postgres and MySQL/MariaDB track this counter completely differently, so
-// the fix is backend-specific: Postgres's `pg_get_serial_sequence` finds the sequence actually
-// attached to this column (rather than assuming a naming convention), and `setval(..., MAX(id),
-// true)` advances it to start handing out MAX(id)+1 next — the `COALESCE(MAX(id), 1)` + `false`
-// fallback for an empty table avoids advancing an unused sequence at all (setval's own "is_called"
-// argument). MySQL/MariaDB has no separate sequence object at all — AUTO_INCREMENT is a per-table
-// property set directly via `ALTER TABLE ... AUTO_INCREMENT = N`, where N is the NEXT value to hand
-// out (MAX(id)+1, not MAX(id) itself — no "is_called" equivalent needed; an empty table's
-// AUTO_INCREMENT is already 1 immediately after TRUNCATE, so this only needs to run when there's
-// actually a MAX(id) to advance past).
+// transfer just created. resyncIdCounter() (db/index.js) is the actual per-table fix, shared with
+// that same module's own execTimed() — which now applies this identical logic reactively too, the
+// moment any table's id-generation collides for whatever reason, so a transfer run against an older
+// build that predates this function (or any other future path that inserts explicit ids without
+// remembering this step) still self-heals on its own rather than staying silently broken.
 async function resetSequences(targetKnex, backend) {
   for (const table of TABLES.filter((t) => t.hasSerialId)) {
-    if (backend === 'mysql') {
-      const [{ maxId }] = await targetKnex(table.name).max({ maxId: 'id' });
-      if (maxId !== null) await targetKnex.raw('ALTER TABLE ?? AUTO_INCREMENT = ?', [table.name, maxId + 1]);
-      continue;
-    }
-    await targetKnex.raw(
-      `SELECT setval(pg_get_serial_sequence(?, 'id'), COALESCE((SELECT MAX(id) FROM ??), 1), (SELECT MAX(id) FROM ??) IS NOT NULL)`,
-      [table.name, table.name, table.name]
-    );
+    await resyncIdCounter(targetKnex, table.name, backend);
   }
 }
 
