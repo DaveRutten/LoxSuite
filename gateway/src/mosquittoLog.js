@@ -13,6 +13,10 @@ const CONNECT_RE = /New client connected from ([\d.]+):(\d+) as (\S+) \(p\d+, c\
 // bracketed part is optional here so this still matches older/alternate wordings that
 // omit it (e.g. a keepalive timeout disconnect logged without an address).
 const DISCONNECT_RE = /Client (\S+) (?:\[[^\]]*\] )?(?:disconnected|has exceeded timeout, disconnecting|closed its connection)/;
+// Mosquitto logs this exact line once per broker process start — stable wording since well before
+// 2.x, so it doubles as a reliable in-band "the broker restarted here" marker (see processLine()'s
+// own use of it as a hard reset point for `clients`, not just a line to record/skip).
+const BROKER_START_RE = /^mosquitto version \S+ starting$/;
 
 const clients = new Map();
 let position = 0;
@@ -58,6 +62,23 @@ async function processLine(line) {
 
   const rest = lineMatch[2];
 
+  // Mosquitto and the gateway restart in lockstep (same container, same docker-entrypoint.sh) — any
+  // TCP session that was open under a PREVIOUS broker process is unconditionally dead the instant
+  // this line appears, whether or not its own disconnect line ever got logged (a killed container
+  // doesn't get to log one). Clearing right here, mid-replay, instead of only once after the whole
+  // first poll() finishes (see markReplayComplete() below, which used to also blanket-flip every
+  // still-"connected" entry) is what fixes a real bug: a device quick enough to reconnect before
+  // Node's very first poll() catches up gets its fresh "New client connected" line processed in the
+  // SAME replay batch as this marker — a post-hoc "wipe everyone still connected" pass run once at
+  // the end of that batch couldn't tell that fresh line apart from a genuine pre-boot leftover, so
+  // it wiped both, leaving an already-reconnected device stuck showing "Disconnected" until its
+  // NEXT reconnect. Resetting exactly when a restart is seen means every CONNECT line processed
+  // after this point is unambiguously live, however soon after boot it happened to log.
+  if (BROKER_START_RE.test(rest)) {
+    clients.clear();
+    return;
+  }
+
   const connectMatch = rest.match(CONNECT_RE);
   if (connectMatch) {
     const [, ip, port, clientId, username] = connectMatch;
@@ -84,25 +105,13 @@ async function processLine(line) {
   }
 }
 
-// The very first replay covers the log's entire history, including whatever was still logged as
-// "connected" the instant this container was last stopped. Mosquitto restarts in lockstep with
-// the gateway (same container, same docker-entrypoint.sh), so none of those old TCP connections
-// can still be genuinely alive by the time this runs — a stopped container doesn't get to log a
-// clean disconnect line for whoever was connected at kill time, which otherwise left them stuck
-// showing "Connected" forever (see clearClients()'s own "still connected" carve-out, which
-// wouldn't touch them either). Anything real reconnects within moments of the broker coming back
-// up and gets its own fresh "New client connected" line, flipping it back to 'connected' the
-// normal way — this only clears out the stale carryover from before this boot.
+// The very first replay covers the log's entire history. Stale pre-boot "connected" entries are
+// already handled inline in processLine() the moment a broker-restart line is seen (see
+// BROKER_START_RE's own comment there) — this now only flips the notification gate: the first
+// full-backlog replay would otherwise fire a notification for every connect/disconnect in the
+// entire log history, not just genuinely new ones, once this boot's own live tailing begins.
 function markReplayComplete() {
-  if (replayComplete) return;
   replayComplete = true;
-  const now = new Date().toISOString();
-  for (const client of clients.values()) {
-    if (client.status === 'connected') {
-      client.status = 'disconnected';
-      client.disconnectedAt = now;
-    }
-  }
 }
 
 function poll() {
@@ -141,7 +150,11 @@ async function startTailing(intervalMs = 2000) {
   // connected instead of being invisible until their next reconnect.
   position = 0;
   poll();
-  setInterval(poll, intervalMs);
+  // unref(): a background poller shouldn't be the thing keeping the process alive on its own — the
+  // real server has plenty else doing that (the HTTP listener, MQTT client, ...), and this is what
+  // lets a test (or any one-off script) that calls startTailing() exit cleanly on its own instead
+  // of hanging on this interval forever.
+  setInterval(poll, intervalMs).unref();
 }
 
 function getClients() {

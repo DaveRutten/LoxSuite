@@ -5,7 +5,7 @@ const db = require('../db');
 const { loadCommandCatalogs, mergeMissingBuiltins } = require('../commandCatalog');
 const { getClient, reloadMappings } = require('../mqttClient');
 const { applyLoxoneToMqttTransform } = require('../loxone');
-const { discoverDevices } = require('../deviceDiscovery');
+const { discoverDevices, activeTopics } = require('../deviceDiscovery');
 const { requirePermission } = require('../middleware/requirePermission');
 const asyncHandler = require('../middleware/asyncHandler');
 
@@ -259,6 +259,14 @@ router.post('/commands/create-rgbw', requirePermission('loxone_to_mqtt', 'edit')
   await db.prepare(insertSql).run(nanoid(16), mqttTopic, 'white');
 
   res.redirect('/mappings/loxone-to-mqtt');
+}));
+
+// Backs the mqtt_topic autocomplete on both "Add mapping" forms (loxone-to-mqtt AND
+// mqtt-to-loxone — same currently-connected-devices'-topics list either way, see
+// deviceDiscovery.js's own activeTopics()). Shared here rather than under either direction's own
+// prefix since it isn't specific to one.
+router.get('/known-topics.json', asyncHandler(async (req, res) => {
+  res.json({ topics: activeTopics() });
 }));
 
 router.get('/loxone-to-mqtt', asyncHandler(async (req, res) => {

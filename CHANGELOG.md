@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.14-alpha.1] - 2026-08-14
+
+### Fixed
+- **Shelly (and other MQTT) devices could get stuck showing "Disconnected" in Client Activity after
+  an update/restart, even though they were genuinely connected** — a device quick enough to
+  reconnect before the gateway's very first Mosquitto-log replay finished had its fresh "connected"
+  status wiped right along with genuinely stale, pre-restart leftovers. Now uses Mosquitto's own
+  `mosquitto version X starting` log line as a hard reset point at the moment it's seen instead of
+  blindly clearing everyone still marked "connected" once replay finishes, so a fast reconnect can
+  no longer be mistaken for stale state regardless of how soon after boot it happened to log.
+- **A renamed Shelly showed its raw factory MQTT client ID instead of its real (custom) topic
+  prefix on Client Activity, and its topics never got picked up for the mqtt_topic autocomplete on
+  the mapping "Add" forms** — same root cause as above: a Shelly's identity-announcing MQTT message
+  is a one-shot, non-retained broadcast sent only on (re)connect, easily missed if it fires before
+  the gateway's own MQTT subscribe completes, with no way to recover it afterward. The gateway now
+  asks every currently-connected Shelly Gen1 device to re-announce itself (Shelly's own
+  `shellies/command` "announceall" feature) right after every successful MQTT (re)connect, so a
+  missed announce is retried automatically. A new "Rescan devices" button on Client Activity
+  triggers the same request on demand, without needing to restart anything.
+
+### Added
+- The mapping "Add" forms (both directions) now offer mqtt_topic autocomplete suggestions, sourced
+  from currently-connected devices' own topics only — a disconnected device's last-known topics
+  aren't suggested, since mapping one of those would just never see a value come in.
+
 ## [0.18.13-alpha.1] - 2026-08-14
 
 ### Fixed

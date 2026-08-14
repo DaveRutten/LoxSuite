@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { getTopicOverview, clearTopicOverview } = require('../mqttClient');
+const { getTopicOverview, clearTopicOverview, requestDeviceAnnounce } = require('../mqttClient');
 const { getClients, clearClients } = require('../mosquittoLog');
 const { commandRecognitionString } = require('../loxone');
 const { discoverDevices, resolveTopicPrefix } = require('../deviceDiscovery');
@@ -80,6 +80,16 @@ router.get('/clients', asyncHandler(async (req, res) => {
 
 router.post('/clients/clear', requirePermission('incoming', 'edit'), (req, res) => {
   clearClients();
+  res.redirect('/incoming/clients');
+});
+
+// Manual escape hatch for requestDeviceAnnounce()'s own automatic on-connect trigger (mqttClient.js)
+// — for whenever a fresher answer (a device just renamed, or one that reconnected in the narrow
+// window before that automatic trigger ran) is wanted without restarting anything. Every currently-
+// connected Shelly Gen1 device responds within moments; this page's own topic-prefix resolution
+// picks the fresh announce up on next load, same as it would after any other reconnect.
+router.post('/clients/rescan', requirePermission('incoming', 'edit'), (req, res) => {
+  requestDeviceAnnounce();
   res.redirect('/incoming/clients');
 });
 

@@ -24,7 +24,8 @@
       <div class="form-grid">
         <div>
           <label>MQTT topic</label>
-          <input type="text" name="mqtt_topic" id="mqtt-topic-input" value="<%= prefillTopic %>" placeholder="home/livingroom/temperature" required>
+          <input type="text" name="mqtt_topic" id="mqtt-topic-input" list="topic-suggestions" value="<%= prefillTopic %>" placeholder="home/livingroom/temperature" required>
+          <datalist id="topic-suggestions"></datalist>
           <span class="hint" style="margin:0.3rem 0 0;">Not sure about the topic for a Shelly or similar device? Use the <a href="/mappings/commands">Common commands</a> builder.</span>
         </div>
         <div>
@@ -146,6 +147,7 @@
 <script src="/tabulator-table.js"></script>
 <script src="/color-picker.js"></script>
 <script src="/mappings-loxone-to-mqtt-tabulator.js"></script>
+<script src="/topic-suggestions.js"></script>
 
 <script>
   (function () {

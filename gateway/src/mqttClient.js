@@ -88,6 +88,19 @@ function shouldThrottle(mapping) {
   return last !== undefined && Date.now() - last < mapping.min_interval_ms;
 }
 
+// Shelly Gen1's own MQTT protocol feature — publishing "announceall" to shellies/command makes
+// every currently-connected Gen1 device immediately republish its own <prefix>/announce (see
+// deviceDiscovery.js's use of that payload to resolve a renamed device's real topic prefix from its
+// raw MQTT client ID). Triggered once on every successful (re)connect below, since a device that
+// reconnects faster than this gateway's own subscribe completes would otherwise have its one-shot,
+// non-retained announce lost for good until its NEXT reconnect — exactly why a device only ever
+// showed up correctly again after being power-cycled by hand. Also exported for a manual "Rescan
+// devices" action (routes/incoming.js) for whenever a fresher answer is wanted without restarting
+// anything.
+function requestDeviceAnnounce() {
+  if (client && state.connected) client.publish('shellies/command', 'announceall');
+}
+
 function attachHandlers(c) {
   c.on('connect', () => {
     state.connected = true;
@@ -95,7 +108,10 @@ function attachHandlers(c) {
     // so the dynamic-security response topic needs an explicit subscription.
     c.subscribe(['#', '$CONTROL/dynamic-security/v1/response'], (err) => {
       if (err) console.error('MQTT subscribe error:', err.message);
-      else console.log('Connected to MQTT broker, subscribed to all topics.');
+      else {
+        console.log('Connected to MQTT broker, subscribed to all topics.');
+        requestDeviceAnnounce();
+      }
     });
   });
 
@@ -201,4 +217,5 @@ module.exports = {
   clearTopicOverview,
   getStats,
   recordMessage,
+  requestDeviceAnnounce,
 };

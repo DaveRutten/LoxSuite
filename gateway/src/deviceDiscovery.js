@@ -1,5 +1,6 @@
 const { CATALOG } = require('./commandCatalog');
 const { getTopicOverview } = require('./mqttClient');
+const { getClients } = require('./mosquittoLog');
 const { BRAND_PREFIX_RE, ROOT_NAMESPACES } = require('./topicName');
 
 // A root namespace's device segment is whatever comes right after it, e.g.
@@ -111,4 +112,43 @@ function resolveTopicPrefix(clientId, knownPrefixes, announcedByMacSuffix) {
   return suffixMatch || null;
 }
 
-module.exports = { discoverDevices, resolveTopicPrefix };
+// Whether `topic` is one of `prefix`'s own — as a full path segment, not a substring match (so a
+// prefix "light" can't spuriously match some unrelated ".../lighting/..." topic): either leading
+// ("prefix/rest", the common case — a renamed device's own custom prefix replaces its entire topic
+// root, no namespace wrapper left at all) or nested one level in ("shellies/prefix/rest" — a
+// still-factory-default device's own topicPrefixPattern always expects that "shellies/" namespace
+// in front of it, which CATALOG-pattern matching needs but a resolved prefix string alone doesn't
+// carry). Deliberately NOT reusing discoverDevices()'s own CATALOG-pattern matching for this: that
+// approach can't recognize a renamed device's topics at all (none of those patterns match anything
+// without a "shellies/" namespace in front), which is exactly the case activeTopics() below most
+// needs to get right.
+function topicBelongsToPrefix(topic, prefix) {
+  return topic === prefix || topic.startsWith(`${prefix}/`) || topic.includes(`/${prefix}/`);
+}
+
+// Topic suggestions for the mapping "Add" forms' own mqtt_topic autocomplete — restricted to
+// topics belonging to a device that's CURRENTLY connected (mosquittoLog.js's own getClients()),
+// not every topic this gateway has ever seen: a disconnected device's last-known topics are
+// exactly the ones someone would map and then never see a value come in for. Suggested strings are
+// the real topics as actually published, which already use whatever topic prefix (custom-renamed
+// or still factory-default) the device itself chose — resolveTopicPrefix() is what keeps a renamed
+// device's raw MQTT client ID (all that mosquittoLog.js's connection log ever sees) from leaking
+// into this as literal topic text.
+function activeTopics() {
+  const { allDevices, announcedByMacSuffix } = discoverDevices();
+  const activePrefixes = [
+    ...new Set(
+      getClients()
+        .filter((c) => c.status === 'connected')
+        .map((c) => resolveTopicPrefix(c.clientId, allDevices, announcedByMacSuffix))
+        .filter(Boolean)
+    ),
+  ];
+  if (activePrefixes.length === 0) return [];
+
+  const topics = getTopicOverview().map((t) => t.topic);
+  const active = topics.filter((topic) => activePrefixes.some((prefix) => topicBelongsToPrefix(topic, prefix)));
+  return [...new Set(active)].sort();
+}
+
+module.exports = { discoverDevices, resolveTopicPrefix, activeTopics };

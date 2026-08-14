@@ -37,6 +37,9 @@
       </div>
     </div>
     <% if (canEdit('incoming')) { %>
+    <form method="post" action="/incoming/clients/rescan" style="margin:0;">
+      <button type="submit" class="btn-soft" title="Ask every currently-connected Shelly Gen1 device to re-announce itself, so a renamed device's real topic prefix (or a status stuck from before a restart) resolves correctly without waiting for its next reconnect."><%- icon('refresh') %> Rescan devices</button>
+    </form>
     <form method="post" action="/incoming/clients/clear" data-confirm="Clear disconnected clients from this list? Clients that are still actively connected stay listed." style="margin:0;">
       <button type="submit" class="danger"><%- icon('trash') %> Clear list</button>
     </form>
