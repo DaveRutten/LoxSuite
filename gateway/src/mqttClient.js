@@ -39,6 +39,15 @@ let enabledMappings = [];
 
 let client = null;
 
+// The gateway registering its OWN Last Will and Testament — the exact MQTT-native "I went away
+// ungracefully" signal Shelly/Zigbee2MQTT/Tasmota etc. already give every device they run, which
+// LoxSuite itself never had. The broker (not this process) is what actually publishes `offline`
+// here the moment it notices this connection is gone without a clean MQTT DISCONNECT first — a
+// crash, an OOM-kill, a yanked network cable, a killed container all trigger it, with nothing this
+// process needs to do or even be alive for. retain:true so a client that only subscribes later
+// still immediately sees the gateway's last known status instead of nothing until its next change.
+const LWT_TOPIC = 'loxsuite/gateway/status';
+
 function topicMatches(pattern, topic) {
   const patternParts = pattern.split('/');
   const topicParts = topic.split('/');
@@ -141,9 +150,32 @@ function clearRetained(topic) {
   topicOverview.delete(topic);
 }
 
+// A clean shutdown (SIGTERM — see server.js) sends a real MQTT DISCONNECT, which tells the broker
+// to discard the registered Will without publishing it at all — from any OTHER client's point of
+// view that would otherwise look like the status topic just freezing on its last "online" forever,
+// not like the gateway stopped. Explicitly publishing "offline" here first, and actually waiting
+// for it to land (the callback, not a fire-and-forget call) before the process is allowed to exit,
+// is what makes a deliberate restart/stop report the same accurate status an ungraceful crash gets
+// for free from the broker's own Will delivery. No-op (immediate callback) if there's no live
+// connection to publish over in the first place — nothing to correct in that case either way.
+function publishOffline(callback) {
+  if (!client || !state.connected) {
+    callback();
+    return;
+  }
+  client.publish(LWT_TOPIC, 'offline', { qos: 1, retain: true }, () => callback());
+}
+
 function attachHandlers(c) {
   c.on('connect', () => {
     state.connected = true;
+    // The other half of LWT_TOPIC's own comment above — the broker only ever flips this to
+    // "offline" itself (on an ungraceful drop) or gets told to explicitly (see publishOffline,
+    // graceful shutdown); it never flips it back to "online" on its own. Every successful
+    // (re)connect has to say so itself, including the very first one and every reconnect after a
+    // network blip — otherwise a client watching this topic would see a stale "offline" from a
+    // PREVIOUS disconnect forever, even while the gateway is right back up and running fine.
+    c.publish(LWT_TOPIC, 'online', { qos: 1, retain: true });
     // '#' does not match topics starting with '$' (e.g. $CONTROL, $SYS) per the MQTT spec, so both
     // the dynamic-security response topic and the broker's own $SYS stats need an explicit
     // subscription. The gateway's own MQTT account already has $SYS/# read access — it's granted
@@ -211,6 +243,11 @@ function connectWithSettings(settings) {
     username: settings.username || undefined,
     password: settings.password || undefined,
     reconnectPeriod: 5000,
+    // See LWT_TOPIC's own comment above — QoS 1 (not 0) so the broker actually holds onto this
+    // one until it's acknowledged delivered/stored, same as the explicit "online"/"offline"
+    // publishes below use, rather than the fire-and-forget QoS 0 every other publish in this file
+    // uses (those are fine to occasionally drop; a status flag flapping incorrectly isn't).
+    will: { topic: LWT_TOPIC, payload: 'offline', qos: 1, retain: true },
   });
   attachHandlers(client);
 }
@@ -301,4 +338,6 @@ module.exports = {
   recordBrokerStat,
   requestDeviceAnnounce,
   clearRetained,
+  publishOffline,
+  LWT_TOPIC,
 };

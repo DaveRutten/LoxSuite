@@ -157,6 +157,26 @@ test('clearRetained is a safe no-op (does not throw, does not touch topicOvervie
   }
 });
 
+// publishOffline's own actual wire behavior (does the broker really flip loxsuite/gateway/status
+// to "offline" on a graceful DISCONNECT, and does a real crash — SIGKILL, no DISCONNECT at all —
+// really trigger the broker's own Will delivery) was verified against a real Mosquitto broker, not
+// something a unit test can meaningfully fake (see gateway/dev/screenshots for the closest thing
+// this repo has to a real-broker Docker harness, though that one's for screenshots, not this). What
+// IS worth covering here, same as clearRetained's own identical-shaped test above: the disconnected
+// no-op path must never hang server.js's own SIGTERM handler waiting on a publish that will never
+// happen — callback has to still fire, synchronously, with no live connection to publish over.
+test('publishOffline calls back immediately (does not hang) while disconnected', () => {
+  const wasConnected = mqttClient.state.connected;
+  mqttClient.state.connected = false;
+  try {
+    let called = false;
+    mqttClient.publishOffline(() => { called = true; });
+    assert.equal(called, true, 'the callback should fire synchronously when there is no live connection to publish over');
+  } finally {
+    mqttClient.state.connected = wasConnected;
+  }
+});
+
 test('getBrokerStats always returns exactly its own curated field list, nothing more or less', () => {
   const stats = mqttClient.getBrokerStats();
   assert.deepEqual(Object.keys(stats).sort(), [

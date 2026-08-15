@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.20-alpha.1] - 2026-08-15
+
+### Added
+- **The gateway now registers its own MQTT Last Will and Testament** (`loxsuite/gateway/status`,
+  retained) — the same "I went away" signal Shelly/Zigbee2MQTT/Tasmota devices already give the
+  broker, which the gateway itself never had. An ungraceful stop (crash, OOM-kill, a yanked network
+  cable, a killed container) now flips that topic to `offline` automatically via the broker's own
+  Will delivery, with no code involved since the process is already gone; a graceful stop
+  explicitly publishes `offline` first so an intentional restart reports the same accurate status
+  instead of leaving the topic frozen on `online`. Verified against a real broker: SIGKILL → broker
+  auto-delivers `offline`; SIGTERM → explicit `offline` publish completes before the process exits.
+  Any other MQTT-side integration (Node-RED, Home Assistant, a monitoring dashboard, ...) can now
+  watch this topic to know if LoxSuite's own gateway is actually up.
+
 ## [0.18.19-alpha.1] - 2026-08-15
 
 ### Added

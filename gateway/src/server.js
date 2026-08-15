@@ -373,9 +373,23 @@ async function main() {
 }
 
 process.on('SIGTERM', () => {
-  const client = mqttClient.getClient();
-  if (client) client.end(true, {}, () => process.exit(0));
-  else process.exit(0);
+  // publishOffline first — a graceful stop sends a real MQTT DISCONNECT, which tells the broker to
+  // discard the registered Will (mqttClient.js's own LWT_TOPIC) without ever publishing it, so
+  // without this an intentional restart/stop would leave that status topic frozen on "online"
+  // forever instead of reporting the gateway is actually down. A 3s cap either way (a stuck publish
+  // waiting on a PUBACK that's never coming, e.g. the broker itself is what's unreachable, must
+  // never block the container's own shutdown past its restart policy's grace period) — whichever
+  // finishes first still proceeds to the same client.end()/process.exit().
+  let settled = false;
+  const proceed = () => {
+    if (settled) return;
+    settled = true;
+    const client = mqttClient.getClient();
+    if (client) client.end(true, {}, () => process.exit(0));
+    else process.exit(0);
+  };
+  setTimeout(proceed, 3000);
+  mqttClient.publishOffline(proceed);
 });
 
 // A broken/unreachable DB at startup can't be "warned and limped through" the way a missing
