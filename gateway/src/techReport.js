@@ -9,7 +9,9 @@ const db = require('./db');
 const mqttClient = require('./mqttClient');
 const mosquittoLog = require('./mosquittoLog');
 const loxoneWebSocket = require('./loxoneWebSocket');
+const backup = require('./backup');
 const { getVersionStatus } = require('./versionCheck');
+const { TABLES } = require('./db/transfer');
 const packageJson = require('../package.json');
 
 // Never a password/token/secret, ever — this whole module's one hard rule. Usernames are the one
@@ -94,7 +96,8 @@ async function configOverview() {
   }
 
   const miniservers = await db.prepare(
-    `SELECT id, name, host, http_port, udp_port, username, status, last_error, firmware_version, gateway_client_of
+    `SELECT id, name, host, http_port, udp_port, username, status, last_error, firmware_version,
+            gateway_client_of, plc_state, cpu_load, heap_status, num_tasks, device_monitor_status
      FROM miniservers ORDER BY sort_order, id`
   ).all();
 
@@ -110,8 +113,108 @@ async function configOverview() {
       lastError: m.last_error,
       firmwareVersion: m.firmware_version,
       isGatewayClient: !!m.gateway_client_of,
+      // The device's own self-reported health, polled separately from the live WebSocket
+      // connection below (see startHardwarePolling) — genuinely useful even when the connection
+      // itself is fine (e.g. plcState stuck "not ok" points at the Miniserver/PLC, not the gateway).
+      plcState: m.plc_state,
+      cpuLoad: m.cpu_load,
+      heapStatus: m.heap_status,
+      numTasks: m.num_tasks,
+      deviceMonitorStatus: m.device_monitor_status,
       liveConnection: loxoneWebSocket.getStatus(m.id),
     })),
+  };
+}
+
+// Whether each Postgres/MySQL table's own id-generator (sequence / AUTO_INCREMENT) still agrees
+// with the table's real data — read-only, mirrors (never calls) db/index.js's own
+// resyncIdCounter()/execTimed() self-heal. The exact class of bug that caused today's own
+// "Internal Server Error" on adding a mapping: the counter falls behind after rows are inserted
+// with explicit ids (a SQLite -> Postgres/MySQL transfer does this) without a resync afterward —
+// this surfaces it BEFORE the next insert into that specific table hits it, instead of only after.
+// SQLite has no separate counter object to fall out of sync in the first place (see TABLES' own
+// hasSerialId filter elsewhere), so there's nothing to check there.
+async function sequenceHealth() {
+  const backendName = db.getBackend();
+  if (backendName === 'sqlite') return { applicable: false, issues: [] };
+
+  const issues = [];
+  for (const table of TABLES.filter((t) => t.hasSerialId)) {
+    const maxRow = await db.prepare(`SELECT MAX(id) AS maxId FROM ${table.name}`).get();
+    const maxId = maxRow.maxId;
+    if (maxId === null) continue; // empty table — no data for a counter to have fallen behind
+
+    if (backendName === 'mysql') {
+      const row = await db.prepare(
+        'SELECT AUTO_INCREMENT AS nextValue FROM information_schema.TABLES WHERE table_schema = DATABASE() AND table_name = ?'
+      ).get(table.name);
+      if (row && row.nextValue !== null && row.nextValue <= maxId) {
+        issues.push({ table: table.name, maxId, nextGeneratedId: row.nextValue });
+      }
+      continue;
+    }
+
+    // pg_get_serial_sequence()'s own result is a schema-qualified sequence name Postgres itself
+    // generated for this fixed, hardcoded table name (never request input) — safe to interpolate
+    // directly below, same reasoning as configOverview()'s own COUNTED_TABLES interpolation above.
+    const seqRow = await db.prepare(`SELECT pg_get_serial_sequence(?, 'id') AS seq`).get(table.name);
+    if (!seqRow.seq) continue;
+    const valRow = await db.prepare(`SELECT last_value FROM ${seqRow.seq}`).get();
+    if (Number(valRow.last_value) < maxId) {
+      issues.push({ table: table.name, maxId, nextGeneratedId: Number(valRow.last_value) + 1 });
+    }
+  }
+  return { applicable: true, issues };
+}
+
+// last_run_at/last_status/last_error (and the rclone equivalents) only — getSettings() also
+// decrypts and returns the real rclone.conf contents (rclone_config), deliberately left out here.
+// listBackups() itself calls ensureBackupDir() (fs.mkdirSync) as its very first step — exactly the
+// call that throws when the process can't create BACKUP_DIR (the non-root CI runner bug fixed
+// under 0.18.13), so catching that here doubles as the "is BACKUP_DIR actually writable" check
+// without a second, separate probe.
+async function backupStatus() {
+  const settings = await backup.getSettings();
+  let backups = [];
+  let backupDirError = null;
+  try {
+    backups = backup.listBackups();
+  } catch (err) {
+    backupDirError = err.message;
+  }
+  return {
+    enabled: !!settings.enabled,
+    scheduleCron: settings.schedule_cron,
+    retentionCount: settings.retention_count,
+    lastRunAt: settings.last_run_at,
+    lastStatus: settings.last_status,
+    lastError: settings.last_error,
+    rcloneEnabled: !!settings.rclone_enabled,
+    rcloneRemote: settings.rclone_remote,
+    rcloneLastRunAt: settings.rclone_last_run_at,
+    rcloneLastStatus: settings.rclone_last_status,
+    rcloneLastError: settings.rclone_last_error,
+    backupDirError,
+    backupCount: backups.length,
+    mostRecentBackup: backups[0] || null,
+  };
+}
+
+// Which OPTIONAL features are turned on and how — never the credentials/keys behind them (AI's own
+// api_key, SSO's client_secret/issuer_url are all deliberately left out). Exists to catch "you
+// think X is on but it isn't" config mistakes at a glance, not to describe how X is configured.
+async function featureFlags() {
+  const ai = await db.prepare('SELECT enabled, provider, model, effort FROM ai_settings WHERE id = 1').get();
+  const sso = await db.prepare('SELECT enabled, local_login_disabled FROM sso_settings WHERE id = 1').get();
+  return {
+    dbBackend: db.getBackend(),
+    aiAssistantEnabled: !!ai?.enabled,
+    aiProvider: ai?.enabled ? ai.provider : null,
+    aiModel: ai?.enabled ? ai.model : null,
+    aiEffort: ai?.enabled ? ai.effort : null,
+    ssoEnabled: !!sso?.enabled,
+    localLoginDisabled: !!sso?.local_login_disabled,
+    trustProxyConfigured: !!process.env.TRUST_PROXY,
   };
 }
 
@@ -145,13 +248,23 @@ function liveStatus() {
 }
 
 async function buildReport(logLimit = 200) {
-  const [system, config, logs] = await Promise.all([systemSection(), configOverview(), recentLogs(logLimit)]);
+  const [system, config, logs, sequences, backups, features] = await Promise.all([
+    systemSection(),
+    configOverview(),
+    recentLogs(logLimit),
+    sequenceHealth(),
+    backupStatus(),
+    featureFlags(),
+  ]);
   return {
     generatedAt: new Date().toISOString(),
     system,
     config,
     live: liveStatus(),
     recentLogs: logs,
+    sequenceHealth: sequences,
+    backup: backups,
+    featureFlags: features,
   };
 }
 

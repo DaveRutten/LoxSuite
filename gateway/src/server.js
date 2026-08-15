@@ -45,6 +45,7 @@ const https = require('https');
 const fs = require('fs');
 
 const db = require('./db');
+const { logSystemEvent } = require('./auditLog');
 const mqttClient = require('./mqttClient');
 const { runBootstrap } = require('./dynsecBootstrap');
 const { startHealthchecks } = require('./healthcheck');
@@ -302,7 +303,22 @@ async function main() {
   // gated (see routes/logs.js's requirePermission('logs_notifications', ...)).
   app.use('/notifications', requireAuth, notificationCenterRoutes);
   app.get('/help', requireAuth, (req, res) => res.render('help'));
-  
+
+  // Registered last, after every route — Express's own error-handling convention (a 4-parameter
+  // function is what marks this as an error handler rather than a request handler). Anything
+  // asyncHandler() forwarded via next(err) (or a synchronous throw in a plain, non-async route)
+  // lands here. Previously this just fell through to Express's own built-in default handler — which
+  // does send a 500, but ONLY ever logs to console/stderr, invisible to anything that isn't already
+  // tailing the container's raw output. That's exactly the gap that meant an uncaught route error
+  // (e.g. a Postgres primary-key collision) never showed up in a Tech report (see techReport.js)
+  // pulled right after it happened — logged to log_entries here too now, not just the console.
+  app.use((err, req, res, next) => {
+    console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
+    logSystemEvent(`Unhandled error on ${req.method} ${req.originalUrl}: ${err.stack || err.message}`).catch(() => {});
+    if (res.headersSent) return next(err);
+    res.status(500).send('Internal Server Error');
+  });
+
   // Each of these async worker-starters does its own real setup (an initial DB read/MQTT connect/
   // history purge/etc.) before settling into a self-perpetuating setInterval loop — none of that
   // startup work is awaited here (every worker starts concurrently rather than serially blocking

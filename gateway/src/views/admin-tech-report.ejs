@@ -51,7 +51,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Name</th><th>Host</th><th>User</th><th>Configured status</th><th>Live connection</th><th>Firmware</th></tr>
+          <tr><th>Name</th><th>Host</th><th>User</th><th>Configured status</th><th>Live connection</th><th>Firmware</th><th>Device health</th></tr>
         </thead>
         <tbody>
           <% report.config.miniservers.forEach(ms => { %>
@@ -62,12 +62,69 @@
               <td><%= ms.configuredStatus %><% if (ms.lastError) { %><br><span class="hint" style="margin:0;"><%= ms.lastError %></span><% } %></td>
               <td><%= ms.liveConnection.status %><% if (ms.liveConnection.error) { %><br><span class="hint" style="margin:0;"><%= ms.liveConnection.error %></span><% } %></td>
               <td><%= ms.firmwareVersion || '-' %></td>
+              <td>
+                <% if (ms.plcState || ms.cpuLoad != null || ms.heapStatus || ms.numTasks != null) { %>
+                  <span style="display:block;">PLC: <%= ms.plcState != null ? plcStateLabel(ms.plcState) : '-' %></span>
+                  <span class="hint" style="margin:0;">CPU <%= ms.cpuLoad != null ? ms.cpuLoad + '%' : '-' %>, heap <%= ms.heapStatus != null ? formatHeapStatus(ms.heapStatus) : '-' %><% if (ms.numTasks != null) { %>, <%= ms.numTasks %> tasks<% } %></span>
+                <% } else { %>-<% } %>
+              </td>
             </tr>
           <% }) %>
         </tbody>
       </table>
     </div>
   <% } %>
+</div>
+
+<div class="card">
+  <h2>Backup status</h2>
+  <p class="hint">
+    <span style="display:block;">Scheduled backups: <strong style="color:var(--text);"><%= report.backup.enabled ? 'Enabled' : 'Disabled' %></strong><% if (report.backup.enabled && report.backup.scheduleCron) { %> (<%= report.backup.scheduleCron %>, keep <%= report.backup.retentionCount %>)<% } %></span>
+    <span style="display:block;">Last run: <strong style="color:var(--text);"><%= report.backup.lastRunAt ? formatDateTime(report.backup.lastRunAt) : 'never' %></strong><% if (report.backup.lastStatus) { %> — <%= report.backup.lastStatus %><% } %><% if (report.backup.lastError) { %><br><span class="hint" style="margin:0;"><%= report.backup.lastError %></span><% } %></span>
+    <span style="display:block;">Stored backups: <strong style="color:var(--text);"><%= report.backup.backupCount %></strong><% if (report.backup.mostRecentBackup) { %> — most recent <%= formatDateTime(report.backup.mostRecentBackup.createdAt) %><% } %></span>
+    <% if (report.backup.backupDirError) { %>
+      <span style="display:block; color:var(--danger, #d33);">Backup directory error: <%= report.backup.backupDirError %></span>
+    <% } %>
+    <% if (report.backup.rcloneEnabled) { %>
+      <span style="display:block;">Rclone remote: <strong style="color:var(--text);"><%= report.backup.rcloneRemote || '-' %></strong><% if (report.backup.rcloneLastRunAt) { %> — last run <%= formatDateTime(report.backup.rcloneLastRunAt) %> (<%= report.backup.rcloneLastStatus %>)<% } %></span>
+      <% if (report.backup.rcloneLastError) { %>
+        <span style="display:block; color:var(--danger, #d33);">Rclone error: <%= report.backup.rcloneLastError %></span>
+      <% } %>
+    <% } %>
+  </p>
+</div>
+
+<div class="card">
+  <h2>Database sequence health</h2>
+  <% if (!report.sequenceHealth.applicable) { %>
+    <p class="hint">Not applicable — SQLite has no separate id-sequence to fall out of sync.</p>
+  <% } else if (!report.sequenceHealth.issues.length) { %>
+    <p class="hint">All id-generators agree with their table's data. No action needed.</p>
+  <% } else { %>
+    <p class="hint" style="color:var(--danger, #d33);">One or more tables have an id-generator that has fallen behind — the next insert into that table risks a primary-key collision.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Table</th><th>Highest row id</th><th>Next generated id</th></tr>
+        </thead>
+        <tbody>
+          <% report.sequenceHealth.issues.forEach(i => { %>
+            <tr><td><%= i.table %></td><td><%= i.maxId %></td><td><%= i.nextGeneratedId %></td></tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<div class="card">
+  <h2>Feature flags</h2>
+  <p class="hint">
+    <span style="display:block;">Database backend: <strong style="color:var(--text);"><%= report.featureFlags.dbBackend %></strong></span>
+    <span style="display:block;">AI assistant: <strong style="color:var(--text);"><%= report.featureFlags.aiAssistantEnabled ? 'Enabled' : 'Disabled' %></strong><% if (report.featureFlags.aiAssistantEnabled) { %> (<%= report.featureFlags.aiProvider %> / <%= report.featureFlags.aiModel %><% if (report.featureFlags.aiEffort) { %>, effort <%= report.featureFlags.aiEffort %><% } %>)<% } %></span>
+    <span style="display:block;">SSO: <strong style="color:var(--text);"><%= report.featureFlags.ssoEnabled ? 'Enabled' : 'Disabled' %></strong><% if (report.featureFlags.ssoEnabled && report.featureFlags.localLoginDisabled) { %> (local login disabled)<% } %></span>
+    <span style="display:block;">TRUST_PROXY configured: <strong style="color:var(--text);"><%= report.featureFlags.trustProxyConfigured ? 'Yes' : 'No' %></strong></span>
+  </p>
 </div>
 
 <div class="card">

@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.16-alpha.1] - 2026-08-15
+
+### Added
+- **Tech report now covers four more diagnostic areas**: DB sequence health (Postgres/MySQL only —
+  flags any table whose id-generator has fallen behind its actual data, the exact class of bug
+  behind the "Internal Server Error" seen right after a database migration), backup status
+  (schedule, last run/result, rclone remote status, and whether the backup directory itself is
+  writable — never the decrypted rclone config), extended per-Miniserver diagnostics (PLC state,
+  CPU load, heap status, task count), and feature flags (AI assistant/SSO enabled state and
+  provider/model — never their credentials).
+- **Unhandled route errors are now also logged to the System log**, not just the container's
+  console/stderr — so they show up in a Tech report (and the in-app Logs page) instead of only
+  ever being visible to whoever happens to be tailing the raw container output when it happens.
+
 ## [0.18.15-alpha.1] - 2026-08-14
 
 ### Added
