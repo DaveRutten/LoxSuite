@@ -67,6 +67,7 @@
             </div>
           </td>
           <td>
+            <% if (t.retained) { %><span class="badge badge-neutral" style="margin:0 0.2rem 0.2rem 0;" title="The broker is still holding this as the topic's retained message — could be an old value replayed on subscribe, not necessarily a just-happened publish">Retained</span><% } %>
             <% if (mappedTopics.includes(t.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;">Mapped</span><% } %>
             <% if (monitoredTopics.includes(t.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;">Monitored</span><% } %>
             <% if (widgetedTopics.includes(t.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;">Widget</span><% } %>

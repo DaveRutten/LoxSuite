@@ -65,3 +65,83 @@ test('recordMessage still updates its own in-memory topic overview even when rec
     monitorCollector.recordMqttValue = originalRecordMqttValue;
   }
 });
+
+// A device replaying its last-known state as a retained message on (re)connect (Shelly,
+// Zigbee2MQTT, ...) needs to read as visibly different from a genuinely fresh publish on Incoming
+// Messages — see recordMessage's own comment on why. Two messages on the same topic, only the
+// second retained, confirms the flag reflects THAT message and isn't stuck once set.
+test('recordMessage tracks the retained flag per message, not just once true', () => {
+  mqttClient.recordMessage('retain-test/topic', Buffer.from('fresh'), false);
+  let overview = mqttClient.getTopicOverview().find((o) => o.topic === 'retain-test/topic');
+  assert.equal(overview.retained, false);
+
+  mqttClient.recordMessage('retain-test/topic', Buffer.from('replayed'), true);
+  overview = mqttClient.getTopicOverview().find((o) => o.topic === 'retain-test/topic');
+  assert.equal(overview.retained, true);
+});
+
+// A caller (attachHandlers) that forgets to pass mqtt.js's own `retain` flag at all shouldn't crash
+// or silently mark everything retained — recordMessage's own `!!retained` coercion should read an
+// omitted third argument as false, the same "not confirmed retained" default a message from a
+// broker too old to report it correctly falls back to.
+test('recordMessage treats a missing retained argument as false, not undefined/truthy', () => {
+  mqttClient.recordMessage('retain-test/no-flag', Buffer.from('x'));
+  const overview = mqttClient.getTopicOverview().find((o) => o.topic === 'retain-test/no-flag');
+  assert.equal(overview.retained, false);
+});
+
+// getBrokerStats() parses Mosquitto's own $SYS/broker/* tree — values captured verbatim from a
+// real, running Mosquitto 2.1.2 broker (including the literal space in "retained messages/count",
+// the one topic in this tree that isn't slash-only) rather than guessed at, so this doubles as a
+// regression guard against ever assuming a cleaner shape than the broker actually publishes.
+test('getBrokerStats parses a real Mosquitto $SYS/broker/* snapshot into typed fields', () => {
+  const snapshot = {
+    version: 'mosquitto version 2.1.2',
+    uptime: '17415 seconds',
+    'clients/connected': '2',
+    'clients/total': '2',
+    'clients/maximum': '2',
+    'messages/received': '298',
+    'messages/sent': '384',
+    'bytes/received': '1134',
+    'bytes/sent': '5070',
+    'retained messages/count': '55',
+    'subscriptions/count': '3',
+    'load/messages/received/1min': '3.08',
+    'load/messages/sent/1min': '57.42',
+  };
+  for (const [suffix, value] of Object.entries(snapshot)) {
+    mqttClient.recordBrokerStat(`$SYS/broker/${suffix}`, Buffer.from(value));
+  }
+
+  const stats = mqttClient.getBrokerStats();
+  assert.deepEqual(stats, {
+    version: 'mosquitto version 2.1.2',
+    uptimeSeconds: 17415,
+    clientsConnected: 2,
+    clientsTotal: 2,
+    clientsMaximum: 2,
+    messagesReceived: 298,
+    messagesSent: 384,
+    bytesReceived: 1134,
+    bytesSent: 5070,
+    retainedMessageCount: 55,
+    subscriptionsCount: 3,
+    load1minMessagesReceived: 3.08,
+    load1minMessagesSent: 57.42,
+  });
+});
+
+// getBrokerStats() only ever returns this fixed, curated field list (see its own comment on why —
+// deliberately not "whatever happens to be in the raw $SYS map today"), e.g. heap/current is a real
+// key Mosquitto publishes (only when compiled with heap tracking) but isn't one of them — a broker
+// publishing an unrecognized $SYS key, or not publishing heap stats at all, can't change this shape
+// either way.
+test('getBrokerStats always returns exactly its own curated field list, nothing more or less', () => {
+  const stats = mqttClient.getBrokerStats();
+  assert.deepEqual(Object.keys(stats).sort(), [
+    'bytesReceived', 'bytesSent', 'clientsConnected', 'clientsMaximum', 'clientsTotal',
+    'load1minMessagesReceived', 'load1minMessagesSent', 'messagesReceived', 'messagesSent',
+    'retainedMessageCount', 'subscriptionsCount', 'uptimeSeconds', 'version',
+  ]);
+});

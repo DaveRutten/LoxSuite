@@ -95,9 +95,12 @@ async function configOverview() {
     counts[key] = row.c;
   }
 
+  // device_monitor_status deliberately not selected — see legacy-sqlite-schema.js's own comment on
+  // it: superseded by plc_state below years ago, nothing has written to it since, and it would
+  // only ever report null here.
   const miniservers = await db.prepare(
     `SELECT id, name, host, http_port, udp_port, username, status, last_error, firmware_version,
-            gateway_client_of, plc_state, cpu_load, heap_status, num_tasks, device_monitor_status
+            gateway_client_of, plc_state, cpu_load, heap_status, num_tasks
      FROM miniservers ORDER BY sort_order, id`
   ).all();
 
@@ -120,7 +123,6 @@ async function configOverview() {
       cpuLoad: m.cpu_load,
       heapStatus: m.heap_status,
       numTasks: m.num_tasks,
-      deviceMonitorStatus: m.device_monitor_status,
       liveConnection: loxoneWebSocket.getStatus(m.id),
     })),
   };
@@ -242,6 +244,12 @@ function liveStatus() {
       port: mqttClient.state.port,
       ...mqttClient.getStats(),
     },
+    // The broker's own $SYS/broker/* self-report (see mqttClient.js's own getBrokerStats) —
+    // real, broker-reported figures, as opposed to mqtt.messagesPerSecond/totalMessages/topicsSeen
+    // above, which are only ever this gateway's own count of what it happened to see. Every field
+    // is null until Mosquitto's own first $SYS publish since the gateway last (re)subscribed (up
+    // to 10s), which a brand new/just-reconnected report can legitimately still be waiting on.
+    broker: mqttClient.getBrokerStats(),
     connectedDeviceCount: clients.filter((c) => c.status === 'connected').length,
     devices: clients,
   };

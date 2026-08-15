@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.17-alpha.1] - 2026-08-15
+
+### Added
+- **Real Mosquitto broker stats** (Tech report's Live status card) — uptime, connected/registered
+  client counts, messages/bytes sent & received, retained-message count, and active subscription
+  count, read straight from the broker's own `$SYS/broker/#` topics rather than only ever showing
+  LoxSuite's own count of what it happened to see. No config change needed — the bundled broker
+  already publishes these every ~10s, nothing was subscribed to them before now.
+- **"Retained" badge on Live Data / Incoming Messages** — a topic whose current value came from the
+  broker replaying its last retained message (e.g. right after a reconnect) now reads visibly
+  different from a genuinely fresh publish.
+
+### Removed
+- `device_monitor_status` dropped from the Tech report's Miniserver section — confirmed dead
+  (superseded by `plc_state` years ago, nothing has written to it since), so it only ever showed
+  a meaningless `null`.
+
 ## [0.18.16-alpha.1] - 2026-08-15
 
 ### Added

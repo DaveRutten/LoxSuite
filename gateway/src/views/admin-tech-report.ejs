@@ -131,9 +131,26 @@
   <h2>Live status</h2>
   <p class="hint">
     <span style="display:block;">MQTT broker connection: <strong style="color:var(--text);"><%= report.live.mqtt.connected ? 'Connected' : 'Disconnected' %></strong><% if (report.live.mqtt.host) { %> (<%= report.live.mqtt.host %>:<%= report.live.mqtt.port %>)<% } %></span>
-    <span style="display:block;">Throughput: <strong style="color:var(--text);"><%= report.live.mqtt.messagesPerSecond %> msg/s</strong>, <%= formatCount(report.live.mqtt.totalMessages) %> total, <%= formatCount(report.live.mqtt.topicsSeen) %> topics seen</span>
+    <span style="display:block;">Throughput (as seen by LoxSuite): <strong style="color:var(--text);"><%= report.live.mqtt.messagesPerSecond %> msg/s</strong>, <%= formatCount(report.live.mqtt.totalMessages) %> total, <%= formatCount(report.live.mqtt.topicsSeen) %> topics seen</span>
     <span style="display:block;">Connected devices: <strong style="color:var(--text);"><%= report.live.connectedDeviceCount %></strong> of <%= report.live.devices.length %> known</span>
   </p>
+
+  <% if (report.live.broker.version) { %>
+    <p class="hint">
+      <span style="display:block;">Broker (<%= report.live.broker.version %>), up <strong style="color:var(--text);"><%= report.live.broker.uptimeSeconds != null ? formatDuration(report.live.broker.uptimeSeconds) : '-' %></strong> —
+        <strong style="color:var(--text);"><%= report.live.broker.clientsConnected != null ? report.live.broker.clientsConnected : '-' %></strong> clients connected
+        <% if (report.live.broker.clientsTotal != null) { %>(<%= report.live.broker.clientsTotal %> registered<% if (report.live.broker.clientsMaximum != null) { %>, <%= report.live.broker.clientsMaximum %> ever at once<% } %>)<% } %>
+      </span>
+      <span style="display:block;">Broker throughput (its own count, not just what LoxSuite saw):
+        <strong style="color:var(--text);"><%= report.live.broker.messagesReceived != null ? formatCount(report.live.broker.messagesReceived) : '-' %></strong> received /
+        <strong style="color:var(--text);"><%= report.live.broker.messagesSent != null ? formatCount(report.live.broker.messagesSent) : '-' %></strong> sent
+        <% if (report.live.broker.bytesReceived != null && report.live.broker.bytesSent != null) { %>(<%= formatBytes(report.live.broker.bytesReceived) %> in / <%= formatBytes(report.live.broker.bytesSent) %> out)<% } %>
+      </span>
+      <span style="display:block;"><%= report.live.broker.retainedMessageCount != null ? report.live.broker.retainedMessageCount : '-' %> retained messages held, <%= report.live.broker.subscriptionsCount != null ? report.live.broker.subscriptionsCount : '-' %> active subscriptions</span>
+    </p>
+  <% } else { %>
+    <p class="hint">Broker stats ($SYS/broker/#) not received yet — the broker publishes these every ~10s after the gateway (re)connects.</p>
+  <% } %>
 
   <% if (report.live.devices.length) { %>
     <div class="table-wrap">

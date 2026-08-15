@@ -9,11 +9,23 @@ const { decrypt } = require('./secretCrypto');
 const MAX_LOG = 200;
 const RATE_WINDOW_MS = 10000;
 const messageLog = [];
-const topicOverview = new Map(); // topic -> { value, previousValue, lastSeen, count }
+const topicOverview = new Map(); // topic -> { value, previousValue, lastSeen, count, retained }
 const lastForwardedAt = new Map(); // mapping id -> timestamp (ms), for min_interval_ms throttling
 const recentTimestamps = []; // ms epoch of recent messages, pruned to RATE_WINDOW_MS, for msgs/sec
 const state = { connected: false, host: null, port: null };
 let totalMessageCount = 0;
+
+// $SYS/broker/<suffix> -> raw string payload, e.g. suffix "clients/connected" -> "3". Mosquitto
+// publishes its own broker-wide health/throughput stats under here every `sys_interval` seconds
+// (10s by default, on by default, nothing to opt into) — the real thing, straight from the broker
+// process itself, as opposed to messagesPerSecond/totalMessages/topicsSeen below, which are only
+// ever this gateway's OWN count of what it happened to see (identical in practice today, since the
+// gateway is the only '#' subscriber, but would diverge the moment anything else — mosquitto_sub, a
+// second integration — also talks to this broker). Kept as raw suffix->string rather than parsed
+// into getBrokerStats' shape immediately: a real broker was found to use a topic with a literal
+// space in it ("retained messages/count", not "retained_messages/count"), so indexing by the exact
+// suffix string sidesteps having to normalize that.
+const brokerStats = new Map();
 
 // Every enabled mappings_mqtt_to_loxone row — refreshed via reloadMappings() below, read by the
 // message handler as a plain in-memory array instead of a fresh query per message. Mirrors
@@ -41,11 +53,11 @@ function topicMatches(pattern, topic) {
   return patternParts.length === topicParts.length;
 }
 
-function recordMessage(topic, payload) {
+function recordMessage(topic, payload, retained) {
   const value = payload.toString().slice(0, 500);
   const now = new Date().toISOString();
 
-  messageLog.unshift({ topic, payload: value, receivedAt: now });
+  messageLog.unshift({ topic, payload: value, receivedAt: now, retained: !!retained });
   if (messageLog.length > MAX_LOG) messageLog.length = MAX_LOG;
 
   // Fire-and-forget by design (recordMessage itself stays a plain sync function, called from the
@@ -60,6 +72,13 @@ function recordMessage(topic, payload) {
     previousValue: existing ? existing.value : null,
     lastSeen: now,
     count: existing ? existing.count + 1 : 1,
+    // The broker's own retain flag on the message that produced this row's current value — set on
+    // essentially every reconnect for many devices (Shelly, Zigbee2MQTT, ...) publish their last
+    // known state as retained specifically so a fresh subscriber sees it immediately, without
+    // waiting for the device's own next real update. Distinguishing that from a genuinely fresh,
+    // just-happened publish is exactly the kind of thing a "why does Incoming Messages show a value
+    // from before the gateway even restarted" question needs, and until now had no answer for.
+    retained: !!retained,
   });
 
   totalMessageCount++;
@@ -67,6 +86,12 @@ function recordMessage(topic, payload) {
   recentTimestamps.push(nowMs);
   const cutoff = nowMs - RATE_WINDOW_MS;
   while (recentTimestamps.length && recentTimestamps[0] < cutoff) recentTimestamps.shift();
+}
+
+// Mosquitto's own $SYS/broker/* tree — see brokerStats' own comment above. '$SYS/broker/' is 12
+// characters; sliced off once here rather than repeated at every call site.
+function recordBrokerStat(topic, payload) {
+  brokerStats.set(topic.slice(12), payload.toString().slice(0, 200));
 }
 
 async function loadSettings() {
@@ -104,9 +129,13 @@ function requestDeviceAnnounce() {
 function attachHandlers(c) {
   c.on('connect', () => {
     state.connected = true;
-    // '#' does not match topics starting with '$' (e.g. $CONTROL, $SYS) per the MQTT spec,
-    // so the dynamic-security response topic needs an explicit subscription.
-    c.subscribe(['#', '$CONTROL/dynamic-security/v1/response'], (err) => {
+    // '#' does not match topics starting with '$' (e.g. $CONTROL, $SYS) per the MQTT spec, so both
+    // the dynamic-security response topic and the broker's own $SYS stats need an explicit
+    // subscription. The gateway's own MQTT account already has $SYS/# read access — it's granted
+    // "admin" (not just "client") dynamic-security role by dynsecBootstrap.js, and that built-in
+    // "admin" role's ACLs (confirmed on a real broker) already include subscribePattern $SYS/#, so
+    // this needs no ACL change of its own.
+    c.subscribe(['#', '$CONTROL/dynamic-security/v1/response', '$SYS/broker/#'], (err) => {
       if (err) console.error('MQTT subscribe error:', err.message);
       else {
         console.log('Connected to MQTT broker, subscribed to all topics.');
@@ -119,10 +148,11 @@ function attachHandlers(c) {
   c.on('close', () => { state.connected = false; });
   c.on('error', (err) => console.error('MQTT client error:', err.message));
 
-  c.on('message', async (topic, payload) => {
+  c.on('message', async (topic, payload, packet) => {
+    if (topic.startsWith('$SYS/broker/')) { recordBrokerStat(topic, payload); return; }
     if (topic.startsWith('$')) return; // internal broker/control traffic, not an application message
 
-    recordMessage(topic, payload);
+    recordMessage(topic, payload, packet && packet.retain);
 
     const matching = enabledMappings.filter((m) => topicMatches(m.mqtt_topic, topic));
 
@@ -198,6 +228,39 @@ function getStats() {
   };
 }
 
+// Parses a handful of the most generally useful $SYS/broker/* keys (confirmed against a real,
+// running Mosquitto 2.x broker — see recordBrokerStat's own comment on why the raw map is keyed by
+// exact suffix) into a stable, typed shape for display. Every field is null until the broker's own
+// first $SYS publish after this gateway subscribes (up to `sys_interval`, 10s by default) — never
+// thrown for a value not seen yet, same "honest unknown" convention every other live-status reading
+// in this app already follows.
+function num(key) {
+  const raw = brokerStats.get(key);
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isNaN(n) ? null : n;
+}
+
+function getBrokerStats() {
+  const rawUptime = brokerStats.get('uptime'); // "12345 seconds"
+  const uptimeSeconds = rawUptime ? parseInt(rawUptime, 10) : null;
+  return {
+    version: brokerStats.get('version') || null, // "mosquitto version 2.1.2"
+    uptimeSeconds: Number.isNaN(uptimeSeconds) ? null : uptimeSeconds,
+    clientsConnected: num('clients/connected'),
+    clientsTotal: num('clients/total'),
+    clientsMaximum: num('clients/maximum'),
+    messagesReceived: num('messages/received'),
+    messagesSent: num('messages/sent'),
+    bytesReceived: num('bytes/received'),
+    bytesSent: num('bytes/sent'),
+    retainedMessageCount: num('retained messages/count'),
+    subscriptionsCount: num('subscriptions/count'),
+    load1minMessagesReceived: num('load/messages/received/1min'),
+    load1minMessagesSent: num('load/messages/sent/1min'),
+  };
+}
+
 // Used to be a bare module-load-time call (connectWithSettings(loadSettings());) — safe when
 // loadSettings() was a synchronous better-sqlite3 read, but the async facade means it can't be
 // awaited at plain require() time. server.js's main() calls this explicitly after db.init() instead.
@@ -216,6 +279,10 @@ module.exports = {
   getTopicOverview,
   clearTopicOverview,
   getStats,
+  getBrokerStats,
   recordMessage,
+  // Exported for the same reason recordMessage is: test/mqttClient.test.js exercises the message-
+  // handling logic directly, without a real broker connection to publish a real $SYS/broker/* line.
+  recordBrokerStat,
   requestDeviceAnnounce,
 };

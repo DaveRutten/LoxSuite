@@ -97,7 +97,7 @@ const { toggleSwitch } = require('./toggleSwitch');
 const backup = require('./backup');
 const scheduledDeviceCommands = require('./scheduledDeviceCommands');
 const { formatDateTime, getDisplayTimezone, loadTimezoneCache } = require('./dateFormat');
-const { formatCount, formatHeapStatus, miniserverGenerationLabel, formatDuration, PLC_STATE_LABELS, plcStateLabel } = require('./format');
+const { formatCount, formatBytes, formatHeapStatus, miniserverGenerationLabel, formatDuration, PLC_STATE_LABELS, plcStateLabel } = require('./format');
 const panelTypeDefaults = require('./panelTypeDefaults');
 const { getVersionStatus, startVersionCheck } = require('./versionCheck');
 const { startSqliteImportCheck, getSqliteImportStatus } = require('./sqliteImportStatus');
@@ -157,6 +157,7 @@ async function main() {
   app.locals.toggleSwitch = toggleSwitch;
   app.locals.formatDateTime = formatDateTime;
   app.locals.formatCount = formatCount;
+  app.locals.formatBytes = formatBytes;
   app.locals.formatHeapStatus = formatHeapStatus;
   app.locals.miniserverGenerationLabel = miniserverGenerationLabel;
   app.locals.PLC_STATE_LABELS = PLC_STATE_LABELS;

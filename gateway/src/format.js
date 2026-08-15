@@ -93,4 +93,24 @@ function formatDuration(seconds) {
   return `${days}d`;
 }
 
-module.exports = { formatCount, formatHeapStatus, parseHeapStatus, miniserverGenerationLabel, formatDuration, PLC_STATE_LABELS, plcStateLabel };
+// Mosquitto's own $SYS/broker/bytes/{received,sent} (see mqttClient.js's getBrokerStats) are plain
+// byte counts, unlike backup.js's own file sizes (already read as a whole number of bytes too, but
+// shown via a client-side Tabulator column formatter instead — this one instead needs to render
+// server-side inside an EJS template, so it gets its own plain helper here rather than duplicating
+// that JS-side one or trying to share it across a server/browser boundary).
+function formatBytes(n) {
+  if (!Number.isFinite(n)) return null;
+  const abs = Math.abs(n);
+  if (abs < 1024) return `${n} B`;
+  const units = [
+    { value: 1024 ** 3, suffix: 'GB' },
+    { value: 1024 ** 2, suffix: 'MB' },
+    { value: 1024, suffix: 'KB' },
+  ];
+  const unit = units.find((u) => abs >= u.value);
+  const scaled = n / unit.value;
+  const formatted = Math.abs(scaled) >= 10 ? Math.round(scaled).toString() : (Math.round(scaled * 10) / 10).toString();
+  return `${formatted} ${unit.suffix}`;
+}
+
+module.exports = { formatCount, formatBytes, formatHeapStatus, parseHeapStatus, miniserverGenerationLabel, formatDuration, PLC_STATE_LABELS, plcStateLabel };
