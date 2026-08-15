@@ -126,6 +126,21 @@ function requestDeviceAnnounce() {
   if (client && state.connected) client.publish('shellies/command', 'announceall');
 }
 
+// A zero-length payload published with retain:true is the MQTT spec's own, universal way to purge
+// a topic's retained message from the broker (Mosquitto included — nothing broker-specific here) —
+// exactly the "Clear retained" action on Incoming Messages needs for a topic whose only value left
+// is a stale replay from a device that's since been renamed, replaced, or removed: without this,
+// that stale value keeps replaying to every new subscriber (a fresh mapping, a new monitor, ...)
+// forever, with no way to stop it short of publishing over it from outside LoxSuite entirely.
+// Removes the topic from topicOverview too — once cleared there's no longer a "current value" for
+// it from the broker's own point of view, and if the device is still genuinely alive and publishing
+// this topic live (not just retained), its own next publish repopulates the row the normal way.
+function clearRetained(topic) {
+  if (!client || !state.connected) return;
+  client.publish(topic, '', { retain: true });
+  topicOverview.delete(topic);
+}
+
 function attachHandlers(c) {
   c.on('connect', () => {
     state.connected = true;
@@ -285,4 +300,5 @@ module.exports = {
   // handling logic directly, without a real broker connection to publish a real $SYS/broker/* line.
   recordBrokerStat,
   requestDeviceAnnounce,
+  clearRetained,
 };

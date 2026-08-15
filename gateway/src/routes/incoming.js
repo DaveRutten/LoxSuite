@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { getTopicOverview, clearTopicOverview, requestDeviceAnnounce } = require('../mqttClient');
+const { getTopicOverview, clearTopicOverview, requestDeviceAnnounce, clearRetained } = require('../mqttClient');
 const { getClients, clearClients } = require('../mosquittoLog');
 const { commandRecognitionString } = require('../loxone');
 const { discoverDevices, resolveTopicPrefix } = require('../deviceDiscovery');
@@ -34,6 +34,14 @@ router.get('/messages', asyncHandler(async (req, res) => {
 
 router.post('/messages/clear', requirePermission('incoming', 'edit'), (req, res) => {
   clearTopicOverview();
+  res.redirect('/incoming/messages');
+});
+
+// topic comes from a hidden form field (see incoming-messages.ejs), not a URL param — an MQTT
+// topic routinely contains "/", which would otherwise need escaping to survive as a single
+// Express route segment for no real benefit over just posting it as a body field.
+router.post('/messages/clear-retained', requirePermission('incoming', 'edit'), (req, res) => {
+  if (req.body.topic) clearRetained(req.body.topic);
   res.redirect('/incoming/messages');
 });
 

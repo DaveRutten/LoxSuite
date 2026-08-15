@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.19-alpha.1] - 2026-08-15
+
+### Added
+- **"Clear retained" button on Live Data / Incoming Messages** — purges the broker's own retained
+  copy of a topic (publishes a zero-length retained message, the MQTT spec's own standard way to do
+  it) so a stale value from a renamed/replaced/removed device stops replaying to every new
+  subscriber. Only shown on a topic currently flagged Retained (see 0.18.17-alpha.1's own retained
+  badge).
+
 ## [0.18.18-alpha.1] - 2026-08-15
 
 ### Added

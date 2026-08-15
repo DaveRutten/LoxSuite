@@ -92,6 +92,12 @@
                 <button type="submit" class="primary" <%= topicMonitored ? 'disabled' : '' %> title="<%= topicMonitored ? 'Already being monitored' : 'Start recording this topic\'s history on the Monitor page' %>"><%- icon('plus') %> <%= topicMonitored ? 'Monitored' : 'Monitor' %></button>
               </form>
               <% } %>
+              <% if (t.retained && canEdit('incoming')) { %>
+              <form class="inline" method="post" action="/incoming/messages/clear-retained" data-confirm="Clear the retained value the broker is holding for this exact topic? Any future subscriber (a new mapping, a new monitor, ...) will no longer see this old value replayed to it. This does not stop the device from publishing a fresh retained value again later.">
+                <input type="hidden" name="topic" value="<%= t.topic %>">
+                <button type="submit" class="danger" title="Purge the broker's own retained copy of this topic's value"><%- icon('trash') %> Clear retained</button>
+              </form>
+              <% } %>
             </div>
           </td>
         </tr>

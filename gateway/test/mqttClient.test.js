@@ -137,6 +137,26 @@ test('getBrokerStats parses a real Mosquitto $SYS/broker/* snapshot into typed f
 // key Mosquitto publishes (only when compiled with heap tracking) but isn't one of them — a broker
 // publishing an unrecognized $SYS key, or not publishing heap stats at all, can't change this shape
 // either way.
+// clearRetained's own "publish an empty retained message" is the MQTT spec's own well-established
+// way to purge a topic's retained value from the broker — not something worth re-deriving in a
+// unit test (see routes/incoming.js's own comment). What IS worth covering here, the same way
+// requestDeviceAnnounce's identical `if (client && state.connected)` guard already protects against
+// a stray click while genuinely disconnected: this must never throw, and must never wipe a topic's
+// still-relevant overview entry, when there's no live connection to actually publish the clear
+// through in the first place.
+test('clearRetained is a safe no-op (does not throw, does not touch topicOverview) while disconnected', () => {
+  const wasConnected = mqttClient.state.connected;
+  mqttClient.state.connected = false;
+  try {
+    mqttClient.recordMessage('clear-retained-test/topic', Buffer.from('still here'));
+    assert.doesNotThrow(() => mqttClient.clearRetained('clear-retained-test/topic'));
+    const overview = mqttClient.getTopicOverview().find((o) => o.topic === 'clear-retained-test/topic');
+    assert.ok(overview, 'the topic overview entry should be untouched — nothing was actually cleared on a broker we are not connected to');
+  } finally {
+    mqttClient.state.connected = wasConnected;
+  }
+});
+
 test('getBrokerStats always returns exactly its own curated field list, nothing more or less', () => {
   const stats = mqttClient.getBrokerStats();
   assert.deepEqual(Object.keys(stats).sort(), [
