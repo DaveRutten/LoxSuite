@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.18-alpha.1] - 2026-08-15
+
+### Added
+- **Per-user "Extra permissions" on MQTT Users** — each user row now has a Permissions section
+  showing what its role already grants (read-only, edit that on MQTT Roles instead) plus that one
+  user's own extra ACLs on top, for the rare case where a single device needs something beyond its
+  shared role without loosening that role for everyone else who has it. Under the hood this is a
+  second, auto-managed role held only by that user (Mosquitto's dynsec plugin has no real per-client
+  ACL concept at all — confirmed against a real broker) — verified against a real broker that an
+  admin's `Deny` on the base role always wins over an `Allow` added here for the same topic,
+  regardless of role-attach order: the base role someone else manages always has the final word.
+
 ## [0.18.17-alpha.1] - 2026-08-15
 
 ### Added

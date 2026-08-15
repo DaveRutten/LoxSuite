@@ -20,7 +20,9 @@
   &mdash; the broker does not allow anonymous clients. <strong>Last used</strong> comes from the
   broker's own log and only covers activity since this gateway last started &mdash; a blank means
   no connection has been seen yet in that window, not necessarily that the account has never
-  connected.
+  connected. <strong>Permissions</strong> shows what a user's role already grants (read-only here)
+  plus that one user's own extra permissions on top of it &mdash; for the rare case where one
+  device needs something beyond its role without changing that role for everyone else who has it.
 </p>
 
 <% if (canEdit('mqtt_users')) { %>
@@ -64,20 +66,22 @@
     </thead>
     <tbody>
       <% clients.forEach(c => { %>
+        <% var ownAcls = (rolesByName[c.personalRoleName] || {}).acls || []; %>
+        <% var inheritedAcls = (c.baseRoles || []).flatMap(r => ((rolesByName[r.rolename] || {}).acls || []).map(acl => ({ ...acl, fromRole: r.rolename }))); %>
         <tr>
           <td><%= c.username %></td>
           <td>
             <% if (!protectedUsernames.includes(c.username) && canEdit('mqtt_users')) { %>
               <form id="role-form-<%= c.username %>" method="post" action="/mqtt-users/<%= c.username %>/role" style="display:inline;">
-                <input type="hidden" name="previous_roles" value="<%= (c.roles || []).map(r => r.rolename).join(',') %>">
+                <input type="hidden" name="previous_roles" value="<%= (c.baseRoles || []).map(r => r.rolename).join(',') %>">
                 <select name="rolename">
                   <% roles.forEach(r => { %>
-                    <option value="<%= r %>" <%= (c.roles || []).some(cr => cr.rolename === r) ? 'selected' : '' %>><%= r %></option>
+                    <option value="<%= r %>" <%= (c.baseRoles || []).some(cr => cr.rolename === r) ? 'selected' : '' %>><%= r %></option>
                   <% }) %>
                 </select>
               </form>
             <% } else { %>
-              <%= (c.roles || []).map(r => r.rolename).join(', ') || '-' %>
+              <%= (c.baseRoles || []).map(r => r.rolename).join(', ') || '-' %>
             <% } %>
           </td>
           <td><%= (c.connections || []).length %></td>
@@ -91,15 +95,18 @@
             <% } %>
           </td>
           <td>
-            <% if (!protectedUsernames.includes(c.username) && canEdit('mqtt_users')) { %>
-              <div class="row-actions">
+            <div class="row-actions">
+              <% if (!protectedUsernames.includes(c.username)) { %>
+                <button type="button" class="btn-edit" data-toggle-row="mqtt-perms-<%= c.username %>"><%- icon('edit') %> Permissions<% if (ownAcls.length) { %> (<%= ownAcls.length %>)<% } %></button>
+              <% } %>
+              <% if (!protectedUsernames.includes(c.username) && canEdit('mqtt_users')) { %>
                 <button type="submit" form="role-form-<%= c.username %>" class="btn-edit"><%- icon('edit') %> Save role</button>
                 <button type="button" class="btn-edit" data-toggle-row="mqtt-reset-pw-<%= c.username %>"><%- icon('edit') %> Reset password</button>
                 <form class="inline" method="post" action="/mqtt-users/<%= c.username %>/delete" data-confirm="Delete this user?">
                   <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
                 </form>
-              </div>
-            <% } %>
+              <% } %>
+            </div>
           </td>
         </tr>
         <% if (!protectedUsernames.includes(c.username) && canEdit('mqtt_users')) { %>
@@ -110,6 +117,126 @@
               <input type="password" name="password" required style="max-width:14rem;">
               <button type="submit" class="btn-edit"><%- icon('edit') %> Set password</button>
             </form>
+          </td>
+        </tr>
+        <% } %>
+        <% if (!protectedUsernames.includes(c.username)) { %>
+        <tr class="expand-row" id="mqtt-perms-<%= c.username %>">
+          <td colspan="5">
+            <p class="hint" style="margin-top:0;">
+              Inherited from <%= (c.baseRoles || []).map(r => r.rolename).join(', ') || 'its role' %> (read-only here — edit on
+              <a href="/mqtt-roles">MQTT Roles</a> if this should change for everyone with that role):
+            </p>
+            <div class="table-wrap">
+              <table class="acl-table">
+                <thead>
+                  <tr><th>ACL type</th><th>Topic filter</th><th>Allow</th><th>From role</th></tr>
+                </thead>
+                <tbody>
+                  <% inheritedAcls.forEach(acl => { %>
+                    <tr>
+                      <td><%= acl.acltype %></td>
+                      <td><code><%= acl.topic %></code></td>
+                      <td><span class="badge <%= acl.allow ? 'badge-ok' : 'badge-off' %>"><%= acl.allow ? 'Allow' : 'Deny' %></span></td>
+                      <td><%= acl.fromRole %></td>
+                    </tr>
+                  <% }) %>
+                  <% if (inheritedAcls.length === 0) { %>
+                    <tr><td colspan="4" class="empty">No ACLs inherited &mdash; this user's role currently grants no access.</td></tr>
+                  <% } %>
+                </tbody>
+              </table>
+            </div>
+
+            <p class="hint">
+              This user's own extra permissions, on top of the above &mdash; only <%= c.username %> gets these.
+              A <strong>Deny</strong> above always wins over an <strong>Allow</strong> added here for the same
+              topic, so this can only grant access the role above stays silent on, never re-open something
+              the role explicitly denies:
+            </p>
+            <div class="table-wrap">
+              <table class="acl-table">
+                <thead>
+                  <tr><th>ACL type</th><th>Topic filter</th><th>Allow</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                  <% ownAcls.forEach((acl, i) => { %>
+                    <% var editRowId = 'mqtt-perm-edit-' + c.username + '-' + i; %>
+                    <tr>
+                      <td><%= acl.acltype %></td>
+                      <td><code><%= acl.topic %></code></td>
+                      <td><span class="badge <%= acl.allow ? 'badge-ok' : 'badge-off' %>"><%= acl.allow ? 'Allow' : 'Deny' %></span></td>
+                      <td>
+                        <% if (canEdit('mqtt_users')) { %>
+                        <div class="row-actions">
+                          <button type="button" class="btn-edit" data-toggle-row="<%= editRowId %>"><%- icon('edit') %> Edit</button>
+                          <form class="inline" method="post" action="/mqtt-users/<%= c.username %>/acls/delete">
+                            <input type="hidden" name="acltype" value="<%= acl.acltype %>">
+                            <input type="hidden" name="topic" value="<%= acl.topic %>">
+                            <button type="submit" class="danger"><%- icon('trash') %> Remove</button>
+                          </form>
+                        </div>
+                        <% } %>
+                      </td>
+                    </tr>
+                    <% if (canEdit('mqtt_users')) { %>
+                    <tr class="expand-row" id="<%= editRowId %>">
+                      <td colspan="4">
+                        <form method="post" action="/mqtt-users/<%= c.username %>/acls/edit" class="form-grid" style="gap:0.6rem;">
+                          <input type="hidden" name="old_acltype" value="<%= acl.acltype %>">
+                          <input type="hidden" name="old_topic" value="<%= acl.topic %>">
+                          <div>
+                            <label>ACL type</label>
+                            <select name="acltype">
+                              <% aclTypes.forEach(t => { %>
+                                <option value="<%= t %>" <%= t === acl.acltype ? 'selected' : '' %>><%= t %></option>
+                              <% }) %>
+                            </select>
+                          </div>
+                          <div><label>Topic filter</label><input type="text" name="topic" value="<%= acl.topic %>" required></div>
+                          <div>
+                            <label>Effect</label>
+                            <select name="allow">
+                              <option value="1" <%= acl.allow ? 'selected' : '' %>>Allow</option>
+                              <option value="0" <%= !acl.allow ? 'selected' : '' %>>Deny</option>
+                            </select>
+                          </div>
+                          <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+                        </form>
+                      </td>
+                    </tr>
+                    <% } %>
+                  <% }) %>
+                  <% if (ownAcls.length === 0) { %>
+                    <tr><td colspan="4" class="empty">No extra permissions yet.</td></tr>
+                  <% } %>
+                </tbody>
+              </table>
+            </div>
+
+            <% if (canEdit('mqtt_users')) { %>
+            <form method="post" action="/mqtt-users/<%= c.username %>/acls">
+              <div class="form-grid">
+                <div>
+                  <label>ACL type</label>
+                  <select name="acltype">
+                    <% aclTypes.forEach(t => { %>
+                      <option value="<%= t %>"><%= t %></option>
+                    <% }) %>
+                  </select>
+                </div>
+                <div><label>Topic filter</label><input type="text" name="topic" placeholder="shared/broadcast/#" required></div>
+                <div>
+                  <label>Effect</label>
+                  <select name="allow">
+                    <option value="1">Allow</option>
+                    <option value="0">Deny</option>
+                  </select>
+                </div>
+                <button type="submit" class="primary"><%- icon('plus') %> Add permission</button>
+              </div>
+            </form>
+            <% } %>
           </td>
         </tr>
         <% } %>

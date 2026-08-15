@@ -1,5 +1,5 @@
 const express = require('express');
-const { listRolesVerbose, createRole, deleteRole, addRoleAcl, removeRoleAcl, editRoleAcl } = require('../dynamicSecurity');
+const { ACL_TYPES, listRolesVerbose, createRole, deleteRole, addRoleAcl, removeRoleAcl, editRoleAcl } = require('../dynamicSecurity');
 const { requirePermission } = require('../middleware/requirePermission');
 
 const router = express.Router();
@@ -7,8 +7,6 @@ const router = express.Router();
 // These roles are wired into the bootstrap/gateway logic — removing them would
 // break the gateway's own broker connection or the default device role.
 const PROTECTED_ROLES = ['admin', 'client'];
-
-const ACL_TYPES = ['publishClientSend', 'publishClientReceive', 'subscribePattern', 'unsubscribePattern'];
 
 router.get('/', async (req, res) => {
   try {

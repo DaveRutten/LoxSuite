@@ -7,6 +7,12 @@ const REQUEST_TOPIC = '$CONTROL/dynamic-security/v1';
 const RESPONSE_TOPIC = '$CONTROL/dynamic-security/v1/response';
 const TIMEOUT_MS = 5000;
 
+// Every ACL type Mosquitto's dynsec plugin recognizes (`mosquitto_ctrl dynsec help`'s own
+// aclspec line) — shared by routes/mqttRoles.js (a named role's own ACLs) and routes/mqttUsers.js
+// (a client's own personal-role ACLs, see personalRoleName below), so the two ACL-editing forms
+// can never quietly drift apart on which types are offered.
+const ACL_TYPES = ['publishClientSend', 'publishClientReceive', 'subscribePattern', 'unsubscribePattern'];
+
 // Mosquitto's dynamic-security plugin exposes user/role management over MQTT
 // control topics rather than a REST API — see mosquitto_ctrl dynsec help.
 function sendCommand(command) {
@@ -138,6 +144,53 @@ async function createDeviceScopedRole(topicPrefix) {
   return rolename;
 }
 
+// Mosquitto's dynsec plugin has no concept of a per-client ACL at all (confirmed against a real
+// broker — `mosquitto_ctrl dynsec help` lists ACLs only under Roles, nothing under Clients) — every
+// permission a client has comes from a role, always. What this backs (Settings > MQTT Users' own
+// "Extra permissions" section) is really "give ONE client something extra beyond its shared role,
+// without touching that role" — done by giving the client a SECOND role, held only by them, that
+// only that section's own add/edit/delete ACL actions ever touch. Same slug scheme as
+// deviceRoleName above, just its own "personal-" prefix so the two role families can never collide
+// — and the same theoretical two-different-usernames-slugify-to-the-same-name risk deviceRoleName
+// already accepts, unchanged here.
+//
+// SECURITY PROPERTY, confirmed empirically against a real broker (createRole/addRoleACL/
+// addClientRole/mosquitto_sub, not just read from docs) rather than assumed: a `deny` ACL on the
+// client's BASE role always wins over an `allow` on this personal role for the same topic, in
+// EITHER role-attach order, at the default (-1/unset) priority both ends up at here — Mosquitto's
+// dynsec evaluates "does anything applicable say deny" rather than "first/last matching rule
+// wins." A personal role can only ever grant something extra on topics its base role stays silent
+// on; it can never re-open something the base role explicitly denies. Whoever manages the base
+// role (routes/mqttRoles.js) always has the final word — exactly what this feature was asked for.
+// This only holds as long as ensurePersonalRole/addRoleAcl below never pass an explicit priority
+// (they don't) — an explicit HIGHER priority on the personal role's own ACL would break this
+// guarantee, so don't add one without re-verifying this property against a real broker again.
+function personalRoleName(username) {
+  const slug = String(username).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `personal-${slug}`;
+}
+
+// Idempotent: safe to call every time the "Extra permissions" section actually adds its first ACL,
+// not just once — createRole errors (role name taken) are swallowed exactly like
+// createDeviceScopedRole's own reuse-if-exists comment above, and addClientRole errors the same way
+// since re-adding a role a client already holds errors too (confirmed against a real broker: "addClientRole:
+// Error: Internal error", not a silent no-op) — there's no cheap "does this client already have this
+// role" check worth making first when the failure mode either way is "nothing changed."
+async function ensurePersonalRole(username) {
+  const rolename = personalRoleName(username);
+  try {
+    await createRole(rolename);
+  } catch (err) {
+    // Already exists from an earlier "extra permission" added for this same user — fine.
+  }
+  try {
+    await addClientRole(username, rolename);
+  } catch (err) {
+    // Already assigned — fine.
+  }
+  return rolename;
+}
+
 // A one-shot, standalone connection attempt with a specific username/password — used right after
 // createClient()/setClientPassword() (see routes/mqttUsers.js), the only moment the plaintext
 // password is ever in hand. Unlike a Miniserver, an existing MQTT user's password isn't stored
@@ -174,6 +227,7 @@ async function testClientConnection(username, password, timeoutMs = 5000) {
 }
 
 module.exports = {
+  ACL_TYPES,
   listClients,
   createClient,
   deleteClient,
@@ -188,5 +242,7 @@ module.exports = {
   removeRoleAcl,
   editRoleAcl,
   createDeviceScopedRole,
+  personalRoleName,
+  ensurePersonalRole,
   testClientConnection,
 };
