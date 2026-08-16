@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.21-alpha.1] - 2026-08-16
+
+### Added
+- **"Lock panels" on the Dashboard and every My Dashboards board** — locked, a panel can't be
+  dragged, resized, or dropped into another group (everything else — opening a panel's own edit
+  drawer, tapping a control inside it — still works). Defaults to locked on a phone/tablet-sized
+  screen, where a stray touch can trigger a drag by accident, and unlocked everywhere else;
+  remembered per-device from there on (one shared preference across every dashboard, not a
+  per-board setting).
+
 ## [0.18.20-alpha.1] - 2026-08-15
 
 ### Added

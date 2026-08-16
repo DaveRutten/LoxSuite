@@ -59,8 +59,11 @@
       <%- icon('plus') %> Add group
     </button>
   </form>
+  <button type="button" id="dash-lock-panels-btn" class="btn-soft" style="margin-left:auto;" title="Locked: panels can't be dragged, resized, or dropped into another group — everything else (opening a panel's own edit drawer, tapping a control inside it) still works. Defaults to locked on a phone/tablet-sized screen (an easy gesture to trigger by accident there) and unlocked everywhere else; remembered on this device from here on.">
+    <span class="dash-lock-panels-icon-unlocked"><%- icon('unlock') %></span><span class="dash-lock-panels-icon-locked" hidden><%- icon('lock') %></span> <span class="dash-lock-panels-label">Lock panels</span>
+  </button>
   <% if (panels.length > 1) { %>
-  <button type="button" id="dash-auto-order-btn" class="btn-soft" style="margin-left:auto;" title="Pack every group's panels tightly, closing up any gaps">
+  <button type="button" id="dash-auto-order-btn" class="btn-soft" title="Pack every group's panels tightly, closing up any gaps">
     <%- icon('grid') %> Auto order
   </button>
   <% } %>
@@ -2470,6 +2473,46 @@
         var h = node.h;
         while (node.y + h < maxBottom && !overlapsAny({ x: node.x, y: node.y, w: node.w, h: h + 1 }, node)) h += 1;
         if (h !== node.h) grid.update(node.el, { h: h });
+      });
+    }
+
+    // "Lock panels" — grid.setStatic(true) is GridStack's own single call for "no drag, no
+    // resize, no cross-zone drop," layered ON TOP of the staticGrid:!canEdit set at init time
+    // above (that one's permanent, for a view-only visitor; this one's a runtime toggle for
+    // someone who CAN edit, choosing not to right now). One shared localStorage key across every
+    // dashboard on this device/browser, not a per-dashboard setting — "my phone locks panels by
+    // default" is a property of the device you're touching it on, not of which board happens to
+    // be open. No saved value yet (first-ever visit on this device) falls back to a live
+    // matchMedia check rather than a value baked in at page-load, so the SAME already-open tab
+    // re-evaluates correctly if it's ever resized/rotated across the 768px breakpoint before the
+    // button is first touched.
+    var LOCK_STORAGE_KEY = 'dashLockPanels';
+    var lockBtn = document.getElementById('dash-lock-panels-btn');
+    if (lockBtn) {
+      var lockLabel = lockBtn.querySelector('.dash-lock-panels-label');
+      var lockedIcon = lockBtn.querySelector('.dash-lock-panels-icon-locked');
+      var unlockedIcon = lockBtn.querySelector('.dash-lock-panels-icon-unlocked');
+
+      function isLocked() {
+        var saved = localStorage.getItem(LOCK_STORAGE_KEY);
+        if (saved === '1') return true;
+        if (saved === '0') return false;
+        return window.matchMedia('(max-width: 768px)').matches; // matches this app's own mobile breakpoint, see style.css
+      }
+
+      function applyLocked(locked) {
+        grids.forEach(function (grid) { grid.setStatic(locked); });
+        lockBtn.classList.toggle('is-active', locked);
+        lockedIcon.hidden = !locked;
+        unlockedIcon.hidden = locked;
+        lockLabel.textContent = locked ? 'Unlock panels' : 'Lock panels';
+      }
+
+      applyLocked(isLocked());
+      lockBtn.addEventListener('click', function () {
+        var next = !isLocked();
+        localStorage.setItem(LOCK_STORAGE_KEY, next ? '1' : '0');
+        applyLocked(next);
       });
     }
 

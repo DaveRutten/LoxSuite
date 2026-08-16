@@ -3047,6 +3047,11 @@ main > p.hint:first-of-type { margin-top: 0; }
 .favorite-toggle-btn.is-favorited .icon { fill: currentColor; }
 .favorite-toggle-btn.is-favorited:hover { color: var(--warning) !important; background: var(--warning-soft) !important; border-color: var(--warning) !important; }
 
+/* Panel-grid's own "Lock panels" toggle (panel-grid.ejs) once locked — same accent-means-"on"
+   convention as .icon-btn.active below, not the favorite star's warning-amber above: a locked
+   grid is the deliberate, protected state someone chose, not something that needs attention. */
+#dash-lock-panels-btn.is-active { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+
 /* Colored at rest (not just on hover) so an icon-only edit/delete action is recognizable by
    color + icon alone, matching the colored .btn-edit/.danger pill buttons elsewhere. */
 .icon-btn-edit { color: var(--warning); background: var(--warning-soft); border-color: var(--warning); }
