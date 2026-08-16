@@ -179,8 +179,15 @@ a { color: var(--accent); }
    .notification-center-btn/.topbar-help further below, both icon-only circles of their own) keeps
    this margin off, otherwise it throws off centering (the icon sits visibly left of true center) —
    exactly the bug a real screenshot measurement caught on the notification bell: SVG vertically
-   centered to within a sub-pixel, but 0.35rem off horizontally, matching this margin exactly. */
-button:not(.icon-btn):not(.notification-center-btn):not(.topbar-support-btn):not(.ai-chat-launcher) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35rem; }
+   centered to within a sub-pixel, but 0.35rem off horizontally, matching this margin exactly.
+   #dash-favorite-btn/#dash-lock-panels-btn/#dash-auto-order-btn (panel-grid.ejs's own icon-only
+   trailing group) are the same .btn-soft/.favorite-toggle-btn classes their WITH-text counterparts
+   elsewhere use (the dashboards.ejs list's own two Favorite buttons still need this margin) — kept
+   on plain .btn-soft rather than switched to .icon-btn (a different, transparent-by-default look)
+   specifically so they still match Add panel/Add group's own bordered-chip sizing right next to
+   them, which is exactly why this needed its own ID-based exclusions rather than reusing one of
+   the class-based ones above. */
+button:not(.icon-btn):not(.notification-center-btn):not(.topbar-support-btn):not(.ai-chat-launcher):not(#dash-favorite-btn):not(#dash-lock-panels-btn):not(#dash-auto-order-btn) .icon, a button:not(.icon-btn) .icon { margin-right: 0.35rem; }
 
 /* ---- App shell ---- */
 .app-shell {

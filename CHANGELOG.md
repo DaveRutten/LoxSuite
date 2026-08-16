@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.23-alpha.1] - 2026-08-16
+
+### Fixed
+- **Off-center icons on the new Favorite/Lock panels/Auto order buttons** — the same
+  icon-only-button-needs-its-text-margin-removed bug already fixed once for the notification bell;
+  these three just weren't in that exclusion list yet. Measured 0.00px left/right gap difference
+  now, in every state (favorited/unfavorited, locked/unlocked).
+
 ## [0.18.22-alpha.1] - 2026-08-16
 
 ### Changed

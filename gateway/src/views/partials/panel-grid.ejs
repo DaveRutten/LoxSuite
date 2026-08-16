@@ -61,7 +61,7 @@
     <% if (typeof isFavorited !== 'undefined') { %>
     <form method="post" action="/dashboards/<%= dashboardId %>/<%= isFavorited ? 'unfavorite' : 'favorite' %>" class="inline">
       <input type="hidden" name="redirect_to" value="/dashboards/<%= dashboardId %>">
-      <button type="submit" class="btn-soft favorite-toggle-btn <%= isFavorited ? 'is-favorited' : '' %>" aria-label="<%= isFavorited ? 'Remove from favorite' : 'Add to favorite' %>" title="<%= isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>">
+      <button type="submit" id="dash-favorite-btn" class="btn-soft favorite-toggle-btn <%= isFavorited ? 'is-favorited' : '' %>" aria-label="<%= isFavorited ? 'Remove from favorite' : 'Add to favorite' %>" title="<%= isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>">
         <%- icon('star') %>
       </button>
     </form>
