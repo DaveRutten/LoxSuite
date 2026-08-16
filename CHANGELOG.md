@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.22-alpha.1] - 2026-08-16
+
+### Changed
+- **Favorite/Lock panels/Auto order are now icon-only**, grouped together at the right edge of the
+  Dashboard/My Dashboards toolbar — Favorite moved there from its own separate row. Favorited and
+  Locked now read from the button's own color + filled icon (the same convention Favorite's star
+  already used), not text.
+
 ## [0.18.21-alpha.1] - 2026-08-16
 
 ### Added

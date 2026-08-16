@@ -58,10 +58,11 @@ const ICONS = {
   // The AI Assistant widget's own composer send button — a paper plane, not `edit`'s pencil (used
   // for the older full-page composer, where an adjacent text label already said "Send").
   send: '<path d="m3 3 18 9-18 9V3Z"/><path d="M11 12H3"/>',
-  // Panel-grid's own "Lock panels" toggle (see partials/panel-grid.ejs) — closed/open shackle,
-  // the standard pair every OS/app already uses for this exact locked-vs-unlocked meaning.
+  // Panel-grid's own "Lock panels" toggle (see partials/panel-grid.ejs) — one icon, outline vs
+  // filled (see style.css's own #dash-lock-panels-btn.is-active), same "single icon + fill/color
+  // carries the on/off state" convention the favorite star above already uses, rather than a
+  // second "unlock" icon swapped in/out.
   lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
-  unlock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
 };
 
 function icon(name, opts) {

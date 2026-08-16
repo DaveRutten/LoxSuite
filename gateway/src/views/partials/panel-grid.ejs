@@ -35,21 +35,18 @@
 <link rel="stylesheet" href="/vendor/gridstack.min.css">
 <script src="/vendor/gridstack-all.min.js"></script>
 <%
-  // Favorite lives in the same row-actions bar as Add panel/Add group whenever both are present,
-  // but neither gates the other — favoriting is a personal action available to a view-only
-  // visitor of a shared dashboard (who has no Add panel/Add group at all, hence its own row here),
-  // same as it always was before it lived in the page's own header instead of this shared partial.
+  // Favorite/Lock/Auto order all live in one icon-only trailing group, right-aligned via the
+  // wrapping div's own margin-left:auto (not on any one button — which of the three actually
+  // renders varies: the shared home Dashboard has no Favorite at all, isFavorited is only ever
+  // passed for a personal My Dashboards board; Lock/Auto order need canEditPanels; Auto order
+  // additionally needs more than one panel — so anchoring the margin to "whichever renders
+  // first" would be fragile, a wrapper sidesteps that entirely). No visible text on any of the
+  // three — state (favorited/locked) reads from the button's own color+fill, same convention
+  // favorite's star already used before this; Auto order has no persistent state, just a title
+  // tooltip, same as any other icon-only action button elsewhere in the app.
 %>
 <% if (typeof isFavorited !== 'undefined' || canEditPanels) { %>
 <div class="row-actions" style="margin-bottom:0.75rem;">
-  <% if (typeof isFavorited !== 'undefined') { %>
-  <form method="post" action="/dashboards/<%= dashboardId %>/<%= isFavorited ? 'unfavorite' : 'favorite' %>" class="inline">
-    <input type="hidden" name="redirect_to" value="/dashboards/<%= dashboardId %>">
-    <button type="submit" class="btn-soft favorite-toggle-btn <%= isFavorited ? 'is-favorited' : '' %>" title="<%= isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>">
-      <%- icon('star') %> <%= isFavorited ? 'Remove from favorite' : 'Add to favorite' %>
-    </button>
-  </form>
-  <% } %>
   <% if (canEditPanels) { %>
   <button type="button" id="dash-add-panel-btn" class="btn-soft"><%- icon('plus') %> Add panel</button>
   <form method="post" action="/dashboards/<%= dashboardId %>/panels" class="inline">
@@ -59,15 +56,27 @@
       <%- icon('plus') %> Add group
     </button>
   </form>
-  <button type="button" id="dash-lock-panels-btn" class="btn-soft" style="margin-left:auto;" title="Locked: panels can't be dragged, resized, or dropped into another group — everything else (opening a panel's own edit drawer, tapping a control inside it) still works. Defaults to locked on a phone/tablet-sized screen (an easy gesture to trigger by accident there) and unlocked everywhere else; remembered on this device from here on.">
-    <span class="dash-lock-panels-icon-unlocked"><%- icon('unlock') %></span><span class="dash-lock-panels-icon-locked" hidden><%- icon('lock') %></span> <span class="dash-lock-panels-label">Lock panels</span>
-  </button>
-  <% if (panels.length > 1) { %>
-  <button type="button" id="dash-auto-order-btn" class="btn-soft" title="Pack every group's panels tightly, closing up any gaps">
-    <%- icon('grid') %> Auto order
-  </button>
   <% } %>
-  <% } %>
+  <div class="row-actions" style="margin-left:auto;">
+    <% if (typeof isFavorited !== 'undefined') { %>
+    <form method="post" action="/dashboards/<%= dashboardId %>/<%= isFavorited ? 'unfavorite' : 'favorite' %>" class="inline">
+      <input type="hidden" name="redirect_to" value="/dashboards/<%= dashboardId %>">
+      <button type="submit" class="btn-soft favorite-toggle-btn <%= isFavorited ? 'is-favorited' : '' %>" aria-label="<%= isFavorited ? 'Remove from favorite' : 'Add to favorite' %>" title="<%= isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>">
+        <%- icon('star') %>
+      </button>
+    </form>
+    <% } %>
+    <% if (canEditPanels) { %>
+    <button type="button" id="dash-lock-panels-btn" class="btn-soft" aria-pressed="false" aria-label="Lock panels" title="Locked: panels can't be dragged, resized, or dropped into another group — everything else (opening a panel's own edit drawer, tapping a control inside it) still works. Defaults to locked on a phone/tablet-sized screen (an easy gesture to trigger by accident there) and unlocked everywhere else; remembered on this device from here on.">
+      <%- icon('lock') %>
+    </button>
+    <% if (panels.length > 1) { %>
+    <button type="button" id="dash-auto-order-btn" class="btn-soft" aria-label="Auto order" title="Pack every group's panels tightly, closing up any gaps">
+      <%- icon('grid') %>
+    </button>
+    <% } %>
+    <% } %>
+  </div>
 </div>
 <% } %>
 <% if (canEditPanels) { %>
@@ -2489,10 +2498,6 @@
     var LOCK_STORAGE_KEY = 'dashLockPanels';
     var lockBtn = document.getElementById('dash-lock-panels-btn');
     if (lockBtn) {
-      var lockLabel = lockBtn.querySelector('.dash-lock-panels-label');
-      var lockedIcon = lockBtn.querySelector('.dash-lock-panels-icon-locked');
-      var unlockedIcon = lockBtn.querySelector('.dash-lock-panels-icon-unlocked');
-
       function isLocked() {
         var saved = localStorage.getItem(LOCK_STORAGE_KEY);
         if (saved === '1') return true;
@@ -2500,12 +2505,16 @@
         return window.matchMedia('(max-width: 768px)').matches; // matches this app's own mobile breakpoint, see style.css
       }
 
+      // Icon-only, no visible label — locked/unlocked reads from the button's own color+fill
+      // (see #dash-lock-panels-btn.is-active in style.css), same convention the favorite star
+      // already used. aria-label/title still describe the action (what clicking DOES), same as
+      // the favorite button's own aria-label flips between "Add to"/"Remove from" — not the
+      // current state, which a screen reader gets from the button's aria-pressed instead.
       function applyLocked(locked) {
         grids.forEach(function (grid) { grid.setStatic(locked); });
         lockBtn.classList.toggle('is-active', locked);
-        lockedIcon.hidden = !locked;
-        unlockedIcon.hidden = locked;
-        lockLabel.textContent = locked ? 'Unlock panels' : 'Lock panels';
+        lockBtn.setAttribute('aria-pressed', String(locked));
+        lockBtn.setAttribute('aria-label', locked ? 'Unlock panels' : 'Lock panels');
       }
 
       applyLocked(isLocked());
