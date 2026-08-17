@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.24-alpha.1] - 2026-08-17
+
+### Added
+- **Separate right-axis minimum/maximum on chart panels** — a series routed to the right Y-axis
+  previously had no way to fix its own range; only the left axis had a Min/Max override.
+- **Group selector in Add/Edit panel** — pick which existing group a panel belongs to right from
+  the form, instead of only being able to move it there afterwards by dragging.
+- **"Replace" a monitor from a panel's Edit drawer** — swap a checked monitor for another one and
+  carry its Series settings/Threshold/Value-per-name overrides over to the new monitor, instead of
+  starting blank. Mainly useful right after duplicating a panel.
+
+### Changed
+- **Adding a panel no longer reloads the whole dashboard** — the Add-panel form now grafts the new
+  panel straight into the live grid (`fetch()` + GridStack's own `makeWidget()`), falling back to a
+  normal page load on any failure. One known trade-off: opening that specific brand-new panel's own
+  Edit drawer still forces a single reload the first time, since its settings-form JS can't be
+  wired up without one — every other panel is unaffected.
+- **Dashboard panels no longer visibly jump into place while loading** — GridStack only ever
+  positions panels via JS, so before that ran (and again after its own load-time compaction/min-size
+  correction passes) everything briefly rendered stacked at the top. Panels now render with their
+  known position already baked in, and stay behind a pulsing placeholder until GridStack's layout is
+  genuinely final and every chart has actually painted.
+
+### Fixed
+- **Loxone Logbook's "no permission" notice no longer gets clipped** — the table card had no
+  minimum height, so a 0/1-row error state shrank it down until the notice sitting on top of it was
+  cut off by the card's own rounded-corner clipping.
+
 ## [0.18.23-alpha.1] - 2026-08-16
 
 ### Fixed

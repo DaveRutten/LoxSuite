@@ -351,6 +351,10 @@
     if (!Number.isFinite(yMin)) yMin = undefined;
     var yMax = parseFloat(canvas.dataset.yMax);
     if (!Number.isFinite(yMax)) yMax = undefined;
+    var yMinRight = parseFloat(canvas.dataset.yMinRight);
+    if (!Number.isFinite(yMinRight)) yMinRight = undefined;
+    var yMaxRight = parseFloat(canvas.dataset.yMaxRight);
+    if (!Number.isFinite(yMaxRight)) yMaxRight = undefined;
     var zoomEnabled = canvas.dataset.zoom === '1';
     // Line style per series — a solid line (the default, no override) plus a color-only override
     // both keep borderDash empty/borderWidth at 2; only 'solid-thick'/'dashed'/'dotted' change
@@ -573,6 +577,8 @@
           // Same reasoning as the left axis's own grace above — skipped when filled, since fillArea
           // (canvas.dataset.fill) applies panel-wide to every series regardless of which axis it's on.
           grace: fillArea ? undefined : '10%',
+          min: yMinRight,
+          max: yMaxRight,
           position: 'right',
           grid: { drawOnChartArea: false },
           ticks: { callback: function (value) { return formatAxisValue(value, axisDecimals.y1 != null ? axisDecimals.y1 : decimals) + (axisUnit.y1 ? ' ' + axisUnit.y1 : ''); } },

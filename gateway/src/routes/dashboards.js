@@ -377,6 +377,8 @@ function buildConfig(panelType, body) {
     // Settings-page global default at render time instead (see panel-grid.ejs's canvas).
     const yMin = Number(body.y_min);
     const yMax = Number(body.y_max);
+    const yMinRight = Number(body.y_min_right);
+    const yMaxRight = Number(body.y_max_right);
     // stepped_line is now a <select> (Off/Before/After/Middle) whose "Off" option submits '' —
     // anything not one of the three real granularities (including '', or the field being absent)
     // means off. Old saved panels with the pre-upgrade `stepped: true` boolean are normalized to
@@ -401,6 +403,8 @@ function buildConfig(panelType, body) {
       yScaleType: body.y_scale_type === 'logarithmic' ? 'logarithmic' : 'linear',
       yMin: fieldStr(body.y_min) !== '' && Number.isFinite(yMin) ? yMin : null,
       yMax: fieldStr(body.y_max) !== '' && Number.isFinite(yMax) ? yMax : null,
+      yMinRight: fieldStr(body.y_min_right) !== '' && Number.isFinite(yMinRight) ? yMinRight : null,
+      yMaxRight: fieldStr(body.y_max_right) !== '' && Number.isFinite(yMaxRight) ? yMaxRight : null,
       zoom: !!body.enable_zoom,
       thresholds: parseThresholdLadder(fieldStr(body.chart_thresholds)),
       annotations: parseAnnotations(fieldStr(body.chart_annotations)),
@@ -1292,17 +1296,21 @@ router.post('/:id/panels', asyncHandler(async (req, res) => {
   const initialColSpan = panelType === 'group_header' ? 12 : 4;
   const initialRowSpan = panelType === 'group_header' ? 1 : 3;
 
+  let newPanelId;
   await db.transaction(async (tx) => {
-    const panelId = await tx.insertReturningId(
+    newPanelId = await tx.insertReturningId(
       'INSERT INTO dashboard_panels (dashboard_id, panel_type, title, range, config, position, col_span, row_span) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [dashboard.id, panelType, req.body.title || null, range, config, maxPos + 1, initialColSpan, initialRowSpan]
     );
     for (let index = 0; index < monitorIds.length; index++) {
-      await tx.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)').run(panelId, monitorIds[index], index);
+      await tx.prepare('INSERT INTO dashboard_panel_monitors (panel_id, monitor_id, position) VALUES (?, ?, ?)').run(newPanelId, monitorIds[index], index);
     }
   });
 
-  res.redirect(dashboardUrl(dashboard));
+  // ?newPanel= lets the Add-panel form's own fetch()-based submit (see panel-grid.ejs) identify
+  // which of the freshly re-rendered page's many .dash-panel elements is the one it just created,
+  // so it can insert just that one into the live DOM instead of doing a full page navigation.
+  res.redirect(dashboardUrl(dashboard) + '?newPanel=' + newPanelId);
 }));
 
 router.post('/:id/panels/:panelId/settings', asyncHandler(async (req, res) => {

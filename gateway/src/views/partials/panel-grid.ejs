@@ -102,6 +102,23 @@
           <label>Range</label>
           <%- rangeField('dashboard', { includeDashboardDefault: true }) %>
         </div>
+        <%
+          // Not part of buildConfig()/the panel's own config — this only tells the client which
+          // existing group_header panel's zone to drop the newly created panel into (via the same
+          // /panels/:id/move-to-zone endpoint drag-and-drop already uses), so a new panel doesn't
+          // always have to land wherever the dashboard's very last panel happens to be.
+          const addPanelGroupHeaders = panels.filter(gp => gp.panel_type === 'group_header');
+          const addPanelDefaultGroupId = addPanelGroupHeaders.length ? addPanelGroupHeaders[addPanelGroupHeaders.length - 1].id : '';
+        %>
+        <div>
+          <label>Group</label>
+          <select name="target_group_id" id="add-panel-group-select">
+            <option value="" <%= addPanelDefaultGroupId === '' ? 'selected' : '' %>>— Ungrouped (top) —</option>
+            <% addPanelGroupHeaders.forEach(function (gp) { %>
+            <option value="<%= gp.id %>" <%= addPanelDefaultGroupId === gp.id ? 'selected' : '' %>><%= gp.title || 'Group' %></option>
+            <% }) %>
+          </select>
+        </div>
       </div>
 
       <div class="form-grid" id="chart-fields" style="margin-top:0.85rem; display:none;">
@@ -309,7 +326,22 @@
 </div>
 <% } %>
 
-<div class="dash-grid-wrap" id="dash-grid">
+<%
+  // A pulsing skeleton tint on every panel until the reveal script (very bottom of this file, after
+  // monitor-chart.js) removes this class — see that script's own comment on exactly when. Without
+  // this, first paint shows every
+  // .grid-stack-item stacked at the container's own top edge (GridStack only ever positions them
+  // via JS-computed inline styles, see style.css's own comment on .grid-stack-item) — a visible
+  // "everything piles up top-left, then jumps to its real spot" flash on every single page load,
+  // worse the more panels/groups a dashboard has. GS_CELL_HEIGHT/GS_MARGIN right below let each
+  // panel's real top/height be rendered up front instead (left/width already come for free from
+  // GridStack's own gs-x/gs-w attribute-selector CSS, see vendor/gridstack.min.css — only top/height
+  // depend on cellHeight, which isn't baked into that file), so GridStack's own init just confirms
+  // what's already on screen rather than visibly moving it.
+  const GS_CELL_HEIGHT = 70; // must match GridStack's own cellHeight in the init options further down
+  const GS_MARGIN = 8; // must match GridStack's own margin in the init options further down
+%>
+<div class="dash-grid-wrap dash-grid-loading" id="dash-grid">
   <%
     // One GridStack instance per "zone", not one grid for the whole dashboard — zone 0 is every
     // panel before the first group_header, rendered inside its own <div class="grid-stack">
@@ -346,8 +378,13 @@
         // GridStack's own computed x/y right after auto-placing it so the NEXT load has a real
         // saved spot instead of re-auto-placing every time.
         const hasGridPos = p.grid_x !== null && p.grid_x !== undefined && p.grid_y !== null && p.grid_y !== undefined;
+        // Same math GridStack itself uses to turn a row count into pixels — approximate only in
+        // that GridStack may round/compact by a px or two once it actually initializes, which reads
+        // as nothing more than the already-in-place box settling, not the old "jump from top" flash.
+        const preJsTop = hasGridPos ? p.grid_y * (GS_CELL_HEIGHT + GS_MARGIN) : null;
+        const preJsHeight = hasGridPos ? p.row_span * GS_CELL_HEIGHT + (p.row_span - 1) * GS_MARGIN : null;
       %>
-    <div class="grid-stack-item" gs-w="<%= p.col_span %>" gs-h="<%= p.row_span %>" gs-min-w="2" gs-min-h="2" gs-id="<%= p.id %>"<% if (hasGridPos) { %> gs-x="<%= p.grid_x %>" gs-y="<%= p.grid_y %>"<% } else { %> data-needs-position="1"<% } %>>
+    <div class="grid-stack-item" gs-w="<%= p.col_span %>" gs-h="<%= p.row_span %>" gs-min-w="2" gs-min-h="2" gs-id="<%= p.id %>"<% if (hasGridPos) { %> gs-x="<%= p.grid_x %>" gs-y="<%= p.grid_y %>" style="top:<%= preJsTop %>px; height:<%= preJsHeight %>px;"<% } else { %> data-needs-position="1"<% } %>>
       <div class="grid-stack-item-content">
     <% } %>
     <div class="dash-panel<%= isGroupHeader ? ' dash-panel-group-header' : '' %>" data-id="<%= p.id %>" data-panel-type="<%= p.panel_type %>">
@@ -422,6 +459,21 @@
         <div data-fields-for="group_header">
           <label>Description (optional)</label>
           <input type="text" name="description" value="<%= p.panel_type === 'group_header' ? (p.config.description || '') : '' %>" placeholder="Shown after the title as &quot;Title - description&quot;">
+        </div>
+        <%
+          // Not part of this panel's own config — moving it to a different group is handled
+          // separately via /panels/:id/move-to-zone (see the edit-group-select script further
+          // down), the same endpoint drag-and-drop across zones already posts to.
+          const editPanelGroupHeaders = panels.filter(gp => gp.panel_type === 'group_header' && gp.id !== p.id);
+        %>
+        <div data-fields-for="chart,table,value,gauge,stat_delta,threshold,state_bar">
+          <label>Group</label>
+          <select name="target_group_id" class="panel-edit-group-select" data-panel-id="<%= p.id %>">
+            <option value="">— Ungrouped (top) —</option>
+            <% editPanelGroupHeaders.forEach(function (gp) { %>
+            <option value="<%= gp.id %>"><%= gp.title || 'Group' %></option>
+            <% }) %>
+          </select>
         </div>
         <div data-fields-for="chart,table,stat_delta,state_bar">
           <label>Range</label>
@@ -517,8 +569,10 @@
               <option value="logarithmic" <%= yScaleType === 'logarithmic' ? 'selected' : '' %>>Logarithmic</option>
             </select>
           </div>
-          <div><label>Minimum (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMin != null ? p.config.yMin : '' %>"></div>
-          <div><label>Maximum (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMax != null ? p.config.yMax : '' %>"></div>
+          <div><label>Minimum, left axis (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMin != null ? p.config.yMin : '' %>"></div>
+          <div><label>Maximum, left axis (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMax != null ? p.config.yMax : '' %>"></div>
+          <div><label>Minimum, right axis (optional)</label><input type="number" name="y_min_right" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMinRight != null ? p.config.yMinRight : '' %>"></div>
+          <div><label>Maximum, right axis (optional)</label><input type="number" name="y_max_right" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMaxRight != null ? p.config.yMaxRight : '' %>"></div>
         </div>
         <div class="panel-section" data-fields-for="chart" data-chart-type-for="line">
           <div class="panel-section-title">Interaction</div>
@@ -683,6 +737,7 @@
               <label class="panel-monitor-check-row" data-label="<%= m.label.toLowerCase() %>" style="display:flex; align-items:center; gap:0.3rem; font-size:0.75rem; min-width:0; padding:0.05rem 0;">
                 <input type="checkbox" name="monitor_ids" value="<%= m.id %>" style="flex-shrink:0;" <%= p.monitors.some(pm => pm.id === m.id) ? 'checked' : '' %>>
                 <span style="flex:1; min-width:0; overflow-wrap:anywhere; line-height:1.2;"><%= m.label %></span>
+                <button type="button" class="icon-btn icon-btn-neutral panel-monitor-replace-btn" data-monitor-id="<%= m.id %>" title="Replace with another monitor, carrying over its Series settings/Threshold/Value overrides">⇄</button>
               </label>
             <% }) %>
             <% if (monitors.length === 0) { %>
@@ -730,7 +785,7 @@
             if (p.config.legendShowCurrent) legendStats.push('current');
           %>
           <div class="chart-canvas-box">
-          <canvas data-chart-type="<%= p.config.chartType || 'line' %>" data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.displayRange || p.range %>" data-range-until="<%= p.chartUntilMs || '' %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-legend-align="<%= p.config.legendAlign || 'start' %>" data-legend-stats="<%= legendStats.join(',') %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>" data-scale="1" data-fill="<%= p.config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= p.config.curveTension != null ? p.config.curveTension : 0.15 %>" data-points="<%= p.config.points ? '1' : '' %>" data-animation="<%= p.config.animation ? '1' : '' %>" data-y-scale-type="<%= p.config.yScaleType || 'linear' %>" data-y-min="<%= p.config.yMin != null ? p.config.yMin : '' %>" data-y-max="<%= p.config.yMax != null ? p.config.yMax : '' %>" data-zoom="<%= p.config.zoom ? '1' : '' %>" data-thresholds="<%= JSON.stringify(p.config.thresholds || []) %>" data-annotations="<%= JSON.stringify(p.config.annotations || []) %>" data-series="<%= JSON.stringify(p.config.series || {}) %>"></canvas>
+          <canvas data-chart-type="<%= p.config.chartType || 'line' %>" data-monitor-ids="<%= p.monitors.map(m => m.id).join(',') %>" data-range="<%= p.displayRange || p.range %>" data-range-until="<%= p.chartUntilMs || '' %>" data-legend="<%= p.config.legendPosition || 'auto' %>" data-legend-align="<%= p.config.legendAlign || 'start' %>" data-legend-stats="<%= legendStats.join(',') %>" data-unit="<%= p.config.unit || '' %>" data-decimals="<%= defaultPanelDecimals %>" data-scale="1" data-fill="<%= p.config.fill ? '1' : '' %>" data-stepped="<%= canvasStepped %>" data-tension="<%= p.config.curveTension != null ? p.config.curveTension : 0.15 %>" data-points="<%= p.config.points ? '1' : '' %>" data-animation="<%= p.config.animation ? '1' : '' %>" data-y-scale-type="<%= p.config.yScaleType || 'linear' %>" data-y-min="<%= p.config.yMin != null ? p.config.yMin : '' %>" data-y-max="<%= p.config.yMax != null ? p.config.yMax : '' %>" data-y-min-right="<%= p.config.yMinRight != null ? p.config.yMinRight : '' %>" data-y-max-right="<%= p.config.yMaxRight != null ? p.config.yMaxRight : '' %>" data-zoom="<%= p.config.zoom ? '1' : '' %>" data-thresholds="<%= JSON.stringify(p.config.thresholds || []) %>" data-annotations="<%= JSON.stringify(p.config.annotations || []) %>" data-series="<%= JSON.stringify(p.config.series || {}) %>"></canvas>
           </div>
           </div>
         </div>
@@ -1526,6 +1581,10 @@
       var rowsEl = container.querySelector('.chart-series-rows');
       var cache = {};
       try { cache = JSON.parse(hidden.value || '{}'); } catch (e) { /* malformed — start empty */ }
+      // Exposed so the "Replace monitor" checklist button (further down) can rename a settings
+      // entry from an old monitor's id to a newly-picked one's, carrying it over instead of leaving
+      // the new monitor to start blank.
+      container._seriesCache = cache;
 
       function serialize() {
         var out = {};
@@ -1620,6 +1679,7 @@
       var rowsEl = container.querySelector('.value-series-rows');
       var cache = {};
       try { cache = JSON.parse(hidden.value || '{}'); } catch (e) { /* malformed — start empty */ }
+      container._seriesCache = cache; // see chart-series-settings' own comment on this above
 
       function serialize() {
         var out = {};
@@ -1715,6 +1775,7 @@
       var rowsEl = container.querySelector('.gauge-series-rows');
       var cache = {};
       try { cache = JSON.parse(hidden.value || '{}'); } catch (e) { /* malformed — start empty */ }
+      container._seriesCache = cache; // see chart-series-settings' own comment on this above
 
       function serialize() {
         var out = {};
@@ -2136,7 +2197,11 @@
     grids.forEach(function (grid) { grid.setAnimation(true); });
     // A view-only visitor gets exactly the saved layout with staticGrid (no drag/resize, so
     // nothing here can ever change) — none of the persistence/Auto-order wiring below applies.
-    if (!canEdit || grids.length === 0) return;
+    // GridStack's own real, compacted layout is already final at this point either way (nothing
+    // further down this branch would still move anything) — see the settle pass further down for
+    // why the editable path sets this same flag later instead, once ITS OWN extra correction pass
+    // (applyMinSizes, which can still grow/reposition an item after this) is actually done too.
+    if (!canEdit || grids.length === 0) { window.__loxsuiteGridSettled = true; return; }
 
     // Persists every affected panel's new x/y/w/h in one request whenever a drag or resize
     // completes (GridStack's own 'change' event) — replaces the role the old separate /reorder and
@@ -2172,6 +2237,29 @@
             body: JSON.stringify({ afterGroupId: afterGroupId }),
           }).catch(function () { /* best-effort */ });
         });
+      });
+    });
+
+    // Explicit "Group" select in the Edit-panel form — an alternative to dragging a panel across
+    // zones. Pre-selected from the zone it's actually rendered in right now (group membership isn't
+    // stored on the panel row itself, see move-to-zone's own comment above), then reuses that exact
+    // same endpoint on change. A full reload afterwards is deliberate: relocating a panel's DOM node
+    // into a different zone live is a lot more surgery than this occasional action justifies —
+    // unlike adding a brand new panel (see the Add-panel script further below), there's no existing
+    // element to keep the user's place on either.
+    document.querySelectorAll('.panel-edit-group-select').forEach(function (select) {
+      var card = select.closest('.dash-panel');
+      var zone = card ? card.closest('.grid-stack') : null;
+      select.value = zone ? (zone.dataset.groupId || '') : '';
+      select.addEventListener('change', function () {
+        var panelId = select.dataset.panelId;
+        var afterGroupId = select.value || null;
+        select.disabled = true;
+        fetch('/dashboards/<%= dashboardId %>/panels/' + panelId + '/move-to-zone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ afterGroupId: afterGroupId }),
+        }).then(function () { location.reload(); }).catch(function () { select.disabled = false; });
       });
     });
 
@@ -2547,8 +2635,112 @@
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
         grids.forEach(function (grid) { applyMinSizes(grid); });
+        // NOW GridStack's layout is actually final — see the reveal script (very bottom of this
+        // file), which waits for this exact flag before dropping .dash-grid-loading, instead of
+        // racing it on its own independent timer.
+        window.__loxsuiteGridSettled = true;
       });
     });
+
+    // Add-panel without a full page reload. The create route still responds with a redirect (see
+    // dashboards.js) — this fetch()es it instead of letting the browser navigate, follows that
+    // redirect itself (fetch does this transparently) to read back the new panel's own id from the
+    // ?newPanel= query string it now carries, optionally repositions it into the chosen group via
+    // the exact same /move-to-zone endpoint cross-zone dragging already uses, then fetches the
+    // dashboard fresh ONE more time to get real server-rendered markup for that one new panel and
+    // grafts just its .grid-stack-item into the live DOM via GridStack's own makeWidget() (the
+    // supported way to adopt a plain DOM node GridStack didn't create itself).
+    //
+    // Known gap, not silently papered over: every OTHER per-panel script on this page (series-
+    // settings row builders, the type/chart-type conditional field toggling, color pickers, the
+    // settings form's own autosave wiring) is wired up in one static pass over the page at load —
+    // exactly the panels that existed when the page was rendered, not ones inserted afterwards. A
+    // brand new panel's Edit drawer would silently look normal but not actually DO anything (no
+    // autosave, no series rows) until reloaded. Rather than leave that trap in place, or refactor
+    // every one of those independent scripts to be re-runnable on demand (a much bigger change),
+    // the newly-inserted item is flagged, and opening THAT panel's own Edit drawer forces one real
+    // reload — every other panel's drawer, and everything else on the page, is unaffected.
+    var addForm = document.querySelector('#dash-add-panel-card form');
+    var addPanelCard = document.getElementById('dash-add-panel-card');
+    if (addForm) {
+      addForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var groupSelect = document.getElementById('add-panel-group-select');
+        var params = new URLSearchParams();
+        new FormData(addForm).forEach(function (value, key) {
+          if (key === 'target_group_id') return; // client-only — not part of buildConfig()
+          params.append(key, value);
+        });
+
+        fetch(addForm.action, { method: 'POST', body: params })
+          .then(function (res) {
+            if (!res.ok) throw new Error('create failed');
+            var newId = new URL(res.url).searchParams.get('newPanel');
+            if (!newId) throw new Error('no new panel id');
+            var dashboardBaseUrl = res.url.split('?')[0];
+            var moveToZone = groupSelect
+              ? fetch('/dashboards/<%= dashboardId %>/panels/' + newId + '/move-to-zone', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ afterGroupId: groupSelect.value || null }),
+                })
+              : Promise.resolve();
+            return moveToZone
+              .then(function () { return fetch(dashboardBaseUrl); })
+              .then(function (r2) { return r2.text(); })
+              .then(function (html) { return { html: html, id: newId }; });
+          })
+          .then(function (result) {
+            var freshDoc = new DOMParser().parseFromString(result.html, 'text/html');
+            var freshCard = freshDoc.querySelector('.dash-panel[data-id="' + result.id + '"]');
+            var freshItem = freshCard ? freshCard.closest('.grid-stack-item') : null;
+            var freshZone = freshItem ? freshItem.closest('.grid-stack') : null;
+            if (!freshItem || !freshZone) throw new Error('new panel fragment not found');
+
+            var zoneKey = freshZone.dataset.groupId || '';
+            var liveZone = null;
+            grids.forEach(function (grid) {
+              if ((grid.el.dataset.groupId || '') === zoneKey) liveZone = grid;
+            });
+            if (!liveZone) throw new Error('live zone not found');
+
+            var importedItem = document.importNode(freshItem, true);
+            importedItem.setAttribute('data-newly-inserted-unwired', '1');
+            liveZone.el.appendChild(importedItem);
+            liveZone.makeWidget(importedItem);
+            applyMinSizes(liveZone);
+
+            var canvas = importedItem.querySelector('canvas[data-monitor-ids]');
+            if (canvas && window.initChartCanvas) window.initChartCanvas(canvas);
+
+            if (importedItem.hasAttribute('data-needs-position') && importedItem.gridstackNode) {
+              var node = importedItem.gridstackNode;
+              persistLayout([{ id: node.id, x: node.x, y: node.y, w: node.w, h: node.h }]);
+            }
+
+            window.stampCsrfTokens();
+            addForm.reset();
+            if (addPanelCard) addPanelCard.hidden = true;
+          })
+          // Anything above can fail (network hiccup, unexpected markup) without ever risking a
+          // duplicate panel — the create request either already succeeded server-side (in which
+          // case reloading just shows it, the normal way) or it didn't (nothing to lose either way).
+          .catch(function () { location.reload(); });
+      });
+    }
+
+    // The one safety net for the known gap explained above — before the generic [data-toggle-row]
+    // handler (delegated in foot.ejs) gets a chance to open an unwired new panel's own Edit drawer,
+    // reload instead. Capture phase so this runs first; every other panel's toggle is untouched.
+    document.addEventListener('click', function (e) {
+      var trigger = e.target.closest('[data-toggle-row^="panel-edit-"]');
+      if (!trigger) return;
+      if (trigger.closest('.grid-stack-item[data-newly-inserted-unwired]')) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        location.reload();
+      }
+    }, true);
   })();
 </script>
 
@@ -2659,3 +2851,38 @@
 <script src="/vendor/hammer.min.js"></script>
 <script src="/vendor/chartjs-plugin-zoom.min.js"></script>
 <script src="/monitor-chart.js?v=<%= assetVersion %>" defer></script>
+<script>
+  // Reveals the real panels (see .dash-grid-loading in style.css) once there's actually something
+  // worth showing instead of the pulsing placeholder. Waits on TWO independent things, whichever
+  // finishes last:
+  //  1. window.__loxsuiteGridSettled, set by the grid-init script (further up this page) only once
+  //     GridStack's OWN real layout — which can still differ from the render loop's own pre-computed
+  //     top/height guess whenever there's a gap to close (float:false packs on load too, not only
+  //     during a live drag), and can shift again after its own extra min-size correction pass — is
+  //     actually final. Revealing on a fixed timer instead of this flag raced that correction pass
+  //     on a fast-loading page: the placeholder would already be showing GridStack's FIRST-pass
+  //     position by the time the timer fired, then visibly snap again a frame later once the
+  //     min-size pass landed — exactly the "still jumps into place" this polls around instead.
+  //  2. 'DOMContentLoaded', so every deferred script (monitor-chart.js included, loaded just above)
+  //     has already run and kicked its charts off before anything is revealed.
+  (function () {
+    var domReady = false;
+    document.addEventListener('DOMContentLoaded', function () { domReady = true; tryReveal(); });
+
+    function tryReveal() {
+      if (!domReady || !window.__loxsuiteGridSettled) {
+        requestAnimationFrame(tryReveal);
+        return;
+      }
+      // One more real paint cycle once both conditions are met, so whatever GridStack/Chart.js just
+      // did has actually been painted, not merely scheduled.
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          var grid = document.getElementById('dash-grid');
+          if (grid) grid.classList.remove('dash-grid-loading');
+        });
+      });
+    }
+    requestAnimationFrame(tryReveal);
+  })();
+</script>

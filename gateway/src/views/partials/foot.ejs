@@ -1052,6 +1052,7 @@
       var rowsEl = container.querySelector('.state-bar-series-rows');
       var cache = {};
       try { cache = JSON.parse(hidden.value || '{}'); } catch (e) { /* malformed — start empty */ }
+      container._seriesCache = cache; // see panel-grid.ejs's chart-series-settings for why
 
       function serialize() {
         var out = {};
@@ -1092,6 +1093,96 @@
         if (e.target.matches('input[type="checkbox"]')) rebuildRows();
       });
       rebuildRows();
+    });
+  })();
+</script>
+<script>
+  // "Replace" button on a checked monitor row in an Edit-panel drawer's checklist (see
+  // panel-grid.ejs's .panel-monitor-check-row markup) — swapping a monitor is already possible by
+  // unchecking one box and checking another, but that always starts the newly-checked monitor's
+  // row blank. This carries the OLD monitor's cached settings (chart Series settings, gauge
+  // Threshold ladder, value/state-bar per-monitor overrides — whichever this panel type actually
+  // has) over to the new monitor's id BEFORE flipping the checkboxes, so each series builder's own
+  // rebuildRows() (triggered by the checkbox change events below, exactly as an ordinary manual
+  // uncheck+check would) finds it already populated instead of starting over. Placed here (after
+  // every series-settings builder above, in both this file and panel-grid.ejs, all of which run
+  // earlier in document order) so every builder's own container._seriesCache is already set by the
+  // time this looks for it.
+  (function () {
+    document.querySelectorAll('.panel-settings-form .panel-monitor-checklist').forEach(function (checklist) {
+      var form = checklist.closest('form');
+
+      function seriesCaches() {
+        return Array.prototype.slice
+          .call(form.querySelectorAll('.chart-series-settings, .value-series-settings, .gauge-series-settings, .state-bar-series-settings'))
+          .map(function (el) { return el._seriesCache; })
+          .filter(Boolean);
+      }
+
+      function closePicker(row) {
+        var picker = row.querySelector('.panel-monitor-replace-picker');
+        if (picker) picker.remove();
+        var btn = row.querySelector('.panel-monitor-replace-btn');
+        if (btn) btn.style.removeProperty('display');
+      }
+
+      checklist.addEventListener('click', function (e) {
+        var btn = e.target.closest('.panel-monitor-replace-btn');
+        if (!btn) return;
+        e.preventDefault();
+        var row = btn.closest('.panel-monitor-check-row');
+        var oldId = btn.dataset.monitorId;
+
+        var candidates = Array.prototype.slice.call(checklist.querySelectorAll('.panel-monitor-check-row')).filter(function (r) {
+          var cb = r.querySelector('input[type="checkbox"]');
+          return cb && !cb.checked;
+        });
+        if (!candidates.length) return;
+
+        var picker = document.createElement('select');
+        picker.className = 'panel-monitor-replace-picker';
+        picker.style.flexShrink = '0';
+        picker.style.maxWidth = '45%';
+        var placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Replace with…';
+        picker.appendChild(placeholder);
+        candidates.forEach(function (r) {
+          var cb = r.querySelector('input[type="checkbox"]');
+          var labelSpan = r.querySelector('span');
+          var opt = document.createElement('option');
+          opt.value = cb.value;
+          opt.textContent = labelSpan ? labelSpan.textContent : cb.value;
+          picker.appendChild(opt);
+        });
+        btn.style.display = 'none';
+        btn.insertAdjacentElement('afterend', picker);
+        picker.focus();
+
+        picker.addEventListener('blur', function () {
+          // Deferred: a 'change' fired by an actual selection must still get to run first.
+          setTimeout(function () { if (picker.isConnected) closePicker(row); }, 150);
+        });
+
+        picker.addEventListener('change', function () {
+          var newId = picker.value;
+          closePicker(row);
+          if (!newId) return;
+
+          seriesCaches().forEach(function (cache) {
+            if (cache[oldId] !== undefined) { cache[newId] = cache[oldId]; delete cache[oldId]; }
+          });
+
+          var oldCheckbox = row.querySelector('input[type="checkbox"]');
+          var newCheckbox = checklist.querySelector('input[type="checkbox"][value="' + CSS.escape(newId) + '"]');
+          oldCheckbox.checked = false;
+          oldCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+          if (newCheckbox) {
+            newCheckbox.checked = true;
+            newCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
+      });
     });
   })();
 </script>

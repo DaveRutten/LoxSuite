@@ -3083,6 +3083,20 @@ main > p.hint:first-of-type { margin-top: 0; }
 .icon-btn-neutral { border-color: var(--border); }
 .icon-btn-neutral:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
 
+/* Only makes sense once there's a checked monitor to replace — an unchecked row has nothing yet
+   for a picked replacement to carry settings over FROM (see the swap wiring in foot.ejs). Kept in
+   sync with the checkbox purely through CSS (no extra JS re-render needed on every check/uncheck):
+   a general sibling selector off the checkbox's own :checked state, same row this button lives in. */
+.panel-monitor-check-row .panel-monitor-replace-btn {
+  display: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  padding: 0;
+}
+.panel-monitor-check-row input[type="checkbox"]:checked ~ .panel-monitor-replace-btn { display: inline-flex; align-items: center; justify-content: center; }
+
 /* Any icon-only toggle button (a table row's diagnostics chevron, an auto-collapsed Actions
    column's "..." kebab, Miniservers' own "show its Clients" share icon, ...) reads as "currently
    open" the same way — filled in with the accent color — rather than only being distinguishable
@@ -3587,6 +3601,26 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
    spacing BETWEEN panels within one zone — no gap/grid-template-columns declared here any more,
    GridStack positions each .grid-stack-item itself via inline styles instead of CSS Grid tracks. */
 
+/* Pulsing placeholder shown in every panel's own already-correct box (see panel-grid.ejs's own
+   comment on the pre-computed top/height inline styles that make that box correct from first
+   paint) until the grid-init script removes .dash-grid-loading — real content (already rendered
+   into the DOM server-side) just stays hidden underneath until then, rather than being torn down
+   and rebuilt. group_header panels aren't nested inside a .grid-stack-item at all (see the render
+   loop), so they're untouched by this and stay visible throughout. */
+.dash-grid-loading .grid-stack-item-content {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  animation: dash-skeleton-pulse 1.3s ease-in-out infinite;
+}
+.dash-grid-loading .dash-panel:not(.dash-panel-group-header) {
+  visibility: hidden;
+}
+@keyframes dash-skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
 .dash-panel {
   position: relative;
   display: flex;
@@ -3704,7 +3738,10 @@ body.lox-row-reordering .panel-edit-backdrop { backdrop-filter: none; -webkit-ba
    otherwise reads exactly like "no log lines yet" instead of "this is actually broken."
    pointer-events:none since a blurred, non-functional table shouldn't still be clickable
    underneath the notice sitting on top of it. */
-.filterable-table-card.log-source-unavailable-blurred { position: relative; }
+/* min-height so the notice box below always has room to render fully — without this, a 0/1-row
+   table (exactly the case a permission/connection error produces) shrinks the card down to almost
+   nothing, and the notice's absolute inset:0 overlay gets clipped by the card's own overflow:hidden. */
+.filterable-table-card.log-source-unavailable-blurred { position: relative; min-height: min(60vh, 420px); }
 .filterable-table-card.log-source-unavailable-blurred > .table-toolbar,
 .filterable-table-card.log-source-unavailable-blurred > .table-wrap {
   filter: blur(4px);
