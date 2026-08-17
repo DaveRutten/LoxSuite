@@ -3601,20 +3601,40 @@ tr.expand-row.open td > .ms-diagnostics-card { max-height: 18rem; }
    spacing BETWEEN panels within one zone — no gap/grid-template-columns declared here any more,
    GridStack positions each .grid-stack-item itself via inline styles instead of CSS Grid tracks. */
 
-/* Pulsing placeholder shown in every panel's own already-correct box (see panel-grid.ejs's own
-   comment on the pre-computed top/height inline styles that make that box correct from first
-   paint) until the grid-init script removes .dash-grid-loading — real content (already rendered
-   into the DOM server-side) just stays hidden underneath until then, rather than being torn down
-   and rebuilt. group_header panels aren't nested inside a .grid-stack-item at all (see the render
-   loop), so they're untouched by this and stay visible throughout. */
-.dash-grid-loading .grid-stack-item-content {
+/* Generic pulsing placeholder (see #dash-loading-skeleton in panel-grid.ejs) shown in place of the
+   real grid until the reveal script (bottom of panel-grid.ejs, after monitor-chart.js) swaps them —
+   deliberately NOT shaped to match any real panel's own position/size (an earlier version tried
+   that, keyed off the saved grid_y/row_span, and it caused a real group-header-overlaps-the-panel-
+   above-it bug once GridStack's actual layout ended up taller than that guess). The real grid stays
+   fully in the DOM underneath, untouched, the whole time — this is a pure visibility swap, not a
+   teardown/rebuild. */
+.dash-grid-wrap { position: relative; }
+.dash-grid-loading > #dash-grid-zone-0,
+.dash-grid-loading > #dash-groups-sort-list {
+  visibility: hidden;
+  position: absolute;
+  inset: 0;
+}
+#dash-loading-skeleton {
+  display: none;
+}
+.dash-grid-loading #dash-loading-skeleton {
+  display: block;
+}
+.dash-loading-skeleton-bar {
   background: var(--surface-alt);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   animation: dash-skeleton-pulse 1.3s ease-in-out infinite;
+  margin-bottom: 1rem;
 }
-.dash-grid-loading .dash-panel:not(.dash-panel-group-header) {
-  visibility: hidden;
+.dash-loading-skeleton-row {
+  display: flex;
+  gap: 1rem;
+}
+.dash-loading-skeleton-row .dash-loading-skeleton-bar {
+  flex: 1;
+  margin-bottom: 0;
 }
 @keyframes dash-skeleton-pulse {
   0%, 100% { opacity: 0.5; }

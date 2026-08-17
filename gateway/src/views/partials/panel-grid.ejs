@@ -327,21 +327,27 @@
 <% } %>
 
 <%
-  // A pulsing skeleton tint on every panel until the reveal script (very bottom of this file, after
-  // monitor-chart.js) removes this class — see that script's own comment on exactly when. Without
-  // this, first paint shows every
-  // .grid-stack-item stacked at the container's own top edge (GridStack only ever positions them
-  // via JS-computed inline styles, see style.css's own comment on .grid-stack-item) — a visible
-  // "everything piles up top-left, then jumps to its real spot" flash on every single page load,
-  // worse the more panels/groups a dashboard has. GS_CELL_HEIGHT/GS_MARGIN right below let each
-  // panel's real top/height be rendered up front instead (left/width already come for free from
-  // GridStack's own gs-x/gs-w attribute-selector CSS, see vendor/gridstack.min.css — only top/height
-  // depend on cellHeight, which isn't baked into that file), so GridStack's own init just confirms
-  // what's already on screen rather than visibly moving it.
-  const GS_CELL_HEIGHT = 70; // must match GridStack's own cellHeight in the init options further down
-  const GS_MARGIN = 8; // must match GridStack's own margin in the init options further down
+  // A generic pulsing skeleton covers the whole grid (see #dash-loading-skeleton just below, and
+  // .dash-grid-loading in style.css) until the reveal script (very bottom of this file, after
+  // monitor-chart.js) swaps it out for the real thing — see that script's own comment on exactly
+  // when. Deliberately NOT trying to pre-compute each panel's/zone's real pixel position/height
+  // here: an earlier version of this did (mirroring GridStack's own cellHeight/margin math against
+  // the saved grid_y/row_span), which fixed the "everything piles up top-left, then jumps" flash
+  // this exists for, but a real GridStack layout can still end up taller than that guess in ways
+  // this template has no reliable way to predict up front (a since-grown panel, a freshly-added
+  // empty group, ...) — got a real group-header-overlaps-the-panel-above-it bug in practice, twice,
+  // trying to chase that down further. This generic placeholder can't ever cause that: it doesn't
+  // touch a single real .grid-stack-item's position or a single .grid-stack zone's height at all.
 %>
 <div class="dash-grid-wrap dash-grid-loading" id="dash-grid">
+  <div id="dash-loading-skeleton" aria-hidden="true">
+    <div class="dash-loading-skeleton-bar" style="height:220px;"></div>
+    <div class="dash-loading-skeleton-row">
+      <div class="dash-loading-skeleton-bar" style="height:160px;"></div>
+      <div class="dash-loading-skeleton-bar" style="height:160px;"></div>
+      <div class="dash-loading-skeleton-bar" style="height:160px;"></div>
+    </div>
+  </div>
   <%
     // One GridStack instance per "zone", not one grid for the whole dashboard — zone 0 is every
     // panel before the first group_header, rendered inside its own <div class="grid-stack">
@@ -378,13 +384,8 @@
         // GridStack's own computed x/y right after auto-placing it so the NEXT load has a real
         // saved spot instead of re-auto-placing every time.
         const hasGridPos = p.grid_x !== null && p.grid_x !== undefined && p.grid_y !== null && p.grid_y !== undefined;
-        // Same math GridStack itself uses to turn a row count into pixels — approximate only in
-        // that GridStack may round/compact by a px or two once it actually initializes, which reads
-        // as nothing more than the already-in-place box settling, not the old "jump from top" flash.
-        const preJsTop = hasGridPos ? p.grid_y * (GS_CELL_HEIGHT + GS_MARGIN) : null;
-        const preJsHeight = hasGridPos ? p.row_span * GS_CELL_HEIGHT + (p.row_span - 1) * GS_MARGIN : null;
       %>
-    <div class="grid-stack-item" gs-w="<%= p.col_span %>" gs-h="<%= p.row_span %>" gs-min-w="2" gs-min-h="2" gs-id="<%= p.id %>"<% if (hasGridPos) { %> gs-x="<%= p.grid_x %>" gs-y="<%= p.grid_y %>" style="top:<%= preJsTop %>px; height:<%= preJsHeight %>px;"<% } else { %> data-needs-position="1"<% } %>>
+    <div class="grid-stack-item" gs-w="<%= p.col_span %>" gs-h="<%= p.row_span %>" gs-min-w="2" gs-min-h="2" gs-id="<%= p.id %>"<% if (hasGridPos) { %> gs-x="<%= p.grid_x %>" gs-y="<%= p.grid_y %>"<% } else { %> data-needs-position="1"<% } %>>
       <div class="grid-stack-item-content">
     <% } %>
     <div class="dash-panel<%= isGroupHeader ? ' dash-panel-group-header' : '' %>" data-id="<%= p.id %>" data-panel-type="<%= p.panel_type %>">
@@ -2197,10 +2198,6 @@
     grids.forEach(function (grid) { grid.setAnimation(true); });
     // A view-only visitor gets exactly the saved layout with staticGrid (no drag/resize, so
     // nothing here can ever change) — none of the persistence/Auto-order wiring below applies.
-    // GridStack's own real, compacted layout is already final at this point either way (nothing
-    // further down this branch would still move anything) — see the settle pass further down for
-    // why the editable path sets this same flag later instead, once ITS OWN extra correction pass
-    // (applyMinSizes, which can still grow/reposition an item after this) is actually done too.
     if (!canEdit || grids.length === 0) { window.__loxsuiteGridSettled = true; return; }
 
     // Persists every affected panel's new x/y/w/h in one request whenever a drag or resize
@@ -2852,17 +2849,12 @@
 <script src="/vendor/chartjs-plugin-zoom.min.js"></script>
 <script src="/monitor-chart.js?v=<%= assetVersion %>" defer></script>
 <script>
-  // Reveals the real panels (see .dash-grid-loading in style.css) once there's actually something
-  // worth showing instead of the pulsing placeholder. Waits on TWO independent things, whichever
-  // finishes last:
+  // Swaps the generic loading skeleton (see #dash-loading-skeleton/.dash-grid-loading above and in
+  // style.css) for the real grid once there's actually something worth showing. Waits on TWO
+  // independent things, whichever finishes last:
   //  1. window.__loxsuiteGridSettled, set by the grid-init script (further up this page) only once
-  //     GridStack's OWN real layout — which can still differ from the render loop's own pre-computed
-  //     top/height guess whenever there's a gap to close (float:false packs on load too, not only
-  //     during a live drag), and can shift again after its own extra min-size correction pass — is
-  //     actually final. Revealing on a fixed timer instead of this flag raced that correction pass
-  //     on a fast-loading page: the placeholder would already be showing GridStack's FIRST-pass
-  //     position by the time the timer fired, then visibly snap again a frame later once the
-  //     min-size pass landed — exactly the "still jumps into place" this polls around instead.
+  //     GridStack's OWN real layout — including its own extra min-size correction pass, which can
+  //     still resize a panel after the first pass — is actually final.
   //  2. 'DOMContentLoaded', so every deferred script (monitor-chart.js included, loaded just above)
   //     has already run and kicked its charts off before anything is revealed.
   (function () {

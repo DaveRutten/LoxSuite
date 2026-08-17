@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.25-alpha.1] - 2026-08-17
+
+### Fixed
+- **Dashboard loading skeleton could overlap a group's header with the panel above it**
+  (0.18.24-alpha.1) — the per-panel/per-zone pixel position it pre-computed could fall short of
+  GridStack's own real, settled layout (a panel that grows to fit its content, a freshly-added
+  empty group, ...), letting the next group's header render up into the panel above it. Replaced
+  with a generic, position-independent placeholder shown over the whole grid while loading — it no
+  longer touches any real panel's own position or height, so this can't recur.
+
 ## [0.18.24-alpha.1] - 2026-08-17
 
 ### Added
