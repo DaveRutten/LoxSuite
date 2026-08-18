@@ -43,6 +43,17 @@
   </div>
 </div>
 
+<% if (proxyTrustMisconfigured) { %>
+  <p class="error">
+    This request arrived carrying a forwarded-by-proxy header, but the app isn't told to trust it
+    (<code>TRUST_PROXY</code> isn't set — see .env.example). That means every visitor, including
+    real external ones, currently looks like they're on the local network to this app — silently
+    defeating "Require SSO from outside the local network" below (and the local-login rate limit's
+    own per-IP tracking above). Set <code>TRUST_PROXY</code> to match your reverse proxy/tunnel
+    setup and restart the gateway.
+  </p>
+<% } %>
+
 <div class="card">
   <h2>Single Sign-On</h2>
   <p class="hint">

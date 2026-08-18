@@ -1,6 +1,13 @@
 const db = require('../db');
 const { loadRecentNotifications } = require('../routes/notificationCenter');
 const asyncHandler = require('./asyncHandler');
+const ssoClient = require('../ssoClient');
+const { isPrivateNetworkRequest } = require('../network');
+const { logSystemEvent } = require('../auditLog');
+
+function destroySession(req) {
+  return new Promise((resolve) => req.session.destroy(resolve));
+}
 
 // Mounted right after requireAuth on every route. Loads the logged-in user's role and permissions
 // fresh from the DB on every request (never cached in the session cookie) so a role change made by
@@ -58,6 +65,22 @@ module.exports = asyncHandler(async function loadUserContext(req, res, next) {
 
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
   if (!user) return next();
+
+  // Both checked fresh on every request, same as the role/permissions load below, rather than
+  // only at the moment of login (routes/auth.js) — so an admin disabling someone, or a local
+  // (non-SSO) account roaming off the local network while the SSO break-glass restriction is on,
+  // takes effect on that user's very next request instead of lingering until their session cookie
+  // happens to expire on its own.
+  if (user.disabled_at) {
+    await logSystemEvent(`Session for "${user.username}" terminated (account disabled).`);
+    await destroySession(req);
+    return res.redirect('/login');
+  }
+  if (user.auth_provider === 'local' && (await ssoClient.isLocalLoginDisabled()) && !isPrivateNetworkRequest(req)) {
+    await logSystemEvent(`Session for "${user.username}" terminated (SSO break-glass restriction, no longer on the local network).`);
+    await destroySession(req);
+    return res.redirect('/login');
+  }
 
   const role = user.role_id ? await db.prepare('SELECT * FROM access_roles WHERE id = ?').get(user.role_id) : null;
   const permissionRows = role

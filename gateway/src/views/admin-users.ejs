@@ -42,7 +42,7 @@
 
 <div class="table-wrap">
   <table>
-    <thead><tr><th></th><th>Username</th><th>Name</th><th>Signs in via</th><th>Last login</th><th>Access Role</th><th>Actions</th></tr></thead>
+    <thead><tr><th></th><th>Username</th><th>Name</th><th>Signs in via</th><th>Status</th><th>Last login</th><th>Access Role</th><th>Actions</th></tr></thead>
     <tbody>
       <% users.forEach(u => { %>
         <% const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.display_name || ''; %>
@@ -57,6 +57,7 @@
           <td><%= u.username %></td>
           <td><%= fullName || '-' %></td>
           <td><%= u.auth_provider === 'local' ? 'Password' : 'Pocket ID (SSO)' %></td>
+          <td><% if (u.disabled_at) { %><span class="badge badge-off">Disabled</span><% } else { %><span class="badge badge-ok">Active</span><% } %></td>
           <td><%= u.last_login_at ? formatDateTime(u.last_login_at) : '-' %></td>
           <td>
             <form class="inline" method="post" action="/admin/users/<%= u.id %>/role" style="display:flex; gap:0.6rem; align-items:center;">
@@ -72,6 +73,15 @@
                 <button type="button" class="btn-edit" data-toggle-row="admin-edit-name-<%= u.id %>"><%- icon('edit') %> Edit name</button>
                 <button type="button" class="btn-edit" data-toggle-row="admin-reset-pw-<%= u.id %>"><%- icon('edit') %> Reset password</button>
               <% } %>
+              <% if (u.disabled_at) { %>
+                <form class="inline" method="post" action="/admin/users/<%= u.id %>/enable">
+                  <button type="submit" class="btn-edit"><%- icon('power') %> Enable</button>
+                </form>
+              <% } else { %>
+                <form class="inline" method="post" action="/admin/users/<%= u.id %>/disable" data-confirm="Disable this user? They will be signed out and unable to log in until re-enabled.">
+                  <button type="submit" class="danger"><%- icon('power') %> Disable</button>
+                </form>
+              <% } %>
               <form class="inline" method="post" action="/admin/users/<%= u.id %>/delete" data-confirm="Delete this user?">
                 <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
               </form>
@@ -80,7 +90,7 @@
         </tr>
         <% if (u.auth_provider === 'local') { %>
         <tr class="expand-row" id="admin-edit-name-<%= u.id %>">
-          <td colspan="7">
+          <td colspan="8">
             <form method="post" action="/admin/users/<%= u.id %>/name" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
               <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">First name:</label>
               <input type="text" name="first_name" value="<%= u.first_name || '' %>" style="max-width:12rem;">
@@ -91,7 +101,7 @@
           </td>
         </tr>
         <tr class="expand-row" id="admin-reset-pw-<%= u.id %>">
-          <td colspan="7">
+          <td colspan="8">
             <form method="post" action="/admin/users/<%= u.id %>/reset-password" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
               <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">New password:</label>
               <input type="password" name="password" required minlength="8" style="max-width:14rem;">
@@ -102,7 +112,7 @@
         <% } %>
       <% }) %>
       <% if (users.length === 0) { %>
-        <tr><td colspan="7" class="empty">No users found.</td></tr>
+        <tr><td colspan="8" class="empty">No users found.</td></tr>
       <% } %>
     </tbody>
   </table>

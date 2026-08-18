@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.26-alpha.1] - 2026-08-18
+
+### Added
+- **Disable a user without deleting their account** — Administration > Users has a Disable/Enable
+  action alongside Delete. A disabled account can't log in (local password or SSO) and, if it's
+  already signed in somewhere, is signed out on its very next request rather than staying valid
+  until the session happens to expire. Same self-service and last-administrator guards as Delete.
+- **Administration > Security now warns about a misconfigured reverse proxy/tunnel** — without
+  `TRUST_PROXY` set, every visitor looks like they're on the local network to this app, which
+  silently defeats both "Require SSO from outside the local network" and the login rate limit's
+  per-IP tracking. Now detected and flagged on the page with what to fix.
+
+### Fixed
+- **A local (non-SSO) account could keep working from outside the local network after logging in**
+  — "Require SSO from outside the local network" (Administration > Security) was only enforced at
+  the login form itself; an already-open session (or a "Remember me" cookie) kept working from
+  anywhere afterward. Now re-checked on every request, so access is cut the moment the account is
+  no longer on the local network.
+
 ## [0.18.25-alpha.1] - 2026-08-17
 
 ### Fixed

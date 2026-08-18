@@ -19,7 +19,7 @@ const router = express.Router();
 async function listUsers() {
   return db.prepare(
     `SELECT users.id, users.username, users.auth_provider, users.role_id, users.last_login_at,
-            users.first_name, users.last_name, users.display_name, users.avatar_url,
+            users.first_name, users.last_name, users.display_name, users.avatar_url, users.disabled_at,
             access_roles.name AS role_name
      FROM users LEFT JOIN access_roles ON access_roles.id = users.role_id
      ORDER BY users.username`
@@ -188,6 +188,35 @@ router.post('/users/:id/reset-password', asyncHandler(async (req, res) => {
   res.redirect('/admin/users');
 }));
 
+// Soft-disable rather than delete — turns off access (checked at login in routes/auth.js and on
+// every subsequent request in middleware/loadUserContext.js, so an already-open session is kicked
+// out on its very next request rather than staying valid until it happens to expire) while leaving
+// the account, its dashboards, and its audit trail intact. Same self/last-admin guards as delete
+// below, since the practical effect on the target user is the same: no more access.
+router.post('/users/:id/disable', asyncHandler(async (req, res) => {
+  if (Number(req.params.id) === req.user.id) {
+    return res.render('admin-users', { users: await listUsers(), roles: await db.prepare('SELECT * FROM access_roles ORDER BY name').all(), error: 'You cannot disable your own account.' });
+  }
+  if (await isLastAdmin(req.params.id)) {
+    return res.render('admin-users', {
+      users: await listUsers(),
+      roles: await db.prepare('SELECT * FROM access_roles ORDER BY name').all(),
+      error: 'This is the only remaining administrator and cannot be disabled — assign another user as administrator first.',
+    });
+  }
+  const targetUser = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  await db.prepare('UPDATE users SET disabled_at = ? WHERE id = ?').run(new Date().toISOString(), req.params.id);
+  await logSystemEvent(`"${req.user.username}" disabled user "${targetUser?.username}".`);
+  res.redirect('/admin/users');
+}));
+
+router.post('/users/:id/enable', asyncHandler(async (req, res) => {
+  const targetUser = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  await db.prepare('UPDATE users SET disabled_at = NULL WHERE id = ?').run(req.params.id);
+  await logSystemEvent(`"${req.user.username}" re-enabled user "${targetUser?.username}".`);
+  res.redirect('/admin/users');
+}));
+
 router.post('/users/:id/delete', asyncHandler(async (req, res) => {
   if (Number(req.params.id) === req.user.id) {
     return res.render('admin-users', { users: await listUsers(), roles: await db.prepare('SELECT * FROM access_roles ORDER BY name').all(), error: 'You cannot delete your own account.' });
@@ -283,16 +312,29 @@ router.post('/roles/:id/delete', asyncHandler(async (req, res) => {
 // now (used to be a separate "Single Sign-On" tab) — this loads everything both cards need
 // regardless of which form was actually just submitted, so either POST handler can re-render the
 // same view with fresh data (and the other card's own edits, if any, aren't lost either).
-async function loadSecurityPageData() {
+// Surfaces the one documented way "Require SSO from outside the local network" (below) can be a
+// silent no-op: without the TRUST_PROXY opt-in (see server.js), req.ip is always the reverse
+// proxy/tunnel's own (private) address, so isPrivateNetworkRequest (network.js) treats every real
+// visitor as local no matter where they actually are. A request that itself arrives carrying an
+// X-Forwarded-For header while Express's own trust-proxy setting is off is exactly that situation
+// — the admin loading this very page is going through the same proxy every other visitor does.
+// Best-effort like the check it's warning about (a proxy could omit/rename that header), but a
+// false negative here just means no banner, not a false sense of security either way.
+function proxyTrustMisconfigured(req) {
+  return !req.app.get('trust proxy') && !!req.headers['x-forwarded-for'];
+}
+
+async function loadSecurityPageData(req) {
   return {
     sso: await db.prepare('SELECT * FROM sso_settings WHERE id = 1').get(),
     roles: await db.prepare('SELECT * FROM access_roles ORDER BY name').all(),
     gatewaySettings: await db.prepare('SELECT * FROM gateway_settings WHERE id = 1').get(),
+    proxyTrustMisconfigured: proxyTrustMisconfigured(req),
   };
 }
 
 router.get('/security', asyncHandler(async (req, res) => {
-  res.render('admin-security', { ...(await loadSecurityPageData()), error: null, saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
+  res.render('admin-security', { ...(await loadSecurityPageData(req)), error: null, saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
 }));
 
 // /admin/sso is kept as the SSO form's own POST target (unchanged from before the merge) rather
@@ -318,7 +360,7 @@ router.post('/sso', asyncHandler(async (req, res) => {
     local_login_disabled ? 1 : 0
   );
   await logSystemEvent(`"${req.user.username}" updated SSO settings.`);
-  res.render('admin-security', { ...(await loadSecurityPageData()), error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
+  res.render('admin-security', { ...(await loadSecurityPageData(req)), error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
 }));
 
 router.post('/security', asyncHandler(async (req, res) => {
@@ -326,17 +368,17 @@ router.post('/security', asyncHandler(async (req, res) => {
   const windowMinutes = Number(req.body.login_rate_limit_window_minutes);
 
   if (!Number.isFinite(max) || max < 1) {
-    return res.render('admin-security', { ...(await loadSecurityPageData()), error: 'Max login attempts must be at least 1.', saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
+    return res.render('admin-security', { ...(await loadSecurityPageData(req)), error: 'Max login attempts must be at least 1.', saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
   }
   if (!Number.isFinite(windowMinutes) || windowMinutes < 1) {
-    return res.render('admin-security', { ...(await loadSecurityPageData()), error: 'The login attempts time window must be at least 1 minute.', saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
+    return res.render('admin-security', { ...(await loadSecurityPageData(req)), error: 'The login attempts time window must be at least 1 minute.', saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
   }
 
   await db.prepare('UPDATE gateway_settings SET login_rate_limit_max = ?, login_rate_limit_window_minutes = ? WHERE id = 1')
     .run(Math.round(max), Math.round(windowMinutes));
   await reloadLoginLimiter();
   await logSystemEvent(`"${req.user.username}" updated the login rate limit.`);
-  res.render('admin-security', { ...(await loadSecurityPageData()), error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
+  res.render('admin-security', { ...(await loadSecurityPageData(req)), error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
 }));
 
 async function loadAiSettings() {

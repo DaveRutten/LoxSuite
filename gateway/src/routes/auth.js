@@ -96,6 +96,14 @@ router.post('/login', (req, res, next) => loginLimiter(req, res, next), asyncHan
     return res.render('login', { error: 'Invalid username or password.', ssoEnabled: await ssoClient.isEnabled(), ssoButtonLabel: await ssoClient.getButtonLabel(), localLoginAllowed: true });
   }
 
+  // Checked after the password so a disabled account's credentials never leak that distinction
+  // from a plain "Invalid username or password" — an attacker probing usernames learns nothing
+  // extra by hitting a disabled one first.
+  if (user.disabled_at) {
+    await logSystemEvent(`Login attempt for disabled user "${username}" from ${req.ip}.`);
+    return res.render('login', { error: 'This account has been disabled.', ssoEnabled: await ssoClient.isEnabled(), ssoButtonLabel: await ssoClient.getButtonLabel(), localLoginAllowed: true });
+  }
+
   await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
   req.session.userId = user.id;
   req.session.username = user.username;
@@ -176,6 +184,10 @@ router.get('/auth/sso/callback', async (req, res) => {
       user = await db.prepare('SELECT * FROM users WHERE id = ?').get(newId);
       console.log(`Provisioned new Pocket ID user "${username}" via SSO.`);
     } else {
+      if (user.disabled_at) {
+        await logSystemEvent(`SSO login attempt for disabled user "${user.username}" from ${req.ip}.`);
+        return renderError('This account has been disabled.');
+      }
       // Refreshed on every login, not just once at provisioning — a name/avatar changed on the
       // Pocket ID side should show up here without needing to recreate the account.
       await db.prepare('UPDATE users SET email = ?, display_name = ?, first_name = ?, last_name = ?, avatar_url = ?, last_login_at = ? WHERE id = ?')
