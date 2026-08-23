@@ -8,6 +8,20 @@ const { getStructure } = require('./loxoneStructure');
 
 const TIMEOUT_MS = 4000;
 
+// How long an auth_failed Miniserver stays skipped by checkAllMiniservers' own recurring sweep
+// before it gets a real check again on its own — see checkAllMiniservers' own comment on why this
+// isn't "forever" (like it used to be) or "every cycle" (60s default) either. Confirmed the hard
+// way: a Miniserver and this gateway container restarting together (an unattended Docker backup
+// snapshot restarting the container, say) can leave the Miniserver itself rejecting a plain
+// GET / with 401/403 for a little while afterward — genuinely temporary (a stale session/lockout
+// window clearing on its own), not a real wrong password, but indistinguishable from one by this
+// check alone; manually clicking "Test now" always worked instantly, which is itself the tell that
+// nothing was actually configured wrong. 15 minutes is a big enough gap that a truly wrong
+// password (which never self-heals) is only re-tried 96x/day instead of 1440x/day, while a
+// transient post-restart rejection clears up within, at most, one of these cycles instead of
+// needing someone to notice and click "Test now" by hand.
+const AUTH_FAILED_RECHECK_MS = 15 * 60 * 1000;
+
 // Tests one specific address directly (no local->external fallback — the whole point here is to
 // report each candidate's own reachability separately, unlike fetchMiniserver's combined result
 // used for the plain online/offline status).
@@ -208,14 +222,19 @@ async function checkMiniserver(miniserver) {
   }
 }
 
+// A Miniserver already known to be rejecting its configured credentials skips the automatic
+// recurring sweep for AUTH_FAILED_RECHECK_MS (own comment above), not forever — checkMiniserver()
+// itself is left able to run unconditionally at any time (called directly, bypassing this
+// entirely, from the Miniservers page's "Test now" and from saving a Miniserver's settings).
+function dueForRecheck(miniserver) {
+  if (miniserver.status !== 'auth_failed') return true;
+  if (!miniserver.last_checked_at) return true;
+  return Date.now() - new Date(miniserver.last_checked_at).getTime() >= AUTH_FAILED_RECHECK_MS;
+}
+
 async function checkAllMiniservers() {
   const miniservers = await db.prepare('SELECT * FROM miniservers').all();
-  // A Miniserver already known to be rejecting its configured credentials stays that way until
-  // the user does something about it — re-testing automatically every cycle would just repeat the
-  // exact same rejection forever. checkMiniserver() itself is left able to run unconditionally
-  // (called directly, bypassing this filter, from the Miniservers page's "Test now" and from
-  // saving a Miniserver's settings) — this filter only affects the automatic recurring sweep.
-  await Promise.all(miniservers.filter((ms) => ms.status !== 'auth_failed').map(checkMiniserver));
+  await Promise.all(miniservers.filter(dueForRecheck).map(checkMiniserver));
   // After every Miniserver's own row has this cycle's fresh firmware_version/plc_state — needs
   // the whole set settled first, since it compares pairs across two independent per-Miniserver
   // checks above rather than reacting to any single one's own result.
@@ -239,4 +258,4 @@ function startHealthchecks() {
   return () => { cancelled = true; };
 }
 
-module.exports = { checkMiniserver, checkAllMiniservers, startHealthchecks, runDetailedCheck };
+module.exports = { checkMiniserver, checkAllMiniservers, startHealthchecks, runDetailedCheck, dueForRecheck };

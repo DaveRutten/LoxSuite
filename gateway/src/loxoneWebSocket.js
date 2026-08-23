@@ -215,11 +215,19 @@ class MiniserverLiveConnection {
       const tokenResp = await tokenPromise;
       const tokenCode = String(tokenResp?.LL?.Code ?? tokenResp?.LL?.code);
       if (tokenCode !== '200') {
-        // Flagged (rather than just a plain Error) so the catch below can tell this apart from a
-        // network-level handshake failure — this one is deterministic, the exact same credentials
-        // rejection would happen again immediately on retry, unlike a genuine connectivity hiccup.
         const err = new Error(`Authentication failed (code ${tokenCode})`);
-        err.authFailed = true;
+        // Only Loxone's own documented "Unauthorized" (401 — the actual credentials being wrong)
+        // is treated as deterministic/never-worth-retrying. Confirmed the hard way: a Miniserver
+        // and this gateway restarting together (a container restart, e.g. triggered by an
+        // unattended backup snapshot) can leave a stale token/session for this exact client UUID
+        // (see gettoken's own hardcoded "aaaabbbb-cccc-dddd-eeeeffff0000" below — every connection
+        // this gateway ever makes identifies itself with the SAME one, never a fresh one per
+        // attempt) still considered "logged in" from the Miniserver's own point of view for a
+        // little while after the old connection actually died — genuinely temporary, gone within
+        // the normal reconnect backoff below, but a code that isn't literally 401 used to get
+        // permanently stuck in 'auth_failed' anyway, indistinguishable from a real wrong password
+        // until someone noticed and clicked "Test now" by hand.
+        err.authFailed = tokenCode === '401';
         throw err;
       }
 

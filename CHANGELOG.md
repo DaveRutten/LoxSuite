@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.27-alpha.1] - 2026-08-23
+
+### Fixed
+- **A Miniserver (reported on a Gateway one specifically) could get stuck showing "Auth failed"
+  after the gateway container and the Miniserver restarted together** (e.g. an unattended Docker
+  backup snapshot restarting the container) — even though the credentials were never actually
+  wrong; a manual "Test now" always worked instantly. Two related causes: the live websocket
+  connection treated ANY non-200 token response as a permanently-wrong-password, never-retry
+  condition, when only Loxone's own documented 401 ("Unauthorized") actually means that — a stale
+  session/lockout right after a simultaneous restart isn't 401 and isn't permanent either, it
+  clears up on its own within the normal reconnect backoff now instead of needing a manual kick.
+  Separately, the recurring healthcheck sweep used to skip an "Auth failed" Miniserver forever once
+  marked — it now gets a real recheck again automatically every 15 minutes, so a transient
+  rejection there self-heals too instead of sitting stuck until someone notices.
+
 ## [0.18.26-alpha.1] - 2026-08-18
 
 ### Added
