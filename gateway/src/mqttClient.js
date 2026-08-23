@@ -125,14 +125,34 @@ function shouldThrottle(mapping) {
 // Shelly Gen1's own MQTT protocol feature — publishing "announceall" to shellies/command makes
 // every currently-connected Gen1 device immediately republish its own <prefix>/announce (see
 // deviceDiscovery.js's use of that payload to resolve a renamed device's real topic prefix from its
-// raw MQTT client ID). Triggered once on every successful (re)connect below, since a device that
-// reconnects faster than this gateway's own subscribe completes would otherwise have its one-shot,
-// non-retained announce lost for good until its NEXT reconnect — exactly why a device only ever
-// showed up correctly again after being power-cycled by hand. Also exported for a manual "Rescan
-// devices" action (routes/incoming.js) for whenever a fresher answer is wanted without restarting
-// anything.
+// raw MQTT client ID). A device that reconnects faster than this gateway's own subscribe completes
+// would otherwise have its one-shot, non-retained announce lost for good until its NEXT reconnect —
+// exactly why a device only ever showed up correctly again after being power-cycled by hand. Also
+// exported standalone for a manual "Rescan devices" action (routes/incoming.js), where a single
+// immediate request is exactly right — someone clicked it because they want a fresh answer right
+// now, not a retry campaign.
 function requestDeviceAnnounce() {
   if (client && state.connected) client.publish('shellies/command', 'announceall');
+}
+
+// One request right after (re)connecting (see attachHandlers below) still isn't enough on its own
+// — confirmed the hard way: a full container restart drops the broker's own process too, so EVERY
+// device's session dies at once, not just this gateway's. A Shelly reconnects to a fresh broker
+// fast, typically well before this whole Node process finishes booting — but "typically fast" on a
+// lightweight embedded device racing dozens of others (plus Wi-Fi/DHCP jitter, the broker's own
+// connection backlog right after it too just restarted) isn't "guaranteed done by the exact moment
+// this one publish fires," and a Shelly that's still mid-reconnect at that instant never receives
+// it — no different from the single-request version's own original race, just against the broker's
+// restart instead of only this gateway's. Repeating the request a few times over the following
+// minute (rather than tracking exactly which devices already answered, and asking again only for
+// stragglers) is the cheap, simple fix: a Shelly that already re-announced just re-announces again,
+// harmless either way.
+const ANNOUNCE_RETRY_DELAYS_MS = [5000, 15000, 30000, 60000];
+function requestDeviceAnnounceWithRetries() {
+  requestDeviceAnnounce();
+  ANNOUNCE_RETRY_DELAYS_MS.forEach((delayMs) => {
+    setTimeout(() => { if (state.connected) requestDeviceAnnounce(); }, delayMs).unref();
+  });
 }
 
 // A zero-length payload published with retain:true is the MQTT spec's own, universal way to purge
@@ -186,7 +206,7 @@ function attachHandlers(c) {
       if (err) console.error('MQTT subscribe error:', err.message);
       else {
         console.log('Connected to MQTT broker, subscribed to all topics.');
-        requestDeviceAnnounce();
+        requestDeviceAnnounceWithRetries();
       }
     });
   });

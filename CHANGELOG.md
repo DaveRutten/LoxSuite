@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.28-alpha.1] - 2026-08-23
+
+### Fixed
+- **Shelly devices could stay showing their raw MQTT client ID (instead of their real topic
+  prefix) on Client Activity after the gateway and the MQTT broker restarted together**, only
+  clearing up once the device itself was power-cycled by hand. The gateway already asked every
+  Shelly to re-announce itself once, right after its own reconnect — not enough when the broker
+  restarted too, since every device's session dies at once and a Shelly reconnecting to the fresh
+  broker can still be a beat behind that one request. Now repeats the request a few times over the
+  following minute instead of asking just once — verified against a real broker.
+
 ## [0.18.27-alpha.1] - 2026-08-23
 
 ### Fixed
