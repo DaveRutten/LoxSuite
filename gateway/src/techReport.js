@@ -104,8 +104,35 @@ async function configOverview() {
      FROM miniservers ORDER BY sort_order, id`
   ).all();
 
+  // Every notification rule by name — the COUNTED_TABLES count above answers "how many exist" but
+  // not "which ones, and are they actually enabled," which turns out to be exactly the question
+  // that matters for "my notifications stopped working" (confirmed live: a report showing
+  // notificationRules: 3 alone couldn't say whether those 3 were the right ones, let alone whether
+  // any of them were switched off). channelNames is empty for a rule wired to zero channels — a
+  // silent, easy-to-miss way for an otherwise-enabled rule to still never actually notify anyone.
+  // Two plain queries + a JS-side group, rather than one with GROUP_CONCAT/STRING_AGG — those two
+  // are spelled differently on SQLite/MySQL vs Postgres, exactly the class of "works on my SQLite
+  // dev box, breaks on the real Postgres install" bug this whole feature exists to help catch, so
+  // it'd be a bad look to introduce one right here.
+  const rules = await db.prepare('SELECT id, trigger_type, name, enabled FROM notification_rules ORDER BY id').all();
+  const ruleChannels = await db.prepare(
+    `SELECT nrc.rule_id, nc.name FROM notification_rule_channels nrc
+     JOIN notification_channels nc ON nc.id = nrc.channel_id`
+  ).all();
+  const channelNamesByRuleId = new Map();
+  for (const rc of ruleChannels) {
+    if (!channelNamesByRuleId.has(rc.rule_id)) channelNamesByRuleId.set(rc.rule_id, []);
+    channelNamesByRuleId.get(rc.rule_id).push(rc.name);
+  }
+
   return {
     counts,
+    notificationRules: rules.map((r) => ({
+      name: r.name,
+      triggerType: r.trigger_type,
+      enabled: !!r.enabled,
+      channelNames: channelNamesByRuleId.get(r.id) || [],
+    })),
     miniservers: miniservers.map((m) => ({
       name: m.name,
       host: m.host,

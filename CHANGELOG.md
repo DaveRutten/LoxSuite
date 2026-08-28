@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.29-alpha.1] - 2026-08-28
+
+### Added
+- **Tech report now lists every notification rule by name** — trigger type, enabled/disabled, and
+  which channel(s) it's wired to. The existing rule *count* alone couldn't say which rules those
+  were, or whether any had quietly ended up disabled — exactly the question that came up
+  troubleshooting a report of notification settings appearing to reset after an update.
+
 ## [0.18.28-alpha.1] - 2026-08-23
 
 ### Fixed

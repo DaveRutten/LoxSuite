@@ -74,6 +74,27 @@
       </table>
     </div>
   <% } %>
+
+  <% if (report.config.notificationRules.length) { %>
+    <p class="hint" style="margin-top:1rem;">Notification rules — the count above only says how many exist, not which ones or whether they're actually switched on:</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Trigger</th><th>Enabled</th><th>Channels</th></tr>
+        </thead>
+        <tbody>
+          <% report.config.notificationRules.forEach(r => { %>
+            <tr>
+              <td><%= r.name %></td>
+              <td><%= r.triggerType %></td>
+              <td><span class="badge <%= r.enabled ? 'badge-ok' : 'badge-off' %>"><%= r.enabled ? 'Yes' : 'No' %></span></td>
+              <td><%= r.channelNames.length ? r.channelNames.join(', ') : '-' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
 </div>
 
 <div class="card">
