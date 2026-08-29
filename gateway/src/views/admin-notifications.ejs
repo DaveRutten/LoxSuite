@@ -270,7 +270,7 @@
           <% } %>
           <% channels.forEach(c => { %>
             <label style="display:inline-flex; align-items:center; gap:0.3rem; margin:0 1rem 0.4rem 0; font-size:0.87rem;">
-              <input type="checkbox" name="channel_ids" value="<%= c.id %>"> <%= c.name %>
+              <input type="checkbox" name="channel_ids" value="<%= c.id %>" <%= c.enabled ? 'checked' : '' %>> <%= c.name %>
             </label>
           <% }) %>
         </div>
@@ -284,14 +284,27 @@
 
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Name</th><th>Trigger</th><th>Channels</th><th>Enabled</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Trigger</th><th>Channels</th><th>Last sent</th><th>Enabled</th><th>Actions</th></tr></thead>
       <tbody>
         <% rules.forEach(r => { %>
           <% const triggerLabel = (triggerTypes.find(t => t.key === r.trigger_type) || {}).label || r.trigger_type; %>
           <tr>
             <td><%= r.name %></td>
             <td><%= triggerLabel %></td>
-            <td><%= r.channels.map(c => c.name).join(', ') || '-' %></td>
+            <td>
+              <% if (r.channels.length) { %>
+                <%= r.channels.map(c => c.name).join(', ') %>
+              <% } else if (r.enabled) { %>
+                <span class="badge badge-warning" title="This rule is enabled but has no channel selected under &quot;Send via&quot;, so its alerts only appear in the Notification Center and aren't sent anywhere. Edit the rule and tick a channel.">No channel</span>
+              <% } else { %>-<% } %>
+            </td>
+            <td>
+              <% if (r.last_error) { %>
+                <span class="badge badge-warning" title="<%= r.last_error %>">Last send failed<% if (r.last_error_at) { %> &middot; <%= formatDateTime(r.last_error_at) %><% } %></span>
+              <% } else if (r.last_sent_at) { %>
+                <%= formatDateTime(r.last_sent_at) %>
+              <% } else { %>-<% } %>
+            </td>
             <td><span class="badge <%= r.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= r.enabled ? 'Yes' : 'No' %></span></td>
             <td>
               <div class="row-actions">
@@ -303,7 +316,7 @@
             </td>
           </tr>
           <tr class="expand-row" id="rule-edit-<%= r.id %>">
-            <td colspan="5">
+            <td colspan="6">
               <form method="post" action="/admin/notifications/rules/<%= r.id %>/update" class="rule-form">
                 <div class="form-grid">
                   <div><label>Name</label><input type="text" name="name" value="<%= r.name %>" required></div>

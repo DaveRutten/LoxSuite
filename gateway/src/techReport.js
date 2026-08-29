@@ -127,12 +127,19 @@ async function configOverview() {
 
   return {
     counts,
-    notificationRules: rules.map((r) => ({
-      name: r.name,
-      triggerType: r.trigger_type,
-      enabled: !!r.enabled,
-      channelNames: channelNamesByRuleId.get(r.id) || [],
-    })),
+    notificationRules: rules.map((r) => {
+      const channelNames = channelNamesByRuleId.get(r.id) || [];
+      return {
+        name: r.name,
+        triggerType: r.trigger_type,
+        enabled: !!r.enabled,
+        channelNames,
+        // Enabled but wired to zero channels — the "shows in the Notification Center but never
+        // actually sends" trap. Called out explicitly here so a reader of the report doesn't have
+        // to spot the empty channel list against the enabled flag themselves.
+        deliversNowhere: !!r.enabled && channelNames.length === 0,
+      };
+    }),
     miniservers: miniservers.map((m) => ({
       name: m.name,
       host: m.host,

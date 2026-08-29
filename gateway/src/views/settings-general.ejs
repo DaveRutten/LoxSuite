@@ -85,6 +85,32 @@
   </div>
 
   <div class="card">
+    <h2>Health monitoring</h2>
+    <div class="settings-field-list">
+      <div class="settings-field">
+        <label>Heartbeat URL (dead-man's-switch)</label>
+        <input type="url" name="heartbeat_url" placeholder="https://hc-ping.com/your-uuid" value="<%= gatewaySettings.heartbeat_url || '' %>">
+        <p class="hint">
+          LoxSuite can't tell you when LoxSuite itself is down &mdash; the thing that would send the
+          alert is what's gone. Instead it pings this URL on a schedule; point it at an external
+          watchdog (e.g. <a href="https://healthchecks.io" target="_blank" rel="noopener">healthchecks.io</a>
+          or an Uptime Kuma push monitor) that alerts <em>you</em> when the pings stop arriving.
+          Leave blank to turn the heartbeat off.
+        </p>
+      </div>
+      <div class="settings-field">
+        <label>Heartbeat interval (minutes)</label>
+        <input type="number" name="heartbeat_interval_minutes" min="0" value="<%= gatewaySettings.heartbeat_interval_minutes %>">
+        <p class="hint">
+          How often to ping the URL above. Set the watchdog's own "grace period" a little longer
+          than this so a single slow tick doesn't trip a false alarm. 0 (or a blank URL) turns the
+          heartbeat off. Takes effect on the next tick, no restart needed.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Miniservers</h2>
     <div class="settings-field-list">
       <div class="settings-field">

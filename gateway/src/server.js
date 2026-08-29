@@ -53,6 +53,7 @@ const { startTailing, getClients } = require('./mosquittoLog');
 const { startUdpServer } = require('./loxoneUdpServer');
 const { startMonitorCollector } = require('./monitorCollector');
 const { startLogCollector } = require('./logCollector');
+const { startHeartbeat } = require('./heartbeat');
 const { startHardwarePolling } = require('./loxoneHardware');
 const { startLiveConnections } = require('./loxoneWebSocket');
 const mcpClient = require('./mcpClient');
@@ -350,6 +351,7 @@ async function main() {
   backup.startScheduler();
   scheduledDeviceCommands.startScheduler();
   startVersionCheck();
+  startHeartbeat();
   
   const port = process.env.PORT || 5582;
   app.listen(port, () => {

@@ -14,7 +14,31 @@ env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/loxsuite
 
 jobs:
+  # Gate the image publish on the gateway's own test suite (same steps as test.yml). Until now the
+  # two workflows ran independently, so a push to main that broke the tests still published a new
+  # :latest straight to GHCR — the exact image the Unraid template pulls. A red test run now blocks
+  # the publish instead of shipping a broken image to every install that auto-updates.
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      # better-sqlite3 needs to compile its native binding from source on install.
+      - run: sudo apt-get update && sudo apt-get install -y python3 make g++
+
+      - run: npm ci
+
+      - run: npm test
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

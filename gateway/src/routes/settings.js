@@ -74,6 +74,17 @@ router.post('/', requirePermission('settings', 'edit'), asyncHandler(async (req,
   if (Number.isFinite(healthcheckSeconds) && healthcheckSeconds >= 10) {
     await db.prepare('UPDATE gateway_settings SET healthcheck_interval_seconds = ? WHERE id = 1').run(Math.round(healthcheckSeconds));
   }
+
+  // Heartbeat (dead-man's-switch, see heartbeat.js). The URL is always overwritten so clearing it
+  // (turning the heartbeat off) actually sticks, unlike the numeric retention fields above which
+  // treat a blank/garbage value as "leave alone". The interval allows 0 = off, so a 0 is a real
+  // saved value here; anything non-positive or unparseable also lands on 0 rather than a tight
+  // ping loop.
+  const heartbeatUrl = String(req.body.heartbeat_url || '').trim();
+  await db.prepare('UPDATE gateway_settings SET heartbeat_url = ? WHERE id = 1').run(heartbeatUrl || null);
+  const heartbeatMinutes = Number(req.body.heartbeat_interval_minutes);
+  await db.prepare('UPDATE gateway_settings SET heartbeat_interval_minutes = ? WHERE id = 1')
+    .run(Number.isFinite(heartbeatMinutes) && heartbeatMinutes > 0 ? Math.round(heartbeatMinutes) : 0);
   if (timezone) {
     await db.prepare('UPDATE gateway_settings SET display_timezone = ? WHERE id = 1').run(timezone);
     await invalidateTimezoneCache();

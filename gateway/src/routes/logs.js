@@ -134,7 +134,7 @@ async function queryNotificationEvents(filters) {
 
   return db.prepare(
     `SELECT id, event_type AS "eventType", severity, title, message, source_label AS "sourceLabel",
-            source_id AS "sourceId", created_at AS "createdAt"
+            source_id AS "sourceId", source_ref AS "sourceRef", created_at AS "createdAt"
      FROM notification_events WHERE ${conditions.join(' AND ')} ORDER BY id DESC LIMIT ?`
   ).all(...params, MAX_ROWS);
 }

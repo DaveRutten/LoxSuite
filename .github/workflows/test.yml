@@ -1,9 +1,13 @@
 name: Test
 
 # Runs the gateway's own test/ suite (unit tests + the async db-facade regression guards —
-# noSyncDbCalls.test.js, and the real-boot httpSmoke.test.js) on every push/PR. Doesn't exist
-# alongside docker-publish.yml until now — that one only ever builds/publishes the image, it never
-# actually ran anything inside it.
+# noSyncDbCalls.test.js, and the real-boot httpSmoke.test.js) on every push/PR. The `test` job runs
+# the whole suite against the default SQLite backend; `test-postgres` and `test-mysql` additionally
+# run test/dbBackendSmoke.test.js against a REAL Postgres and MariaDB service — the migrations and
+# the async db facade (BIGINT counts, insertReturningId, transactions — all dialect-sensitive) were
+# otherwise only ever exercised on SQLite, so a dialect bug in a shipped-and-recommended external
+# backend only surfaced on a user's live server. That smoke file skips itself unless TEST_DB_BACKEND
+# is set, so it's a no-op in the SQLite `test` job and in local dev.
 on:
   push:
     branches: [main]
@@ -29,3 +33,83 @@ jobs:
       - run: npm ci
 
       - run: npm test
+
+  # The shipped-but-previously-CI-untested external backends. Each runs ONLY the backend smoke test
+  # (test/dbBackendSmoke.test.js) against a real server the service block provides — the full suite
+  # isn't retrofitted onto one shared server here (Node runs test files in separate processes but
+  # they'd all hit the same database, so isolation would be flaky); this targets the actual risk,
+  # dialect bugs in the migrations and the db facade, which the smoke test exercises end to end.
+  # Kept out of docker-publish.yml's own publish gate on purpose: the default SQLite `test` job
+  # gates the image, and these slower service-container jobs give the extra coverage without adding
+  # a service-container failure surface in front of every deploy.
+  test-postgres:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: loxsuite
+          POSTGRES_PASSWORD: loxsuite
+          POSTGRES_DB: loxsuite_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U loxsuite"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      # npm ci still builds better-sqlite3's native binding (a dependency regardless of backend).
+      - run: sudo apt-get update && sudo apt-get install -y python3 make g++
+
+      - run: npm ci
+
+      - run: node --test test/dbBackendSmoke.test.js
+        env:
+          TEST_DB_BACKEND: postgres
+          TEST_DATABASE_URL: postgres://loxsuite:loxsuite@127.0.0.1:5432/loxsuite_test
+
+  test-mysql:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_USER: loxsuite
+          MARIADB_PASSWORD: loxsuite
+          MARIADB_DATABASE: loxsuite_test
+          MARIADB_ROOT_PASSWORD: rootpw
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - run: sudo apt-get update && sudo apt-get install -y python3 make g++
+
+      - run: npm ci
+
+      - run: node --test test/dbBackendSmoke.test.js
+        env:
+          TEST_DB_BACKEND: mysql
+          TEST_DATABASE_URL: mysql://loxsuite:loxsuite@127.0.0.1:3306/loxsuite_test

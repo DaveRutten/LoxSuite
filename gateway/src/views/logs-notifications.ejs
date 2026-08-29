@@ -71,7 +71,7 @@
     </thead>
     <tbody>
       <% rows.forEach(r => { %>
-        <% var sourceLink = notificationSourceLink(r.eventType, r.sourceId, canView); %>
+        <% var sourceLink = notificationSourceLink(r.eventType, r.sourceId, canView, r.sourceRef); %>
         <tr>
           <td class="col-select"><input type="checkbox"></td>
           <td><%= formatDateTime(r.createdAt) %></td>

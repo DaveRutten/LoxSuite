@@ -88,7 +88,11 @@
               <td><%= r.name %></td>
               <td><%= r.triggerType %></td>
               <td><span class="badge <%= r.enabled ? 'badge-ok' : 'badge-off' %>"><%= r.enabled ? 'Yes' : 'No' %></span></td>
-              <td><%= r.channelNames.length ? r.channelNames.join(', ') : '-' %></td>
+              <td>
+                <% if (r.channelNames.length) { %><%= r.channelNames.join(', ') %>
+                <% } else if (r.deliversNowhere) { %><span class="badge badge-warning" title="Enabled but no channel selected — alerts show in the Notification Center but are never sent.">No channel</span>
+                <% } else { %>-<% } %>
+              </td>
             </tr>
           <% }) %>
         </tbody>

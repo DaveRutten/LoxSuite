@@ -2,6 +2,70 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.19.0-alpha.1] - 2026-08-29
+
+### Added
+- **Notification rules now default to sending through the channels you actually have.** Adding a
+  rule pre-ticks every enabled channel under "Send via" instead of leaving them all unchecked, and
+  the Hardware page's one-click enable buttons now wire the new rule to those channels too rather
+  than creating it with none. Both used to produce an *enabled* rule attached to zero channels —
+  which faithfully logged every alert to the Notification Center while silently never sending it
+  anywhere. You can still untick a channel; the change is only about the default.
+- **The rules table flags a rule that's enabled but goes nowhere.** A rule that's on with no
+  channel selected now shows a "No channel" warning in the Channels column (and the same flag in
+  the Tech report's rule list), so the "shows in the Notification Center but never actually sends"
+  state is visible at a glance instead of only discoverable by cross-checking enabled-vs-channels.
+- **Per-rule delivery status.** The rules table has a new "Last sent" column showing when a rule
+  last delivered, or a red "Last send failed" badge (with the underlying error on hover) when its
+  most recent attempt errored — previously that only ever lived in the System log.
+- **Clicking a hardware notification jumps to the device, not just the list.** Battery-weak,
+  device-offline and device-firmware-changed notifications now link straight to the device that
+  caused them and highlight its row, instead of only opening the whole (Miniserver-filtered)
+  Hardware list. Backed by a new `source_ref` on notification events carrying the device's stable
+  key; older events recorded before this fall back to the previous list-only behaviour.
+- **Dead-man's-switch heartbeat.** LoxSuite can now ping an external watchdog URL
+  (healthchecks.io, an Uptime Kuma push monitor, ...) on a configurable interval — Settings >
+  Health monitoring. Because a dead gateway can't send you its own "I'm down" alert, the watchdog
+  alerts *you* when the pings stop instead. Off by default (blank URL / 0 minutes); read live, so
+  changing it takes effect without a restart.
+- **Failed notifications retry before they're lost.** A send that fails outright (an Apprise
+  timeout, the box briefly offline, a 5xx it gives up on) is now retried on a short backoff (~30s,
+  2m, 5m) instead of the alert only ever landing in the Notification Center. Each channel retries
+  independently and detached, so a slow or retrying send never holds up the others or the poll that
+  fired the rule; a genuinely wrong channel URL still stops after the scheduled attempts rather than
+  looping forever, and shows up under "Last sent" as a failure.
+- **Automatic pre-migration database snapshot (SQLite).** Because `main` auto-publishes to GHCR on
+  every push, a schema migration reaches a live install unattended on its next restart — and a bad
+  one on a single SQLite file has no server-side recovery to fall back on. Now, right before
+  applying any *pending* migration, LoxSuite copies the database to a timestamped `.bak` beside it
+  via SQLite's own WAL-safe online backup, keeping the five most recent. It's skipped on ordinary
+  boots (nothing pending) and on a fresh install (no data to protect), and never blocks startup — a
+  failed snapshot is logged and the migration still runs. Postgres/MySQL (which have their own
+  server-side backups) instead get a clear log warning before an unattended migration runs.
+
+### Changed
+- **A broken push to `main` no longer publishes a Docker image.** The image-publish workflow now
+  runs the gateway's test suite first and only pushes `:latest` to GHCR if it passes, instead of
+  the build and the tests running as two independent workflows — so a red test run can't ship a
+  broken `:latest` to installs that auto-update.
+- **The Postgres and MySQL/MariaDB backends are now tested in CI against real servers.** They ship
+  and are recommended for larger installs, but every DB-touching test only ever ran on SQLite, so a
+  dialect bug in a migration or the async db facade (BIGINT `COUNT(*)` coming back as a string,
+  `insertReturningId`'s `RETURNING`-vs-`lastInsertRowid` split, transactions on a real pool) could
+  only surface on a user's live server. New `test-postgres` / `test-mysql` jobs run a dedicated
+  `dbBackendSmoke.test.js` — all migrations plus the facade's dialect-sensitive operations — against
+  a real Postgres and MariaDB service container. (Verified locally against Postgres; the same test
+  covers MariaDB in CI.)
+
+### Fixed
+- **Corrected a stale code comment claiming the MySQL/MariaDB backend "isn't reachable".** The
+  comment in `db/index.js` said `resolveDbConfig()` refuses `DB_BACKEND=mysql` — untrue since the
+  MySQL/MariaDB backend shipped in 0.13.0; it's a fully supported backend. No behaviour change,
+  just an actively misleading note removed.
+- Added a unit test pinning the gettoken auth-failure rule (only a literal 401 is a permanent,
+  never-retry failure; every other non-200 code stays retryable) — the exact distinction behind the
+  0.18.27 "stuck in auth_failed after a simultaneous restart" fix, now guarded against regression.
+
 ## [0.18.29-alpha.1] - 2026-08-28
 
 ### Added

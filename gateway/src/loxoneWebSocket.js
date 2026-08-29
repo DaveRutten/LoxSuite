@@ -227,7 +227,7 @@ class MiniserverLiveConnection {
         // the normal reconnect backoff below, but a code that isn't literally 401 used to get
         // permanently stuck in 'auth_failed' anyway, indistinguishable from a real wrong password
         // until someone noticed and clicked "Test now" by hand.
-        err.authFailed = tokenCode === '401';
+        err.authFailed = isPermanentAuthFailure(tokenCode);
         throw err;
       }
 
@@ -288,6 +288,17 @@ class MiniserverLiveConnection {
 // Idempotent — safe to call on every page load / values request. Miniservers with no live
 // connection yet get one started; an existing (even still-connecting or errored-and-retrying) one
 // is left alone rather than restarted, so a request doesn't pile up parallel handshakes.
+// A gettoken response code that means "these credentials are genuinely wrong — never retry",
+// deliberately ONLY Loxone's own documented 401 ("Unauthorized"). Every OTHER non-200 code (a
+// stale session right after the gateway and Miniserver restart together, a transient 5xx, a
+// malformed/empty code) is treated as temporary so it falls through to the normal reconnect
+// backoff instead of getting permanently stuck in 'auth_failed' — see the throw site above and
+// CHANGELOG 0.18.27 for the reported bug this exact distinction fixes. Kept as a tiny pure
+// function (and exported) so that contract has a home a unit test can pin down.
+function isPermanentAuthFailure(tokenCode) {
+  return String(tokenCode) === '401';
+}
+
 function ensureConnection(miniserver) {
   let conn = connections.get(miniserver.id);
   if (!conn) {
@@ -343,4 +354,4 @@ function resetConnection(miniserverId) {
   connections.delete(miniserverId);
 }
 
-module.exports = { startLiveConnections, ensureConnection, getLiveValue, getStatus, testConnection, resetConnection };
+module.exports = { startLiveConnections, ensureConnection, getLiveValue, getStatus, testConnection, resetConnection, isPermanentAuthFailure };

@@ -163,7 +163,11 @@ router.get('/', asyncHandler(async (req, res) => {
   // all doesn't carry a permanently-empty column.
   const hasAudioZones = devices.some((d) => d.zone_of);
 
-  res.render('hardware', { devices, miniservers, miniserverId, categories, hardwareRuleStates, hasAudioZones });
+  // ?device=<device_key> comes from a hardware notification's own "open source" link
+  // (notificationLinks.js) — the view scrolls to and highlights that one device instead of just
+  // showing the whole (Miniserver-filtered) list.
+  const highlightDevice = req.query.device ? String(req.query.device) : null;
+  res.render('hardware', { devices, miniservers, miniserverId, categories, hardwareRuleStates, hasAudioZones, highlightDevice });
 }));
 
 module.exports = router;

@@ -297,7 +297,7 @@ async function getSubscriberChannelsForRule(ruleId) {
 // comment for why rule_id carries no REFERENCES/cascade.
 async function recordNotificationEvent(event, opts) {
   await db.prepare(
-    'INSERT INTO notification_events (event_type, severity, title, message, source_id, source_label, rule_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO notification_events (event_type, severity, title, message, source_id, source_label, source_ref, rule_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     opts.eventType,
     event.severity || 'info',
@@ -305,33 +305,72 @@ async function recordNotificationEvent(event, opts) {
     event.message,
     event.sourceId != null ? event.sourceId : null,
     event.sourceLabel || null,
+    event.sourceRef != null ? event.sourceRef : null,
     opts.ruleId != null ? opts.ruleId : null,
     event.timestamp || new Date().toISOString()
   );
+}
+
+// Delivery retry schedule. Apprise itself already retries at each target service's own API level,
+// but if the apprise invocation as a WHOLE fails (a timeout, the box briefly offline, a 5xx it
+// gives up on) the send was simply lost before this change — the event still sat in the
+// Notification Center, but nothing ever reached Telegram. These are the delays (ms) before each
+// follow-up attempt after the initial one; running out of them means giving up. Deliberately short
+// and few — a handful of minutes rides out the typical transient blip without turning a genuinely
+// wrong channel URL into an endless retry storm.
+const DELIVERY_RETRY_DELAYS_MS = [30 * 1000, 2 * 60 * 1000, 5 * 60 * 1000];
+
+// attempt is 1-based (1 = the initial try). Returns the ms to wait before the NEXT attempt, or null
+// when no attempts are left. Pure, so a test can pin the schedule without real timers.
+function retryDelayMs(attempt) {
+  return DELIVERY_RETRY_DELAYS_MS[attempt - 1] ?? null;
+}
+
+// Sends one event to one target ({ name, url }), retrying a transient failure on the backoff above
+// before giving up. Detached (never awaited by fireRule) so a slow or retrying send never stalls
+// the poller that fired the rule, and each target is independent of the others. Owns its own
+// delivery-status bookkeeping on the rule row (migration 015): ANY success stamps last_sent_at and
+// clears the error; a FINAL give-up records last_error. Never throws — a rejection here would be an
+// unhandled one.
+async function deliverWithRetry(rule, target, event, attempt = 1) {
+  try {
+    await sendToChannel(target, event);
+    await logSystemEvent(`Notification "${rule.name}" sent via "${target.name}"${attempt > 1 ? ` (attempt ${attempt})` : ''}.`);
+    await db.prepare('UPDATE notification_rules SET last_sent_at = ?, last_error = NULL, last_error_at = NULL WHERE id = ?')
+      .run(new Date().toISOString(), rule.id);
+  } catch (err) {
+    const delay = retryDelayMs(attempt);
+    await logSystemEvent(`Notification "${rule.name}" via "${target.name}" failed (attempt ${attempt}${delay === null ? ', giving up' : ', will retry'}): ${err.message}`);
+    if (delay === null) {
+      await db.prepare('UPDATE notification_rules SET last_error = ?, last_error_at = ? WHERE id = ?')
+        .run(`${target.name}: ${err.message}`, new Date().toISOString(), rule.id);
+      return;
+    }
+    const timer = setTimeout(() => { deliverWithRetry(rule, target, event, attempt + 1).catch(() => {}); }, delay);
+    timer.unref?.();
+  }
 }
 
 async function fireRule(rule, rawEvent) {
   const event = await applyTemplate(rawEvent, rule.trigger_type);
   await recordNotificationEvent(event, { eventType: rule.trigger_type, ruleId: rule.id });
 
-  const channels = await getChannelsForRule(rule.id);
-  for (const channel of channels) {
-    try {
-      await sendToChannel(channel, event);
-      await logSystemEvent(`Notification "${rule.name}" sent via "${channel.name}".`);
-    } catch (err) {
-      await logSystemEvent(`Notification "${rule.name}" via "${channel.name}" failed: ${err.message}`);
-    }
+  // sendToChannel only needs { name, url }, so channels and personal subscribers collapse to the
+  // same target shape and share one delivery path (and the same retry behaviour).
+  const targets = [];
+  for (const channel of await getChannelsForRule(rule.id)) {
+    targets.push({ name: channel.name, url: channel.url });
+  }
+  for (const subscriber of await getSubscriberChannelsForRule(rule.id)) {
+    targets.push({ name: `${subscriber.username}'s notifications`, url: subscriber.url });
   }
 
-  const subscribers = await getSubscriberChannelsForRule(rule.id);
-  for (const subscriber of subscribers) {
-    try {
-      await sendToChannel({ name: `${subscriber.username}'s notifications`, url: subscriber.url }, event);
-      await logSystemEvent(`Notification "${rule.name}" sent to "${subscriber.username}".`);
-    } catch (err) {
-      await logSystemEvent(`Notification "${rule.name}" to "${subscriber.username}" failed: ${err.message}`);
-    }
+  // Detached on purpose — a slow or retrying send to one target must not hold up the others or the
+  // poller that fired this rule. Delivery status on the rule row is maintained inside
+  // deliverWithRetry. A rule with no targets just records the event above; its "no channel" state
+  // is surfaced by its own badge, not treated as a delivery error.
+  for (const target of targets) {
+    deliverWithRetry(rule, target, event).catch(() => {});
   }
 }
 
@@ -632,6 +671,7 @@ async function checkBatteryWeak(miniserver, item) {
       ],
       sourceId: miniserver.id,
       sourceLabel: label,
+      sourceRef: item.deviceKey,
       timestamp: new Date().toISOString(),
     });
   }
@@ -660,6 +700,7 @@ async function checkDeviceFirmwareChanged(miniserver, item, previousVersion) {
       ],
       sourceId: miniserver.id,
       sourceLabel: label,
+      sourceRef: item.deviceKey,
       timestamp: new Date().toISOString(),
     });
   }
@@ -688,6 +729,7 @@ async function checkDeviceOffline(miniserver, item, isOnline) {
       ],
       sourceId: miniserver.id,
       sourceLabel: label,
+      sourceRef: item.deviceKey,
       timestamp: new Date().toISOString(),
     });
   }
@@ -753,6 +795,7 @@ async function notifyBackupSucceeded(context) {
 
 module.exports = {
   TRIGGER_TYPES,
+  retryDelayMs,
   sendTestMessage,
   sendTemplateTestMessage,
   checkMonitorThreshold,

@@ -171,8 +171,17 @@ router.post('/rules/toggle-hardware', asyncHandler(async (req, res) => {
 
   const existing = await db.prepare('SELECT id, enabled FROM notification_rules WHERE trigger_type = ? ORDER BY id LIMIT 1').get(info.triggerType);
   if (!existing) {
-    await db.prepare('INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at) VALUES (?, ?, 1, ?, \'{}\', ?)')
-      .run(info.triggerType, info.name, JSON.stringify({ miniserver_id: null, severity: info.severity }), new Date().toISOString());
+    const ruleId = await db.insertReturningId(
+      'INSERT INTO notification_rules (trigger_type, name, enabled, config, last_state, created_at) VALUES (?, ?, 1, ?, \'{}\', ?)',
+      [info.triggerType, info.name, JSON.stringify({ miniserver_id: null, severity: info.severity }), new Date().toISOString()]
+    );
+    // Default a freshly quick-enabled rule to every channel that's actually on, so it delivers
+    // somewhere out of the box instead of only landing in the Notification Center with no channel
+    // attached (channels are still one edit away in the full rule editor).
+    const enabledChannels = await db.prepare('SELECT id FROM notification_channels WHERE enabled = 1').all();
+    for (const ch of enabledChannels) {
+      await db.insertIgnore('notification_rule_channels', { rule_id: ruleId, channel_id: ch.id }, ['rule_id', 'channel_id']);
+    }
     await logSystemEvent(`"${req.user.username}" quick-enabled notification rule "${info.name}".`);
   } else {
     const newEnabled = existing.enabled ? 0 : 1;

@@ -7,9 +7,11 @@
 // are inherently async against a real connection pool; `.lastInsertRowid` isn't portable — see
 // their own comments below).
 //
-// SQLite and Postgres are both wired up (see db/config.js's resolveDbConfig() for how DB_BACKEND
-// picks one); MySQL/MariaDB is Phase 5 of the project's own db-backend plan and isn't reachable —
-// resolveDbConfig() itself refuses DB_BACKEND=mysql before anything here has to care.
+// SQLite, Postgres and MySQL/MariaDB are all wired up (see db/config.js's resolveDbConfig() for
+// how DB_BACKEND picks one). The MySQL/MariaDB backend landed in Phase 5 of the project's own
+// db-backend plan (v0.13.0) and is a fully supported DB_BACKEND value alongside the other two —
+// mysql2 driver in knex.js, mysqldump/mysql backup engine in backup/engines/mysql.js, and the
+// SQLite->target transfer tool (transfer.js) all cover it.
 const path = require('path');
 const fs = require('fs');
 const { createKnex } = require('./knex');
@@ -376,6 +378,71 @@ function stampBaselineAsApplied(conn) {
 //  3. Has app tables (e.g. `users`) but no `knex_migrations` — an upgrading SQLite install that
 //     predates this migration framework entirely. Walks the full frozen legacy path exactly as
 //     every boot always has, then gets stamped into state 2 so every FUTURE boot skips it.
+// Best-effort safety net before applying migrations. A bad migration on a large SQLite file is
+// otherwise unrecoverable — SQLite has no server-side point-in-time recovery the way Postgres/MySQL
+// do — and because main auto-publishes to GHCR on every push, a migration reaches a live install
+// unattended on its next container restart. So right before applying any PENDING migration, copy
+// the live database to a timestamped .bak beside it using SQLite's own WAL-safe online backup().
+//
+// Guards keep it cheap and safe: skipped for :memory: (the test suite), skipped on an ordinary boot
+// with nothing pending, and skipped on a genuinely fresh install (completed migrations = 0, i.e.
+// there's no existing data to protect). It NEVER blocks boot: a snapshot failure is logged loudly
+// and the migration still runs, rather than bricking the app after an update. Only the few most
+// recent snapshots are kept.
+const PRE_MIGRATION_BACKUP_KEEP = 5;
+
+function prunePreMigrationBackups(dbPath) {
+  try {
+    const dir = path.dirname(dbPath);
+    const prefix = `${path.basename(dbPath)}.pre-migrate-`;
+    const backups = fs.readdirSync(dir).filter((f) => f.startsWith(prefix) && f.endsWith('.bak')).sort(); // ISO stamps sort chronologically
+    for (const stale of backups.slice(0, -PRE_MIGRATION_BACKUP_KEEP)) {
+      fs.unlinkSync(path.join(dir, stale));
+    }
+  } catch { /* pruning is best-effort — never let it interfere with boot */ }
+}
+
+async function snapshotSqliteBeforeMigrations(config) {
+  if (config.dbPath === ':memory:') return; // tests — nothing on disk to snapshot
+  let completed;
+  let pending;
+  try {
+    [completed, pending] = await knex.migrate.list();
+  } catch {
+    return; // can't read migration state — don't block boot over the snapshot bookkeeping
+  }
+  // Only when applying NEW migrations to an ALREADY-migrated database (real data to protect); a
+  // fresh install (completed = 0) has nothing to lose and needs no snapshot.
+  if (!pending || pending.length === 0 || !completed || completed.length === 0) return;
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dest = `${config.dbPath}.pre-migrate-${stamp}.bak`;
+  try {
+    const conn = await knex.client.acquireConnection();
+    try {
+      await conn.backup(dest); // better-sqlite3: consistent, WAL-safe online copy
+    } finally {
+      knex.client.releaseConnection(conn);
+    }
+    console.log(`Took a pre-migration database snapshot (${pending.length} pending migration(s)) to ${dest}.`);
+    prunePreMigrationBackups(config.dbPath);
+  } catch (err) {
+    console.warn(`Pre-migration database snapshot failed (${err.message}) — proceeding with the migration anyway. Restore from your own backup if it goes wrong.`);
+  }
+}
+
+// Postgres/MySQL counterpart: no local file to cheaply copy, and those backends have their own
+// server-side backup/PITR, so LoxSuite doesn't snapshot them itself — but it does say plainly, once,
+// that an unattended migration is about to run, so a missing backup isn't a silent risk.
+async function warnBeforeNonSqliteMigrations(config) {
+  try {
+    const [completed, pending] = await knex.migrate.list();
+    if (completed.length > 0 && pending.length > 0) {
+      console.warn(`About to apply ${pending.length} pending migration(s) to the ${config.backend} database. LoxSuite's automatic pre-migration snapshot covers SQLite only — make sure a recent ${config.backend} backup exists (Administration > Backups, or your server's own) before an unattended update runs these.`);
+    }
+  } catch { /* best-effort */ }
+}
+
 async function initSqlite(config) {
   fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 
@@ -416,6 +483,7 @@ async function initSqlite(config) {
     knex.client.releaseConnection(conn);
   }
 
+  await snapshotSqliteBeforeMigrations(config);
   await knex.migrate.latest();
   if (upgradedFromLegacy) {
     console.log('Brought an existing SQLite database up to date via the legacy migration path; future schema changes apply via Knex migrations from here on.');
@@ -486,6 +554,7 @@ async function initPostgres(config) {
   knex = createKnex(config);
   await waitForPostgresReady(config);
   await applyPendingPostgresRestore();
+  await warnBeforeNonSqliteMigrations(config);
   await knex.migrate.latest();
 }
 
@@ -535,6 +604,7 @@ async function initMysql(config) {
   knex = createKnex(config);
   await waitForMysqlReady(config);
   await applyPendingMysqlRestore();
+  await warnBeforeNonSqliteMigrations(config);
   await knex.migrate.latest();
 }
 
@@ -555,6 +625,9 @@ async function close() {
 
 module.exports = {
   init, close, prepare, transaction, insertReturningId, upsert, insertIgnore, raw, getBackend, getInfo, getKnex, withRawConnection,
+  // Exported for preMigrationBackup.test.js — the disk-guarding prune logic behind the SQLite
+  // pre-migration snapshot (keep the newest N, drop the rest).
+  prunePreMigrationBackups,
   // Exported for transfer.js's own resetSequences() — same per-table fix, reused there proactively
   // (right after copying a whole table's worth of explicit-id rows) instead of reactively.
   resyncIdCounter,

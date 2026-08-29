@@ -1,7 +1,7 @@
 // Shared by Logs > Notifications (logs-notifications.ejs) and the topbar bell's own popover list
 // (partials/notification-center-items.ejs) so the two never drift into two different definitions
 // of "what page does this notification actually point at."
-function notificationSourceLink(eventType, sourceId, canView) {
+function notificationSourceLink(eventType, sourceId, canView, sourceRef) {
   // Ollama model-pull completions (see ollamaPullState.js) are a background, app-wide signal, not
   // tied to any one row — hence no sourceId to key off, unlike every other case below. Still worth
   // a link back to where that model actually gets managed.
@@ -16,7 +16,11 @@ function notificationSourceLink(eventType, sourceId, canView) {
     return `/miniservers?open=${sourceId}`;
   }
   if ((eventType === 'battery_weak' || eventType === 'device_firmware_changed' || eventType === 'device_offline') && canView('hardware')) {
-    return `/hardware?miniserver_id=${sourceId}`;
+    // source_ref carries the device's stable device_key (migration 015) so the link lands on that
+    // one device and highlights it; without it (events recorded before 015) fall back to the
+    // Miniserver-scoped list, the old behaviour.
+    const base = `/hardware?miniserver_id=${sourceId}`;
+    return sourceRef ? `${base}&device=${encodeURIComponent(sourceRef)}` : base;
   }
   return null;
 }
