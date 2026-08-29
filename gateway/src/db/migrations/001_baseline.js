@@ -250,7 +250,7 @@ exports.up = async function up(knex) {
 
   await knex.schema.createTable('monitors', (t) => {
     t.increments('id');
-    t.text('source_type').notNullable();
+    stringOnMysql(t, knex, 'source_type').notNullable(); // bounded on MySQL/MariaDB so 009's (source_type, enabled) index fits the key-length limit; TEXT on SQLite/PG (schemaParity)
     t.text('label').notNullable();
     t.text('mqtt_topic');
     t.integer('miniserver_id').unsigned().references('id').inTable('miniservers').onDelete('CASCADE');

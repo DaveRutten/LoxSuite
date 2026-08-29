@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.19.1-alpha.1] - 2026-08-29
+
+### Fixed
+- **The MySQL/MariaDB backend actually works now — it was broken across several migrations and had
+  never been run end to end against either server.** The new CI backend jobs (0.19.0) caught it
+  immediately:
+  - Migrations 003/010/011 dropped a CHECK constraint with `ALTER TABLE ... DROP CHECK`, which is
+    MySQL syntax; MariaDB rejects it and needs `DROP CONSTRAINT`. Both share the mysql2 client, so
+    they're now told apart at runtime by the server's `VERSION()` string.
+  - Migration 009's index on `monitors(source_type, enabled)` failed with "key too long" because
+    `source_type` was a `TEXT` column — MySQL/MariaDB can't fully index TEXT under utf8mb4.
+    `source_type` is now a bounded string on MySQL/MariaDB (matching every other indexed enum column
+    in the schema), still `TEXT` on SQLite/Postgres.
+  Verified end to end against a real MariaDB and Postgres (all 16 migrations + the facade smoke
+  test), with the full SQLite suite still green. Existing SQLite/Postgres installs are unaffected;
+  no MySQL/MariaDB install had ever gotten past migration 003, so there is nothing to migrate back.
+
 ## [0.19.0-alpha.1] - 2026-08-29
 
 ### Added

@@ -38,7 +38,15 @@ exports.up = async function up(knex) {
     return;
   }
 
-  const dropVerb = backend === 'mysql2' ? 'DROP CHECK' : 'DROP CONSTRAINT';
+  // MySQL and MariaDB share the mysql2 client but NOT this verb: MySQL uses DROP CHECK, while
+  // MariaDB uses DROP CONSTRAINT and rejects DROP CHECK outright with a parse error. They can't be
+  // told apart by the client name, so ask the server — MariaDB's VERSION() string always contains
+  // "MariaDB". (Postgres, the other backend reaching here, uses DROP CONSTRAINT too.)
+  let dropVerb = 'DROP CONSTRAINT';
+  if (backend === 'mysql2') {
+    const [versionRows] = await knex.raw('SELECT VERSION() AS v');
+    if (!/mariadb/i.test(versionRows?.[0]?.v || '')) dropVerb = 'DROP CHECK';
+  }
   await knex.raw(`ALTER TABLE ai_settings ${dropVerb} ??`, [CONSTRAINT_NAME]);
   const valueList = PROVIDERS.map((v) => knex.raw('?', [v]).toString()).join(', ');
   await knex.raw(`ALTER TABLE ai_settings ADD CONSTRAINT ?? CHECK (?? IN (${valueList}))`, [CONSTRAINT_NAME, 'provider']);

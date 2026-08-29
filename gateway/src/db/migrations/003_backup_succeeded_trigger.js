@@ -9,9 +9,10 @@
 // do this are actually the same SQL:
 //  - Postgres: ALTER TABLE ... DROP CONSTRAINT <name> / ADD CONSTRAINT <name> CHECK (...) — the
 //    standard syntax, and what it's actually named there.
-//  - MySQL/MariaDB (8.0.16+, the only versions that support CHECK at all): the equivalent verb is
-//    DROP CHECK, not DROP CONSTRAINT — MySQL keeps its own vocabulary for these even though the ADD
-//    side reuses the same ADD CONSTRAINT ... CHECK (...) syntax as Postgres.
+//  - MySQL and MariaDB diverge here despite sharing the mysql2 client: MySQL's verb is DROP CHECK,
+//    but MariaDB's is DROP CONSTRAINT and it rejects DROP CHECK with a parse error. They're told
+//    apart at runtime via the server's VERSION() string (MariaDB always contains "MariaDB"). The
+//    ADD side reuses the same ADD CONSTRAINT ... CHECK (...) syntax as Postgres on both.
 //  - SQLite has no ALTER TABLE ... DROP/ADD CONSTRAINT of any kind — the only way to change a CHECK
 //    constraint at all is the standard "rebuild the table" dance: create a new table with the
 //    constraint already right, copy every row across, drop the old table, rename the new one into
@@ -60,7 +61,15 @@ exports.up = async function up(knex) {
     // them as escaped SQL string literals directly in the DDL text — via knex.raw('?', [v])'s own
     // dialect-aware escaping, not hand-rolled quoting — is safe, and is the only form either
     // backend actually accepts here.
-    const dropVerb = backend === 'mysql2' ? 'DROP CHECK' : 'DROP CONSTRAINT';
+    // MySQL and MariaDB share the mysql2 client but NOT this verb: MySQL uses DROP CHECK, while
+    // MariaDB uses DROP CONSTRAINT and rejects DROP CHECK outright with a parse error. They can't be
+    // told apart by the client name, so ask the server — MariaDB's VERSION() string always contains
+    // "MariaDB". (Postgres, the other backend reaching here, uses DROP CONSTRAINT too.)
+    let dropVerb = 'DROP CONSTRAINT';
+    if (backend === 'mysql2') {
+      const [versionRows] = await knex.raw('SELECT VERSION() AS v');
+      if (!/mariadb/i.test(versionRows?.[0]?.v || '')) dropVerb = 'DROP CHECK';
+    }
     await knex.raw(`ALTER TABLE notification_rules ${dropVerb} ??`, [CONSTRAINT_NAME]);
     const valueList = NEW_TRIGGER_TYPES.map((v) => knex.raw('?', [v]).toString()).join(', ');
     await knex.raw(`ALTER TABLE notification_rules ADD CONSTRAINT ?? CHECK (?? IN (${valueList}))`, [CONSTRAINT_NAME, 'trigger_type']);
