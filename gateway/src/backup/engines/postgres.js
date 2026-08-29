@@ -135,4 +135,14 @@ async function applyPendingRestoreAtBoot(pendingRestorePath) {
   return true;
 }
 
-module.exports = { backend: 'postgres', entryFilename: ENTRY_FILENAME, addPayloadToZip, validateAndStage, applyPendingRestoreAtBoot };
+// Standalone dump to a plain file (not the backup zip) — used by db/index.js's pre-migration
+// safety dump, which needs a file it can keep in backups/ next to the SQLite .bak snapshots, not a
+// bundle. Same pg_dump custom-format archive addPayloadToZip produces, so the normal restore path
+// could consume it too if ever needed.
+async function dumpToFile(destPath) {
+  const config = resolveDbConfig();
+  const { args: connArgs, env } = connectionArgs(config);
+  await run('pg_dump', [...connArgs, '--format=custom', '--file', destPath], env, 10 * 60 * 1000);
+}
+
+module.exports = { backend: 'postgres', entryFilename: ENTRY_FILENAME, addPayloadToZip, dumpToFile, validateAndStage, applyPendingRestoreAtBoot };

@@ -431,16 +431,50 @@ async function snapshotSqliteBeforeMigrations(config) {
   }
 }
 
-// Postgres/MySQL counterpart: no local file to cheaply copy, and those backends have their own
-// server-side backup/PITR, so LoxSuite doesn't snapshot them itself — but it does say plainly, once,
-// that an unattended migration is about to run, so a missing backup isn't a silent risk.
-async function warnBeforeNonSqliteMigrations(config) {
+// Postgres/MySQL counterpart of snapshotSqliteBeforeMigrations. These backends have no local db
+// FILE to cheaply copy, and (worse than SQLite here) their DDL auto-commits — a migration that
+// fails partway can't roll back, leaving the schema half-changed with no clean retry. So before any
+// PENDING migration, take a real dump (pg_dump / mysqldump, reusing the backup engines) into
+// backups/, giving an actual restore point if an unattended migration goes wrong. Same guards as
+// the SQLite snapshot: only on an already-migrated database (completed > 0) with something pending,
+// and never blocks boot — a failed dump is logged with a clear warning and the migration still runs.
+function preMigrationDir() {
+  const dbPath = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data', 'gateway.db');
+  return path.join(path.dirname(dbPath), 'backups');
+}
+
+function prunePreMigrationDumps(dir, backend) {
   try {
-    const [completed, pending] = await knex.migrate.list();
-    if (completed.length > 0 && pending.length > 0) {
-      console.warn(`About to apply ${pending.length} pending migration(s) to the ${config.backend} database. LoxSuite's automatic pre-migration snapshot covers SQLite only — make sure a recent ${config.backend} backup exists (Administration > Backups, or your server's own) before an unattended update runs these.`);
-    }
+    const prefix = `pre-migrate-${backend}-`;
+    const dumps = fs.readdirSync(dir).filter((f) => f.startsWith(prefix)).sort(); // ISO stamps sort chronologically
+    for (const stale of dumps.slice(0, -PRE_MIGRATION_BACKUP_KEEP)) fs.unlinkSync(path.join(dir, stale));
   } catch { /* best-effort */ }
+}
+
+async function dumpNonSqliteBeforeMigrations(config) {
+  let completed;
+  let pending;
+  try {
+    [completed, pending] = await knex.migrate.list();
+  } catch {
+    return;
+  }
+  if (!pending || pending.length === 0 || !completed || completed.length === 0) return;
+
+  const dir = preMigrationDir();
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const ext = config.backend === 'postgres' ? 'pgdump' : 'sql';
+  const dest = path.join(dir, `pre-migrate-${config.backend}-${stamp}.${ext}`);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    // eslint-disable-next-line global-require -- same require-cycle avoidance as applyPending*Restore
+    const engine = require(`../backup/engines/${config.backend}`);
+    await engine.dumpToFile(dest);
+    console.log(`Took a pre-migration ${config.backend} dump (${pending.length} pending migration(s)) to ${dest}.`);
+    prunePreMigrationDumps(dir, config.backend);
+  } catch (err) {
+    console.warn(`Pre-migration ${config.backend} dump failed (${err.message}) — proceeding with the migration anyway. On ${config.backend}, DDL auto-commits, so a migration that fails partway can't roll back; make sure a recent backup exists (Administration > Backups, or your server's own) before an unattended update runs these.`);
+  }
 }
 
 async function initSqlite(config) {
@@ -554,7 +588,7 @@ async function initPostgres(config) {
   knex = createKnex(config);
   await waitForPostgresReady(config);
   await applyPendingPostgresRestore();
-  await warnBeforeNonSqliteMigrations(config);
+  await dumpNonSqliteBeforeMigrations(config);
   await knex.migrate.latest();
 }
 
@@ -604,7 +638,7 @@ async function initMysql(config) {
   knex = createKnex(config);
   await waitForMysqlReady(config);
   await applyPendingMysqlRestore();
-  await warnBeforeNonSqliteMigrations(config);
+  await dumpNonSqliteBeforeMigrations(config);
   await knex.migrate.latest();
 }
 

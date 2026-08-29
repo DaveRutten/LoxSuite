@@ -120,4 +120,14 @@ async function applyPendingRestoreAtBoot(pendingRestorePath) {
   return true;
 }
 
-module.exports = { backend: 'mysql', entryFilename: ENTRY_FILENAME, addPayloadToZip, validateAndStage, applyPendingRestoreAtBoot };
+// Standalone dump to a plain file (not the backup zip) — used by db/index.js's pre-migration
+// safety dump. Same mysqldump script addPayloadToZip produces, just written straight to destPath.
+async function dumpToFile(destPath) {
+  const config = resolveDbConfig();
+  const { args: connArgs, env } = connectionArgs(config);
+  const dumpArgs = [...connArgs, '--single-transaction', '--routines', '--add-drop-table', config.connection.database];
+  const output = await run('mysqldump', dumpArgs, env, 10 * 60 * 1000);
+  fs.writeFileSync(destPath, output);
+}
+
+module.exports = { backend: 'mysql', entryFilename: ENTRY_FILENAME, addPayloadToZip, dumpToFile, validateAndStage, applyPendingRestoreAtBoot };

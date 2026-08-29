@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.19.2-alpha.1] - 2026-08-29
+
+### Added
+- **Pre-migration dump for Postgres and MySQL/MariaDB.** 0.19.0 added an automatic pre-migration
+  snapshot for SQLite; the other backends only got a log warning. Now, before applying any pending
+  migration, LoxSuite takes a real `pg_dump` / `mysqldump` (reusing the backup engines) into
+  `backups/`, giving an actual restore point. This matters most on MySQL/MariaDB, where DDL
+  auto-commits — a migration that fails partway can't roll back and leaves the schema half-changed,
+  so a fresh dump is the difference between a clean restore and a manual repair. Same guards as the
+  SQLite snapshot: only when there's something pending on an already-migrated database (not on a
+  fresh install), the newest five are kept, and it never blocks startup — a failed dump is logged
+  and the migration still runs. Verified end to end against a real MariaDB 10.11 and Postgres 16.
+
 ## [0.19.1-alpha.1] - 2026-08-29
 
 ### Fixed
