@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.19.3-alpha.1] - 2026-08-29
+
+### Changed
+- **Faster MQTT mapping match on a busy broker.** The gateway subscribes to `#`, so its message
+  handler runs for every message on the broker — and it used to scan every enabled mapping with a
+  topic-pattern match per message (O(mappings)). Almost every mapping is an exact topic, so they're
+  now split into a Map keyed by exact topic plus a small list of the genuine wildcard (`+`/`#`)
+  mappings: the common case is a single Map lookup. Same set of matches as before (pinned by a
+  test); the win shows up with many mappings and/or high message volume.
+
+### Fixed
+- **Two top-bar icon controls were missing an `aria-label`** (the auto-refresh interval selector and
+  the help-text show/hide toggle) — they had hover tooltips but nothing for screen readers. Added,
+  matching the labelling every other top-bar control already had.
+
 ## [0.19.2-alpha.1] - 2026-08-29
 
 ### Added

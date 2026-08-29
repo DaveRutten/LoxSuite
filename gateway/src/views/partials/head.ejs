@@ -244,7 +244,7 @@
           // form (monitor-detail.ejs) — those stay as their own dedicated buttons right there, since
           // that's a drawer/inline form a user is actively filling in, not a quick sitewide toggle.
         %>
-        <button type="button" id="topbar-hints-toggle" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide help text under form fields sitewide"><%- icon('lightbulb') %></button>
+        <button type="button" id="topbar-hints-toggle" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide help text under form fields sitewide" aria-label="Show or hide help text under form fields"><%- icon('lightbulb') %></button>
         <% if (helpAnchor) { %>
           <a class="topbar-help" href="/help#help-<%= helpAnchor %>" data-help-open data-help-anchor="help-<%= helpAnchor %>" title="Explain this page" aria-label="Help">
             <%- icon('help') %>

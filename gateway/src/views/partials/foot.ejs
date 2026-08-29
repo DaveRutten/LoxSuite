@@ -197,6 +197,7 @@
 
       var select = document.createElement('select');
       select.title = 'Auto-refresh interval';
+      select.setAttribute('aria-label', 'Auto-refresh interval');
       PRESETS.forEach(function (s) {
         var opt = document.createElement('option');
         opt.value = s;

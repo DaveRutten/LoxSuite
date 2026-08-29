@@ -36,6 +36,7 @@ const brokerStats = new Map();
 // the network on every message, not just a mapped one), confirmed against a real install logging
 // 600ms-1.5s per hit during a burst of a few messages arriving close together.
 let enabledMappings = [];
+let mappingIndex = { exact: new Map(), wildcards: [] };
 
 let client = null;
 
@@ -60,6 +61,37 @@ function topicMatches(pattern, topic) {
     if (part !== topicParts[i]) return false;
   }
   return patternParts.length === topicParts.length;
+}
+
+// The '#' subscription means the message handler below runs for EVERY message on the broker, and it
+// used to scan ALL enabled mappings with topicMatches() per message — O(mappings) on a busy broker.
+// Almost every mapping is an EXACT topic (no + or #), so split them into a Map keyed by exact topic
+// plus a small list of the genuine wildcard mappings: the common case becomes one Map lookup.
+// Pure so a test can pin that it selects exactly what the old full scan did.
+function buildMappingIndex(rows) {
+  const exact = new Map();
+  const wildcards = [];
+  for (const m of rows) {
+    if (m.mqtt_topic.includes('+') || m.mqtt_topic.includes('#')) {
+      wildcards.push(m);
+    } else {
+      const list = exact.get(m.mqtt_topic);
+      if (list) list.push(m);
+      else exact.set(m.mqtt_topic, [m]);
+    }
+  }
+  return { exact, wildcards };
+}
+
+// Exact matches (from the Map) first, then any wildcard mappings that match — same SET the old
+// enabledMappings.filter(topicMatches) produced. Order is exact-then-wildcard rather than strict DB
+// order; the matches are each forwarded to their own Loxone target independently below, so relative
+// order across different targets doesn't change behaviour.
+function selectMappings(topic, index) {
+  const exact = index.exact.get(topic);
+  if (!index.wildcards.length) return exact || [];
+  const wild = index.wildcards.filter((m) => topicMatches(m.mqtt_topic, topic));
+  return exact ? [...exact, ...wild] : wild;
 }
 
 function recordMessage(topic, payload, retained) {
@@ -114,6 +146,7 @@ async function loadSettings() {
 // uses for its topic->monitor cache.
 async function reloadMappings() {
   enabledMappings = await db.prepare('SELECT * FROM mappings_mqtt_to_loxone WHERE enabled = 1').all();
+  mappingIndex = buildMappingIndex(enabledMappings);
 }
 
 function shouldThrottle(mapping) {
@@ -221,7 +254,7 @@ function attachHandlers(c) {
 
     recordMessage(topic, payload, packet && packet.retain);
 
-    const matching = enabledMappings.filter((m) => topicMatches(m.mqtt_topic, topic));
+    const matching = selectMappings(topic, mappingIndex);
 
     for (const mapping of matching) {
       if (shouldThrottle(mapping)) continue;
@@ -347,6 +380,9 @@ module.exports = {
   startMqttClient,
   reconnect,
   reloadMappings,
+  buildMappingIndex,
+  selectMappings,
+  topicMatches,
   getMessageLog: () => messageLog,
   getTopicOverview,
   clearTopicOverview,
