@@ -12,6 +12,8 @@ const { fetchBuiltinTemplatesFromGitHub } = require('../deviceTemplatesUpdate');
 const ollama = require('../llm/ollama');
 const ollamaPullState = require('../ollamaPullState');
 const techReport = require('../techReport');
+const geoBlock = require('../geoBlock');
+const { listCountries } = require('../countries');
 const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
@@ -330,6 +332,8 @@ async function loadSecurityPageData(req) {
     roles: await db.prepare('SELECT * FROM access_roles ORDER BY name').all(),
     gatewaySettings: await db.prepare('SELECT * FROM gateway_settings WHERE id = 1').get(),
     proxyTrustMisconfigured: proxyTrustMisconfigured(req),
+    geoBlock: await geoBlock.loadSettings(),
+    countries: listCountries(),
   };
 }
 
@@ -379,6 +383,31 @@ router.post('/security', asyncHandler(async (req, res) => {
   await reloadLoginLimiter();
   await logSystemEvent(`"${req.user.username}" updated the login rate limit.`);
   res.render('admin-security', { ...(await loadSecurityPageData(req)), error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
+}));
+
+router.post('/security/geo-block', asyncHandler(async (req, res) => {
+  const mode = ['off', 'blocklist', 'allowlist'].includes(req.body.mode) ? req.body.mode : 'off';
+  // A checkbox list posts either one string (exactly one checked) or an array (0 or several) —
+  // normalized to always be an array here rather than pushing that distinction onto saveRule/the
+  // view. Uppercased and filtered against the real ISO list so a tampered/garbage form value can't
+  // end up stored and silently never matching anything (or, worse, matching by coincidence).
+  const posted = Array.isArray(req.body.countries) ? req.body.countries : (req.body.countries ? [req.body.countries] : []);
+  const validCodes = new Set(listCountries().map((c) => c.code));
+  const countries = [...new Set(posted.map((c) => String(c).toUpperCase()))].filter((c) => validCodes.has(c));
+
+  await geoBlock.saveRule(mode, countries);
+  await geoBlock.saveCredentials(req.body.maxmind_account_id, req.body.maxmind_license_key);
+  await logSystemEvent(`"${req.user.username}" updated Geo-blocking settings (mode: ${mode}, ${countries.length} countr${countries.length === 1 ? 'y' : 'ies'}).`);
+  res.render('admin-security', { ...(await loadSecurityPageData(req)), error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
+}));
+
+// Fire-and-check-result rather than redirecting through the full page reload — the download itself
+// can take a few seconds (a real HTTPS round-trip to MaxMind plus gunzip/tar-parse a few MB), and a
+// spinner + inline result reads better than the whole Security page appearing to hang.
+router.post('/security/geo-block/update-now', asyncHandler(async (req, res) => {
+  const result = await geoBlock.updateDatabaseNow();
+  if (result.ok) await logSystemEvent(`"${req.user.username}" manually refreshed the GeoLite2 database.`);
+  res.json(result);
 }));
 
 async function loadAiSettings() {

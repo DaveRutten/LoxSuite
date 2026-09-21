@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.19.3-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.19.4-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -126,6 +126,51 @@ it directly into `/boot/config/plugins/dockerMan/templates-user/` on the Unraid 
 same passwords/secrets the `.env` steps above ask for, and set the three path mappings to real
 appdata locations — the config one especially, since MQTT Users/Roles management and MQTT-config
 backups need it to actually persist.
+
+### Running on a Raspberry Pi / DietPi
+
+`ghcr.io/daverutten/loxsuite` is a **multi-arch image** (`linux/amd64` + `linux/arm64`, built by
+[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml)) — `docker compose
+pull`/`docker run` on an arm64 Pi pulls the arm64 build automatically, no extra flags, no building
+from source on the device itself. Covers Raspberry Pi 3B+/4/5 running a 64-bit OS (DietPi's own
+64-bit images, or 64-bit Raspberry Pi OS) — **not** the 32-bit `armv7` images DietPi also offers for
+older/lower-memory boards; see "Known scope limitations" for why that one isn't built.
+
+1. **Install DietPi** (or Raspberry Pi OS) in **64-bit**. DietPi's own installer/imager lets you
+   pick the image per board — pick the `ARMv8`/`aarch64` one, not `ARMv6`/`ARMv7`. Already running a
+   32-bit install? There's no in-place switch; DietPi needs reflashing with the 64-bit image.
+   Check what you've got: `uname -m` — `aarch64` is 64-bit (works), `armv7l`/`armv6l` is 32-bit
+   (doesn't, for this image).
+2. **Install Docker.** DietPi ships an optional Docker install right from its own setup menu:
+   `dietpi-software` → Software Optimized → **Docker** → Install. On plain Raspberry Pi OS, use
+   Docker's own install script instead: `curl -fsSL https://get.docker.com | sh`.
+3. **Get the repo onto the Pi** (only `docker-compose.yml`, `.env.example`, and the `mosquitto/`
+   folder are actually needed — the image itself is pulled pre-built, not built locally):
+   ```
+   git clone https://github.com/DaveRutten/LoxSuite.git
+   cd LoxSuite
+   cp .env.example .env
+   ```
+   Edit `.env` the same way the Quick start section above describes (at minimum a real
+   `MQTT_ADMIN_PASSWORD`).
+4. **Start it** — same command as any other host, `docker compose` picks the right image
+   architecture on its own:
+   ```
+   docker compose up -d
+   ```
+   The first pull of the arm64 image is the slow part on a Pi's own network/SD card — after that,
+   startup timing (dynamic-security bootstrap, first admin account, MQTT connecting) matches any
+   other install.
+5. Open `http://<pi-ip>:5582` and continue exactly as in Quick start above.
+
+A Raspberry Pi (even a 4/5) is meaningfully slower than a typical x86 Docker host for anything
+CPU-bound — mainly Monitor/Dashboard chart rendering with a lot of history, and a Postgres/MySQL
+backend's own migrations on first upgrade. SQLite (the default — see "Data and persistence" below
+for `DB_BACKEND`) is the right backend choice for a single Pi; there's no reason to point it at an
+external Postgres/MySQL server unless you're already running one for other reasons. See the manual
+verification checklist in [`docs/raspberry-pi-testing.md`](docs/raspberry-pi-testing.md) for what's
+actually been checked against real Pi hardware versus what's expected to work from the image being
+multi-arch but hasn't been separately verified yet.
 
 ## Features
 
@@ -799,6 +844,13 @@ whatever channel(s) they already send to.
   break the Pocket ID SSO redirect callback).
 - **Login rate-limiting** — configurable from Administration → Security (default 10 attempts
   per 15 minutes per IP on `/login`).
+- **Geo-blocking** — Administration → Security can block, or allow only, visitors from specific
+  countries, looked up locally against a free [MaxMind GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data)
+  database (your own free MaxMind account downloads and auto-refreshes it — no per-request call to
+  a third party, and the database file itself is never bundled or committed, per MaxMind's own
+  license). Applies to the whole app on every request, not just the login form. A request from your
+  own local network is always exempt, so misconfiguring this can't lock you out from home, and a
+  Loxone Miniserver's own callback (always LAN-local in a normal setup) is unaffected either way.
 - **Secrets encrypted at rest** — Miniserver passwords, the MQTT broker password, the SSO client
   secret, and any saved `rclone.conf` are stored encrypted (AES-256-GCM) in `gateway.db`, not
   plain text. The key is derived from `SESSION_SECRET` (see Environment variables below) — **that
@@ -821,6 +873,12 @@ whatever channel(s) they already send to.
 
 ## Known scope limitations
 
+- **No 32-bit ARM (`armv7`) image** — the published image is `linux/amd64` + `linux/arm64` only, so
+  it works on a 64-bit-OS Raspberry Pi 3B+/4/5 (see "Running on a Raspberry Pi / DietPi" above) but
+  not on an older/32-bit install. Node and Alpine both still technically support armv7, but with
+  less consistent long-term maintenance than arm64, and every Pi capable of running this comfortably
+  already defaults to a 64-bit OS today — not worth roughly doubling every build's (already
+  QEMU-emulated) compile time for.
 - No autocomplete for a brand-new Virtual Input name — see the Miniservers section above (the
   mapping form does suggest names you've already used elsewhere).
 - MQTT device accounts share one `client` role with access to every topic by default; per-device

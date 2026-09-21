@@ -896,4 +896,24 @@
       initPagination(table);
     });
   };
+
+  // Called by a page's own deep-link script (e.g. hardware.ejs's/miniservers.ejs's notification
+  // "jump to this row" handling, see their own comments) right before it highlights/scrollIntoView
+  // a specific row — pagination above hides every row not on the currently-shown page via
+  // .pg-off-page, so without this, scrolling to a row that merely isn't on page 1 is a silent
+  // no-op: the class gets added and scrollIntoView runs against an element nobody can see.
+  // Callers must wait for DOMContentLoaded (same as this file's own init below) so pagination has
+  // already been built by the time this runs — calling it earlier is a no-op, not an error, since
+  // state.pager won't exist yet.
+  window.revealTableRow = function (row) {
+    var table = row && row.closest('table');
+    if (!table) return;
+    var state = registry.get(table);
+    if (!state || !state.pager || state.pager.el.hidden) return; // not paginated (fits on one page) — nothing to reveal
+    var rows = visibleDataRows(table, state.columnCount);
+    var index = rows.indexOf(row);
+    if (index === -1) return; // e.g. hidden by the page's own filter — not this helper's job to un-filter it
+    var targetPage = Math.floor(index / getPageSize()) + 1;
+    if (targetPage !== state.pager.page) renderPage(table, targetPage);
+  };
 })();

@@ -54,6 +54,7 @@ const { startUdpServer } = require('./loxoneUdpServer');
 const { startMonitorCollector } = require('./monitorCollector');
 const { startLogCollector } = require('./logCollector');
 const { startHeartbeat } = require('./heartbeat');
+const { geoBlockMiddleware, startGeoBlockUpdater } = require('./geoBlock');
 const { startHardwarePolling } = require('./loxoneHardware');
 const { startLiveConnections } = require('./loxoneWebSocket');
 const mcpClient = require('./mcpClient');
@@ -181,6 +182,11 @@ async function main() {
   // Exposed as a global for the client-side chart (public/monitor-chart.js) — everything
   // server-rendered uses formatDateTime() directly and never needs this.
   app.use((req, res, next) => { res.locals.displayTimezone = getDisplayTimezone(); next(); });
+  // As early as possible, ahead of static assets/session/routes — a blocked visitor shouldn't even
+  // get a session cookie or the login page's CSS, just the plain-text refusal (see geoBlock.js).
+  // Exempt for a private/local-network request the same way the SSO break-glass check is (so the
+  // admin on the LAN, and a Miniserver's own /api/loxone-in callback, are never affected).
+  app.use(geoBlockMiddleware);
   app.use(express.urlencoded({ extended: true }));
   app.use(express.json());
   app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -352,6 +358,7 @@ async function main() {
   scheduledDeviceCommands.startScheduler();
   startVersionCheck();
   startHeartbeat();
+  startGeoBlockUpdater();
   
   const port = process.env.PORT || 5582;
   app.listen(port, () => {

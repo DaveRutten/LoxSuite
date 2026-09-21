@@ -173,18 +173,26 @@
     // scroll that one device into view and flash it, so the click lands on the device instead of
     // the whole list. Matched by dataset compare (device_key can contain ':' etc.) rather than a
     // CSS selector, and the '<' escape keeps the injected value from breaking out of this script.
+    // Deferred to DOMContentLoaded (this script itself runs immediately, at parse time, well before
+    // that) so tables.js's own deferred pagination init has already run — otherwise the target row
+    // could be on page 2+ (hidden via .pg-off-page) and this would highlight/scrollIntoView an
+    // element nobody can see, with no visible effect at all. window.revealTableRow (tables.js)
+    // switches to whichever page the row is actually on first.
     var highlightKey = <%- JSON.stringify(highlightDevice || '').replace(/</g, '\\u003c') %>;
     if (highlightKey) {
-      var rows = tbody.querySelectorAll('tr[data-device-key]');
-      for (var i = 0; i < rows.length; i++) {
-        if (rows[i].dataset.deviceKey === highlightKey) {
-          var target = rows[i];
-          target.classList.add('row-highlight');
-          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          setTimeout(function () { target.classList.remove('row-highlight'); }, 4000);
-          break;
+      document.addEventListener('DOMContentLoaded', function () {
+        var rows = tbody.querySelectorAll('tr[data-device-key]');
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i].dataset.deviceKey === highlightKey) {
+            var target = rows[i];
+            if (window.revealTableRow) window.revealTableRow(target);
+            target.classList.add('row-highlight');
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(function () { target.classList.remove('row-highlight'); }, 4000);
+            break;
+          }
         }
-      }
+      });
     }
   })();
 </script>

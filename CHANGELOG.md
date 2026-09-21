@@ -2,6 +2,41 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.19.4-alpha.1] - 2026-09-21
+
+### Added
+- **Geo-blocking (Administration → Security)** — block, or allow only, visitors from specific
+  countries, looked up locally against a free [MaxMind GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data)
+  database instead of a per-request call to a third party. Off by default; turning it on needs your
+  own free MaxMind account (Account ID + license key), which LoxSuite uses to download and then
+  auto-refresh the database roughly daily — the database file itself is never bundled with the app,
+  per MaxMind's own license. Applies to the whole app on every request (not just the login form),
+  the same "re-checked continuously, not just at login" design as the existing "Require SSO from
+  outside the local network" setting — and, like that setting, a request from your own local network
+  is always exempt, so misconfiguring this can't lock you out from home, and a Loxone Miniserver's
+  own callback (always LAN-local in a normal setup) is unaffected either way. The country picker
+  shows each option's flag and name, and lets you search rather than scrolling a list of ~195
+  countries.
+- **Multi-arch Docker image: `linux/arm64` alongside the existing `linux/amd64`** — `ghcr.io/daverutten/loxsuite`
+  now publishes both architectures from one workflow run (QEMU cross-build in CI), so `docker compose
+  pull`/`up` on a 64-bit Raspberry Pi 3B+/4/5 (DietPi or Raspberry Pi OS) just works, with nothing to
+  build from source on the device itself. See the README's new "Running on a Raspberry Pi / DietPi"
+  section for setup steps, and `docs/raspberry-pi-testing.md` for the manual verification checklist
+  covering what's actually been confirmed on real hardware versus what's expected to work from the
+  image being multi-arch. Deliberately not also building `armv7` (32-bit) — see "Known scope
+  limitations" in the README for why.
+
+### Fixed
+- **Clicking a Hardware notification could highlight a device that was silently invisible** — the
+  deep-link (added in 0.19.0) scrolls to and flashes the device's row, but didn't account for that
+  table's own client-side pagination (added since): if the device wasn't on the page shown by
+  default, the row got highlighted and scrolled to while hidden by `display:none`, with no visible
+  effect at all. `tables.js` now exposes a small `revealTableRow()` helper that switches to whichever
+  page a given row is actually on first, and the Hardware page uses it before highlighting.
+  (Separately noticed while fixing this: Miniservers' own similar "?open=&lt;id&gt;" deep-link is
+  stale leftover code from before that page's diagnostics UI moved into a Tabulator-backed dialog —
+  not fixed here, tracked separately.)
+
 ## [0.19.3-alpha.1] - 2026-08-29
 
 ### Changed

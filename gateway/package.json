@@ -1,6 +1,6 @@
 {
   "name": "loxsuite",
-  "version": "0.19.3-alpha.1",
+  "version": "0.19.4-alpha.1",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "description": "LoxSuite: MQTT gateway, logging, monitoring, and backup/restore for Loxone Miniservers",
@@ -28,6 +28,7 @@
     "express-session": "^1.18.0",
     "fast-xml-parser": "^5.10.1",
     "knex": "^3.1.0",
+    "maxmind": "^5.0.7",
     "mqtt": "^5.10.1",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.11.3",

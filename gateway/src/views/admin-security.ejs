@@ -55,6 +55,123 @@
 <% } %>
 
 <div class="card">
+  <h2>Geo-blocking</h2>
+  <p class="hint">
+    Block visitors from specific countries, or allow only specific ones &mdash; looked up from
+    their IP against a local <a href="https://dev.maxmind.com/geoip/geolite2-free-geolocation-data" target="_blank" rel="noopener">MaxMind GeoLite2</a>
+    database, with no per-request call to a third party. Applies to the whole app on every request
+    (not just the login form), the same way "Require SSO from outside the local network" above
+    does &mdash; a request from your own local network is always exempt, so you can't lock yourself
+    out from home and a Loxone Miniserver's own callback (always LAN-local in a normal setup) is
+    never affected.
+  </p>
+
+  <form method="post" action="/admin/security/geo-block" id="geo-block-form">
+    <div class="form-grid">
+      <div>
+        <label>Mode</label>
+        <select name="mode" id="geo-block-mode">
+          <option value="off" <%= geoBlock.mode === 'off' ? 'selected' : '' %>>Off</option>
+          <option value="blocklist" <%= geoBlock.mode === 'blocklist' ? 'selected' : '' %>>Block these countries</option>
+          <option value="allowlist" <%= geoBlock.mode === 'allowlist' ? 'selected' : '' %>>Allow only these countries</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="geo-block-properties" style="margin-top:0.85rem; <%= geoBlock.mode === 'off' ? 'display:none;' : '' %>">
+      <h3>MaxMind account</h3>
+      <p class="hint">
+        GeoLite2 is free but requires a free <a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">MaxMind account</a>
+        to download &mdash; its license doesn't allow bundling the database file itself, so LoxSuite
+        fetches it directly with your own credentials (Account ID + a generated license key, from
+        your MaxMind account's "Manage License Keys" page) and refreshes it automatically about
+        once a day.
+      </p>
+      <div class="form-grid">
+        <div>
+          <label>Account ID</label>
+          <input type="text" name="maxmind_account_id" value="<%= geoBlock.maxmindAccountId %>">
+        </div>
+        <div>
+          <label>License key</label>
+          <input type="password" name="maxmind_license_key" placeholder="<%= geoBlock.maxmindLicenseKey ? 'Leave blank to keep the current key' : '' %>">
+        </div>
+      </div>
+      <div style="margin-top:0.6rem; display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+        <button type="button" class="btn-soft" id="geo-block-update-now"><%- icon('refresh') %> Update database now</button>
+        <span class="hint" id="geo-block-db-status">
+          <% if (geoBlock.dbUpdatedAt) { %>
+            Last updated <%= formatDateTime(geoBlock.dbUpdatedAt) %><% if (geoBlock.dbStatus === 'error') { %> &mdash; <span style="color:var(--danger);">most recent refresh attempt failed: <%= geoBlock.dbError %></span><% } %>
+          <% } else if (geoBlock.dbStatus === 'error') { %>
+            <span style="color:var(--danger);">Never downloaded &mdash; last attempt failed: <%= geoBlock.dbError %></span>
+          <% } else { %>
+            Never downloaded yet.
+          <% } %>
+        </span>
+      </div>
+
+      <h3 style="margin-top:1.2rem;">Countries</h3>
+      <p class="hint" id="geo-block-list-hint">
+        <% if (geoBlock.mode === 'blocklist') { %>Requests from a checked country are refused; every other country is allowed.
+        <% } else { %>Only requests from a checked country are allowed; every other country is refused.<% } %>
+      </p>
+      <input type="text" id="geo-block-country-filter" placeholder="Filter countries…" style="max-width:20rem; margin-bottom:0.5rem;">
+      <div style="max-height:16rem; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem 0.75rem;">
+        <% countries.forEach(c => { %>
+          <label class="geo-block-country-row" data-country-name="<%= c.name.toLowerCase() %>" style="display:flex; align-items:center; gap:0.5rem; padding:0.2rem 0;">
+            <input type="checkbox" name="countries" value="<%= c.code %>" <%= geoBlock.countries.includes(c.code) ? 'checked' : '' %>>
+            <span><%= c.flag %></span><span><%= c.name %></span>
+          </label>
+        <% }) %>
+      </div>
+    </div>
+
+    <div style="margin-top:0.9rem;">
+      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+    </div>
+  </form>
+  <script>
+    (function () {
+      var modeSelect = document.getElementById('geo-block-mode');
+      var properties = document.getElementById('geo-block-properties');
+      var listHint = document.getElementById('geo-block-list-hint');
+      modeSelect.addEventListener('change', function () {
+        properties.style.display = modeSelect.value === 'off' ? 'none' : '';
+        listHint.textContent = modeSelect.value === 'blocklist'
+          ? 'Requests from a checked country are refused; every other country is allowed.'
+          : 'Only requests from a checked country are allowed; every other country is refused.';
+      });
+
+      var filterInput = document.getElementById('geo-block-country-filter');
+      filterInput.addEventListener('input', function () {
+        var q = filterInput.value.trim().toLowerCase();
+        document.querySelectorAll('.geo-block-country-row').forEach(function (row) {
+          row.style.display = !q || row.dataset.countryName.indexOf(q) !== -1 ? '' : 'none';
+        });
+      });
+
+      var updateBtn = document.getElementById('geo-block-update-now');
+      var statusEl = document.getElementById('geo-block-db-status');
+      updateBtn.addEventListener('click', function () {
+        updateBtn.disabled = true;
+        var original = statusEl.textContent;
+        statusEl.textContent = 'Downloading…';
+        fetch('/admin/security/geo-block/update-now', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            statusEl.textContent = data.ok
+              ? 'Updated just now.'
+              : 'Update failed: ' + data.error;
+            statusEl.style.color = data.ok ? '' : 'var(--danger)';
+          })
+          .catch(function () { statusEl.textContent = original; })
+          .finally(function () { updateBtn.disabled = false; });
+      });
+    })();
+  </script>
+</div>
+
+<div class="card">
   <h2>Single Sign-On</h2>
   <p class="hint">
     Lets people log in with a self-hosted <a href="https://pocket-id.org" target="_blank" rel="noopener">Pocket ID</a>

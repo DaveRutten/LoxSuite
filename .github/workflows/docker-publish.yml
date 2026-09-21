@@ -46,6 +46,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Lets the amd64 GitHub-hosted runner cross-build the arm64 image below (see the
+      # build-push-action's own `platforms:`) via QEMU user-mode emulation, rather than needing a
+      # real arm64 runner. Slower than a native build (better-sqlite3's native binding, and every
+      # apk package pulled into the final image, gets built/fetched for arm64 under emulation) but
+      # otherwise unremarkable — GHA's own cache (cache-from/cache-to below) keeps repeat builds fast.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -67,6 +76,13 @@ jobs:
         with:
           context: ./gateway
           push: true
+          # arm64 covers every 64-bit Raspberry Pi (3/4/5) running DietPi/Raspberry Pi OS — see
+          # README's "Running on a Raspberry Pi" section — and any other arm64 SBC/NAS. Deliberately
+          # NOT also building armv7 (32-bit): older Node/Alpine base image support for it is far
+          # less consistently maintained, and every Pi capable of running this comfortably (3B+ and
+          # later) already defaults to a 64-bit OS today, so the real-world benefit is small next to
+          # doubling every build's already-longer (QEMU-emulated) compile time.
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
