@@ -67,6 +67,14 @@
 (function () {
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   var kwh = function (wh) { return wh == null ? '' : (wh / 1000).toFixed(3); };
+  // Show times in LoxSuite's display time zone (Settings), not UTC or the browser's own zone. The
+  // OCPP messages themselves keep their UTC timestamps, as the protocol requires.
+  var TZ = <%- JSON.stringify(typeof displayTimezone !== 'undefined' && displayTimezone ? displayTimezone : null) %>;
+  var fmtOpts = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' };
+  var timeOpts = { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' };
+  var withTz = function (o) { var c = Object.assign({}, o); if (TZ) c.timeZone = TZ; return c; };
+  var dt = function (iso) { try { return new Intl.DateTimeFormat('sv-SE', withTz(fmtOpts)).format(new Date(iso)); } catch (e) { return iso; } };
+  var tm = function (iso) { try { return new Intl.DateTimeFormat('sv-SE', withTz(timeOpts)).format(new Date(iso)); } catch (e) { return iso.slice(11, 19); } };
   function render(data) {
     var s = data.status;
     var st = document.getElementById('ocpp-status');
@@ -78,7 +86,7 @@
         ['Backend', s.mode === 'live' ? (s.connected ? (s.booted ? 'Connected, accepted' : 'Connected') : 'Not connected') : '—'],
         ['Wallbox', s.wallboxReady ? ('car ' + (Number(s.values.connected) === 1 ? 'plugged in' : 'not plugged in') + (Number(s.values.active) === 1 ? ', charging ' + Number(s.values.actual || 0).toFixed(2) + ' kW' : '') + ', meter ' + Number(s.values.total || 0).toFixed(3) + ' kWh') : 'waiting for live data'],
         ['Connector status', s.connectorStatus || '—'],
-        ['Session', s.transaction ? ('since ' + new Date(s.transaction.startedAt).toLocaleString() + ', transaction ' + (s.transaction.transactionId == null ? 'pending' : s.transaction.transactionId) + (s.stopPending ? ' (stopping…)' : '')) : (s.stopPending ? 'stopping…' : 'none')],
+        ['Session', s.transaction ? ('since ' + dt(s.transaction.startedAt) + ', transaction ' + (s.transaction.transactionId == null ? 'pending' : s.transaction.transactionId) + (s.stopPending ? ' (stopping…)' : '')) : (s.stopPending ? 'stopping…' : 'none')],
         ['Queued messages', s.queueLength],
       ];
       if (s.lastError) rows.push(['Last error', '<span style="color: var(--danger);">' + esc(s.lastError) + '</span>']);
@@ -88,14 +96,14 @@
     document.getElementById('ocpp-sessions').innerHTML = ses.length
       ? '<table><thead><tr><th>Start</th><th>Stop</th><th>Meter start</th><th>Meter stop</th><th>kWh</th><th>Transaction</th><th>Mode</th></tr></thead><tbody>' +
         ses.map(function (x) {
-          return '<tr><td>' + esc(new Date(x.started_at).toLocaleString()) + '</td><td>' + esc(x.stopped_at ? new Date(x.stopped_at).toLocaleString() : 'running') +
+          return '<tr><td>' + esc(dt(x.started_at)) + '</td><td>' + esc(x.stopped_at ? dt(x.stopped_at) : 'running') +
             '</td><td>' + kwh(x.meter_start_wh) + '</td><td>' + kwh(x.meter_stop_wh) + '</td><td>' + (x.meter_stop_wh == null ? '' : ((x.meter_stop_wh - x.meter_start_wh) / 1000).toFixed(3)) +
             '</td><td>' + esc(x.transaction_id == null ? '' : x.transaction_id) + '</td><td>' + esc(x.mode) + '</td></tr>';
         }).join('') + '</tbody></table>'
       : '<p class="hint" style="margin:0;">No sessions recorded yet.</p>';
     document.getElementById('ocpp-log').textContent = (data.log || []).slice().reverse().map(function (l) {
       var rest = Object.assign({}, l); delete rest.ts; delete rest.kind;
-      return l.ts.slice(11, 19) + '  ' + l.kind + (Object.keys(rest).length ? '  ' + JSON.stringify(rest) : '');
+      return tm(l.ts) + '  ' + l.kind + (Object.keys(rest).length ? '  ' + JSON.stringify(rest) : '');
     }).join('\n');
   }
   var testBtn = document.getElementById('ocpp-test-btn');
