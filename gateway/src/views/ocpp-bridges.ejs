@@ -15,7 +15,7 @@
     <p class="hint" style="margin:0;">No OCPP bridges yet.</p>
   <% } else { %>
     <table>
-      <thead><tr><th>Name</th><th>Miniserver</th><th>Backend</th><th>Mode</th><th>Status</th></tr></thead>
+      <thead><tr><th>Name</th><th>Miniserver</th><th>Backend</th><th>Mode</th><th>Status</th><th>Last session</th></tr></thead>
       <tbody>
         <% bridges.forEach(b => { const s = b.status; %>
           <tr>
@@ -29,6 +29,12 @@
               <% } else if (s.mode === 'live' && !s.connected) { %><span style="color: var(--danger);">Not connected</span>
               <% } else if (!s.wallboxReady) { %>Waiting for Wallbox data
               <% } else { %><span style="color: var(--success);"><%= s.connectorStatus %><%= s.mode === 'live' ? '' : ' (dry run)' %></span><% } %>
+            </td>
+            <td>
+              <% if (b.lastSession) { %>
+                <strong><%= b.lastSession.kwh.toFixed(3) %> kWh</strong>
+                <span class="hint"> &middot; <%= formatDateTime(b.lastSession.stoppedAt) %><%= b.lastSession.mode === 'dry' ? ' (dry run)' : '' %></span>
+              <% } else { %>&mdash;<% } %>
             </td>
           </tr>
         <% }) %>

@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.20.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.21.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -23,6 +23,8 @@ It provides:
     publishes the value to MQTT.
 - **Monitor**: track any MQTT topic or Loxone value over time, with charts, tables, and CSV export.
 - **Logs**: live + persisted view of the Mosquitto broker log and each Miniserver's own log.
+- **OCPP bridge**: report a Loxone Wallbox to an OCPP 1.6 backend (e.g. Laadloon) as a charge point,
+  plus a quarterly Excel/CSV export of all charging sessions with MID meter readings.
 - A web interface (with login) to manage all of the above — no manual JSON or config-file editing.
 
 ## Screenshots
@@ -520,6 +522,9 @@ online there.
 
 - **Setup**: Loxone → OCPP → *Add OCPP bridge*: pick the Wallbox, enter the backend's Server URL
   (`wss://…`, without the ID), ChargePoint ID, password and the ID tag you registered at the backend.
+- **ID tag**: *Fixed*, or *Automatic* — taken from an NFC Code Touch badge read around plug-in or from
+  the Loxone user of the session ("User = TAG" mapping), falling back to the fixed tag. *Choose a Loxone
+  NFC tag* lists the tags in the Miniserver's user management to pick from.
 - **Dry run first**: logs every OCPP message it *would* send without connecting; switch Mode to Live
   once a test session looks right. **Test connection** checks the saved backend settings (a short
   connection, no OCPP messages) and the Wallbox's live data.
@@ -874,7 +879,7 @@ whatever channel(s) they already send to.
   own local network is always exempt, so misconfiguring this can't lock you out from home, and a
   Loxone Miniserver's own callback (always LAN-local in a normal setup) is unaffected either way.
 - **Secrets encrypted at rest** — Miniserver passwords, the MQTT broker password, the SSO client
-  secret, and any saved `rclone.conf` are stored encrypted (AES-256-GCM) in `gateway.db`, not
+  secret, OCPP backend passwords, and any saved `rclone.conf` are stored encrypted (AES-256-GCM) in `gateway.db`, not
   plain text. The key is derived from `SESSION_SECRET` (see Environment variables below) — **that
   value has to stay the same across restarts**, or these secrets become unreadable (they aren't
   lost, just unrecoverable until you re-enter them). Set it once to a real random value and don't

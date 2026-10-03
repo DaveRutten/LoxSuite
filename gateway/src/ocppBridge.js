@@ -58,6 +58,42 @@ function getConfigurationReply(askedKeys, known) {
   };
 }
 
+// Loxone NFC tag text ("EC B0 2B 05 8D 41 4C 27 EC") -> OCPP idTag ("B02B058D414C27"): hex only,
+// uppercase, without the "EC" specifier and trailing zero bytes — the same normalisation Loxone's
+// own OCPP connector documents for NFC IDs. Capped at OCPP 1.6's 20 characters.
+function normalizeNfcTag(raw) {
+  let hex = String(raw || '').toUpperCase().replace(/[^0-9A-F]/g, '');
+  if (hex.length > 4 && hex.startsWith('EC') && hex.endsWith('EC')) hex = hex.slice(2, -2);
+  else if (hex.length > 2 && hex.startsWith('EC')) hex = hex.slice(2);
+  while (hex.length > 2 && hex.endsWith('00')) hex = hex.slice(0, -2);
+  return hex.slice(0, 20);
+}
+
+// "Dave Rutten = B02B058D414C27" lines -> Map(lowercased user -> tag). Also accepts ':'.
+function parseUserTagMap(text) {
+  const map = new Map();
+  String(text || '').split(/\r?\n/).forEach((line) => {
+    const m = /^\s*(.+?)\s*[=:]\s*(\S+)\s*$/.exec(line);
+    if (m) map.set(m[1].toLowerCase(), m[2].slice(0, 20));
+  });
+  return map;
+}
+
+// Decides the idTag for a session. Returns { tag, source } or null while still waiting for an
+// authorization from Loxone (auto mode only, until `force`, i.e. timeout / charging / unplug).
+function resolveIdTag({ mode, fixedTag, nfc, sessionUser, userMap, sessionStart, force }) {
+  if (mode !== 'auto') return { tag: fixedTag, source: 'fixed' };
+  // An NFC read up to 2 minutes before plug-in still counts (badge first, then plug in).
+  if (nfc && nfc.tag && nfc.at >= sessionStart - 120000) {
+    const tag = normalizeNfcTag(nfc.tag);
+    if (tag) return { tag, source: 'nfc' };
+  }
+  if (sessionUser && userMap && userMap.has(String(sessionUser).toLowerCase())) {
+    return { tag: userMap.get(String(sessionUser).toLowerCase()), source: 'user' };
+  }
+  return force ? { tag: fixedTag, source: 'fallback' } : null;
+}
+
 function emptyState(mode) {
   return { mode, tx: null, queue: [], txMap: {}, nextLocalId: 1 };
 }
@@ -96,6 +132,10 @@ class BridgeRunner {
     this.flushing = false;
     this.lastStatus = null;
     this.lastSessionEnergy = null;
+    this.sessionUser = null;
+    this.nfcSeen = null;
+    this.authTimer = null;
+    this.userMap = parseUserTagMap(row.user_tag_map);
     this.lastError = null;
     this.fakeTxId = 9000;
     this.destroyed = false;
@@ -132,6 +172,15 @@ class BridgeRunner {
       if (!ctl) throw new Error(`Wallbox ${this.row.control_uuid} not found in the structure of ${this.miniserver.name}`);
       for (const name of WATCH) if (ctl.states?.[name]) this.stateUuids[name] = ctl.states[name];
       this.log('wallbox-found', { name: ctl.name, type: ctl.type });
+      if (this.row.id_tag_mode === 'auto' && this.row.nfc_control_uuid) {
+        const nfc = structure.controls?.[this.row.nfc_control_uuid];
+        if (nfc) {
+          for (const name of ['lasttag', 'lastid', 'lastuser']) if (nfc.states?.[name]) this.stateUuids[`nfc_${name}`] = nfc.states[name];
+          this.log('nfc-found', { name: nfc.name });
+        } else {
+          this.log('nfc-error', { error: `NFC Code Touch ${this.row.nfc_control_uuid} not found` });
+        }
+      }
     } catch (err) {
       this.lastError = err.message;
       this.log('wallbox-error', { error: err.message });
@@ -146,6 +195,7 @@ class BridgeRunner {
     clearInterval(this.heartbeatTimer);
     clearTimeout(this.reconnectTimer);
     clearTimeout(this.stopTimer);
+    clearTimeout(this.authTimer);
     try { this.ws?.close(); } catch { /* already closing */ }
   }
 
@@ -165,14 +215,28 @@ class BridgeRunner {
 
   onChange(name, value, old) {
     if (name === 'session' && value) {
-      try { this.lastSessionEnergy = JSON.parse(value).energy; } catch { /* not JSON */ }
+      try {
+        const sess = JSON.parse(value);
+        this.lastSessionEnergy = sess.energy;
+        if (sess.user && sess.user !== this.sessionUser) { this.sessionUser = sess.user; this.log('loxone-user', { user: sess.user }); }
+      } catch { /* not JSON */ }
     }
+    if (name.startsWith('nfc_')) {
+      if (value && (name === 'nfc_lasttag' || name === 'nfc_lastid')) {
+        this.nfcSeen = { tag: String(value), at: Date.now() };
+        this.log('nfc-tag', { raw: String(value), idTag: normalizeNfcTag(value) });
+      }
+      if (this.state.tx?.pendingStart) this.tryStartTransaction(false);
+      return;
+    }
+    if (name === 'session' && this.state.tx?.pendingStart) this.tryStartTransaction(false);
     if (!['total', 'actual', 'session'].includes(name)) this.log('wallbox', { [name]: value, was: old });
     if (!this.ready) {
       if (['connected', 'active', 'total'].every((k) => this.values[k] !== undefined)) {
         this.ready = true;
         this.log('wallbox-state', { connected: this.values.connected, active: this.values.active, total_kWh: this.values.total });
         if (this.state.tx && Number(this.values.connected) !== 1) this.stopTx('Other', null);
+        else if (this.state.tx?.pendingStart) this.scheduleAuthTimeout();
         if (!this.state.tx && Number(this.values.connected) === 1) {
           this.log('note', { msg: 'car was already plugged in at start; that session is not reported' });
         }
@@ -200,16 +264,52 @@ class BridgeRunner {
     const localId = this.state.nextLocalId++;
     const meterStart = toWh(this.values.total);
     const startedAt = new Date().toISOString();
-    this.state.tx = { localId, meterStart, startedAt };
+    this.sessionUser = null;
+    this.state.tx = { localId, meterStart, startedAt, pendingStart: true, idTag: null };
     this.log('SESSION START', { meterStart_kWh: meterStart / 1000 });
     db.prepare('INSERT INTO ocpp_bridge_sessions (bridge_id, local_id, mode, started_at, meter_start_wh) VALUES (?, ?, ?, ?, ?)')
       .run(this.row.id, localId, this.mode, startedAt, meterStart).catch((e) => this.log('db-error', { error: e.message }));
-    this.enqueue('StartTransaction', { connectorId: 1, idTag: this.row.id_tag, meterStart, timestamp: startedAt }, localId);
+    this.persist();
+    if (!this.tryStartTransaction(false)) {
+      this.log('id-tag', { msg: `waiting up to ${this.row.auth_wait_s}s for an NFC tag or Loxone user` });
+      this.scheduleAuthTimeout();
+    }
+  }
+
+  scheduleAuthTimeout() {
+    clearTimeout(this.authTimer);
+    const tx = this.state.tx;
+    if (!tx) return;
+    const left = Math.max(0, Date.parse(tx.startedAt) + Math.max(0, Number(this.row.auth_wait_s) || 0) * 1000 - Date.now());
+    this.authTimer = setTimeout(() => this.tryStartTransaction(true), left);
+    this.authTimer.unref?.();
+  }
+
+  // Sends StartTransaction once the idTag is known (or `force`d to the fallback). Its timestamp and
+  // meterStart stay those of the plug-in, however long the authorization took. Returns true once sent.
+  tryStartTransaction(force) {
+    const tx = this.state.tx;
+    if (!tx || !tx.pendingStart) return !!tx;
+    const decision = resolveIdTag({
+      mode: this.row.id_tag_mode, fixedTag: this.row.id_tag, nfc: this.nfcSeen, sessionUser: this.sessionUser,
+      userMap: this.userMap, sessionStart: Date.parse(tx.startedAt), force,
+    });
+    if (!decision) return false;
+    clearTimeout(this.authTimer);
+    tx.pendingStart = false;
+    tx.idTag = decision.tag;
+    tx.idTagSource = decision.source;
+    this.log('id-tag', { idTag: decision.tag, source: decision.source });
+    db.prepare('UPDATE ocpp_bridge_sessions SET id_tag = ?, id_tag_source = ? WHERE bridge_id = ? AND local_id = ? AND mode = ?')
+      .run(decision.tag, decision.source, this.row.id, tx.localId, this.mode).catch(() => {});
+    this.enqueue('StartTransaction', { connectorId: 1, idTag: decision.tag, meterStart: tx.meterStart, timestamp: tx.startedAt }, tx.localId);
+    return true;
   }
 
   stopTx(reason, energyLoxone) {
     const tx = this.state.tx;
     if (!tx) return;
+    if (tx.pendingStart) this.tryStartTransaction(true); // unplugged before any authorization arrived
     const meterStop = toWh(this.values.total);
     const ts = new Date().toISOString();
     this.log('SESSION STOP', { charged_kWh: (meterStop - tx.meterStart) / 1000, loxone_kWh: energyLoxone, reason });
@@ -217,7 +317,7 @@ class BridgeRunner {
       .run(ts, meterStop, energyLoxone ?? null, reason, this.row.id, tx.localId, this.mode).catch((e) => this.log('db-error', { error: e.message }));
     logSystemEvent(`OCPP bridge "${this.row.name}": session stopped, ${((meterStop - tx.meterStart) / 1000).toFixed(3)} kWh (${this.mode})`).catch(() => {});
     this.enqueue('StopTransaction', {
-      idTag: this.row.id_tag, meterStop, timestamp: ts, reason,
+      idTag: tx.idTag || this.row.id_tag, meterStop, timestamp: ts, reason,
       transactionData: [{ timestamp: ts, sampledValue: [{ value: String(meterStop), measurand: 'Energy.Active.Import.Register', unit: 'Wh', context: 'Transaction.End' }] }],
     }, tx.localId);
     this.state.tx = null;
@@ -226,7 +326,7 @@ class BridgeRunner {
   }
 
   sendMeterValues() {
-    if (!this.state.tx || this.values.total === undefined) return;
+    if (!this.state.tx || this.state.tx.pendingStart || this.values.total === undefined) return;
     this.enqueue('MeterValues', { connectorId: 1, meterValue: [{ timestamp: new Date().toISOString(), sampledValue: [
       { value: String(toWh(this.values.total)), measurand: 'Energy.Active.Import.Register', unit: 'Wh', context: 'Sample.Periodic' },
       { value: String(toWh(this.values.actual)), measurand: 'Power.Active.Import', unit: 'W', context: 'Sample.Periodic' },
@@ -423,6 +523,7 @@ class BridgeRunner {
       values: { connected: this.values.connected, active: this.values.active, actual: this.values.actual, total: this.values.total },
       connectorStatus: this.lastStatus,
       transaction: this.state.tx ? { ...this.state.tx, transactionId: this.state.txMap[this.state.tx.localId] ?? null } : null,
+      idTagMode: this.row.id_tag_mode === 'auto' ? 'auto' : 'fixed',
       stopPending: !!this.stopTimer,
       queueLength: this.state.queue.length,
       lastError: this.lastError,
@@ -504,5 +605,5 @@ function getBridgeLog(id) {
 
 module.exports = {
   startOcppBridges, syncRunners, getBridgeStatus, getBridgeLog, testBackendConnection,
-  wallboxStatus, getConfigurationReply, restoreState,
+  wallboxStatus, getConfigurationReply, restoreState, normalizeNfcTag, parseUserTagMap, resolveIdTag,
 };

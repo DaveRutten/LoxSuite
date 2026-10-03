@@ -86,7 +86,8 @@
         ['Backend', s.mode === 'live' ? (s.connected ? (s.booted ? 'Connected, accepted' : 'Connected') : 'Not connected') : '—'],
         ['Wallbox', s.wallboxReady ? ('car ' + (Number(s.values.connected) === 1 ? 'plugged in' : 'not plugged in') + (Number(s.values.active) === 1 ? ', charging ' + Number(s.values.actual || 0).toFixed(2) + ' kW' : '') + ', meter ' + Number(s.values.total || 0).toFixed(3) + ' kWh') : 'waiting for live data'],
         ['Connector status', s.connectorStatus || '—'],
-        ['Session', s.transaction ? ('since ' + dt(s.transaction.startedAt) + ', transaction ' + (s.transaction.transactionId == null ? 'pending' : s.transaction.transactionId) + (s.stopPending ? ' (stopping…)' : '')) : (s.stopPending ? 'stopping…' : 'none')],
+        ['Session', s.transaction ? ('since ' + dt(s.transaction.startedAt) + (s.transaction.pendingStart ? ', waiting for an ID tag from Loxone' : ', ID tag ' + (s.transaction.idTag || '—') + ', transaction ' + (s.transaction.transactionId == null ? 'pending' : s.transaction.transactionId)) + (s.stopPending ? ' (stopping…)' : '')) : (s.stopPending ? 'stopping…' : 'none')],
+        ['ID tag mode', s.idTagMode === 'auto' ? 'Automatic (from Loxone)' : 'Fixed'],
         ['Queued messages', s.queueLength],
       ];
       if (s.lastError) rows.push(['Last error', '<span style="color: var(--danger);">' + esc(s.lastError) + '</span>']);
@@ -94,11 +95,11 @@
     }
     var ses = data.sessions || [];
     document.getElementById('ocpp-sessions').innerHTML = ses.length
-      ? '<table><thead><tr><th>Start</th><th>Stop</th><th>Meter start</th><th>Meter stop</th><th>kWh</th><th>Transaction</th><th>Mode</th></tr></thead><tbody>' +
+      ? '<table><thead><tr><th>Start</th><th>Stop</th><th>Meter start</th><th>Meter stop</th><th>kWh</th><th>ID tag</th><th>Transaction</th><th>Mode</th></tr></thead><tbody>' +
         ses.map(function (x) {
           return '<tr><td>' + esc(dt(x.started_at)) + '</td><td>' + esc(x.stopped_at ? dt(x.stopped_at) : 'running') +
             '</td><td>' + kwh(x.meter_start_wh) + '</td><td>' + kwh(x.meter_stop_wh) + '</td><td>' + (x.meter_stop_wh == null ? '' : ((x.meter_stop_wh - x.meter_start_wh) / 1000).toFixed(3)) +
-            '</td><td>' + esc(x.transaction_id == null ? '' : x.transaction_id) + '</td><td>' + esc(x.mode) + '</td></tr>';
+            '</td><td>' + esc(x.id_tag ? x.id_tag + ' (' + x.id_tag_source + ')' : '') + '</td><td>' + esc(x.transaction_id == null ? '' : x.transaction_id) + '</td><td>' + esc(x.mode) + '</td></tr>';
         }).join('') + '</tbody></table>'
       : '<p class="hint" style="margin:0;">No sessions recorded yet.</p>';
     document.getElementById('ocpp-log').textContent = (data.log || []).slice().reverse().map(function (l) {

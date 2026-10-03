@@ -13,6 +13,7 @@ const { logSystemEvent } = require('../auditLog');
 const loxoneWebSocket = require('../loxoneWebSocket');
 const ocppExport = require('../ocppExport');
 const { getDisplayTimezone } = require('../dateFormat');
+const { fetchMiniserver } = require('../loxone');
 
 const router = express.Router();
 
@@ -32,6 +33,35 @@ async function wallboxOptions() {
   return options;
 }
 
+// NFC Code Touch controls, for the automatic-ID-tag picker.
+async function nfcOptions() {
+  const miniservers = await db.prepare('SELECT * FROM miniservers ORDER BY name').all();
+  const options = [];
+  for (const ms of miniservers) {
+    try {
+      const structure = await loxoneStructure.getStructure(ms);
+      for (const [uuid, c] of Object.entries(structure.controls || {})) {
+        if (c.type === 'NfcCodeTouch') options.push({ miniserverId: ms.id, miniserverName: ms.name, uuid, name: c.name });
+      }
+    } catch { /* unreachable Miniserver */ }
+  }
+  return options;
+}
+
+// Serial-number suggestion from the Hardware page's device list (Tree/Air devices with their
+// serials) — the Wallbox block itself carries no serial. First device whose type or name mentions
+// a Wallbox; null when Hardware polling hasn't seen one.
+async function wallboxSerialSuggestion() {
+  try {
+    const row = await db.prepare(
+      "SELECT serial FROM loxone_hardware_devices WHERE serial IS NOT NULL AND serial <> '' AND (LOWER(type) LIKE '%wallbox%' OR LOWER(name) LIKE '%wallbox%') ORDER BY id LIMIT 1"
+    ).get();
+    return row?.serial || null;
+  } catch {
+    return null;
+  }
+}
+
 // Parses + validates the shared create/update form. Returns { values } or { error }.
 function parseForm(body, { requirePassword }) {
   const [miniserverId, controlUuid] = String(body.wallbox || '').split('|');
@@ -49,6 +79,10 @@ function parseForm(body, { requirePassword }) {
     meter_interval_s: Math.max(10, Math.min(3600, Number(body.meter_interval_s) || 60)),
     stop_delay_s: Math.max(0, Math.min(900, Number(body.stop_delay_s) || 0)),
     password: String(body.password || ''),
+    id_tag_mode: body.id_tag_mode === 'auto' ? 'auto' : 'fixed',
+    nfc_control_uuid: String(body.nfc_control_uuid || '').trim() || null,
+    user_tag_map: String(body.user_tag_map || '').trim() || null,
+    auth_wait_s: Math.max(0, Math.min(900, Number(body.auth_wait_s) || 0)),
   };
   if (!values.name) return { error: 'Name is required.' };
   if (!values.miniserver_id || !values.control_uuid) return { error: 'Pick a Wallbox.' };
@@ -64,8 +98,21 @@ router.get('/', asyncHandler(async (req, res) => {
     `SELECT b.*, ms.name AS miniserver_name FROM ocpp_bridges b
      JOIN miniservers ms ON ms.id = b.miniserver_id ORDER BY b.name`
   ).all();
-  const rows = bridges.map((b) => ({ ...b, status: ocppBridge.getBridgeStatus(b.id) }));
-  res.render('ocpp-bridges', { bridges: rows, wallboxes: await wallboxOptions(), error: req.query.error || null });
+  const rows = [];
+  for (const b of bridges) {
+    const last = await db.prepare(
+      'SELECT stopped_at, meter_start_wh, meter_stop_wh, mode FROM ocpp_bridge_sessions WHERE bridge_id = ? AND stopped_at IS NOT NULL ORDER BY id DESC LIMIT 1'
+    ).get(b.id);
+    rows.push({
+      ...b,
+      status: ocppBridge.getBridgeStatus(b.id),
+      lastSession: last ? { stoppedAt: last.stopped_at, kwh: (last.meter_stop_wh - last.meter_start_wh) / 1000, mode: last.mode } : null,
+    });
+  }
+  res.render('ocpp-bridges', {
+    bridges: rows, wallboxes: await wallboxOptions(), nfcs: await nfcOptions(),
+    serialSuggestion: await wallboxSerialSuggestion(), error: req.query.error || null,
+  });
 }));
 
 router.post('/', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
@@ -73,15 +120,54 @@ router.post('/', requirePermission('miniservers', 'edit'), asyncHandler(async (r
   if (error) return res.redirect(`/ocpp?error=${encodeURIComponent(error)}`);
   const now = new Date().toISOString();
   const id = await db.insertReturningId(
-    `INSERT INTO ocpp_bridges (name, miniserver_id, control_uuid, enabled, mode, server_url, charge_point_id, password, id_tag, serial, ean, meter_interval_s, stop_delay_s, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO ocpp_bridges (name, miniserver_id, control_uuid, enabled, mode, server_url, charge_point_id, password, id_tag, serial, ean, meter_interval_s, stop_delay_s, id_tag_mode, nfc_control_uuid, user_tag_map, auth_wait_s, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [values.name, values.miniserver_id, values.control_uuid, values.enabled, values.mode, values.server_url,
       values.charge_point_id, values.password ? encrypt(values.password) : null, values.id_tag, values.serial, values.ean,
-      values.meter_interval_s, values.stop_delay_s, now, now]
+      values.meter_interval_s, values.stop_delay_s, values.id_tag_mode, values.nfc_control_uuid, values.user_tag_map, values.auth_wait_s, now, now]
   );
   await logSystemEvent(`OCPP bridge "${values.name}" created (${values.mode}) by ${req.session?.username || 'unknown user'}`).catch(() => {});
   await ocppBridge.syncRunners();
   return res.redirect(`/ocpp/${id}`);
+}));
+
+// NFC tags known to the Miniserver's user management (Loxone "getuserlist2" + "getuser/<uuid>"),
+// so a tag can be picked as the bridge's ID tag even when it's never used at the Wallbox itself.
+// Needs the LoxSuite Miniserver user to have user-management rights; on any failure the picker
+// just says so and the tag can still be typed by hand. Field names are read defensively since the
+// exact shape differs a little between firmware versions.
+function parseLL(body) {
+  const v = body?.LL?.value;
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v); } catch { return v; }
+}
+router.get('/loxone-nfc-tags.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
+  if (!ms) return res.status(404).json({ ok: false, message: 'Miniserver not found.' });
+  try {
+    const listRes = await fetchMiniserver(ms, '/jdev/sps/getuserlist2', { timeoutMs: 8000 });
+    if (!listRes.ok) throw new Error(`HTTP ${listRes.status} (does the LoxSuite user have user-management rights?)`);
+    const users = parseLL(await listRes.json());
+    if (!Array.isArray(users)) throw new Error('Unexpected user list from the Miniserver.');
+    const tags = [];
+    for (const u of users.slice(0, 100)) {
+      if (!u?.uuid) continue;
+      try {
+        const r = await fetchMiniserver(ms, `/jdev/sps/getuser/${encodeURIComponent(u.uuid)}`, { timeoutMs: 8000 });
+        if (!r.ok) continue;
+        const detail = parseLL(await r.json()) || {};
+        const list = detail.nfcTags || detail.nfcTag || detail.tags || [];
+        (Array.isArray(list) ? list : []).forEach((t) => {
+          const raw = t?.id ?? t?.tagId ?? t?.value;
+          if (!raw) return;
+          tags.push({ user: u.name || detail.name || '', name: t.name || '', raw: String(raw), idTag: ocppBridge.normalizeNfcTag(raw) });
+        });
+      } catch { /* skip this user */ }
+    }
+    return res.json({ ok: true, tags });
+  } catch (err) {
+    return res.json({ ok: false, message: err.message });
+  }
 }));
 
 router.get('/:id', asyncHandler(async (req, res) => {
@@ -92,7 +178,8 @@ router.get('/:id', asyncHandler(async (req, res) => {
   if (!bridge) return res.status(404).render('forbidden', { message: 'OCPP bridge not found.' });
   const sessions = await db.prepare('SELECT * FROM ocpp_bridge_sessions WHERE bridge_id = ? ORDER BY id DESC LIMIT 25').all(bridge.id);
   return res.render('ocpp-bridge-edit', {
-    bridge, sessions, wallboxes: await wallboxOptions(), quarters: ocppExport.recentQuarters(),
+    bridge, sessions, wallboxes: await wallboxOptions(), nfcs: await nfcOptions(), quarters: ocppExport.recentQuarters(),
+    serialSuggestion: await wallboxSerialSuggestion(),
     status: ocppBridge.getBridgeStatus(bridge.id),
     error: req.query.error || null, saved: req.query.saved === '1',
   });
@@ -179,10 +266,12 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandle
   const password = values.password ? encrypt(values.password) : existing.password;
   await db.prepare(
     `UPDATE ocpp_bridges SET name = ?, miniserver_id = ?, control_uuid = ?, enabled = ?, mode = ?, server_url = ?,
-       charge_point_id = ?, password = ?, id_tag = ?, serial = ?, ean = ?, meter_interval_s = ?, stop_delay_s = ?, updated_at = ?
+       charge_point_id = ?, password = ?, id_tag = ?, serial = ?, ean = ?, meter_interval_s = ?, stop_delay_s = ?,
+       id_tag_mode = ?, nfc_control_uuid = ?, user_tag_map = ?, auth_wait_s = ?, updated_at = ?
      WHERE id = ?`
   ).run(values.name, values.miniserver_id, values.control_uuid, values.enabled, values.mode, values.server_url,
     values.charge_point_id, password, values.id_tag, values.serial, values.ean, values.meter_interval_s, values.stop_delay_s,
+    values.id_tag_mode, values.nfc_control_uuid, values.user_tag_map, values.auth_wait_s,
     new Date().toISOString(), existing.id);
   if (existing.mode !== values.mode || existing.enabled !== values.enabled) {
     await logSystemEvent(`OCPP bridge "${values.name}" is now ${values.enabled ? 'enabled' : 'disabled'} (${values.mode})`).catch(() => {});

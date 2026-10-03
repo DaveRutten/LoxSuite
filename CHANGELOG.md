@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.21.0-alpha.1] - 2026-10-03
+
+### Added
+- **OCPP bridge: automatic ID tag** — the ID tag can now be *Fixed* (as before) or *Automatic*: the tag
+  of a badge read on a chosen NFC Code Touch around plug-in (normalised like Loxone's own OCPP
+  connector does: hex, without the "EC" specifier and trailing zeros), else the tag mapped to the
+  Loxone user the Wallbox reports for the session ("User = TAG" lines), else the fixed tag as
+  fallback. StartTransaction waits up to a configurable time for that authorization but keeps the
+  plug-in time and meter reading. The session list shows which tag was sent and where it came from.
+- **Choose a Loxone NFC tag** — a picker next to the ID tag that lists the NFC tags in the
+  Miniserver's user management (also ones never used at the Wallbox), so one can be used as the
+  bridge's tag. Needs the LoxSuite Miniserver user to have user-management rights.
+- **Last session on the OCPP overview** — each bridge row shows the kWh and end time of its most
+  recent charging session.
+- **Serial number suggestion** — when adding a bridge, the serial is pre-filled from the Hardware
+  page's device list if it shows a Wallbox (the Wallbox block itself carries no serial).
+
+### Fixed
+- **OCPP page times** (status, sessions, log) are now shown in LoxSuite's display time zone instead
+  of UTC. The OCPP messages themselves keep their UTC timestamps, as the protocol requires.
+
 ## [0.20.0-alpha.1] - 2026-10-03
 
 ### Added

@@ -81,3 +81,28 @@ test('buildXlsx produces a zip with a worksheet and buildCsv a semicolon file', 
   assert.match(csv, /^sessie;starttijd/);
   assert.match(csv, /2026-07-01 14:01:11;2026-07-01 18:59:00;1\.000;2\.500;1\.500;gemeten/);
 });
+
+const { normalizeNfcTag, parseUserTagMap, resolveIdTag } = require('../src/ocppBridge');
+
+test('normalizeNfcTag turns a Loxone NFC tag into an OCPP idTag', () => {
+  assert.equal(normalizeNfcTag('EC B0 2B 05 8D 41 4C 27 EC'), 'B02B058D414C27');
+  assert.equal(normalizeNfcTag('04:a1:b2:c3:00:00'), '04A1B2C3');
+  assert.equal(normalizeNfcTag(''), '');
+});
+
+test('parseUserTagMap reads "user = tag" lines case-insensitively', () => {
+  const m = parseUserTagMap('Dave Rutten = B02B058D414C27\nGuest: GUEST01\n\njunk');
+  assert.equal(m.get('dave rutten'), 'B02B058D414C27');
+  assert.equal(m.get('guest'), 'GUEST01');
+  assert.equal(m.size, 2);
+});
+
+test('resolveIdTag: fixed, NFC, mapped user, waiting and fallback', () => {
+  const base = { fixedTag: 'FIX', userMap: parseUserTagMap('Dave = DAVE1'), sessionStart: 1_000_000 };
+  assert.deepEqual(resolveIdTag({ ...base, mode: 'fixed' }), { tag: 'FIX', source: 'fixed' });
+  assert.deepEqual(resolveIdTag({ ...base, mode: 'auto', nfc: { tag: 'EC 04 A1 B2 C3 EC', at: 1_000_500 } }), { tag: '04A1B2C3', source: 'nfc' });
+  assert.equal(resolveIdTag({ ...base, mode: 'auto', nfc: { tag: '04A1', at: 1_000_000 - 200_000 } }), null); // stale read
+  assert.deepEqual(resolveIdTag({ ...base, mode: 'auto', sessionUser: 'dave' }), { tag: 'DAVE1', source: 'user' });
+  assert.equal(resolveIdTag({ ...base, mode: 'auto', sessionUser: 'someone else' }), null);
+  assert.deepEqual(resolveIdTag({ ...base, mode: 'auto', force: true }), { tag: 'FIX', source: 'fallback' });
+});

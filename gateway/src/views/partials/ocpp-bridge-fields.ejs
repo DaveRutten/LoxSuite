@@ -29,17 +29,55 @@
     <label>Password (OCPP Basic auth)</label>
     <input type="password" name="password" autocomplete="new-password" placeholder="<%= isNew ? '' : 'Leave blank to keep the current password' %>">
   </div>
-  <div><label>ID tag</label><input type="text" name="id_tag" value="<%= b.id_tag || '' %>" maxlength="20" required></div>
+  <div>
+    <label>ID tag</label>
+    <select name="id_tag_mode" id="ocpp-idtag-mode">
+      <option value="fixed" <%= b.id_tag_mode !== 'auto' ? 'selected' : '' %>>Fixed: always use the tag below</option>
+      <option value="auto" <%= b.id_tag_mode === 'auto' ? 'selected' : '' %>>Automatic: from Loxone, else the tag below</option>
+    </select>
+  </div>
+  <div>
+    <label>ID tag (fixed / fallback)</label>
+    <input type="text" name="id_tag" id="ocpp-idtag" value="<%= b.id_tag || '' %>" maxlength="20" required>
+    <button type="button" class="btn-soft" id="ocpp-nfc-pick-btn" style="margin-top:0.35rem;"><%- icon('list') %> Choose a Loxone NFC tag</button>
+    <select id="ocpp-nfc-pick" hidden style="margin-top:0.35rem;"></select>
+    <p class="hint" id="ocpp-nfc-pick-msg" style="margin:0.3rem 0 0;" hidden></p>
+  </div>
+</div>
+<div class="form-grid" id="ocpp-idtag-auto" style="margin-top:0.85rem;" <%= b.id_tag_mode === 'auto' ? '' : 'hidden' %>>
+  <div>
+    <label>NFC Code Touch (optional)</label>
+    <select name="nfc_control_uuid">
+      <option value="">— none —</option>
+      <% (typeof nfcs !== 'undefined' ? nfcs : []).forEach(n => { %>
+        <option value="<%= n.uuid %>" <%= b.nfc_control_uuid === n.uuid ? 'selected' : '' %>><%= n.name %> (<%= n.miniserverName %>)</option>
+      <% }) %>
+    </select>
+  </div>
+  <div>
+    <label>Loxone user &rarr; tag (optional, one per line)</label>
+    <textarea name="user_tag_map" rows="3" placeholder="Dave Rutten = B02B058D414C27"><%= b.user_tag_map || '' %></textarea>
+  </div>
+  <div><label>Wait for authorization (s)</label><input type="number" name="auth_wait_s" min="0" max="900" value="<%= b.auth_wait_s != null ? b.auth_wait_s : 60 %>"></div>
 </div>
 <p class="hint" style="margin-top:0.5rem;">
   The ChargePoint ID is appended to the Server URL (<code>wss://…/&lt;ChargePoint ID&gt;</code>) and also used as the
   Basic-auth username. The ID tag is sent with every transaction; register the same tag at your backend.
+  <strong>Automatic</strong> uses the tag of a badge read on the chosen NFC Code Touch around plug-in (normalised like
+  Loxone's own OCPP connector does: hex, without the "EC" specifier and trailing zeros), else the tag mapped to the
+  Loxone user the Wallbox reports for the session, else the fixed tag. The session start is reported after the
+  authorization arrives (or the wait time passes), but with the plug-in time and meter reading.
   The bridge identifies itself as <code>Loxone / WallboxTree-LoxSuite</code>.
 </p>
 
 <h2 style="margin-top:1.3rem;">Details</h2>
 <div class="form-grid">
-  <div><label>Serial number (optional)</label><input type="text" name="serial" value="<%= b.serial || '' %>" placeholder="B05F4595"></div>
+  <% const serialSug = typeof serialSuggestion !== 'undefined' ? serialSuggestion : null; %>
+  <div>
+    <label>Serial number (optional)</label>
+    <input type="text" name="serial" value="<%= b.serial || (isNew && serialSug ? serialSug : '') %>" placeholder="<%= serialSug || 'B05F4595' %>">
+    <% if (serialSug) { %><p class="hint" style="margin:0.3rem 0 0;">Hardware lists a Wallbox with serial <code><%= serialSug %></code>.</p><% } %>
+  </div>
   <div><label>EAN (optional, export title)</label><input type="text" name="ean" value="<%= b.ean || '' %>"></div>
   <div><label>Meter values every (s)</label><input type="number" name="meter_interval_s" min="10" max="3600" value="<%= b.meter_interval_s %>"></div>
   <div><label>Stop delay after unplug (s)</label><input type="number" name="stop_delay_s" min="0" max="900" value="<%= b.stop_delay_s %>"></div>
@@ -48,3 +86,37 @@
   The Wallbox's meter reading only updates about once a minute, so a session is closed a little after the car is
   unplugged to capture the final reading. Re-plugging within that window continues the same session.
 </p>
+<script>
+(function () {
+  var mode = document.getElementById('ocpp-idtag-mode');
+  var box = document.getElementById('ocpp-idtag-auto');
+  if (mode && box) mode.addEventListener('change', function () { box.hidden = mode.value !== 'auto'; });
+
+  // Pick any NFC tag known to the Miniserver's user management (also ones never used at the Wallbox).
+  var btn = document.getElementById('ocpp-nfc-pick-btn');
+  var pick = document.getElementById('ocpp-nfc-pick');
+  var msg = document.getElementById('ocpp-nfc-pick-msg');
+  var input = document.getElementById('ocpp-idtag');
+  var wb = document.querySelector('select[name="wallbox"]');
+  if (btn) btn.addEventListener('click', function () {
+    var msId = wb && wb.value ? wb.value.split('|')[0] : '';
+    if (!msId) { msg.hidden = false; msg.textContent = 'Pick a Wallbox first.'; return; }
+    btn.disabled = true; msg.hidden = false; msg.textContent = 'Reading NFC tags from the Miniserver…';
+    fetch('/ocpp/loxone-nfc-tags.json?miniserver_id=' + encodeURIComponent(msId))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { msg.textContent = 'Could not read NFC tags: ' + d.message; return; }
+        if (!d.tags.length) { msg.textContent = 'No NFC tags found in the Miniserver\'s user management.'; return; }
+        pick.innerHTML = '<option value="">— choose a tag —</option>' + d.tags.map(function (t) {
+          var label = (t.user ? t.user + ': ' : '') + (t.name || 'tag') + ' — ' + t.idTag;
+          return '<option value="' + t.idTag.replace(/"/g, '') + '">' + label.replace(/</g, '&lt;') + '</option>';
+        }).join('');
+        pick.hidden = false;
+        msg.textContent = d.tags.length + ' tag(s) found. Register the chosen tag at your backend too.';
+      })
+      .catch(function (e) { msg.textContent = 'Could not read NFC tags: ' + e.message; })
+      .finally(function () { btn.disabled = false; });
+  });
+  if (pick) pick.addEventListener('change', function () { if (pick.value) input.value = pick.value; });
+})();
+</script>
