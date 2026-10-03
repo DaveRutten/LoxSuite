@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.21.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.22.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -533,6 +533,9 @@ online there.
   outage or restart. Make sure Loxone's own OCPP connector isn't using the same ChargePoint ID.
 - **Quarterly export**: Excel or CSV of all sessions in a quarter with meter readings at start/end,
   for manual uploads when sessions can't go over OCPP.
+- **Statistics**: today / week / month / quarter / previous quarter / year tiles, a per-month chart and
+  the last session's kWh. The same values are published as retained MQTT topics
+  (`loxsuite/ocpp/<id>/…`); *Use in Monitor & dashboards* adds them as monitors in one click.
 
 The bridge identifies itself as `Loxone / WallboxTree-LoxSuite`, so the backend can see the data
 comes through LoxSuite — check with your provider that they accept this kind of connection.

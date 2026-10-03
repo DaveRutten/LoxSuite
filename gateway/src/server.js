@@ -58,6 +58,7 @@ const { geoBlockMiddleware, startGeoBlockUpdater } = require('./geoBlock');
 const { startHardwarePolling } = require('./loxoneHardware');
 const { startLiveConnections } = require('./loxoneWebSocket');
 const { startOcppBridges } = require('./ocppBridge');
+const { startStatsPublisher } = require('./ocppStats');
 const mcpClient = require('./mcpClient');
 const requireAuth = require('./middleware/requireAuth');
 const loadUserContext = require('./middleware/loadUserContext');
@@ -350,6 +351,7 @@ async function main() {
   startHardwarePolling();
   startLiveConnections().catch((err) => console.error('Failed to start live Loxone connections:', err.message));
   startOcppBridges();
+  startStatsPublisher();
   mcpClient.startMcpClients().catch((err) => console.error('Failed to start MCP clients:', err.message));
   // A restart mid-turn (deploy, crash) abandons any AI Assistant reply still marked 'streaming' —
   // nothing will ever finalize that row otherwise, since the code path that would (routes/aiChat.js's

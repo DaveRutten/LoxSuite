@@ -106,3 +106,24 @@ test('resolveIdTag: fixed, NFC, mapped user, waiting and fallback', () => {
   assert.equal(resolveIdTag({ ...base, mode: 'auto', sessionUser: 'someone else' }), null);
   assert.deepEqual(resolveIdTag({ ...base, mode: 'auto', force: true }), { tag: 'FIX', source: 'fallback' });
 });
+
+const { computeStats, statTopics, statValues } = require('../src/ocppStats');
+
+test('computeStats: counters from Loxone, quarters and months from sessions', () => {
+  const tracker = parseTrackerEntries(TRACKER);
+  const s = computeStats({
+    tracker, recorded: [], currentTotalKwh: 5627.548,
+    live: { totalDay: 9.27, totalWeek: 53.96, totalMonth: 9.73, totalYear: 836.99, actual: 10.7 },
+    timeZone: 'Europe/Amsterdam', now: new Date('2026-10-03T20:00:00Z'), months: 6,
+  });
+  assert.equal(s.today, 9.27);
+  assert.equal(s.year, 836.99);
+  assert.equal(s.quarter.name, '2026Q4');
+  assert.equal(s.prevQuarter.name, '2026Q3');
+  assert.equal(s.prevQuarter.kwh, 20.926); // 13.358 (1 Jul) + 7.568 (30 Sep)
+  assert.equal(s.months.length, 6);
+  assert.equal(s.months[5].key, '2026-10');
+  assert.equal(s.months[0].incomplete, true); // May: before the session log starts
+  assert.equal(statTopics(3).quarter_kwh, 'loxsuite/ocpp/3/quarter_kwh');
+  assert.equal(statValues(s).power_kw, 10.7);
+});

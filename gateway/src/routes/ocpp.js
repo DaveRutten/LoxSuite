@@ -14,6 +14,8 @@ const loxoneWebSocket = require('../loxoneWebSocket');
 const ocppExport = require('../ocppExport');
 const { getDisplayTimezone } = require('../dateFormat');
 const { fetchMiniserver } = require('../loxone');
+const ocppStats = require('../ocppStats');
+const { reloadMqttMonitors } = require('../monitorCollector');
 
 const router = express.Router();
 
@@ -253,6 +255,38 @@ router.post('/:id/test', requirePermission('miniservers', 'edit'), asyncHandler(
     }
   }
   return res.json({ backend, wallbox });
+}));
+
+router.get('/:id/stats.json', asyncHandler(async (req, res) => {
+  const bridge = await db.prepare('SELECT * FROM ocpp_bridges WHERE id = ?').get(req.params.id);
+  if (!bridge) return res.status(404).json({ error: 'Not found.' });
+  const result = await ocppStats.loadStats(bridge);
+  return res.json({ ...result, topics: ocppStats.statTopics(bridge.id), labels: ocppStats.STAT_LABELS });
+}));
+
+// Adds the chosen statistics as MQTT monitors (Monitor page / dashboards). JSON, so CSRF-exempt.
+// Skips topics that are already monitored; values arrive via the retained loxsuite/ocpp/<id>/*
+// topics ocppStats publishes every minute (on change).
+router.post('/:id/monitor', requirePermission('monitor', 'edit'), asyncHandler(async (req, res) => {
+  const bridge = await db.prepare('SELECT * FROM ocpp_bridges WHERE id = ?').get(req.params.id);
+  if (!bridge) return res.status(404).json({ ok: false, message: 'Not found.' });
+  const topics = ocppStats.statTopics(bridge.id);
+  const wanted = (Array.isArray(req.body?.metrics) ? req.body.metrics : []).filter((k) => topics[k]);
+  if (!wanted.length) return res.json({ ok: false, message: 'Pick at least one value.' });
+  const created = [];
+  const skipped = [];
+  for (const key of wanted) {
+    const topic = topics[key];
+    const exists = await db.prepare("SELECT id FROM monitors WHERE source_type = 'mqtt' AND mqtt_topic = ?").get(topic);
+    if (exists) { skipped.push(key); continue; }
+    await db.prepare(
+      `INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at, config) VALUES ('mqtt', ?, ?, 1, ?, '{}')`
+    ).run(`${bridge.name} – ${ocppStats.STAT_LABELS[key]}`, topic, new Date().toISOString());
+    created.push(key);
+  }
+  if (created.length) await reloadMqttMonitors();
+  ocppStats.publishAllStats().catch(() => {});
+  return res.json({ ok: true, created, skipped });
 }));
 
 router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {

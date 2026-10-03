@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.22.0-alpha.1] - 2026-10-03
+
+### Added
+- **Charging statistics on each OCPP bridge page** — tiles for today, this week, this month, this
+  quarter, the previous quarter (with a direct export link) and this year, plus a per-month bar chart
+  and the last session's kWh. Day/week/month/year come straight from the Wallbox's own counters in
+  Loxone; quarters and the monthly chart are built from charging sessions (the bridge's own, else the
+  Wallbox's session log), with months older than that log shown as "no data".
+- **Charging statistics in Monitor & dashboards** — LoxSuite publishes these values as retained MQTT
+  topics `loxsuite/ocpp/<id>/{today,week,month,quarter,prev_quarter,year,last_session}_kwh`,
+  `power_kw` and `meter_kwh` (checked every minute, published on change). *Use in Monitor &
+  dashboards* on the bridge page adds the chosen ones as monitors in one click, so they can be charted
+  over time and put on dashboards like any other value.
+
 ## [0.21.0-alpha.1] - 2026-10-03
 
 ### Added
