@@ -1,0 +1,50 @@
+<div class="form-grid">
+  <div><label>Name</label><input type="text" name="name" value="<%= b.name || '' %>" placeholder="Carport" required></div>
+  <div>
+    <label>Wallbox</label>
+    <select name="wallbox" required>
+      <% if (!wallboxes.length) { %><option value="">No Wallbox found on any reachable Miniserver</option><% } %>
+      <% wallboxes.forEach(w => { const val = w.miniserverId + '|' + w.uuid; %>
+        <option value="<%= val %>" <%= (b.miniserver_id === w.miniserverId && b.control_uuid === w.uuid) ? 'selected' : '' %>><%= w.name %> (<%= w.miniserverName %>)</option>
+      <% }) %>
+    </select>
+  </div>
+  <div><label>Enabled</label><%- toggleSwitch('enabled', !!b.enabled) %></div>
+</div>
+
+<h2 style="margin-top:1.3rem;">OCPP backend</h2>
+<div class="form-grid">
+  <div>
+    <label>Mode</label>
+    <select name="mode">
+      <option value="dry" <%= b.mode !== 'live' ? 'selected' : '' %>>Dry run (log only, send nothing)</option>
+      <option value="live" <%= b.mode === 'live' ? 'selected' : '' %>>Live</option>
+    </select>
+  </div>
+  <div><label>Server URL</label><input type="text" name="server_url" value="<%= b.server_url || '' %>" placeholder="wss://ocpp.example.com" required></div>
+  <div><label>ChargePoint ID</label><input type="text" name="charge_point_id" value="<%= b.charge_point_id || '' %>" placeholder="LL-XXXXXX" required></div>
+</div>
+<div class="form-grid" style="margin-top:0.85rem;">
+  <div>
+    <label>Password (OCPP Basic auth)</label>
+    <input type="password" name="password" autocomplete="new-password" placeholder="<%= isNew ? '' : 'Leave blank to keep the current password' %>">
+  </div>
+  <div><label>ID tag</label><input type="text" name="id_tag" value="<%= b.id_tag || '' %>" maxlength="20" required></div>
+</div>
+<p class="hint" style="margin-top:0.5rem;">
+  The ChargePoint ID is appended to the Server URL (<code>wss://…/&lt;ChargePoint ID&gt;</code>) and also used as the
+  Basic-auth username. The ID tag is sent with every transaction; register the same tag at your backend.
+  The bridge identifies itself as <code>Loxone / WallboxTree-LoxSuite</code>.
+</p>
+
+<h2 style="margin-top:1.3rem;">Details</h2>
+<div class="form-grid">
+  <div><label>Serial number (optional)</label><input type="text" name="serial" value="<%= b.serial || '' %>" placeholder="B05F4595"></div>
+  <div><label>EAN (optional, export title)</label><input type="text" name="ean" value="<%= b.ean || '' %>"></div>
+  <div><label>Meter values every (s)</label><input type="number" name="meter_interval_s" min="10" max="3600" value="<%= b.meter_interval_s %>"></div>
+  <div><label>Stop delay after unplug (s)</label><input type="number" name="stop_delay_s" min="0" max="900" value="<%= b.stop_delay_s %>"></div>
+</div>
+<p class="hint" style="margin-top:0.5rem;">
+  The Wallbox's meter reading only updates about once a minute, so a session is closed a little after the car is
+  unplugged to capture the final reading. Re-plugging within that window continues the same session.
+</p>
