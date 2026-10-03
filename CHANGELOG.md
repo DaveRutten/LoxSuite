@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.20.0-alpha.1] - 2026-10-03
+
+### Added
+- **OCPP bridge (Loxone → OCPP)** — reports a Loxone Wallbox to an OCPP 1.6 backend (for example
+  Laadloon, for home-charging reimbursement / ERE registration) as a charge point, using the live
+  Wallbox data LoxSuite already receives over the Miniserver websocket. Built for setups where
+  Loxone's own OCPP Server Connector can't be used: that connector needs the Wallbox block and its
+  Charging Point on the same current-generation Miniserver, so a Wallbox on a Gen 1 Client of a Gen 2
+  Gateway reports "Wallbox Offline / Selfcheck Failed" and never sends a session (the API connector
+  can't be passed through a memory flag). New page **Loxone → OCPP**: pick the Wallbox, enter the
+  backend URL, ChargePoint ID, password (encrypted at rest) and ID tag. Starts in **Dry run** (logs
+  every message it would send, connects to nothing); switch to Live when ready. A session starts at
+  plug-in and stops after unplug with a configurable delay (default 90 s) so the Wallbox's
+  once-a-minute MID meter update is still captured; Start/Stop/MeterValues go through a persistent
+  queue, so a backend outage or a LoxSuite restart loses nothing. The bridge identifies itself
+  honestly as `Loxone / WallboxTree-LoxSuite`. Includes a **Test connection** button (short
+  connection to the backend, no OCPP messages; plus a Wallbox live-data check), live status, a
+  session list and a message log.
+- **Quarterly charging-session export (Excel/CSV)** on each OCPP bridge page — every session of a
+  quarter with the MID meter reading at start and end, in the layout already accepted for manual
+  uploads (title row with serial/EAN, sessie / starttijd / eindtijd / startwaarde / eindwaarde /
+  verbruik_kWh, totals row). Sessions recorded by the bridge (dry run or live) use the readings taken
+  at plug-in/unplug; older ones come from the Wallbox's own session log on the Miniserver with
+  readings derived from the current meter total, marked as such per row. Works whether or not the
+  bridge itself is enabled.
+
 ## [0.19.4-alpha.1] - 2026-09-21
 
 ### Added

@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.19.4-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.20.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -509,6 +509,28 @@ and alerting are independent.
 </picture>
 
 *(Real data from a live installation.)*
+
+### OCPP (Loxone Wallbox → OCPP backend)
+
+Reports a Loxone Wallbox to an OCPP 1.6 backend (for example [Laadloon](https://www.laadloon.nl))
+as a charge point, from the live Wallbox data LoxSuite already receives. Use it when Loxone's own
+OCPP Server Connector can't be used — that connector needs the Wallbox and its Charging Point on the
+same current-generation Miniserver, so a Wallbox on a Gen 1 Client of a Gen 2 Gateway never comes
+online there.
+
+- **Setup**: Loxone → OCPP → *Add OCPP bridge*: pick the Wallbox, enter the backend's Server URL
+  (`wss://…`, without the ID), ChargePoint ID, password and the ID tag you registered at the backend.
+- **Dry run first**: logs every OCPP message it *would* send without connecting; switch Mode to Live
+  once a test session looks right. **Test connection** checks the saved backend settings (a short
+  connection, no OCPP messages) and the Wallbox's live data.
+- **Sessions**: start at plug-in, stop shortly after unplug (Stop delay, default 90 s, so the last
+  MID meter update is included). Transaction messages are queued persistently and re-sent after an
+  outage or restart. Make sure Loxone's own OCPP connector isn't using the same ChargePoint ID.
+- **Quarterly export**: Excel or CSV of all sessions in a quarter with meter readings at start/end,
+  for manual uploads when sessions can't go over OCPP.
+
+The bridge identifies itself as `Loxone / WallboxTree-LoxSuite`, so the backend can see the data
+comes through LoxSuite — check with your provider that they accept this kind of connection.
 
 ### MQTT → Loxone
 

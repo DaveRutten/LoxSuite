@@ -1,0 +1,52 @@
+<%- include('partials/head', { pageTitle: 'OCPP', active: 'ocpp' }) %>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+
+<p class="hint">
+  Reports a Loxone Wallbox to an OCPP 1.6 backend (for example Laadloon) as a charge point, using
+  the live Wallbox data LoxSuite already receives from the Miniserver. Meant for setups where
+  Loxone's own OCPP Server Connector can't be used, such as a Wallbox on a Gen 1 Client Miniserver.
+  Start in <strong>Dry run</strong>: it logs what it would send without connecting to the backend.
+  Each bridge page also has a <strong>quarterly export</strong> (Excel/CSV) of all charging sessions.
+</p>
+
+<div class="card">
+  <% if (!bridges.length) { %>
+    <p class="hint" style="margin:0;">No OCPP bridges yet.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Name</th><th>Miniserver</th><th>Backend</th><th>Mode</th><th>Status</th></tr></thead>
+      <tbody>
+        <% bridges.forEach(b => { const s = b.status; %>
+          <tr>
+            <td><a href="/ocpp/<%= b.id %>"><%= b.name %></a></td>
+            <td><%= b.miniserver_name %></td>
+            <td><code><%= b.server_url %>/<%= b.charge_point_id %></code></td>
+            <td><%= b.mode === 'live' ? 'Live' : 'Dry run' %></td>
+            <td>
+              <% if (!b.enabled) { %>Disabled
+              <% } else if (!s) { %>Starting&hellip;
+              <% } else if (s.mode === 'live' && !s.connected) { %><span style="color: var(--danger);">Not connected</span>
+              <% } else if (!s.wallboxReady) { %>Waiting for Wallbox data
+              <% } else { %><span style="color: var(--success);"><%= s.connectorStatus %><%= s.mode === 'live' ? '' : ' (dry run)' %></span><% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</div>
+
+<% if (canEdit('miniservers')) { %>
+<details class="card" <%= bridges.length ? '' : 'open' %>>
+  <summary><strong>Add OCPP bridge</strong></summary>
+  <form method="post" action="/ocpp" style="margin-top:0.8rem;">
+    <%- include('partials/ocpp-bridge-fields', { b: { mode: 'dry', enabled: 1, server_url: 'wss://ocpp.laadloon.nl', id_tag: 'LOXSUITE01', meter_interval_s: 60, stop_delay_s: 90 }, wallboxes, isNew: true }) %>
+    <div class="btn-row" style="margin-top:0.9rem;">
+      <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+    </div>
+  </form>
+</details>
+<% } %>
+
+<%- include('partials/foot') %>

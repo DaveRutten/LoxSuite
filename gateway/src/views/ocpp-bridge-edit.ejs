@@ -1,0 +1,125 @@
+<%- include('partials/head', { pageTitle: 'OCPP bridge: ' + bridge.name, active: 'ocpp' }) %>
+
+<p><a href="/ocpp">&larr; All OCPP bridges</a></p>
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);">Saved.</p><% } %>
+
+<div class="card">
+  <h2 style="margin-top:0;">Status</h2>
+  <div id="ocpp-status"><p class="hint" style="margin:0;"><%= bridge.enabled ? 'Loading…' : 'Disabled.' %></p></div>
+  <% if (canEdit('miniservers')) { %>
+  <div class="btn-row" style="margin-top:0.8rem;">
+    <button type="button" id="ocpp-test-btn" class="btn-test"><%- icon('refresh') %> Test connection</button>
+  </div>
+  <div id="ocpp-test-result" style="margin-top:0.6rem;"></div>
+  <p class="hint" style="margin:0.4rem 0 0;">Tests the <em>saved</em> settings: opens a short connection to the backend (no OCPP messages, nothing is registered) and checks the Wallbox's live data. If this bridge is already connected live, that connection is reported instead.</p>
+  <% } %>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Quarterly export</h2>
+  <p class="hint">
+    All charging sessions of a quarter with the MID meter reading at start and end, in the layout Laadloon accepts
+    for manual uploads. Sessions recorded by this bridge (dry run or live) use the readings taken at plug-in/unplug;
+    older sessions come from the Wallbox's session log on the Miniserver, with readings derived from the current meter
+    total (marked "afgeleid").
+  </p>
+  <form method="get" action="/ocpp/<%= bridge.id %>/export" class="btn-row" style="align-items:flex-end; gap:0.6rem;">
+    <div>
+      <label>Quarter</label>
+      <select name="quarter"><% quarters.forEach(q => { %><option value="<%= q %>"><%= q %></option><% }) %></select>
+    </div>
+    <div>
+      <label>Format</label>
+      <select name="format"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV</option></select>
+    </div>
+    <button type="submit" class="btn-soft"><%- icon('download') %> Download</button>
+  </form>
+</div>
+
+<% if (canEdit('miniservers')) { %>
+<div class="card">
+  <form method="post" action="/ocpp/<%= bridge.id %>/update">
+    <%- include('partials/ocpp-bridge-fields', { b: bridge, wallboxes, isNew: false }) %>
+    <div class="btn-row" style="margin-top:0.9rem;">
+      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+    </div>
+  </form>
+  <form method="post" action="/ocpp/<%= bridge.id %>/delete" style="margin-top:0.8rem;"
+        onsubmit="return confirm('Delete this OCPP bridge and its session history?');">
+    <button type="submit" class="btn-soft"><%- icon('trash') %> Delete</button>
+  </form>
+</div>
+<% } %>
+
+<div class="card">
+  <h2 style="margin-top:0;">Sessions</h2>
+  <div id="ocpp-sessions"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Log</h2>
+  <p class="hint">Last 300 events since LoxSuite started. Passwords are never logged.</p>
+  <pre id="ocpp-log" style="max-height:28rem; overflow:auto; font-size:0.75rem; white-space:pre-wrap;"></pre>
+</div>
+
+<script>
+(function () {
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var kwh = function (wh) { return wh == null ? '' : (wh / 1000).toFixed(3); };
+  function render(data) {
+    var s = data.status;
+    var st = document.getElementById('ocpp-status');
+    if (!s) {
+      st.innerHTML = '<p class="hint" style="margin:0;"><%= bridge.enabled ? "Starting…" : "Disabled." %></p>';
+    } else {
+      var rows = [
+        ['Mode', s.mode === 'live' ? 'Live' : 'Dry run (nothing is sent)'],
+        ['Backend', s.mode === 'live' ? (s.connected ? (s.booted ? 'Connected, accepted' : 'Connected') : 'Not connected') : '—'],
+        ['Wallbox', s.wallboxReady ? ('car ' + (Number(s.values.connected) === 1 ? 'plugged in' : 'not plugged in') + (Number(s.values.active) === 1 ? ', charging ' + Number(s.values.actual || 0).toFixed(2) + ' kW' : '') + ', meter ' + Number(s.values.total || 0).toFixed(3) + ' kWh') : 'waiting for live data'],
+        ['Connector status', s.connectorStatus || '—'],
+        ['Session', s.transaction ? ('since ' + new Date(s.transaction.startedAt).toLocaleString() + ', transaction ' + (s.transaction.transactionId == null ? 'pending' : s.transaction.transactionId) + (s.stopPending ? ' (stopping…)' : '')) : (s.stopPending ? 'stopping…' : 'none')],
+        ['Queued messages', s.queueLength],
+      ];
+      if (s.lastError) rows.push(['Last error', '<span style="color: var(--danger);">' + esc(s.lastError) + '</span>']);
+      st.innerHTML = '<table>' + rows.map(function (r) { return '<tr><th style="text-align:left; padding-right:1rem;">' + r[0] + '</th><td>' + (r[0] === 'Last error' ? r[1] : esc(r[1])) + '</td></tr>'; }).join('') + '</table>';
+    }
+    var ses = data.sessions || [];
+    document.getElementById('ocpp-sessions').innerHTML = ses.length
+      ? '<table><thead><tr><th>Start</th><th>Stop</th><th>Meter start</th><th>Meter stop</th><th>kWh</th><th>Transaction</th><th>Mode</th></tr></thead><tbody>' +
+        ses.map(function (x) {
+          return '<tr><td>' + esc(new Date(x.started_at).toLocaleString()) + '</td><td>' + esc(x.stopped_at ? new Date(x.stopped_at).toLocaleString() : 'running') +
+            '</td><td>' + kwh(x.meter_start_wh) + '</td><td>' + kwh(x.meter_stop_wh) + '</td><td>' + (x.meter_stop_wh == null ? '' : ((x.meter_stop_wh - x.meter_start_wh) / 1000).toFixed(3)) +
+            '</td><td>' + esc(x.transaction_id == null ? '' : x.transaction_id) + '</td><td>' + esc(x.mode) + '</td></tr>';
+        }).join('') + '</tbody></table>'
+      : '<p class="hint" style="margin:0;">No sessions recorded yet.</p>';
+    document.getElementById('ocpp-log').textContent = (data.log || []).slice().reverse().map(function (l) {
+      var rest = Object.assign({}, l); delete rest.ts; delete rest.kind;
+      return l.ts.slice(11, 19) + '  ' + l.kind + (Object.keys(rest).length ? '  ' + JSON.stringify(rest) : '');
+    }).join('\n');
+  }
+  var testBtn = document.getElementById('ocpp-test-btn');
+  if (testBtn) testBtn.addEventListener('click', function () {
+    var out = document.getElementById('ocpp-test-result');
+    testBtn.disabled = true;
+    out.innerHTML = '<p class="hint" style="margin:0;">Testing&hellip;</p>';
+    fetch('/ocpp/<%= bridge.id %>/test', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var line = function (label, x) {
+          return '<div><strong>' + label + ':</strong> <span style="color: var(--' + (x && x.ok ? 'success' : 'danger') + ');">' + (x && x.ok ? '&#10003; ' : '&#10007; ') + esc(x ? x.message : 'no answer') + '</span>' + (x && x.ms ? ' <span class="hint">(' + x.ms + ' ms)</span>' : '') + '</div>';
+        };
+        out.innerHTML = line('Backend', d.backend) + line('Wallbox', d.wallbox);
+      })
+      .catch(function (e) { out.innerHTML = '<p class="error" style="margin:0;">' + esc(e.message) + '</p>'; })
+      .finally(function () { testBtn.disabled = false; });
+  });
+  function tick() {
+    fetch('/ocpp/<%= bridge.id %>/status.json').then(function (r) { return r.json(); }).then(render).catch(function () {});
+  }
+  tick();
+  setInterval(tick, 5000);
+})();
+</script>
+
+<%- include('partials/foot') %>
