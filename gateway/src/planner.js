@@ -33,6 +33,8 @@ const DEFAULTS = {
   min_topup_kwh: 1,               // "plan" mode: don't start a session for less than this (a nearly full battery)
   min_on_s: 300,                  // once charging, keep going at least this long (no on/off flapping)
   min_off_s: 300,                 // once stopped, wait at least this long before starting again
+  full_hold: 'release',           // battery full and still plugged in: 'release' = keep the Wallbox open at the
+                                  // minimum so the car tops itself up (pre-heating from the grid), 'off' = 0
   solar_trust: 'low',             // 'low' (p10 of the forecast band) | 'expected' | 'bonus' (ignore solar when planning)
   max_price_eur_kwh: null,
   insufficient: 'charge',         // too few cheap intervals: 'charge' anyway | 'stop' at the price cap
@@ -73,14 +75,19 @@ function makePlan({
       chunks.push({ slot: s, kw: kwA, h, cost: pvValue, source: 'pv' });
       if (kwA < maxKw && price !== null) chunks.push({ slot: s, kw: maxKw - kwA, h, cost: price, source: 'grid', topUp: true });
     } else if (price !== null) {
-      const blended = (pv * pvValue + (maxKw - pv) * price) / maxKw;
-      chunks.push({ slot: s, kw: maxKw, h, cost: blended, source: pv > 0.3 ? 'mixed' : 'grid', pvShare: pv / maxKw });
+      // Not enough solar for the minimum on its own: the first part (up to the minimum power) uses the
+      // little solar there is, the rest is grid at the price. Picking the cheapest kWh then fills the
+      // cheapest intervals first — at full power where needed, so the car is full at the lowest cost.
+      const base = Math.min(minKw, maxKw);
+      const blended = (pv * pvValue + (base - pv) * price) / base;
+      chunks.push({ slot: s, kw: base, h, cost: blended, source: pv > 0.3 ? 'mixed' : 'grid', pvShare: pv / base });
+      if (maxKw > base) chunks.push({ slot: s, kw: maxKw - base, h, cost: price, source: 'grid', topUp: true });
     }
   }
 
   let picked = [];
   if (mode === 'now') {
-    picked = chunks.filter((c) => !c.topUp).sort((a, b) => a.slot.s - b.slot.s).map((c) => (c.source === 'pv' ? { ...c, kw: maxKw } : c));
+    picked = chunks.filter((c) => !c.topUp).sort((a, b) => a.slot.s - b.slot.s).map((c) => ({ ...c, kw: maxKw }));
   } else if (mode === 'pv') {
     picked = chunks.filter((c) => c.source === 'pv').sort((a, b) => a.slot.s - b.slot.s);
   } else if (mode === 'minpv') {
@@ -108,7 +115,8 @@ function makePlan({
     const take = Math.min(kwh, remaining);
     // A partial interval: lower power for longer (never below the minimum) rather than full power for
     // a minute or two — fewer start/stops for the car and the Wallbox.
-    const kwUse = take < kwh ? Math.max(Math.min(c.kw, minKw), take / c.h) : c.kw;
+    // An extra (top-up) part on top of a base: spread over the whole interval as extra kW.
+    const kwUse = take >= kwh || mode === 'now' ? c.kw : c.topUp ? take / c.h : Math.max(Math.min(c.kw, minKw), take / c.h);
     const frac = Math.min(1, take / (kwUse * c.h));
     result.push({
       start: new Date(c.slot.s).toISOString(), end: new Date(c.slot.s + (c.slot.e - c.slot.s) * frac).toISOString(),
@@ -124,7 +132,7 @@ function makePlan({
     const prev = bySlot.get(k);
     if (prev) {
       prev.kw = round2(prev.kw + r.kw); prev.kwh = round3(prev.kwh + r.kwh); prev.cost = round3(prev.cost + r.cost);
-      prev.source = 'mixed'; if (r.end > prev.end) prev.end = r.end;
+      prev.source = prev.source === 'grid' && r.source === 'grid' ? 'grid' : 'mixed'; if (r.end > prev.end) prev.end = r.end;
     } else bySlot.set(k, { ...r });
   }
   const planSlots = [...bySlot.values()].sort((a, b) => a.start.localeCompare(b.start));
@@ -352,6 +360,7 @@ async function computeTarget(nowMs, wb) {
     if (nx && (!readyAtMs || nx.at < readyAtMs)) { readyAtMs = nx.at; readySource = `${nx.source} ${nx.weekday} departure (${nx.confidence})`; }
   }
   if (readyAtMs) readyAtMs -= 0; // ready time already includes the learned margin
+  if (rt.fullKey && rt.fullKey === rt.session) { needKwh = 0; needSource = 'battery full (not unplugged since)'; }
   const minTopup = Number(cfg.min_topup_kwh) || 0;
   if ((rt.override || cfg.mode) === 'plan' && needKwh > 0 && needKwh < minTopup) {
     needSource += ` — less than the ${minTopup} kWh minimum top-up, so no grid charging (solar surplus still counts)`;
@@ -450,6 +459,18 @@ async function outputMiniserver(cfg) {
   return db.prepare('SELECT * FROM miniservers ORDER BY id LIMIT 1').get();
 }
 
+// Is the battery full in this plug-in session? Full stays full until the car is unplugged: the car
+// stopped taking power while we asked for it, it reports a full battery (a reading from after the
+// plug-in), or its own charging state says so. Pure, for tests.
+function sessionFull({ sessionKey, fullKey = null, done = false, reading = null, readingAt = null, connectAt = null, limitPct = 100, chargeState = null }) {
+  if (!sessionKey || sessionKey === 'none') return false;
+  if (fullKey && fullKey === sessionKey) return true;
+  if (done) return true;
+  if (reading && reading.soc !== null && reading.soc !== undefined && readingAt && connectAt && readingAt >= connectAt && reading.soc >= limitPct - 1) return true;
+  if (chargeState && /complete|completed|finished|fully|charged|full|vol/i.test(String(chargeState)) && !/not|un/i.test(String(chargeState))) return true;
+  return false;
+}
+
 async function tick(nowMs = Date.now()) {
   const cfg = await getConfig();
   const wb = await wallboxLive();
@@ -468,12 +489,34 @@ async function tick(nowMs = Date.now()) {
   const asked = rt.lastSet || 0;
   if (connected && asked > 0 && (wb.kw || 0) < 0.3) { if (!rt.lowDrawSince) rt.lowDrawSince = nowMs; } else rt.lowDrawSince = null;
   if (rt.lowDrawSince && nowMs - rt.lowDrawSince > 5 * 60 * 1000) rt.doneSince = rt.doneSince || nowMs;
+  // Full and still plugged in (also after a LoxSuite restart: remembered per Wallbox session).
+  if (rt.fullKey === undefined) rt.fullKey = (await settings.get('wallbox_full_session', null))?.key ?? null;
+  let full = false;
+  if (connected) {
+    const vehicle = rt.plan?.target?.vehicle ? await require('./db').prepare('SELECT * FROM vehicles WHERE id = ?').get(rt.plan.target.vehicle.id).catch(() => null) : null;
+    const st = vehicle ? require('./vehicles').getVehicleStatus(vehicle) : null;
+    full = sessionFull({
+      sessionKey: key, fullKey: rt.fullKey, done: !!rt.doneSince, reading: st?.reading || null,
+      readingAt: st?.sourceUpdatedAt ? Date.parse(st.sourceUpdatedAt) : null, connectAt: wb.connectAt || null,
+      limitPct: st?.reading?.limit_soc ?? vehicle?.charge_limit_pct ?? 100, chargeState: st?.raw?.charging ?? null,
+    });
+    if (full && rt.fullKey !== key) { rt.fullKey = key; rt.planAt = 0; await settings.set('wallbox_full_session', { key, at: new Date(nowMs).toISOString() }).catch(() => {}); }
+  }
+  rt.full = full;
   const gridKw = live.roles?.grid?.power_kw ?? null;
   const step = controlStep({
     nowMs, mode: cfg.mode, cfg, plan: rt.plan, override: rt.override, done: !!rt.doneSince, state: rt.ctrl.state,
     live: { connected, gridKw, wallboxKw: wb?.kw ?? 0, houseKw: live.house_kw },
   });
   rt.ctrl.state = step.state;
+  const effMode0 = rt.override || cfg.mode;
+  if (full && connected && effMode0 !== 'off' && effMode0 !== 'now') {
+    const hold = cfg.full_hold === 'off' ? 0 : Number(cfg.min_kw) || 4.16;
+    step.kw = hold;
+    step.reason = hold
+      ? `Battery full and still plugged in: the Wallbox stays open at ${hold} kW so the car tops itself up (e.g. pre-heating from the grid) — no starting and stopping.`
+      : 'Battery full and still plugged in: nothing to charge until it is unplugged.';
+  }
   // No flapping: once on, keep going for min_on_s; once off, wait min_off_s before starting again —
   // unless the car is gone, the target is reached, or the mode says off/now.
   const effMode = rt.override || cfg.mode;
@@ -530,5 +573,5 @@ function startPlanner() {
 
 module.exports = {
   MODES, DEFAULTS, makePlan, fuelBreakEven, activeSlot, controlStep,
-  getConfig, saveConfig, recalc, tick, outputMiniserver, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, buildSlots, computeTarget, wallboxLive,
+  getConfig, saveConfig, recalc, tick, outputMiniserver, sessionFull, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, buildSlots, computeTarget, wallboxLive,
 };

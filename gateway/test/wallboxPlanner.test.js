@@ -285,3 +285,37 @@ test('a small top-up runs at the minimum power for longer, never below 4.16 kW a
   const q = planner.makePlan({ nowMs: now, needKwh: 1.5, slots, mode: 'plan', minKw: 4.16, maxKw: 11 });
   assert.equal(q.slots[0].kw, 6); // 1.5 kWh in a 15-min interval = 6 kW for the whole interval
 });
+
+test('a full battery stays full until it is unplugged', () => {
+  const f = planner.sessionFull;
+  const connectAt = Date.parse('2026-10-04T14:42:00Z');
+  assert.equal(f({ sessionKey: 's1', done: true }), true);
+  assert.equal(f({ sessionKey: 's1', fullKey: 's1' }), true, 'remembered (also after a restart)');
+  assert.equal(f({ sessionKey: 's2', fullKey: 's1' }), false, 'a new plug-in starts fresh');
+  assert.equal(f({ sessionKey: 'none', fullKey: 'none', done: true }), false);
+  // A battery % only counts when it was reported after the plug-in (a stale 99% from before the trip doesn't).
+  assert.equal(f({ sessionKey: 's1', reading: { soc: 99.5 }, readingAt: connectAt + 60000, connectAt, limitPct: 100 }), true);
+  assert.equal(f({ sessionKey: 's1', reading: { soc: 99.5 }, readingAt: connectAt - 3600000, connectAt, limitPct: 100 }), false);
+  assert.equal(f({ sessionKey: 's1', reading: { soc: 80 }, readingAt: connectAt + 60000, connectAt, limitPct: 80 }), true, 'own charge limit');
+  assert.equal(f({ sessionKey: 's1', chargeState: 'CHARGING_COMPLETE' }), true);
+  assert.equal(f({ sessionKey: 's1', chargeState: 'plugged_out' }), false);
+});
+
+test('without enough solar: the car is filled in the cheapest intervals (full power there), never below the minimum', () => {
+  const now = Date.parse('2026-10-05T00:00:00Z');
+  const slots = [0.30, 0.18, 0.19, 0.25, 0.20].map((price, i) => ({ start: new Date(now + i * 3600000).toISOString(), end: new Date(now + (i + 1) * 3600000).toISOString(), price, pvKw: 0 }));
+  const p = planner.makePlan({ nowMs: now, needKwh: 12, slots, mode: 'plan', minKw: 4.16, maxKw: 11 });
+  const at = (price) => p.slots.find((s) => s.price === price);
+  assert.equal(at(0.18).kw, 11);                // cheapest hour at full power: 11 kWh
+  assert.equal(at(0.19).kw, 4.16);              // the last 1 kWh in the next-cheapest hour, at the minimum
+  assert.ok(Math.abs(at(0.19).kwh - 1) < 0.01);
+  assert.ok(!p.slots.some((s) => s.price >= 0.20));
+  assert.ok(p.slots.every((s) => s.kw >= 4.16));
+  // Some solar below the minimum: topped up from the grid to (at least) the minimum, labelled solar + grid
+  const r = planner.makePlan({ nowMs: now, needKwh: 3, slots: [{ ...slots[1], pvKw: 2 }], mode: 'plan', minKw: 4.16, maxKw: 11 });
+  assert.equal(r.slots[0].kw, 4.16);
+  assert.equal(r.slots[0].source, 'mixed');
+  // "Now" charges at full power
+  const n = planner.makePlan({ nowMs: now, needKwh: 5, slots, mode: 'now', minKw: 4.16, maxKw: 11 });
+  assert.equal(n.slots[0].kw, 11);
+});

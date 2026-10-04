@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.27.2-alpha.1] - 2026-10-04
+
+### Changed
+- **A full battery can simply stay plugged in.** Once the battery is full in a plug-in session — the car stopped taking
+  power, it reports a full battery after the plug-in, or its charging state says so — LoxSuite remembers that until the
+  car is unplugged (also across a restart). By default the Wallbox then stays open at the minimum power, so the car tops
+  itself up and pre-heats from the grid without any starting and stopping; or choose "nothing until unplugged"
+  (Smart charging → Charging → *Battery full, still plugged in*). The minimum top-up (1 kWh) is a setting too.
+- **Filled in the cheapest intervals**: when there is too little solar, the plan fills the car in the cheapest intervals
+  (full power there when needed, never below the Wallbox minimum); a little solar below the minimum is used first and
+  topped up from the grid. "Now" still charges at full power.
+
 ## [0.27.1-alpha.1] - 2026-10-04
 
 ### Fixed
