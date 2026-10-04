@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.26.1-alpha.1] - 2026-10-04
+
+### Fixed
+- **Push to an iPhone failed** ("Received unexpected response code"): the VAPID contact sent to the push services was a
+  made-up address (`mailto:admin@loxsuite.local`), which Apple rejects (403 BadJwtToken). LoxSuite now uses the https
+  address it is opened on (taken when a device switches push on), or a contact set by an administrator under
+  App & push → Push contact.
+- **Push errors are explained**: the push service's status and reason are shown (with what to do), also per device.
+- **App & push shows whether push is already on** for this device, and when notifications are blocked in the phone's
+  settings.
+
 ## [0.26.0-alpha.1] - 2026-10-04
 
 ### Added

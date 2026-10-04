@@ -262,3 +262,14 @@ test('quarter export leaves out sessions of cars that are not reported', () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].energy, 5);
 });
+
+test('web push: the VAPID contact must be real (Apple rejects made-up ones) and refusals are explained', () => {
+  const w = require('../src/webPush');
+  assert.equal(w.validSubject('mailto:admin@loxsuite.local'), null);
+  assert.equal(w.validSubject('https://loxsuite.example.nl/'), 'https://loxsuite.example.nl');
+  assert.equal(w.validSubject('mailto:me@example.nl'), 'mailto:me@example.nl');
+  assert.equal(w.validSubject('http://192.168.1.5:5582'), null);
+  assert.match(w.explainError({ statusCode: 403, body: '{"reason":"BadJwtToken"}' }), /403.*BadJwtToken.*Push contact/);
+  assert.match(w.explainError({ statusCode: 400, body: 'bad' }), /switch push off and on again/);
+  assert.equal(w.explainError(new Error('boom')), 'boom');
+});

@@ -15,6 +15,7 @@ router.get('/', asyncHandler(async (req, res) => {
   res.render('app', {
     devices: await webPush.listDevices(), channel, myPush: (me?.notify_url || '').startsWith('loxsuite-push://'),
     userId: req.user?.id || req.session?.userId, saved: req.query.saved || null,
+    pushSubject: (await webPush.keys().catch(() => null))?.subject || null,
   });
 }));
 
@@ -25,6 +26,9 @@ router.get('/vapid.json', asyncHandler(async (req, res) => {
 router.post('/subscribe', asyncHandler(async (req, res) => {
   try {
     await webPush.subscribe(req.user?.id || req.session?.userId, req.body?.subscription, req.get('user-agent'));
+    // The https address this device uses becomes the push contact (Apple rejects a made-up one).
+    const origin = req.get('origin') || (req.get('x-forwarded-proto') && req.get('x-forwarded-host') ? `${req.get('x-forwarded-proto')}://${req.get('x-forwarded-host')}` : `${req.protocol}://${req.get('host')}`);
+    await webPush.adoptOrigin(origin).catch(() => {});
     res.json({ ok: true });
   } catch (err) {
     res.json({ ok: false, message: err.message });
@@ -41,10 +45,15 @@ router.post('/test', asyncHandler(async (req, res) => {
     const r = await webPush.send({ userId: req.user?.id || req.session?.userId }, {
       title: 'LoxSuite', body: 'Push works. Car reminders and other notifications can now arrive on this device.', url: '/planner', tag: 'test',
     });
-    res.json({ ok: true, sent: r.sent });
+    res.json({ ok: true, sent: r.sent, failed: r.failed, errors: r.errors });
   } catch (err) {
     res.json({ ok: false, message: err.message });
   }
+}));
+
+router.post('/subject', asyncHandler(async (req, res) => {
+  if (!req.user?.isAdmin) return res.json({ ok: false, message: 'Only an administrator can change this.' });
+  try { res.json({ ok: true, subject: await webPush.setSubject(req.body?.subject) }); } catch (err) { res.json({ ok: false, message: err.message }); }
 }));
 
 // Buttons in a push notification (sent by the service worker).

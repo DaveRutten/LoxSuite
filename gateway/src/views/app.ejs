@@ -17,6 +17,14 @@
     <button type="button" class="btn-soft" id="app-test">Send a test</button>
   </div>
   <p class="hint" id="app-msg" style="margin:0.5rem 0 0;"></p>
+  <% if (isAdminUser) { %>
+  <details style="margin-top:0.8rem;">
+    <summary class="hint" style="cursor:pointer;">Push contact: <code><%= pushSubject %></code></summary>
+    <p class="hint" style="margin:0.4rem 0;">The push services (Apple, Google, Mozilla) want a contact with every message. Apple refuses made-up
+      addresses (error 403 <em>BadJwtToken</em>). LoxSuite uses the https address it is opened on; you can also enter your e-mail address.</p>
+    <div class="btn-row" style="align-items:flex-end;"><div><label>Contact</label><input type="text" id="app-subject" value="<%= pushSubject %>" placeholder="mailto:you@example.com"></div><button type="button" class="btn-soft" id="app-subject-save">Save</button></div>
+  </details>
+  <% } %>
 </div>
 
 <div class="card">
@@ -66,7 +74,7 @@
       });
     }).then(function (sub) { return post('/app/subscribe', { subscription: sub.toJSON() }); })
       .then(function (d) { msg.textContent = d.ok ? 'Push is on for this device.' : d.message; if (d.ok) setTimeout(function () { location.reload(); }, 800); })
-      .catch(function (e) { msg.textContent = e.message; });
+      .catch(function (e) { msg.textContent = (e.name && e.name !== 'Error' ? e.name + ': ' : '') + e.message; });
   };
   document.getElementById('app-off').onclick = function () {
     if (!supported) return;
@@ -75,7 +83,20 @@
       return post('/app/unsubscribe', { endpoint: s.endpoint }).then(function () { return s.unsubscribe(); }).then(function () { msg.textContent = 'Push is off for this device.'; });
     }).catch(function (e) { msg.textContent = e.message; });
   };
-  document.getElementById('app-test').onclick = function () { post('/app/test', {}).then(function (d) { msg.textContent = d.ok ? 'Sent to ' + d.sent + ' device(s).' : d.message; }); };
+  document.getElementById('app-test').onclick = function () {
+    msg.textContent = 'Sending…';
+    post('/app/test', {}).then(function (d) { msg.textContent = d.ok ? 'Sent to ' + d.sent + ' device(s).' + (d.failed ? ' ' + d.failed + ' failed: ' + d.errors.join(' | ') : '') : d.message; });
+  };
+  var subj = document.getElementById('app-subject-save');
+  if (subj) subj.onclick = function () { post('/app/subject', { subject: document.getElementById('app-subject').value }).then(function (d) { msg.textContent = d.ok ? 'Push contact saved: ' + d.subject + '. Send a test.' : d.message; }); };
+  // Show whether this device already has push on.
+  if (supported && window.isSecureContext && navigator.serviceWorker) {
+    navigator.serviceWorker.getRegistration().then(function (reg) { return reg ? reg.pushManager.getSubscription() : null; }).then(function (s) {
+      var perm = window.Notification ? Notification.permission : 'default';
+      if (s) { msg.textContent = 'Push is on for this device.'; document.getElementById('app-on').textContent = 'Renew push for this device'; }
+      else if (perm === 'denied') msg.textContent = 'Notifications are blocked for LoxSuite in this browser/phone settings — allow them there first.';
+    }).catch(function () {});
+  }
 })();
 </script>
 
