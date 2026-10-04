@@ -1,0 +1,147 @@
+<%- include('partials/head', { pageTitle: 'Energy manager', active: 'energymanager' }) %>
+
+<% if (saved) { %><p class="hint" style="color: var(--success);">Saved.</p><% } %>
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+
+<p class="hint">
+  The other big consumers, planned together with the car from the prices, the solar forecast and your house load. This runs in
+  <strong>shadow mode</strong>: LoxSuite measures, plans and shows what it <em>would</em> send to Loxone &mdash; nothing is sent.
+  Compare it with what your own Loxone logic does; later you connect the virtual inputs and switch a load to Live.
+</p>
+
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+    <h2 style="margin:0;">Now</h2>
+    <div class="btn-row" style="margin:0;">
+      <span class="hint" id="em-status" style="margin:0;"></span>
+      <% if (canEdit('miniservers')) { %><button type="button" class="btn-soft" id="em-recalc">Recalculate</button><button type="button" class="btn-soft" id="em-import">Import 30 days from Loxone</button><% } %>
+    </div>
+  </div>
+  <div id="em-now" style="margin-top:0.6rem;"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Plan &mdash; next 36 hours</h2>
+  <div id="em-plan"></div>
+</div>
+
+<div id="em-loads"></div>
+
+<% if (canEdit('miniservers')) { %>
+<div class="card">
+  <h2 style="margin-top:0;">Consumers</h2>
+  <p class="hint">Priority 1 is served first when there is solar surplus. The car (Smart charging) takes its place at the priority set below.</p>
+  <% loads.forEach(l => { %>
+    <details style="border-top:1px solid var(--border); padding:0.5rem 0;">
+      <summary style="cursor:pointer;"><strong><%= l.name %></strong> <span class="hint">· <%= kinds[l.kind].label %> · priority <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
+      <%- include('partials/energy-load-form', { l, kinds, meters }) %>
+      <form method="post" action="/energy-manager/loads/<%= l.id %>/delete" style="margin-top:0.4rem;" onsubmit="return confirm('Delete <%= l.name %> and its history?');"><button type="submit" class="btn-soft">Delete</button></form>
+    </details>
+  <% }) %>
+  <details style="border-top:1px solid var(--border); padding:0.5rem 0;" <%= loads.length ? '' : 'open' %>>
+    <summary style="cursor:pointer;"><strong>+ Add a consumer</strong></summary>
+    <%- include('partials/energy-load-form', { l: null, kinds, meters }) %>
+  </details>
+  <form method="post" action="/energy-manager/settings" class="form-grid" style="margin-top:0.8rem; border-top:1px solid var(--border); padding-top:0.8rem;">
+    <div><label>Priority of the car</label><input type="text" name="car_priority" value="<%= cfg.car_priority %>"></div>
+    <div><label>Prefer own solar (€/kWh bonus)</label><input type="text" name="solar_bonus_eur" value="<%= cfg.solar_bonus_eur %>"></div>
+    <div style="align-self:end;"><button type="submit" class="btn-soft">Save</button></div>
+  </form>
+</div>
+<% } %>
+
+<script>
+(function () {
+  var CAN = <%- JSON.stringify(canEdit('miniservers')) %>;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function eur(v, d) { return v == null ? '—' : '€ ' + nf(v, d == null ? 2 : d); }
+  function hh(t) { return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  function dayLabel(d) { var p = d.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }); }
+  function post(u, b) { return fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }).then(function (r) { return r.json(); }); }
+  function val(sig) {
+    if (sig.value == null) return '—';
+    if (sig.unit === '1/0' || sig.unit === 'pulse') return Number(sig.value) ? '<strong style="color:var(--success);">1</strong>' : '0';
+    return '<strong>' + esc(sig.value) + '</strong> ' + esc(sig.unit);
+  }
+  var last = null;
+
+  function planChart(d) {
+    var el = document.getElementById('em-plan');
+    if (!d.hours.length) { el.innerHTML = '<p class="hint" style="margin:0;">No plan yet (prices or solar forecast missing).</p>'; return; }
+    var W = lsChartW(el, 900), left = 150, rowH = 22, hrs = d.hours.filter(function (h) { return h.ms >= Math.floor(Date.now() / 3600000) * 3600000; }).slice(0, 36);
+    var bw = (W - left - 6) / hrs.length;
+    var maxP = Math.max.apply(null, hrs.map(function (h) { return h.price || 0; }).concat([0.1]));
+    var maxS = Math.max.apply(null, hrs.map(function (h) { return h.surplusKwh || 0; }).concat([1]));
+    var rows = [{ label: 'Price', kind: 'price' }, { label: 'Solar surplus (forecast)', kind: 'solar' }, { label: 'Car (Smart charging)', kind: 'car' }];
+    d.loads.forEach(function (l) { l.signals.forEach(function (s) { if (s.key === 'pause') return; rows.push({ label: l.name + ' · ' + s.key, load: l, sig: s }); }); });
+    var H = rows.length * rowH + 22, s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;">';
+    rows.forEach(function (r, ri) {
+      var y = ri * rowH;
+      s += '<text x="0" y="' + (y + 15) + '" font-size="11" fill="currentColor" opacity="0.8">' + esc(r.label) + '</text>';
+      hrs.forEach(function (h, i) {
+        var x = left + i * bw, fill = null, op = 1, tip = hh(h.ms) + ' ';
+        if (r.kind === 'price') { fill = '#9aa5b1'; op = 0.25 + 0.75 * (h.price || 0) / maxP; tip += '€ ' + nf(h.price, 3) + (h.estimated ? ' (estimate)' : ''); }
+        else if (r.kind === 'solar') { if (h.surplusKwh > 0.05) { fill = '#d4a017'; op = 0.2 + 0.8 * h.surplusKwh / maxS; } tip += nf(h.surplusKwh, 1) + ' kWh'; }
+        else if (r.kind === 'car') { var k = d.carKwh[h.ms] || 0; if (k > 0.05) fill = '#4a7bd0'; tip += nf(k, 1) + ' kWh'; }
+        else {
+          var p = r.load.plan.find(function (x) { return Date.parse(x.hour) === h.ms; });
+          var v = p ? p.values[r.sig.key] : null;
+          if (r.sig.unit === '°C') { if (v && Number(v) !== 0 && r.sig.key === 'correction') { fill = Number(v) > 0 ? '#e67e22' : '#3498db'; } else if (r.sig.key === 'setpoint' && v != null && p && p.values.now) fill = '#e67e22'; op = 0.8; }
+          else if (Number(v)) fill = '#4caf50';
+          tip += (v == null ? '—' : v + ' ' + r.sig.unit) + (p && p.reason ? ' — ' + p.reason : '');
+        }
+        s += '<rect x="' + (x + 0.5) + '" y="' + (y + 3) + '" width="' + Math.max(1, bw - 1) + '" height="' + (rowH - 6) + '" rx="2" fill="' + (fill || 'currentColor') + '" opacity="' + (fill ? op : 0.06) + '"><title>' + esc(tip) + '</title></rect>';
+      });
+    });
+    hrs.forEach(function (h, i) { if (new Date(h.ms).getHours() % 3 === 0) s += '<text x="' + (left + i * bw) + '" y="' + (H - 6) + '" font-size="10" fill="currentColor" opacity="0.6">' + hh(h.ms).slice(0, 5) + '</text>'; });
+    el.innerHTML = s + '</svg><div class="hint" style="margin:0.3rem 0 0;">Green = would be 1 (release / now / start). Orange = higher setpoint (pre-heat), blue = lower. Hover for the reason.</div>';
+  }
+
+  function render(d) {
+    last = d;
+    document.getElementById('em-status').textContent = d.planAt ? 'plan ' + hh(d.planAt) + (d.status && d.status.exportKw != null ? ' · feeding in now ' + nf(d.status.exportKw, 1) + ' kW' : '') : '';
+    if (!d.loads.length) { document.getElementById('em-now').innerHTML = '<p class="hint" style="margin:0;">No consumers yet &mdash; add one below.</p>'; }
+    else document.getElementById('em-now').innerHTML = '<div style="overflow-x:auto;"><table><thead><tr><th>Consumer</th><th>Power now</th><th>Would send (virtual input = value)</th><th>Why</th></tr></thead><tbody>' + d.loads.map(function (l) {
+      return '<tr><td><strong>' + esc(l.name) + '</strong><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(l.kindLabel) + ' · prio ' + l.priority + ' · ' + (l.output === 'live' ? 'live' : 'shadow') + '</div></td><td>' + (l.live && l.live.kw != null ? nf(l.live.kw, 2) + ' kW' : (l.live && l.live.found === false ? '<span class="hint">meter not found</span>' : '—')) + (l.running ? ' <span class="badge">running</span>' : '') + '</td><td>' +
+        l.signals.map(function (s) { return '<code>' + esc(s.vi) + '</code> = ' + val(s); }).join('<br>') + '</td><td class="hint">' + esc(l.reason || '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+    planChart(d);
+    document.getElementById('em-loads').innerHTML = d.loads.map(function (l) {
+      var lr = l.learned || {}, h = '<div class="card"><h2 style="margin-top:0;">' + esc(l.name) + ' <span class="hint" style="font-size:0.8rem; font-weight:400;">' + esc(l.kindLabel) + '</span></h2>';
+      if (l.kind === 'appliance') {
+        h += '<p class="hint" style="margin:0 0 0.5rem;">Learned: ' + (lr.runs ? lr.runs + ' run(s), typically ' + nf(lr.kwh, 2) + ' kWh in ' + nf(lr.durationH, 1) + ' h' : 'no runs measured yet') + '.</p>';
+        if (CAN) h += '<div class="btn-row" style="align-items:flex-end;"><div><label>Ready by</label><input type="datetime-local" id="em-ready-' + l.id + '"></div><div><label>Label</label><input type="text" id="em-label-' + l.id + '" placeholder="e.g. 40° wash"></div><button type="button" class="btn-soft" data-req="' + l.id + '">Plan the best start</button></div>';
+        if (l.requests.length) h += '<ul style="margin:0.5rem 0;">' + l.requests.map(function (q) { return '<li>' + esc(q.label) + ': ready by ' + esc(new Date(q.readyBy).toLocaleString()) + ' &rarr; <strong>' + (q.plannedStart ? 'start at ' + hh(q.plannedStart) : 'no start found') + '</strong>' + (q.plannedCost != null ? ' (' + eur(q.plannedCost) + ')' : '') + (CAN ? ' <a href="#" data-delreq="' + q.id + '">remove</a>' : '') + '</li>'; }).join('') + '</ul>';
+        h += '<div style="overflow-x:auto;"><table><thead><tr><th>Run</th><th>Duration</th><th>kWh</th><th>Cost</th><th>Best start (hindsight)</th><th>Then</th><th>Saving</th></tr></thead><tbody>' +
+          (l.runs.length ? l.runs.map(function (r) { var dur = (Date.parse(r.end_at) - Date.parse(r.start_at)) / 60000; var sav = r.cost_eur != null && r.best_cost_eur != null ? r.cost_eur - r.best_cost_eur : null; return '<tr><td>' + esc(new Date(r.start_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + Math.round(dur) + ' min</td><td>' + nf(r.kwh, 2) + '</td><td>' + eur(r.cost_eur) + '</td><td>' + (r.best_start ? hh(r.best_start) : '—') + '</td><td>' + eur(r.best_cost_eur) + '</td><td style="color:' + (sav > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(sav) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No runs measured yet.</td></tr>') + '</tbody></table></div>';
+      } else {
+        h += '<p class="hint" style="margin:0 0 0.5rem;">Learned: ' + (lr.kwhPerDay != null ? nf(lr.kwhPerDay, 1) + ' kWh/day, about ' + nf(lr.kwPeak, 1) + ' kW while running' : 'no measurements yet') + '. "In advised hours" = share of the kWh that fell in hours LoxSuite would have released; "could save" = moving the rest there.</p>';
+        h += '<div style="overflow-x:auto;"><table><thead><tr><th>Day</th><th>kWh</th><th>Cost</th><th>€/kWh</th><th>Solar</th><th>In advised hours</th><th>Could save</th></tr></thead><tbody>' +
+          (l.daily.length ? l.daily.map(function (x) { return '<tr><td>' + esc(dayLabel(x.day)) + '</td><td>' + nf(x.kwh, 1) + '</td><td>' + eur(x.cost) + '</td><td>' + eur(x.eurPerKwh, 3) + '</td><td>' + (x.solarShare == null ? '—' : x.solarShare + '%') + '</td><td>' + (x.advisedShare == null ? '<span class="hint">not logged yet</span>' : x.advisedShare + '%') + '</td><td style="color:' + (x.potential > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(x.potential) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No measurements yet.</td></tr>') + '</tbody></table></div>';
+      }
+      h += '<p class="hint" style="margin:0.6rem 0 0; font-size:0.8rem;">Later, to let LoxSuite drive it: ' + l.signals.map(function (s) { return 'virtual input <code>' + esc(s.vi) + '</code> (' + esc(s.unit) + ') &rarr; ' + esc(s.hint); }).join('; ') + '.</p>';
+      return h + '</div>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('[data-req]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.dataset.req, v = document.getElementById('em-ready-' + id).value;
+        post('/energy-manager/loads/' + id + '/request.json', { readyBy: v ? new Date(v).toISOString() : '', label: document.getElementById('em-label-' + id).value }).then(function (r) { if (!r.ok) alert(r.message); load(); });
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-delreq]'), function (a) {
+      a.addEventListener('click', function (e) { e.preventDefault(); post('/energy-manager/requests/' + a.dataset.delreq + '/delete.json').then(load); });
+    });
+  }
+  function load() { return fetch('/energy-manager/data.json').then(function (r) { return r.json(); }).then(render); }
+  var rc = document.getElementById('em-recalc');
+  if (rc) rc.addEventListener('click', function () { rc.disabled = true; post('/energy-manager/recalc.json').then(load).finally(function () { rc.disabled = false; }); });
+  var im = document.getElementById('em-import');
+  if (im) im.addEventListener('click', function () { im.disabled = true; im.textContent = 'Importing…'; post('/energy-manager/import.json', { days: 30 }).then(function (r) { im.textContent = r.ok ? r.report.map(function (x) { return x.load + ': ' + (x.ok ? x.hours + ' h' : x.message); }).join(' · ') : r.message; load(); }).finally(function () { im.disabled = false; }); });
+  lsOnResize(function () { if (last) planChart(last); });
+  load();
+  setInterval(load, 60000);
+})();
+</script>
+
+<%- include('partials/foot') %>

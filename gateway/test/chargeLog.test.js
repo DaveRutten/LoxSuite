@@ -61,3 +61,35 @@ test('a failed send is shown', () => {
   assert.equal(c.send.status, 'fail');
   assert.match(c.send.detail, /does not exist/);
 });
+
+test("Dave's case: 6 kW sent to a 97% battery — released by the Wallbox, no power: info, not a failure", () => {
+  const rows = [
+    row(0, { sentKw: null, kw: 0, soc: 97, carState: 'plugged_out', limit: 0, enabled: 1 }, 'Car plugged in'),
+    row(48, { sentKw: 6, kw: 0, soc: 97, carState: 'plugged_out', limit: 6, enabled: 1 }, 'Test: sent 6 kW'),
+    row(400, { sentKw: 6, kw: 0, soc: 97, limit: 6, enabled: 1 }),
+  ];
+  const c = byId(analyzeSession(rows, T0 + 400000));
+  assert.equal(c.start.status, 'info');
+  assert.match(c.start.detail, /97%.*released.*no power/);
+});
+
+test('right after sending, the start check waits instead of failing', () => {
+  const rows = [
+    row(0, { sentKw: 0, kw: 0 }, 'Car plugged in'),
+    row(48, { sentKw: 6, kw: 0, limit: 6 }, 'Test: sent 6 kW'),
+  ];
+  const c = byId(analyzeSession(rows, T0 + 60000));
+  assert.equal(c.start.status, 'pending');
+  assert.match(c.start.detail, /waiting/);
+});
+
+test('no start and the Wallbox never released it: fail with the reason', () => {
+  const rows = [
+    row(0, { sentKw: 0, kw: 0, limit: 0 }, 'Car plugged in'),
+    row(10, { sentKw: 6, kw: 0, limit: 0, enabled: 0 }, 'Test: sent 6 kW'),
+    row(400, { sentKw: 6, kw: 0, limit: 0, enabled: 0 }),
+  ];
+  const c = byId(analyzeSession(rows, T0 + 400000));
+  assert.equal(c.start.status, 'fail');
+  assert.match(c.start.detail, /did not release/);
+});

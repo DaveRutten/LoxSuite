@@ -1,0 +1,54 @@
+<% const s = l ? l.settings : {}; const kind = l ? l.kind : 'dhw'; const fid = l ? l.id : 'new'; %>
+<form method="post" action="/energy-manager/loads" style="margin-top:0.6rem;" class="em-load-form">
+  <% if (l) { %><input type="hidden" name="id" value="<%= l.id %>"><% } %>
+  <div class="form-grid">
+    <div><label>Name</label><input type="text" name="name" value="<%= l ? l.name : '' %>" placeholder="e.g. Tap water"></div>
+    <div><label>Kind</label><select name="kind" data-kindsel="<%= fid %>"><% Object.keys(kinds).forEach(k => { %><option value="<%= k %>" <%= kind === k ? 'selected' : '' %>><%= kinds[k].label %></option><% }) %></select></div>
+    <div><label>Loxone meter</label><select name="meter"><option value="">— choose —</option><% meters.forEach(m => { const v = m.miniserverId + '|' + m.uuid; %><option value="<%= v %>" <%= l && (l.miniserver_id + '|' + l.meter_uuid) === v ? 'selected' : '' %>><%= m.name %><%= meters.some(x => x.miniserverId !== m.miniserverId) ? ' (' + m.miniserverName + ')' : '' %></option><% }) %></select></div>
+    <div><label>Priority (1 = first)</label><input type="text" name="priority" value="<%= l ? l.priority : 5 %>"></div>
+    <div style="align-self:end;"><label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" name="enabled" value="1" <%= !l || l.enabled ? 'checked' : '' %>> Active</label></div>
+  </div>
+  <div class="form-grid" data-kind="dhw" data-for="<%= fid %>" style="margin-top:0.6rem;">
+    <div><label>Power while heating (kW)</label><input type="text" name="s_kw" value="<%= s.kw ?? kinds.dhw.defaults.kw %>"></div>
+    <div><label>Duration (h)</label><input type="text" name="s_duration_h" value="<%= s.duration_h ?? 1 %>"></div>
+    <div><label>Not before (hour)</label><input type="text" name="s_earliest" value="<%= s.earliest ?? 9 %>"></div>
+    <div><label>Not after (hour)</label><input type="text" name="s_latest" value="<%= s.latest ?? 21 %>"></div>
+    <div><label>Normal setpoint (°C)</label><input type="text" name="s_normal_setpoint" value="<%= s.normal_setpoint ?? 52 %>"></div>
+    <div><label>Buffer setpoint in cheap/solar hours (°C)</label><input type="text" name="s_buffer_setpoint" value="<%= s.buffer_setpoint ?? 58 %>"></div>
+  </div>
+  <div class="form-grid" data-kind="heatpump" data-for="<%= fid %>" style="margin-top:0.6rem;">
+    <div><label>Season</label><select name="s_season"><% [['heating','Heating'],['cooling','Cooling'],['off','Off (no influence)']].forEach(([v,t]) => { %><option value="<%= v %>" <%= (s.season || 'heating') === v ? 'selected' : '' %>><%= t %></option><% }) %></select></div>
+    <div><label>Typical power (kW)</label><input type="text" name="s_kw" value="<%= s.kw ?? kinds.heatpump.defaults.kw %>"></div>
+    <div><label>Release in cheapest share of hours</label><input type="text" name="s_release_share" value="<%= s.release_share ?? 0.6 %>"></div>
+    <div><label>Never block longer than (h)</label><input type="text" name="s_max_block_h" value="<%= s.max_block_h ?? 3 %>"></div>
+    <div><label>Pre-heat/cool correction (°C)</label><input type="text" name="s_up" value="<%= s.up ?? 1 %>"></div>
+    <div><label>Ease-off in expensive hours (°C)</label><input type="text" name="s_down" value="<%= s.down ?? 0.5 %>"></div>
+  </div>
+  <div class="form-grid" data-kind="appliance" data-for="<%= fid %>" style="margin-top:0.6rem;">
+    <div><label>Typical power (kW)</label><input type="text" name="s_kw" value="<%= s.kw ?? kinds.appliance.defaults.kw %>"></div>
+    <div><label>Look for a better start up to (h later)</label><input type="text" name="s_flex_h" value="<%= s.flex_h ?? 8 %>"></div>
+  </div>
+  <p class="hint" style="margin:0.5rem 0 0.2rem;">The kW is learned from the meter after a few days (tick to keep your own value): <label style="display:inline-flex; gap:0.3rem; font-weight:normal;"><input type="checkbox" name="s_kw_fixed" value="1" <%= s.kw_fixed ? 'checked' : '' %>> keep my kW</label></p>
+  <details style="margin-top:0.3rem;"><summary class="hint" style="cursor:pointer;">Virtual input names (for later)</summary>
+    <div class="form-grid" style="margin-top:0.4rem;">
+      <% Object.keys(kinds).forEach(k => { kinds[k].signals.forEach(sig => { %>
+        <div data-kind="<%= k %>" data-for="<%= fid %>"><label><%= sig.suffix %> (<%= sig.unit %>)</label><input type="text" name="vi_<%= sig.key %>" value="<%= l && l.kind === k && s.vi && s.vi[sig.key] ? s.vi[sig.key] : '' %>" placeholder="<%= l && l.signals ? (l.signals.find(x => x.key === sig.key) || {}).vi || '' : 'LoxSuite_<name>_' + sig.suffix %>"></div>
+      <% }) }) %>
+    </div>
+  </details>
+  <div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit">Save</button></div>
+</form>
+<script>
+(function () {
+  var fid = <%- JSON.stringify(String(fid)) %>;
+  var sel = document.querySelector('[data-kindsel="' + fid + '"]');
+  function show() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-for="' + fid + '"]'), function (el) {
+      var on = el.getAttribute('data-kind') === sel.value;
+      el.style.display = on ? '' : 'none';
+      Array.prototype.forEach.call(el.querySelectorAll('input,select'), function (i) { i.disabled = !on; });
+    });
+  }
+  sel.addEventListener('change', show); show();
+})();
+</script>

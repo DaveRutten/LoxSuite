@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.27.0-alpha.1] - 2026-10-04
+
+### Added
+- **Energy manager** (Wallbox → Energy manager), in **shadow mode**: other big consumers planned together with the car
+  from the prices, the solar forecast and the learned house load. LoxSuite measures each consumer with its own Loxone
+  meter, makes a 36-hour plan and shows per minute what it *would* send to Loxone — nothing is sent yet.
+  - **Tap water**: the best block of the day (solar surplus first, else the cheapest hours), a buffer setpoint in
+    cheap/solar hours, and a live override when there is surplus now.
+  - **Heat pump** (heating/cooling, living room leads): release in the cheapest share of the hours and whenever there is
+    surplus, never blocked longer than a set number of hours, plus a setpoint correction to pre-heat/pre-cool in
+    cheap/solar hours and ease off in expensive ones.
+  - **Appliances** (washer, dryer): runs are measured (kWh, duration, cost) with the best start in hindsight and what
+    it would have saved; a "ready by" request gets a planned start.
+  - The solar surplus is shared in priority order, with the car at its own place in that order.
+  - Per consumer and per day: kWh, cost, solar share, the share in the hours LoxSuite would have chosen and what moving
+    the rest there could have saved. History can be imported from the Loxone meters (30 days).
+  - The virtual input names to connect later are shown per consumer; output stays in shadow mode for now.
+
+### Fixed
+- **Charge log**: right after sending a value the start check now waits (up to 2 minutes) instead of reporting a
+  failure; a (nearly) full battery (95%+) is reported as such; and it says whether the Wallbox released the charge (and
+  the car took nothing) or did not release it.
+- **Smart charging chart**: prices on the axis now show the € sign.
+
 ## [0.26.2-alpha.1] - 2026-10-04
 
 ### Changed

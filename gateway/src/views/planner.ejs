@@ -276,7 +276,7 @@
     var t0 = Date.parse(slots[0].start), t1 = Date.parse(slots[n - 1].end);
     var X = function (ms) { return left + (ms - t0) / (t1 - t0) * (W - left - 8); };
     var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 34) + '" width="100%" style="display:block;">';
-    [0.25, 0.5, 0.75, 1].forEach(function (f) { var v = maxP * f; var y = 10 + H - f * H; svg += '<line x1="' + left + '" y1="' + y + '" x2="' + (W - 5) + '" y2="' + y + '" stroke="currentColor" opacity="0.08"/><text x="' + (left - 4) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + v.toFixed(2) + '</text>'; });
+    [0.25, 0.5, 0.75, 1].forEach(function (f) { var v = maxP * f; var y = 10 + H - f * H; svg += '<line x1="' + left + '" y1="' + y + '" x2="' + (W - 5) + '" y2="' + y + '" stroke="currentColor" opacity="0.08"/><text x="' + (left - 4) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">€' + v.toFixed(2) + '</text>'; });
     slots.forEach(function (s, i) {
       var x = X(Date.parse(s.start));
       var w = Math.max(1, X(Date.parse(s.end)) - x - 1);

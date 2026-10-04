@@ -66,6 +66,7 @@ const { startSolarForecast } = require('./solarForecast');
 const { startLearning } = require('./learning');
 const { startDriving } = require('./driving');
 const { startChargeLog } = require('./chargeLog');
+const { startEnergyManager } = require('./energyManager');
 const { startPlanner } = require('./planner');
 const { startAgenda } = require('./agenda');
 const { startReminders } = require('./reminders');
@@ -97,6 +98,7 @@ const energyRoutes = require('./routes/energy');
 const plannerRoutes = require('./routes/planner');
 const learnedRoutes = require('./routes/learned');
 const drivingRoutes = require('./routes/driving');
+const energyManagerRoutes = require('./routes/energyManager');
 const agendaRoutes = require('./routes/agenda');
 const appRoutes = require('./routes/app');
 const logsRoutes = require('./routes/logs');
@@ -310,6 +312,7 @@ async function main() {
   app.use('/planner', requireAuth, requirePermission('miniservers', 'view'), plannerRoutes);
   app.use('/learned', requireAuth, requirePermission('miniservers', 'view'), learnedRoutes);
   app.use('/driving', requireAuth, requirePermission('miniservers', 'view'), drivingRoutes);
+  app.use('/energy-manager', requireAuth, requirePermission('miniservers', 'view'), energyManagerRoutes);
   app.use('/agenda', requireAuth, requirePermission('miniservers', 'view'), agendaRoutes);
   app.use('/app', requireAuth, appRoutes);
   // logs.js serves four distinct areas (one per tab: logs_mqtt/logs_loxone/logs_loxone_commands/
@@ -384,6 +387,7 @@ async function main() {
   startLearning();
   startDriving();
   startChargeLog();
+  startEnergyManager();
   startAgenda();
   startFuelPrice();
   startPlanner();

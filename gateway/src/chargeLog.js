@@ -114,7 +114,7 @@ function startChargeLog() {
 
 // rows: [{ t (ms), event, d: sample }] of one session, oldest first. Returns the checks with
 // status 'pass' | 'fail' | 'info' | 'pending' (not tested yet) and a short Dutch-free English text.
-function analyzeSession(rows) {
+function analyzeSession(rows, nowMs = Date.now()) {
   const checks = [];
   const add = (id, status, title, detail) => checks.push({ id, status, title, detail });
   const conn = rows.filter((r) => r.d.connected === 1);
@@ -164,15 +164,28 @@ function analyzeSession(rows) {
     // has few rows and the settled value is the last one).
     const tail = hit ? after.filter((r) => r.t >= hit.t).slice(-3).map((r) => r.d.kw || 0) : [];
     const steady = tail.length ? Math.max(...tail) : null;
-    const full = after.length && after.every((r) => (r.d.soc ?? 0) >= 99);
-    return { q, secs: hit ? Math.round((hit.t - q.t) / 1000) : null, waitedMin, steady, full };
+    // Battery (nearly) full: a car near 100% often takes nothing at all.
+    const socAt = [...rows].reverse().find((r) => r.t <= q.t + 60000 && r.d.soc !== null && r.d.soc !== undefined)?.d.soc ?? null;
+    const full = socAt !== null && socAt >= 95;
+    // Still within the time it may take to start (the session goes on, nothing more recorded yet).
+    const lastT = Math.max(rows[rows.length - 1].t, rows[rows.length - 1].d.connected === 1 ? nowMs : 0);
+    const waiting = !hit && lastT - q.t < START_WITHIN_S * 1000 && !next;
+    // What the Wallbox itself did with the request: released (limit/enabled) but no power drawn?
+    const wbAfter = after.filter((r) => r.t >= q.t);
+    const released = wbAfter.some((r) => (r.d.limit ?? 0) >= ON_KW && r.d.enabled !== 0);
+    return { q, secs: hit ? Math.round((hit.t - q.t) / 1000) : null, waitedMin, steady, full, socAt, waiting, released };
   });
   if (startResults.length) {
     const ok = startResults.filter((s) => s.secs !== null && s.secs <= START_WITHIN_S);
-    const fullOnly = startResults.every((s) => s.secs === null && s.full);
-    add('start', fullOnly ? 'info' : ok.length === startResults.length ? 'pass' : 'fail', 'It starts charging when asked',
-      fullOnly ? 'Asked to charge, but the battery was full — test again with a lower battery.'
-        : startResults.map((s) => `${s.q.kw} kW: ${s.secs === null ? 'did not start within 10 min' : `started after ${s.secs} s`}`).join('; ') + '.');
+    const open = startResults.filter((s) => s.secs === null && !s.waiting && !s.full);
+    const status = open.length ? 'fail' : ok.length === startResults.length ? 'pass' : startResults.some((s) => s.waiting) ? 'pending' : 'info';
+    add('start', status, 'It starts charging when asked', startResults.map((s) => {
+      if (s.secs !== null) return `${s.q.kw} kW: started after ${s.secs} s`;
+      if (s.waiting) return `${s.q.kw} kW: waiting for it to start (up to ${START_WITHIN_S / 60} min)…`;
+      const wb = s.released ? 'the Wallbox released it (limit set), but the car took no power' : 'the Wallbox did not release it (limit/enabled stayed 0)';
+      if (s.full) return `${s.q.kw} kW: battery at ${Math.round(s.socAt)}% — ${wb}; normal for a (nearly) full battery, test again with a lower battery`;
+      return `${s.q.kw} kW: did not start — ${wb}`;
+    }).join('; ') + '.');
     const woke = startResults.filter((s) => s.waitedMin >= 10);
     if (woke.length) {
       add('wake', woke.every((s) => s.secs !== null && s.secs <= START_WITHIN_S) ? 'pass' : 'fail', 'It also starts after waiting 10+ minutes',
