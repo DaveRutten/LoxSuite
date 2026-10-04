@@ -6,6 +6,8 @@ function notificationSourceLink(eventType, sourceId, canView, sourceRef) {
   // tied to any one row — hence no sourceId to key off, unlike every other case below. Still worth
   // a link back to where that model actually gets managed.
   if (eventType === 'ai_ollama_pull' && canView('ai_chat')) return '/admin/ai';
+  if (eventType === 'energy_meter_status' && canView('miniservers')) return '/energy';
+  if ((eventType === 'car_reminder' || eventType === 'charging_plan') && canView('miniservers')) return '/planner';
   if (!sourceId) return null;
   if ((eventType === 'monitor_threshold' || eventType === 'threshold_ladder') && canView('monitor')) {
     // ?open=settings auto-expands that monitor's own Chart settings drawer (see monitor-detail.ejs)

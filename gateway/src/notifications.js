@@ -19,6 +19,9 @@ const TRIGGER_TYPES = [
   { key: 'device_firmware_changed', label: 'Loxone device firmware changed' },
   { key: 'device_offline', label: 'Loxone device online/offline' },
   { key: 'vehicle_source_status', label: 'Vehicle data source failing/recovered' },
+  { key: 'energy_meter_status', label: 'Energy meter (grid/PV/Wallbox) failing/recovered' },
+  { key: 'car_reminder', label: 'Car: plug in / swap reminders' },
+  { key: 'charging_plan', label: 'Car: charging plan warnings (won\'t be ready, trip longer than the battery)' },
 ];
 
 // Sending goes through Apprise (https://github.com/caronc/apprise, installed as a CLI in the
@@ -105,6 +108,24 @@ function substituteTemplate(text, context) {
 // REAL event, so the preview's available {{placeholders}} always match what a real notification
 // would actually have to substitute.
 const TEMPLATE_PREVIEW_SAMPLES = {
+  car_reminder: {
+    title: 'Car not plugged in',
+    message: 'Tomorrow 07:00 work (±20 kWh). Plugging in now saves about € 1.70 compared to fuel; it charges 02:00–04:45 at € 0.24/kWh.',
+    severity: 'info',
+    fields: [{ label: 'Vehicle', value: 'Skoda' }, { label: 'Departure', value: 'Mon 07:00' }],
+  },
+  charging_plan: {
+    title: 'Skoda: trip longer than the battery',
+    message: 'Saturday 08:55 birthday, Utrecht needs about 38.8 kWh; the battery holds 26 kWh. It will be full before you leave; the rest is driven on fuel.',
+    severity: 'warning',
+    fields: [{ label: 'Vehicle', value: 'Skoda' }, { label: 'Trip', value: 'Utrecht' }],
+  },
+  energy_meter_status: {
+    title: 'Solar (PV) meter: failing',
+    message: 'The Solar (PV) meter has stopped reporting: no value from the Miniserver for over 10 minutes.',
+    severity: 'warning',
+    fields: [{ label: 'Meter', value: 'Solar (PV)' }, { label: 'Status', value: 'failing' }],
+  },
   vehicle_source_status: {
     title: 'Skoda: data source failing',
     message: 'The Home Assistant data source of vehicle "Skoda" is failing: no update for 3 h (limit 2 h).',
@@ -236,6 +257,14 @@ function ensureTelegramMarkdown(url) {
 
 async function sendToChannel(channel, event) {
   if (!channel.url) throw new Error('This channel has no Apprise URL configured.');
+  // LoxSuite's own web push (the app on the phone's home screen) instead of Apprise.
+  const webPush = require('./webPush');
+  if (webPush.isPushUrl(channel.url)) {
+    const target = webPush.parseTarget(channel.url);
+    if (!target) throw new Error('Push URL must be loxsuite-push://all or loxsuite-push://user/<id>.');
+    await webPush.send(target, webPush.eventToPayload(event));
+    return;
+  }
   const telegram = isTelegramUrl(channel.url);
   const url = telegram ? ensureTelegramMarkdown(channel.url) : channel.url;
   const title = telegram ? renderTelegramTitle(event) : event.title;
@@ -830,6 +859,41 @@ async function checkVehicleSourceStatus(vehicle, status, detail, sourceLabel) {
   }
 }
 
+// Called by energyMeters.js when a meter role's live data stops or comes back. Same transition
+// rules as checkVehicleSourceStatus.
+async function checkEnergyMeterStatus(role, label, status, detail) {
+  for (const rule of await getRulesByTrigger('energy_meter_status')) {
+    const state = JSON.parse(rule.last_state || '{}');
+    const previous = state[role];
+    if (previous === status) continue;
+    await updateRuleState(rule.id, { ...state, [role]: status });
+    if (previous === undefined && status === 'ok') continue;
+    const failing = status !== 'ok';
+    await fireRule(rule, {
+      title: `${label} meter: ${failing ? 'failing' : 'working again'}`,
+      message: failing ? `The ${label} meter has stopped reporting: ${detail}.` : `The ${label} meter reports values again.`,
+      severity: failing ? 'warning' : 'info',
+      fields: [{ label: 'Meter', value: label }, { label: 'Status', value: failing ? 'failing' : 'ok' }],
+      sourceLabel: label,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+// Car notifications (reminders.js / planner): fired once per `key` (e.g. "plug|2026-10-05T04:45")
+// so a reminder isn't repeated every check; `event` may carry push actions and a link.
+async function fireCarEvent(triggerType, key, event) {
+  for (const rule of await getRulesByTrigger(triggerType)) {
+    const cfg = JSON.parse(rule.config || '{}');
+    if (cfg.vehicle_id && event.vehicleId && Number(cfg.vehicle_id) !== Number(event.vehicleId)) continue;
+    const state = JSON.parse(rule.last_state || '{}');
+    if (state[key]) continue;
+    const pruned = Object.fromEntries(Object.entries(state).filter(([, at]) => Date.now() - Date.parse(at) < 14 * 86400000));
+    await updateRuleState(rule.id, { ...pruned, [key]: new Date().toISOString() });
+    await fireRule(rule, { severity: 'info', timestamp: new Date().toISOString(), ...event });
+  }
+}
+
 module.exports = {
   TRIGGER_TYPES,
   retryDelayMs,
@@ -846,6 +910,8 @@ module.exports = {
   checkDeviceFirmwareChanged,
   checkDeviceOffline,
   checkVehicleSourceStatus,
+  checkEnergyMeterStatus,
+  fireCarEvent,
   notifyBackupFailed,
   notifyBackupSucceeded,
   // Not a formal rule-driven trigger type (no notification_rules.trigger_type CHECK entry, no

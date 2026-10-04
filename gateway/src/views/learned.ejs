@@ -1,0 +1,168 @@
+<%- include('partials/head', { pageTitle: 'Learned', active: 'learned' }) %>
+
+<% if (saved) { %><p class="hint" style="color: var(--success);">Saved.</p><% } %>
+
+<p class="hint">
+  What LoxSuite learned from your own data &mdash; updated continuously and used by the smart charging plan. Departure times
+  can be overridden per weekday; everything else follows the data. <span id="ln-meta"></span>
+</p>
+
+<div class="card">
+  <h2 style="margin-top:0;">Driving pattern &mdash; when does the car leave?</h2>
+  <p class="hint" style="margin:0 0 0.5rem;">Each dot is an unplug; green = a morning departure, red line = median. "Ready by" = the early quartile of that day's departures minus 15 minutes, so the car is almost always ready in time. A weekday without a regular morning departure has none.</p>
+  <form method="post" action="/learned/overrides">
+    <div style="overflow-x:auto;"><table id="ln-dep"><tbody><tr><td class="hint">Loading&hellip;</td></tr></tbody></table></div>
+    <% if (canEdit('miniservers')) { %><div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save own times</button><button type="button" class="btn-soft" id="ln-sync">Read sessions from the Wallbox now</button></div><% } %>
+  </form>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Energy per trip</h2>
+  <p class="hint" style="margin:0 0 0.5rem;">Each dot = what was charged after such a trip (only trips that started with a charged car). "Safe" = enough 3 out of 4 times. <span id="ln-trip-note"></span></p>
+  <div style="overflow-x:auto;"><table id="ln-trips"><tbody><tr><td class="hint">Loading&hellip;</td></tr></tbody></table></div>
+</div>
+
+<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr)); gap:1rem;">
+  <div class="card">
+    <h2 style="margin-top:0;">Solar &mdash; forecast tomorrow</h2>
+    <div id="ln-solar"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0;">House consumption &mdash; expected profile</h2>
+    <div id="ln-house"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var DAYS = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
+  var SLOT = { morning: 'morning', afternoon: 'afternoon', evening: 'evening' };
+  var DUR = { short: 'short · < 2 h away', medium: '2 – 6 h away', long: '> 6 h away' };
+  var CONF = { high: ['high', '#2e7d32'], medium: ['medium', '#b8860b'], low: ['low', '#c0392b'], none: ['—', 'inherit'] };
+  var canEdit = <%- JSON.stringify(canEdit('miniservers')) %>;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function conf(c) { var x = CONF[c] || CONF.none; return '<span style="color:' + x[1] + '; font-weight:600;">' + x[0] + '</span>'; }
+  var TW = 360;
+  function timeline(all, morning, medMin) {
+    var s = '<svg width="' + TW + '" height="18" viewBox="0 0 ' + TW + ' 18" style="display:block;"><line x1="0" y1="9" x2="' + TW + '" y2="9" stroke="currentColor" opacity="0.12"/>';
+    [6, 12, 18].forEach(function (h) { var x = h / 24 * TW; s += '<line x1="' + x + '" y1="2" x2="' + x + '" y2="16" stroke="currentColor" opacity="0.15"/>'; });
+    var m = {}; morning.forEach(function (v) { m[v] = true; });
+    all.forEach(function (v) { s += '<circle cx="' + (v / 1440 * TW) + '" cy="9" r="4" fill="' + (m[v] ? 'var(--accent)' : '#b0b8c2') + '" opacity="0.85"/>'; });
+    if (medMin != null) { var x = medMin / 1440 * TW; s += '<line x1="' + x + '" y1="0" x2="' + x + '" y2="18" stroke="#e5534b" stroke-width="2"/>'; }
+    return s + '</svg>';
+  }
+  function axis(labels, max, w) { var s = '<svg width="' + w + '" height="14" viewBox="0 0 ' + w + ' 14" style="display:block;">'; labels.forEach(function (l) { s += '<text x="' + Math.min(w - 14, l / max * w) + '" y="11" font-size="10" fill="currentColor" opacity="0.6">' + l + '</text>'; }); return s + '</svg>'; }
+  function toMin(t) { if (!t) return null; var p = t.split(':'); return +p[0] * 60 + +p[1]; }
+
+  function renderDep(d) {
+    var rows = '<thead><tr><th>Day</th><th>' + axis([0, 6, 12, 18, 24], 24, TW).replace(/>(\d+)</g, function (m, h) { return '>' + String(h).padStart(2, '0') + '<'; }) + '</th><th>Leaves</th><th>Ready by</th><th>Home</th><th>Charges</th><th>Confidence</th><th>Own time</th></tr></thead><tbody>';
+    d.departures.forEach(function (x) {
+      rows += '<tr><td style="font-weight:600;">' + DAYS[x.key] + '</td><td>' + timeline(x.allUnplugs, x.morningUnplugs, toMin(x.departure)) + '</td>' +
+        '<td><strong>' + (x.departure || '—') + '</strong></td><td>' + (x.ready || '—') + (x.override ? ' <span class="hint">(own)</span>' : '') + '</td><td>' + (x.arrival || '—') + '</td>' +
+        '<td>' + (x.kwh_median != null ? nf(x.kwh_median, 1) + ' kWh' : '—') + '</td><td>' + conf(x.confidence) + ' <span class="hint">(' + x.n + ')</span></td>' +
+        '<td><input type="text" name="ready_' + x.key + '" value="' + esc(x.override || '') + '" placeholder="' + esc(x.learnedReady || 'auto') + '" style="width:5.5rem;"' + (canEdit ? '' : ' disabled') + '></td></tr>';
+    });
+    document.getElementById('ln-dep').innerHTML = rows + '</tbody>';
+  }
+
+  var SW = 260, MAXK = 25;
+  function strip(vals, med) {
+    var s = '<svg width="' + SW + '" height="18" viewBox="0 0 ' + SW + ' 18" style="display:block;"><line x1="0" y1="9" x2="' + SW + '" y2="9" stroke="currentColor" opacity="0.12"/>';
+    [5, 10, 15, 20].forEach(function (k) { var x = k / MAXK * SW; s += '<line x1="' + x + '" y1="3" x2="' + x + '" y2="15" stroke="currentColor" opacity="0.12"/>'; });
+    vals.forEach(function (v) { s += '<circle cx="' + (Math.min(v, MAXK) / MAXK * SW) + '" cy="9" r="4" fill="#4a7bd0" opacity="0.75"/>'; });
+    if (med != null) { var x = Math.min(med, MAXK) / MAXK * SW; s += '<line x1="' + x + '" y1="0" x2="' + x + '" y2="18" stroke="#e5534b" stroke-width="2"/>'; }
+    return s + '</svg>';
+  }
+  function renderTrips(d) {
+    var t = d.trips;
+    var vals = [];
+    t.classes.forEach(function (c) { vals = vals.concat(c.values); });
+    MAXK = Math.max(10, Math.ceil(Math.max.apply(null, vals.concat([10])) / 5) * 5);
+    var rows = '<thead><tr><th>Trip</th><th>' + axis([0, MAXK / 5, 2 * MAXK / 5, 3 * MAXK / 5, 4 * MAXK / 5, MAXK], MAXK, SW) + '</th><th>Usually</th><th>Safe</th><th>Confidence</th></tr></thead><tbody>';
+    t.classes.forEach(function (c) {
+      rows += '<tr><td><strong>' + DAYS[c.weekday] + ' ' + SLOT[c.slot] + '</strong><div class="hint" style="margin:0; font-size:0.75rem;">' + DUR[c.duration] + (c.emptied ? ' · ' + c.emptied + '× battery emptied' : '') + '</div></td><td>' + strip(c.values, c.median) + '</td><td><strong>' + nf(c.median, 1) + ' kWh</strong></td><td>' + nf(c.safe, 1) + ' kWh</td><td>' + conf(c.confidence) + ' <span class="hint">(' + c.n + ')</span></td></tr>';
+    });
+    ['short', 'medium', 'long'].forEach(function (k) {
+      var f = t.fallback[k];
+      rows += '<tr style="opacity:0.75;"><td><strong>Other trips</strong><div class="hint" style="margin:0; font-size:0.75rem;">' + DUR[k] + '</div></td><td class="hint">fallback for trips not seen often enough</td><td><strong>' + nf(f.median, 1) + ' kWh</strong></td><td>' + nf(f.safe, 1) + ' kWh</td><td><span class="hint">(' + f.n + ')</span></td></tr>';
+    });
+    document.getElementById('ln-trips').innerHTML = rows + '</tbody>';
+    document.getElementById('ln-trip-note').textContent = d.vehicle && d.vehicle.type === 'phev' ? 'A plug-in hybrid that emptied its battery drove on fuel after that, so its real need was higher.' : '';
+  }
+
+  function renderSolar(d) {
+    var s = d.solar;
+    var el = document.getElementById('ln-solar');
+    if (!s.config.kwp) { el.innerHTML = '<p class="hint" style="margin:0;">Set your solar array (kWp, tilt, direction) and home location under <a href="/planner#settings">Planner &rarr; Settings</a>.</p>'; return; }
+    var hours = s.tomorrow.hours;
+    var html = '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700; color:#d4a017;">' + nf(s.tomorrow.total_kwh, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh</span></div>' +
+      '<div class="hint" style="margin:0;">range ' + nf(s.tomorrow.low_kwh, 0) + ' – ' + nf(s.tomorrow.high_kwh, 0) + ' kWh' + (s.status && s.status.ok ? ' · updated ' + new Date(s.status.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : s.status && s.status.error ? ' · <span style="color:var(--danger);">' + esc(s.status.error) + '</span>' : '') + '</div></div>';
+    if (hours.length) {
+      var W = 520, H = 120, max = Math.max(1, Math.max.apply(null, hours.map(function (h) { return h.corrected_kwh || 0; })) * 1.15);
+      var band = s.tomorrow.band;
+      var X = function (i) { return 30 + i / Math.max(1, hours.length - 1) * (W - 40); };
+      var Y = function (v) { return 8 + H - v / max * H; };
+      var up = hours.map(function (h, i) { return X(i) + ',' + Y((h.corrected_kwh || 0) * band.high); });
+      var lo = hours.map(function (h, i) { return X(i) + ',' + Y((h.corrected_kwh || 0) * band.low); }).reverse();
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 28) + '" width="100%" style="max-width:' + W + 'px;"><polygon points="' + up.concat(lo).join(' ') + '" fill="#d4a017" opacity="0.15"/>' +
+        '<polyline points="' + hours.map(function (h, i) { return X(i) + ',' + Y(h.corrected_kwh || 0); }).join(' ') + '" fill="none" stroke="#d4a017" stroke-width="2.4"/>';
+      hours.forEach(function (h, i) { if (i % 3 === 0) svg += '<text x="' + X(i) + '" y="' + (H + 24) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + new Date(h.hour).toLocaleTimeString([], { hour: '2-digit' }) + '</text>'; });
+      html += svg + '</svg>';
+    }
+    var f = s.status && s.status.factors;
+    html += '<p class="hint" style="margin:0.2rem 0 0;">Weather forecast (irradiance on your panels, Open-Meteo) &times; your ' + nf(s.config.kwp, 1) + ' kWp, corrected per hour with what the PV meter really produced' + (f ? ' (overall factor ' + nf(f.overall, 2) + ', ' + f.samples + ' hours compared)' : '') + '.</p>';
+    var hist = s.history;
+    if (hist.length) {
+      var W2 = 520, H2 = 80, mx = Math.max(1, Math.max.apply(null, hist.map(function (x) { return Math.max(x.actual, x.forecast); })));
+      var bw = (W2 - 10) / hist.length;
+      var svg2 = '<svg viewBox="0 0 ' + W2 + ' ' + (H2 + 18) + '" width="100%" style="max-width:' + W2 + 'px;">';
+      hist.forEach(function (x, i) {
+        var hgt = x.actual / mx * H2;
+        svg2 += '<rect x="' + (5 + i * bw + 1) + '" y="' + (4 + H2 - hgt) + '" width="' + (bw - 2) + '" height="' + hgt + '" fill="#d4a017" opacity="0.75" rx="2"><title>' + new Date(x.day).toLocaleDateString() + ': ' + nf(x.actual, 1) + ' kWh (forecast ' + nf(x.forecast, 1) + ')</title></rect>' +
+          '<line x1="' + (5 + i * bw + 2) + '" x2="' + (5 + (i + 1) * bw - 2) + '" y1="' + (4 + H2 - x.forecast / mx * H2) + '" y2="' + (4 + H2 - x.forecast / mx * H2) + '" stroke="currentColor" stroke-width="2" opacity="0.7"/>';
+      });
+      svg2 += '</svg>';
+      var band2 = s.tomorrow.band;
+      html += '<div class="hint" style="margin:0.6rem 0 0.2rem; font-size:0.8rem;">Last ' + hist.length + ' days: yield (bar) and forecast (line)' + (band2.mape != null ? ' — avg. deviation <strong>±' + Math.round(band2.mape * 100) + '%</strong>' : '') + '</div>' + svg2;
+    } else {
+      html += '<p class="hint" style="margin:0.5rem 0 0;">The comparison with the PV meter starts as soon as forecasts and measured hours overlap (a day or two).</p>';
+    }
+    el.innerHTML = html;
+  }
+
+  function renderHouse(d) {
+    var h = d.house;
+    var el = document.getElementById('ln-house');
+    if (!h.days && !h.workday.some(function (x) { return x != null; })) { el.innerHTML = '<p class="hint" style="margin:0;">No hourly data yet. Choose the meters under <a href="/energy">Meters</a> and import the history from Loxone.</p>'; return; }
+    var W = 520, H = 120, all = h.workday.concat(h.weekend).filter(function (x) { return x != null; });
+    var max = Math.max(0.5, Math.max.apply(null, all) * 1.1);
+    var X = function (i) { return 30 + i / 23 * (W - 40); };
+    var Y = function (v) { return 8 + H - v / max * H; };
+    var line = function (arr, color, dash) { var pts = []; arr.forEach(function (v, i) { if (v != null) pts.push(X(i) + ',' + Y(v)); }); return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="2.2"' + (dash ? ' stroke-dasharray="5 3"' : '') + '/>'; };
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 26) + '" width="100%" style="max-width:' + W + 'px;">';
+    [max / 2, max].forEach(function (v) { svg += '<line x1="30" x2="' + (W - 10) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="currentColor" opacity="0.08"/><text x="26" y="' + (Y(v) + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + v.toFixed(1) + '</text>'; });
+    svg += line(h.workday, '#4a7bd0') + line(h.weekend, '#9b59b6', true);
+    [0, 6, 12, 18, 23].forEach(function (i) { svg += '<text x="' + X(i) + '" y="' + (H + 22) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + String(i).padStart(2, '0') + '</text>'; });
+    svg += '</svg>';
+    var html = '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700; color:#4a7bd0;">' + nf(h.perDay, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh/day</span></div><div class="hint" style="margin:0;">base load ±' + nf(h.baseLoadKw, 2) + ' kW · without the Wallbox · ' + h.days + ' full days</div></div>' + svg +
+      '<div class="hint" style="margin:0.1rem 0 0;"><span style="color:#4a7bd0; font-weight:700;">━</span> workday &nbsp; <span style="color:#9b59b6; font-weight:700;">┅</span> weekend &nbsp;(kWh per hour, median of the last 4 weeks)</div>' +
+      '<p class="hint" style="margin:0.5rem 0 0;">Calculated per hour as grid import &minus; export + solar &minus; Wallbox from the meters.</p>';
+    var s = d.surplus;
+    if (d.solar.config.kwp) html += '<div style="margin-top:0.9rem; padding:0.7rem 0.9rem; border-radius:10px; border:1px solid var(--border);"><strong>Expected solar surplus tomorrow:</strong> ±' + nf(s.kwh, 1) + ' kWh' + (s.from ? ' between ' + new Date(s.from).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' and ' + new Date(s.to).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '') + '<div class="hint" style="margin:0.2rem 0 0;">= solar ' + nf(d.solar.tomorrow.total_kwh, 1) + ' &minus; house during the day ±' + nf(s.houseDay, 1) + ' kWh. The smart plan uses this first, the rest in the cheapest hours.</div></div>';
+    el.innerHTML = html;
+  }
+
+  function load() {
+    fetch('/learned/data.json').then(function (r) { return r.json(); }).then(function (d) {
+      document.getElementById('ln-meta').textContent = d.sessions ? 'Based on ' + d.sessions + ' charging sessions since ' + new Date(d.firstSession).toLocaleDateString() + '.' : 'No charging sessions yet.';
+      renderDep(d); renderTrips(d); renderSolar(d); renderHouse(d);
+    }).catch(function () {});
+  }
+  load();
+  var sync = document.getElementById('ln-sync');
+  if (sync) sync.addEventListener('click', function () { sync.disabled = true; fetch('/learned/sync.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(function (r) { return r.json(); }).then(function (d) { sync.textContent = (typeof d.added === 'number' ? d.added + ' new session(s)' : 'Done'); load(); }).finally(function () { sync.disabled = false; }); });
+})();
+</script>
+
+<%- include('partials/foot') %>

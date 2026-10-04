@@ -43,6 +43,9 @@ function parseForm(body) {
     home_lon: num(body.home_lon, { min: -180, max: 180 }),
     home_radius_m: num(body.home_radius_m, { min: 20, max: 5000 }) ?? 150,
     home_value: String(body.home_value || '').trim() || null,
+    id_tags: String(body.id_tags || '').trim().slice(0, 500) || null,
+    loxone_users: String(body.loxone_users || '').trim().slice(0, 500) || null,
+    ocpp_report: body.ocpp_report ? 1 : 0,
     secret: '',
   };
   for (const k of ['battery_kwh', 'charge_limit_pct', 'reserve_pct', 'kwh_per_km', 'fuel_l_per_100km', 'home_lat', 'home_lon', 'home_radius_m']) {
@@ -113,7 +116,7 @@ async function loadVehicle(id) {
   return db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id);
 }
 
-const DEFAULTS = { type: 'phev', enabled: 1, charge_limit_pct: 100, reserve_pct: 0, home_radius_m: 150, source_type: 'none' };
+const DEFAULTS = { type: 'phev', enabled: 1, charge_limit_pct: 100, reserve_pct: 0, home_radius_m: 150, source_type: 'none', ocpp_report: 1 };
 
 function viewModel(v) {
   return { ...v, config: vehicles.parseConfig(v), hasSecret: !!v.secret };
@@ -134,14 +137,15 @@ router.post('/', requirePermission('miniservers', 'edit'), asyncHandler(async (r
   const now = new Date().toISOString();
   const id = await db.insertReturningId(
     `INSERT INTO vehicles (name, type, enabled, battery_kwh, charge_limit_pct, reserve_pct, kwh_per_km, fuel_l_per_100km,
-       source_type, source_config, secret, home_lat, home_lon, home_radius_m, home_value, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       source_type, source_config, secret, home_lat, home_lon, home_radius_m, home_value, id_tags, loxone_users, ocpp_report, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [values.name, values.type, values.enabled, values.battery_kwh, values.charge_limit_pct, values.reserve_pct, values.kwh_per_km,
       values.fuel_l_per_100km, values.source_type, values.source_config, secretToStore(values, null), values.home_lat, values.home_lon,
-      values.home_radius_m, values.home_value, now, now]
+      values.home_radius_m, values.home_value, values.id_tags, values.loxone_users, values.ocpp_report, now, now]
   );
   await logSystemEvent(`Vehicle "${values.name}" added (source: ${values.source_type}) by ${req.session?.username || 'unknown user'}`).catch(() => {});
   vehicles.refreshVehicle(id);
+  vehicles.refreshVehicleCache().catch(() => {});
   return res.redirect(`/vehicles/${id}`);
 }));
 
@@ -165,7 +169,7 @@ router.post('/homey-devices.json', requirePermission('miniservers', 'edit'), asy
   }
   try {
     const devices = await vehicles.listHomeyDevices(req.body?.url, key);
-    res.json({ ok: true, devices: devices.map((d) => ({ ...d, guess: vehicles.guessHomeyFields(d.capabilities) })) });
+    res.json({ ok: true, devices: devices.map((d) => ({ ...d, guess: vehicles.guessHomeyFields(d.capabilities, req.body?.type) })) });
   } catch (err) {
     res.json({ ok: false, message: err.message });
   }
@@ -241,12 +245,14 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandle
   await db.prepare(
     `UPDATE vehicles SET name = ?, type = ?, enabled = ?, battery_kwh = ?, charge_limit_pct = ?, reserve_pct = ?, kwh_per_km = ?,
        fuel_l_per_100km = ?, source_type = ?, source_config = ?, secret = ?, home_lat = ?, home_lon = ?, home_radius_m = ?,
-       home_value = ?, updated_at = ?
+       home_value = ?, id_tags = ?, loxone_users = ?, ocpp_report = ?, updated_at = ?
      WHERE id = ?`
   ).run(values.name, values.type, values.enabled, values.battery_kwh, values.charge_limit_pct, values.reserve_pct, values.kwh_per_km,
     values.fuel_l_per_100km, values.source_type, values.source_config, secretToStore(values, existing), values.home_lat,
-    values.home_lon, values.home_radius_m, values.home_value, new Date().toISOString(), existing.id);
+    values.home_lon, values.home_radius_m, values.home_value, values.id_tags, values.loxone_users, values.ocpp_report,
+    new Date().toISOString(), existing.id);
   vehicles.refreshVehicle(existing.id);
+  vehicles.refreshVehicleCache().catch(() => {});
   return res.redirect(`/vehicles/${existing.id}?saved=1`);
 }));
 

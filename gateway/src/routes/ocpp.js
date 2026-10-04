@@ -218,8 +218,10 @@ router.get('/:id/export', asyncHandler(async (req, res) => {
     return res.redirect(`/ocpp/${bridge.id}?error=${encodeURIComponent('Live Wallbox data not available yet (Miniserver connection still starting?). Try again in a minute.')}`);
   }
   const recorded = await db.prepare('SELECT * FROM ocpp_bridge_sessions WHERE bridge_id = ?').all(bridge.id);
+  const excluded = (await db.prepare('SELECT id FROM vehicles WHERE ocpp_report = 0').all().catch(() => [])).map((v) => v.id);
   const { rows, incomplete } = ocppExport.buildQuarterRows({
     tracker: ocppExport.parseTrackerEntries(trackerText), recorded, currentTotalKwh: Number(total), start: range.start, end: range.end,
+    excludeVehicleIds: excluded,
   });
   const fileBase = `laadsessies${range.name}`;
   if (req.query.format === 'csv') {

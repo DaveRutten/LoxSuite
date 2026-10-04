@@ -1,0 +1,482 @@
+// Smart charging (Wallbox > Planner). Two halves:
+//
+//   makePlan()   — pure: given the time until the car must be ready, how much energy it needs, the
+//                  price per interval and the expected solar surplus, pick the cheapest way to get
+//                  there. Solar energy is valued at what exporting it would earn (with net metering /
+//                  "saldering" that is the price of that moment; without it a fixed feed-in tariff),
+//                  grid energy at the all-in price. A price cap (your own, or for a plug-in hybrid the
+//                  price above which driving on fuel is cheaper) keeps expensive intervals out.
+//   controlStep() — pure: every 30 s, the charging power to ask for right now, from the mode, the
+//                  plan and the live meters (solar surplus with start/stop delays, grid limit).
+//
+// The runtime part (bottom) gathers the inputs from the vehicle, the learned departures, the
+// agenda, prices, the solar forecast and the house profile; recalculates the plan every 15 minutes
+// or when something changes; and — in "Live" output mode — writes the setpoint to Loxone virtual
+// inputs. In "Advise" mode it only shows what it would do.
+const settings = require('./wallboxSettings');
+
+const MODES = ['off', 'now', 'pv', 'minpv', 'plan'];
+const DEFAULTS = {
+  mode: 'plan',
+  output: 'advise',               // 'advise' (show only) | 'live' (write to Loxone)
+  vi_setpoint: '',                // Loxone virtual input receiving the charging power in kW (0 = stop)
+  vi_enable: '',                  // optional virtual input receiving 1/0 (charging allowed)
+  min_kw: 4.16,                   // 6 A x 3 phases
+  max_kw: 11,
+  grid_limit_kw: 17.3,            // 3 x 25 A
+  pv_start_kw: null,              // default: min_kw
+  pv_start_delay_s: 120,
+  pv_stop_delay_s: 300,
+  pv_allowed_import_kw: 0.5,      // grid import tolerated while solar charging before the stop timer runs
+  pv_opportunistic: true,         // in "plan" mode also use solar surplus outside the planned intervals
+  solar_trust: 'low',             // 'low' (p10 of the forecast band) | 'expected' | 'bonus' (ignore solar when planning)
+  max_price_eur_kwh: null,
+  insufficient: 'charge',         // too few cheap intervals: 'charge' anyway | 'stop' at the price cap
+  feed_in: 'saldering',           // value of exported solar: 'saldering' (= price of that moment) | 'fixed'
+  feed_in_eur_kwh: 0.05,
+  target_policy: 'full',          // 'full' before every departure | 'needed' (next trip + reserve; needs SoC)
+  ready_margin_min: 15,
+  fuel_eur_l: 2.10,
+  fuel_auto: false,
+  default_kwh_per_km: 0.2,
+};
+
+const round2 = (x) => Math.round(x * 100) / 100;
+const round3 = (x) => Math.round(x * 1000) / 1000;
+
+// ------------------------------------------------------------------ plan (pure)
+
+// slots: [{ start, end (ISO), price (all-in €/kWh), pvKw (expected solar surplus, kW) }]
+function makePlan({
+  nowMs, readyAtMs = null, needKwh, slots, mode = 'plan', minKw = 4.16, maxKw = 11,
+  solarTrust = 'low', priceCap = null, insufficient = 'charge', feedIn = 'saldering', feedInEur = 0.05, horizonH = 24,
+}) {
+  const end = readyAtMs || nowMs + horizonH * 3600000;
+  const trust = solarTrust === 'bonus' ? 0 : solarTrust === 'expected' ? 1 : 0.7;
+  const win = slots
+    .map((s) => ({ ...s, s: Math.max(Date.parse(s.start), nowMs), e: Math.min(Date.parse(s.end), end) }))
+    .filter((s) => s.e - s.s > 60000);
+  const need = Math.max(0, Number(needKwh) || 0);
+  const notes = [];
+  const chunks = [];
+  for (const s of win) {
+    const h = (s.e - s.s) / 3600000;
+    const pv = Math.max(0, (s.pvKw || 0) * trust);
+    const price = Number.isFinite(s.price) ? s.price : null;
+    const pvValue = feedIn === 'fixed' ? feedInEur : (price ?? feedInEur);
+    if (pv >= minKw) {
+      const kwA = Math.min(maxKw, pv);
+      chunks.push({ slot: s, kw: kwA, h, cost: pvValue, source: 'pv' });
+      if (kwA < maxKw && price !== null) chunks.push({ slot: s, kw: maxKw - kwA, h, cost: price, source: 'grid', topUp: true });
+    } else if (price !== null) {
+      const blended = (pv * pvValue + (maxKw - pv) * price) / maxKw;
+      chunks.push({ slot: s, kw: maxKw, h, cost: blended, source: pv > 0.3 ? 'mixed' : 'grid', pvShare: pv / maxKw });
+    }
+  }
+
+  let picked = [];
+  if (mode === 'now') {
+    picked = chunks.filter((c) => !c.topUp).sort((a, b) => a.slot.s - b.slot.s).map((c) => (c.source === 'pv' ? { ...c, kw: maxKw } : c));
+  } else if (mode === 'pv') {
+    picked = chunks.filter((c) => c.source === 'pv').sort((a, b) => a.slot.s - b.slot.s);
+  } else if (mode === 'minpv') {
+    picked = win.map((s) => {
+      const pv = Math.max(0, (s.pvKw || 0) * trust);
+      return { slot: s, kw: Math.min(maxKw, Math.max(minKw, pv)), h: (s.e - s.s) / 3600000, cost: s.price, source: pv >= minKw ? 'pv' : 'grid' };
+    });
+  } else if (mode === 'plan') {
+    const sorted = [...chunks].sort((a, b) => a.cost - b.cost || a.slot.s - b.slot.s);
+    const under = sorted.filter((c) => priceCap === null || c.cost <= priceCap);
+    const over = sorted.filter((c) => priceCap !== null && c.cost > priceCap);
+    picked = [...under];
+    if (insufficient === 'charge') picked = [...under, ...over];
+    else if (over.length) notes.push('Intervals above the price cap are skipped.');
+  }
+
+  // Take chunks in order until the need is met (the last one partly).
+  const result = [];
+  let remaining = mode === 'off' ? 0 : need;
+  const sequential = mode !== 'plan';
+  for (const c of picked) {
+    if (remaining <= 0.01) break;
+    const kwh = c.kw * c.h;
+    if (kwh <= 0) continue;
+    const take = Math.min(kwh, remaining);
+    const frac = take / kwh;
+    // A partial interval is charged at full power for part of the time, never below the minimum.
+    result.push({
+      start: new Date(c.slot.s).toISOString(), end: new Date(c.slot.s + (c.slot.e - c.slot.s) * frac).toISOString(),
+      kw: round2(c.kw), kwh: round3(take), source: c.source, price: c.slot.price ?? null, cost: round3(take * c.cost), topUp: !!c.topUp,
+    });
+    remaining -= take;
+    if (sequential && mode === 'pv' && remaining <= 0) break;
+  }
+  // Merge pv + top-up in the same interval and sort by time.
+  const bySlot = new Map();
+  for (const r of result) {
+    const k = r.start;
+    const prev = bySlot.get(k);
+    if (prev) {
+      prev.kw = round2(prev.kw + r.kw); prev.kwh = round3(prev.kwh + r.kwh); prev.cost = round3(prev.cost + r.cost);
+      prev.source = 'mixed'; if (r.end > prev.end) prev.end = r.end;
+    } else bySlot.set(k, { ...r });
+  }
+  const planSlots = [...bySlot.values()].sort((a, b) => a.start.localeCompare(b.start));
+  const kwh = round3(planSlots.reduce((s, r) => s + r.kwh, 0));
+  const cost = round3(planSlots.reduce((s, r) => s + r.cost, 0));
+  const pvKwh = round3(planSlots.filter((r) => r.source === 'pv').reduce((s, r) => s + r.kwh, 0));
+  const shortfall = round3(Math.max(0, need - kwh));
+  if (mode !== 'off' && shortfall > 0.05) {
+    notes.push(mode === 'pv'
+      ? `Expected solar covers ${kwh.toFixed(1)} of ${need.toFixed(1)} kWh before the deadline.`
+      : `${shortfall.toFixed(1)} kWh does not fit before the deadline${priceCap !== null && insufficient === 'stop' ? ' within the price cap' : ''}.`);
+  }
+
+  // What charging straight away would cost, for comparison.
+  let left = need;
+  let nowCost = 0;
+  for (const s of [...win].sort((a, b) => a.s - b.s)) {
+    if (left <= 0 || s.price === null || s.price === undefined) continue;
+    const k = Math.min(left, maxKw * (s.e - s.s) / 3600000);
+    nowCost += k * s.price;
+    left -= k;
+  }
+  const nowKwh = need - Math.max(0, left);
+  return {
+    mode, slots: planSlots, needKwh: round3(need), kwh, pvKwh, gridKwh: round3(kwh - pvKwh), cost,
+    avgPrice: kwh > 0 ? round3(cost / kwh) : null, feasible: shortfall <= 0.05, shortfallKwh: shortfall,
+    compare: nowKwh > 0 ? { cost: round3(nowCost), avgPrice: round3(nowCost / nowKwh), saving: round3(nowCost * (kwh / nowKwh) - cost) } : null,
+    readyAt: readyAtMs ? new Date(readyAtMs).toISOString() : null, notes,
+  };
+}
+
+// Price above which a plug-in hybrid is cheaper on fuel: fuel €/km divided by kWh/km (+10% losses).
+function fuelBreakEven({ fuelEurL, lPer100km, kwhPerKm }) {
+  if (!(fuelEurL > 0) || !(lPer100km > 0) || !(kwhPerKm > 0)) return null;
+  return round3((fuelEurL * lPer100km / 100) / (kwhPerKm * 1.1));
+}
+
+// The planned interval that covers `nowMs`, if any.
+function activeSlot(plan, nowMs) {
+  return (plan?.slots || []).find((s) => Date.parse(s.start) <= nowMs && Date.parse(s.end) > nowMs) || null;
+}
+
+// ------------------------------------------------------------------ control (pure)
+
+// live: { connected, gridKw (+ import), wallboxKw, houseKw }; state carries the solar timers.
+// Returns { kw, reason, state }.
+function controlStep({ nowMs, mode, cfg, plan, live, state = {}, done = false, override = null }) {
+  const min = Number(cfg.min_kw) || 4.16;
+  const max = Number(cfg.max_kw) || 11;
+  const st = { ...state };
+  const effMode = override || mode;
+  if (!live.connected) return { kw: 0, reason: 'No car connected.', state: { } };
+  if (done) return { kw: 0, reason: 'Target reached (the car stopped charging).', state: st };
+  // Solar surplus available to the car: what is exported now plus what the car already uses.
+  const surplus = round3(-(live.gridKw ?? 0) + (live.wallboxKw ?? 0));
+  const startKw = Number(cfg.pv_start_kw) || min;
+  const pvSetpoint = () => {
+    if (st.pvCharging) {
+      if (surplus >= min - (Number(cfg.pv_allowed_import_kw) || 0)) st.pvLowSince = null;
+      else if (st.pvLowSince == null) st.pvLowSince = nowMs;
+      if (st.pvLowSince != null && nowMs - st.pvLowSince >= (cfg.pv_stop_delay_s ?? 300) * 1000) { st.pvCharging = false; st.pvLowSince = null; }
+    } else {
+      if (surplus >= startKw) { if (st.pvHighSince == null) st.pvHighSince = nowMs; } else st.pvHighSince = null;
+      if (st.pvHighSince != null && nowMs - st.pvHighSince >= (cfg.pv_start_delay_s ?? 120) * 1000) { st.pvCharging = true; st.pvHighSince = null; }
+    }
+    return st.pvCharging ? Math.min(max, Math.max(min, surplus)) : 0;
+  };
+  let kw = 0;
+  let reason = '';
+  if (effMode === 'off') { reason = 'Mode Off.'; }
+  else if (effMode === 'now') { kw = max; reason = 'Charging now at full power.'; }
+  else if (effMode === 'pv') { kw = pvSetpoint(); reason = kw ? `Solar surplus ${surplus.toFixed(2)} kW.` : `Waiting for solar surplus (now ${surplus.toFixed(2)} kW, start at ${startKw.toFixed(2)} kW).`; }
+  else if (effMode === 'minpv') { kw = Math.min(max, Math.max(min, surplus)); reason = surplus > min ? `Minimum + solar (${surplus.toFixed(2)} kW surplus).` : 'Minimum power.'; }
+  else if (effMode === 'plan') {
+    const slot = activeSlot(plan, nowMs);
+    const pv = cfg.pv_opportunistic ? pvSetpoint() : 0;
+    if (slot) { kw = Math.max(slot.kw, pv); reason = `Planned interval until ${require('./localTime').hhmm(Date.parse(slot.end))} (${slot.source === 'pv' ? 'solar' : slot.source === 'mixed' ? 'solar + grid' : 'grid'}).`; }
+    else if (pv) { kw = pv; reason = `Extra solar surplus ${surplus.toFixed(2)} kW.`; }
+    else { const next = (plan?.slots || []).find((s) => Date.parse(s.start) > nowMs); reason = next ? `Waiting for the next planned interval at ${require('./localTime').hhmm(Date.parse(next.start))}.` : 'Nothing planned.'; }
+  }
+  // Never exceed the grid connection: house load + car <= limit.
+  const limit = Number(cfg.grid_limit_kw) || 0;
+  if (kw > 0 && limit > 0 && live.houseKw !== null && live.houseKw !== undefined) {
+    const room = limit - live.houseKw;
+    if (room < kw) {
+      kw = room >= min ? room : 0;
+      reason += kw ? ` Limited to ${kw.toFixed(2)} kW by the grid connection.` : ' Paused: the grid connection is fully used.';
+    }
+  }
+  if (kw > 0) kw = Math.min(max, Math.max(min, round2(kw)));
+  return { kw: round2(kw), reason: reason.trim(), state: st, surplus };
+}
+
+// ------------------------------------------------------------------ runtime
+
+async function getConfig() { return settings.get('planner', DEFAULTS); }
+async function saveConfig(v) {
+  const cur = await getConfig();
+  const next = { ...cur, ...v };
+  if (!MODES.includes(next.mode)) next.mode = 'plan';
+  await settings.set('planner', next);
+  return next;
+}
+
+const rt = {
+  plan: null, planAt: 0, planKey: '', ctrl: { state: {} }, lastWrite: { kw: null, at: 0 }, override: null,
+  session: null, status: null, readyOverride: null, doneSince: null, lowDrawSince: null,
+};
+
+// The car this session is for: the only one, or identified by NFC tag / Loxone user / its own data
+// source, or the answer to the "which car is plugged in?" push question. Otherwise the first car,
+// and the question is asked (once per session).
+async function primaryVehicle(wb = null) {
+  const db = require('./db');
+  const list = await db.prepare('SELECT * FROM vehicles WHERE enabled = 1 ORDER BY id').all().catch(() => []);
+  if (list.length <= 1 || !wb?.connected) return list[0] || null;
+  if (rt.sessionVehicle) { const v = list.find((x) => x.id === rt.sessionVehicle); if (v) return v; }
+  let idTag = null;
+  try {
+    const bridges = await db.prepare('SELECT id FROM ocpp_bridges WHERE enabled = 1').all();
+    for (const b of bridges) {
+      const st = require('./ocppBridge').getBridgeStatus(b.id);
+      if (st?.transaction?.idTag && st.transaction.idTagSource !== 'fixed' && st.transaction.idTagSource !== 'fallback') idTag = st.transaction.idTag;
+    }
+  } catch { /* no bridge */ }
+  const vehicles = require('./vehicles');
+  const plugged = list.filter((v) => vehicles.getVehicleStatus(v).reading?.plugged === true).map((v) => v.id);
+  const hit = vehicles.identifyVehicle(list, { idTag, loxoneUser: wb.sessionUser, pluggedIds: plugged });
+  if (hit) return hit;
+  require('./notifications').fireCarEvent('car_reminder', `which|${wb.connectAt || 'now'}`, {
+    title: 'Which car is plugged in?', message: 'LoxSuite can\'t tell which car is connected; tap the right one so the plan is made for it.',
+    fields: [], url: '/planner', tag: 'which',
+    actions: list.slice(0, 2).map((v) => ({ action: `vehicle:${v.id}`, title: v.name })), data: { kind: 'which' },
+  }).catch(() => {});
+  return list[0];
+}
+
+// The car's live state from its data source, if fresh (< 6 h).
+function freshReading(vehicle) {
+  if (!vehicle) return null;
+  const st = require('./vehicles').getVehicleStatus(vehicle);
+  const r = st.reading;
+  const at = st.sourceUpdatedAt ? Date.parse(st.sourceUpdatedAt) : null;
+  if (!r || r.soc === null || r.soc === undefined) return null;
+  if (at && Date.now() - at > 6 * 3600000) return null;
+  return r;
+}
+
+// Live Wallbox values (connected, power, session energy) via the configured wallbox meter.
+async function wallboxLive() {
+  const learning = require('./learning');
+  const wb = await learning.wallboxControl();
+  if (!wb) return null;
+  const ws = require('./loxoneWebSocket');
+  ws.ensureConnection(wb.miniserver);
+  const read = (n) => (wb.control.states?.[n] ? ws.getLiveValue(wb.miniserver.id, wb.control.states[n]) : undefined);
+  let session = null;
+  try { session = JSON.parse(read('session') || 'null'); } catch { session = null; }
+  return {
+    name: wb.control.name, connected: Number(read('connected')) === 1, active: Number(read('active')) === 1,
+    kw: Number(read('actual')) || 0, total: Number(read('total')) || null, mode: read('mode'), limit: read('limit'),
+    sessionKwh: session ? Number(session.energy) || 0 : null, connectAt: session?.connect ? session.connect * 1000 : null, miniserver: wb.miniserver,
+    sessionUser: session?.user || null,
+  };
+}
+
+// How much the car needs and by when. Returns { needKwh, needSource, readyAtMs, readySource, vehicle, ... }.
+async function computeTarget(nowMs, wb) {
+  const cfg = await getConfig();
+  const learning = require('./learning');
+  const { displayTz } = require('./localTime');
+  const tz = displayTz();
+  const vehicle = await primaryVehicle(wb);
+  const usable = vehicle?.battery_kwh ? vehicle.battery_kwh * ((vehicle.charge_limit_pct || 100) / 100) : null;
+  const reading = freshReading(vehicle);
+  let needKwh = null;
+  let needSource = '';
+  if (reading && vehicle?.battery_kwh) {
+    const limitPct = reading.limit_soc ?? vehicle.charge_limit_pct ?? 100;
+    needKwh = Math.max(0, vehicle.battery_kwh * (limitPct - reading.soc) / 100);
+    needSource = `car reports ${reading.soc}%`;
+  } else {
+    // Estimate: energy of the trip the car just came back from (learned), minus what this session charged.
+    const sessions = await learning.loadSessions(60, vehicle?.id || null);
+    const last = sessions.filter((s) => s.disconnect && (!wb?.connectAt || s.disconnect < wb.connectAt)).pop();
+    const awayH = last && wb?.connectAt ? (wb.connectAt - last.disconnect) / 3600000 : 8;
+    const trips = await learning.learnedTrips(vehicle);
+    const exp = last ? learning.expectedTripKwh(trips, last.disconnect, awayH, { tz }) : null;
+    let est = exp?.kwh ?? (usable ? usable * 0.6 : 15);
+    if (usable) est = Math.min(est, usable);
+    needKwh = Math.max(0, est - (wb?.sessionKwh || 0));
+    needSource = exp ? `estimated from ${exp.source} (${exp.n}x, ${exp.kwh} kWh) minus ${(wb?.sessionKwh || 0).toFixed(1)} kWh charged` : 'estimate (no history yet)';
+  }
+  // Deadline: a manual "ready by" for this session, the agenda, the learned weekday pattern.
+  let readyAtMs = null;
+  let readySource = '';
+  if (rt.readyOverride && rt.readyOverride > nowMs) { readyAtMs = rt.readyOverride; readySource = 'set for this session'; }
+  try {
+    const agenda = require('./agenda');
+    const trip = await agenda.nextCarTrip(nowMs, vehicle);
+    if (trip && (!readyAtMs || trip.readyAt < readyAtMs)) {
+      readyAtMs = trip.readyAt; readySource = `agenda: ${trip.title}`;
+      if (trip.needKwh && usable && trip.needKwh > needKwh) {
+        // A long trip from the agenda: make sure that much is in the battery.
+        const energyNow = reading && vehicle?.battery_kwh ? vehicle.battery_kwh * reading.soc / 100 : (usable - needKwh);
+        needKwh = Math.max(needKwh, Math.min(usable, trip.needKwh) - energyNow);
+        needSource += ` · trip needs ${trip.needKwh.toFixed(1)} kWh`;
+      }
+    }
+  } catch { /* agenda not configured */ }
+  // The learned weekday pattern counts too: whichever comes first (unless set by hand).
+  if (!rt.readyOverride || rt.readyOverride <= nowMs) {
+    const stats = await learning.learnedDepartures(vehicle?.id || null);
+    const nx = learning.nextReadyTime(stats, nowMs, { tz });
+    if (nx && (!readyAtMs || nx.at < readyAtMs)) { readyAtMs = nx.at; readySource = `${nx.source} ${nx.weekday} departure (${nx.confidence})`; }
+  }
+  if (readyAtMs) readyAtMs -= 0; // ready time already includes the learned margin
+  return { needKwh: round3(needKwh || 0), needSource, readyAtMs, readySource, vehicle, usable, reading };
+}
+
+// Price + expected solar surplus per interval from now to the deadline (or 36 h).
+async function buildSlots(nowMs, untilMs) {
+  const prices = require('./prices');
+  const solar = require('./solarForecast');
+  const learning = require('./learning');
+  const { displayTz } = require('./localTime');
+  const tz = displayTz();
+  const fromIso = new Date(Math.floor(nowMs / 900000) * 900000).toISOString();
+  const toIso = new Date(untilMs).toISOString();
+  const rows = await prices.getPrices(fromIso, toIso);
+  const pv = await solar.forecastBetween(new Date(Math.floor(nowMs / 3600000) * 3600000).toISOString(), toIso);
+  const house = await learning.learnedHouse();
+  const slots = [];
+  const covered = rows.length ? Date.parse(rows[rows.length - 1].end_at) : nowMs;
+  const pushSlot = (s, e, price) => {
+    const hour = new Date(Math.floor(s / 3600000) * 3600000).toISOString();
+    const pvKwh = pv.get(hour) || 0;
+    const houseKwh = learning.expectedHouseKwh(house, s, { tz }) ?? 0.4;
+    slots.push({ start: new Date(s).toISOString(), end: new Date(e).toISOString(), price, pvKw: round3(Math.max(0, pvKwh - houseKwh)), pvKwh, houseKwh });
+  };
+  for (const r of rows) pushSlot(Date.parse(r.start_at), Date.parse(r.end_at), r.allin_eur_kwh);
+  // Beyond the known prices (tomorrow's come out around 13:00): hourly slots without a price.
+  for (let t = Math.max(covered, Math.floor(nowMs / 3600000) * 3600000); t < untilMs; t += 3600000) pushSlot(t, t + 3600000, null);
+  return slots;
+}
+
+async function recalc(nowMs = Date.now(), { force = false } = {}) {
+  const cfg = await getConfig();
+  const wb = await wallboxLive();
+  const target = await computeTarget(nowMs, wb);
+  const until = target.readyAtMs || nowMs + 24 * 3600000;
+  const slots = await buildSlots(nowMs, Math.max(until, nowMs + 3600000));
+  const vehicle = target.vehicle;
+  let priceCap = cfg.max_price_eur_kwh ? Number(cfg.max_price_eur_kwh) : null;
+  let fuel = null;
+  if (vehicle?.type === 'phev') {
+    const fuelPrice = await require('./fuelPrice').currentFuelPrice();
+    fuel = fuelBreakEven({ fuelEurL: fuelPrice?.eur_l ?? cfg.fuel_eur_l, lPer100km: vehicle.fuel_l_per_100km || 6.5, kwhPerKm: vehicle.kwh_per_km || cfg.default_kwh_per_km });
+    if (fuel !== null) priceCap = priceCap === null ? fuel : Math.min(priceCap, fuel);
+  }
+  const plan = makePlan({
+    nowMs, readyAtMs: target.readyAtMs, needKwh: target.needKwh, slots, mode: rt.override || cfg.mode,
+    minKw: cfg.min_kw, maxKw: cfg.max_kw, solarTrust: cfg.solar_trust, priceCap,
+    insufficient: vehicle?.type === 'phev' ? 'stop' : cfg.insufficient, feedIn: cfg.feed_in, feedInEur: cfg.feed_in_eur_kwh,
+  });
+  plan.target = { ...target, vehicle: vehicle ? { id: vehicle.id, name: vehicle.name, type: vehicle.type } : null, reading: undefined };
+  plan.fuelBreakEven = fuel;
+  plan.priceCap = priceCap;
+  plan.slotsAll = slots;
+  plan.madeAt = new Date(nowMs).toISOString();
+  rt.plan = plan;
+  rt.planAt = nowMs;
+  return plan;
+}
+
+async function writeOutput(cfg, kw, nowMs) {
+  if (cfg.output !== 'live' || !cfg.vi_setpoint) return { written: false };
+  const same = rt.lastWrite.kw === kw;
+  if (same && nowMs - rt.lastWrite.at < 5 * 60 * 1000) return { written: false };
+  const db = require('./db');
+  const { sendHttpVirtualInput } = require('./loxone');
+  const ms = await db.prepare('SELECT * FROM miniservers ORDER BY id LIMIT 1').get();
+  if (!ms) return { written: false, error: 'No Miniserver.' };
+  await sendHttpVirtualInput(ms, cfg.vi_setpoint, String(kw));
+  if (cfg.vi_enable) await sendHttpVirtualInput(ms, cfg.vi_enable, kw > 0 ? '1' : '0');
+  rt.lastWrite = { kw, at: nowMs };
+  if (!same) {
+    const { logSystemEvent } = require('./auditLog');
+    logSystemEvent(`Planner: charging power set to ${kw} kW`).catch(() => {});
+  }
+  return { written: true };
+}
+
+async function tick(nowMs = Date.now()) {
+  const cfg = await getConfig();
+  const wb = await wallboxLive();
+  const energy = require('./energyMeters');
+  const live = await energy.live().catch(() => ({ roles: {}, house_kw: null }));
+  const connected = !!wb?.connected;
+  // New session / unplug resets per-session choices.
+  const key = connected ? String(wb.connectAt || 'c') : 'none';
+  if (rt.session !== key) {
+    rt.session = key; rt.override = null; rt.readyOverride = null; rt.doneSince = null; rt.lowDrawSince = null; rt.ctrl.state = {}; rt.sessionVehicle = null;
+    rt.planAt = 0;
+  }
+  if (!rt.plan || nowMs - rt.planAt > 15 * 60 * 1000) await recalc(nowMs).catch((err) => { rt.status = { error: err.message }; });
+  // "Done": we asked for power but the car took (almost) none for 5 minutes -> it is full.
+  const asked = rt.lastSet || 0;
+  if (connected && asked > 0 && (wb.kw || 0) < 0.3) { if (!rt.lowDrawSince) rt.lowDrawSince = nowMs; } else rt.lowDrawSince = null;
+  if (rt.lowDrawSince && nowMs - rt.lowDrawSince > 5 * 60 * 1000) rt.doneSince = rt.doneSince || nowMs;
+  const gridKw = live.roles?.grid?.power_kw ?? null;
+  const step = controlStep({
+    nowMs, mode: cfg.mode, cfg, plan: rt.plan, override: rt.override, done: !!rt.doneSince, state: rt.ctrl.state,
+    live: { connected, gridKw, wallboxKw: wb?.kw ?? 0, houseKw: live.house_kw },
+  });
+  rt.ctrl.state = step.state;
+  rt.lastSet = step.kw;
+  let out = { written: false };
+  try { out = await writeOutput(cfg, step.kw, nowMs); } catch (err) { out = { written: false, error: err.message }; }
+  rt.status = {
+    at: new Date(nowMs).toISOString(), connected, wallbox: wb ? { name: wb.name, kw: wb.kw, sessionKwh: wb.sessionKwh, connectAt: wb.connectAt } : null,
+    setpointKw: step.kw, reason: step.reason, surplusKw: step.surplus ?? null, output: cfg.output, outputResult: out,
+    mode: rt.override || cfg.mode, override: rt.override, done: !!rt.doneSince,
+  };
+  publishStatus(rt.status);
+  return rt.status;
+}
+
+function publishStatus(s) {
+  let mqttClient;
+  try { mqttClient = require('./mqttClient'); } catch { return; }
+  const client = mqttClient.getClient();
+  if (!client || !mqttClient.state?.connected) return;
+  const pub = (t, v) => client.publish(`loxsuite/planner/${t}`, String(v), { qos: 0, retain: true });
+  pub('setpoint_kw', s.setpointKw);
+  pub('mode', s.mode);
+  if (rt.plan) { pub('need_kwh', rt.plan.needKwh); pub('ready_at', rt.plan.readyAt || ''); pub('plan_cost_eur', rt.plan.cost); }
+}
+
+// Buttons on the page: 'now' / 'off' (pause) / null (back to the configured mode) for this session.
+function setOverride(mode) {
+  rt.override = MODES.includes(mode) ? mode : null;
+  rt.planAt = 0;
+}
+function setReadyOverride(ms) { rt.readyOverride = ms || null; rt.planAt = 0; }
+function setSessionVehicle(id) { rt.sessionVehicle = Number(id) || null; rt.planAt = 0; }
+function getRuntime() { return { plan: rt.plan, status: rt.status, override: rt.override, readyOverride: rt.readyOverride }; }
+
+let timer = null;
+function startPlanner() {
+  if (timer) return;
+  const run = () => tick().catch((err) => { rt.status = { error: err.message, at: new Date().toISOString() }; });
+  timer = setInterval(run, 30000);
+  timer.unref?.();
+  setTimeout(run, 50000).unref?.();
+}
+
+module.exports = {
+  MODES, DEFAULTS, makePlan, fuelBreakEven, activeSlot, controlStep,
+  getConfig, saveConfig, recalc, tick, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, buildSlots, computeTarget, wallboxLive,
+};

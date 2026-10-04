@@ -1,0 +1,345 @@
+<%- include('partials/head', { pageTitle: 'Agenda', active: 'agenda' }) %>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);">Saved.</p><% } %>
+
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
+    <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+      <button type="button" class="btn-soft" id="ag-prev">&lsaquo;</button>
+      <button type="button" class="btn-soft" id="ag-today">Today</button>
+      <button type="button" class="btn-soft" id="ag-next">&rsaquo;</button>
+      <strong id="ag-title" style="margin-left:0.4rem;"></strong>
+    </div>
+    <div id="ag-views" style="display:inline-flex; border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+      <% [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['year', 'Year']].forEach(([k, l]) => { %>
+        <button type="button" data-view="<%= k %>" style="border:0; padding:0.4rem 0.85rem; font-weight:600; cursor:pointer;"><%= l %></button>
+      <% }) %>
+    </div>
+  </div>
+  <div id="ag-legend" class="hint" style="margin:0.6rem 0 0.6rem; font-size:0.8rem;"></div>
+  <div style="display:flex; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
+    <div id="ag-view" style="flex:1 1 640px; min-width:0; max-width:100%; overflow-x:auto;"></div>
+    <div id="ag-detail" style="flex:0 0 300px; max-width:100%;"></div>
+  </div>
+</div>
+
+<% if (canEdit('miniservers')) { %>
+<div class="card">
+  <h2 style="margin-top:0;">Calendars</h2>
+  <% if (!site.lat) { %><p class="hint" style="color:#b8860b;">Set the home location under <a href="/planner#settings">Planner &rarr; Settings</a> so distances can be calculated.</p><% } %>
+  <% if (calendars.length) { %>
+    <table>
+      <thead><tr><th>Name</th><th>Address</th><th>Car</th><th>Last sync</th><th></th></tr></thead>
+      <tbody>
+        <% calendars.forEach(c => { %>
+          <tr>
+            <td><span style="display:inline-block; width:10px; height:10px; border-radius:3px; background:<%= c.color %>;"></span> <%= c.name %><%= c.enabled ? '' : ' (off)' %></td>
+            <td class="hint"><%= c.urlHost %></td>
+            <td><%= (vehicles.find(v => v.id === c.vehicle_id) || {}).name || '—' %></td>
+            <td class="hint"><%= c.last_sync_at ? formatDateTime(c.last_sync_at) : '—' %><% if (c.last_error) { %> <span style="color:var(--danger);"><%= c.last_error %></span><% } %></td>
+            <td><form method="post" action="/agenda/calendars/<%= c.id %>/delete" onsubmit="return confirm('Remove this calendar from LoxSuite?');" style="margin:0;"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <div class="btn-row" style="margin-top:0.5rem;"><button type="button" class="btn-soft" id="ag-sync"><%- icon('refresh') %> Sync now</button><span class="hint" id="ag-sync-msg" style="margin:0;"></span></div>
+  <% } %>
+  <details style="margin-top:0.8rem;" <%= calendars.length ? '' : 'open' %>>
+    <summary><strong>Add calendar</strong></summary>
+    <form method="post" action="/agenda/calendars" style="margin-top:0.6rem;">
+      <div class="form-grid">
+        <div><label>Name</label><input type="text" name="name" placeholder="Private" required></div>
+        <div style="grid-column: span 2;"><label>ICS address (secret link)</label><input type="password" name="url" autocomplete="off" placeholder="https://… or webcal://…" required></div>
+        <div><label>Colour</label><input type="color" name="color" value="#3b82c4"></div>
+        <div><label>Car (optional)</label><select name="vehicle_id"><option value="">— any —</option><% vehicles.forEach(v => { %><option value="<%= v.id %>"><%= v.name %></option><% }) %></select></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;">
+        Nextcloud: calendar &rarr; &hellip; &rarr; Copy subscription link. Google: calendar settings &rarr; "Secret address in iCal format". Outlook: Settings &rarr;
+        Calendar &rarr; Shared calendars &rarr; Publish &rarr; ICS link. The address is stored encrypted; LoxSuite only reads it (every 15 minutes).
+      </p>
+      <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="primary"><%- icon('plus') %> Add</button></div>
+    </form>
+  </details>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Trips planned in LoxSuite</h2>
+  <% if (trips.length) { %>
+    <table><thead><tr><th>Trip</th><th>Leaves</th><th>Back</th><th>Where / how much</th><th></th></tr></thead><tbody>
+      <% trips.forEach(t => { %><tr><td><%= t.title %><%= t.weekly ? ' (weekly)' : '' %></td><td><%= formatDateTime(t.depart_at) %></td><td><%= t.return_at ? formatDateTime(t.return_at) : '—' %></td><td><%= t.location || '' %> <%= t.own_value || '' %></td>
+        <td><form method="post" action="/agenda/trips/<%= t.id %>/delete" style="margin:0;"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form></td></tr><% }) %>
+    </tbody></table>
+  <% } %>
+  <details style="margin-top:0.6rem;" <%= trips.length ? '' : 'open' %>>
+    <summary><strong>Plan a trip</strong></summary>
+    <form method="post" action="/agenda/trips" style="margin-top:0.6rem;" id="ag-trip-form">
+      <div class="form-grid">
+        <div><label>Name</label><input type="text" name="title" placeholder="Visit" required></div>
+        <div><label>Leaves</label><input type="datetime-local" id="ag-dep" required><input type="hidden" name="depart_at"></div>
+        <div><label>Back (optional)</label><input type="datetime-local" id="ag-ret"><input type="hidden" name="return_at"></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.7rem;">
+        <div><label>Address (optional)</label><input type="text" name="location" placeholder="Utrecht"></div>
+        <div><label>Or: how much</label><input type="text" name="own_value" placeholder="150 km, 30 kWh or full"></div>
+        <div><label>Car</label><select name="vehicle_id"><option value="">— default —</option><% vehicles.forEach(v => { %><option value="<%= v.id %>"><%= v.name %></option><% }) %></select></div>
+        <div><label>Every week</label><%- toggleSwitch('weekly', false) %></div>
+      </div>
+      <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="primary"><%- icon('plus') %> Add trip</button></div>
+    </form>
+  </details>
+</div>
+
+<div class="card" id="settings">
+  <h2 style="margin-top:0;">Settings</h2>
+  <form method="post" action="/agenda/settings">
+    <div class="form-grid">
+      <div><label>Car markers in the title</label><input type="text" name="tags" value="<%= cfg.tags.join(' ') %>"></div>
+      <div><label>Margin on distance (km)</label><input type="text" name="margin_km" value="<%= cfg.margin_km %>"></div>
+      <div><label>Ready this long before leaving (min)</label><input type="text" name="ready_margin_min" value="<%= cfg.ready_margin_min %>"></div>
+      <div><label>Calculate distances (OpenStreetMap)</label><%- toggleSwitch('geo', !!cfg.geo) %></div>
+    </div>
+    <p class="hint" style="margin:0.5rem 0 0;">
+      An appointment needs the car when its title or description contains one of the markers, e.g. <code>🚗 Birthday</code> or <code>Visit #auto</code>.
+      Add a hint like <code>🚗 120 km</code>, <code>🚗 30 kWh</code> or <code>🚗 full</code> to skip the distance lookup. For car appointments with an
+      address, the driving distance from home is looked up (only those addresses are sent, results are kept), doubled for the way back plus the margin,
+      and turned into kWh with the car's consumption.
+    </p>
+    <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save</button></div>
+  </form>
+</div>
+<% } %>
+
+<style>.ag-need td { padding:0.3rem 0.2rem; } .ag-need td:last-child { white-space:nowrap; text-align:right; }</style>
+<script>
+(function () {
+  var canEdit = <%- JSON.stringify(canEdit('miniservers')) %>;
+  var view = window.matchMedia('(max-width: 768px)').matches ? 'day' : 'week'; // a week doesn't fit a phone
+  try { view = localStorage.getItem('agenda-view') || view; } catch (e) { /* storage blocked */ }
+  var cursor = new Date();
+  var data = null;
+  var selected = null;
+  var DAYN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function tm(d) { return new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  function startOfDay(d) { var x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+  function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function startOfWeek(d) { var x = startOfDay(d); var wd = (x.getDay() + 6) % 7; return addDays(x, -wd); }
+  function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+  function weekNo(d) { var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); var day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day); var y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return Math.ceil(((t - y0) / 86400000 + 1) / 7); }
+  function post(url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }); }
+
+  function range() {
+    if (view === 'day') { var s = startOfDay(cursor); return [s, addDays(s, 1)]; }
+    if (view === 'week') { var w = startOfWeek(cursor); return [w, addDays(w, 7)]; }
+    if (view === 'month') { var m = new Date(cursor.getFullYear(), cursor.getMonth(), 1); var g = startOfWeek(m); return [g, addDays(g, 42)]; }
+    return [new Date(cursor.getFullYear(), 0, 1), new Date(cursor.getFullYear() + 1, 0, 1)];
+  }
+  function title() {
+    var r = range();
+    if (view === 'day') return cursor.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    if (view === 'week') return r[0].toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' – ' + addDays(r[1], -1).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) + '  · week ' + weekNo(r[0]);
+    if (view === 'month') return cursor.toLocaleDateString([], { month: 'long', year: 'numeric' });
+    return String(cursor.getFullYear());
+  }
+  function load() {
+    var r = range();
+    document.getElementById('ag-title').textContent = title();
+    document.querySelectorAll('#ag-views button').forEach(function (b) { var on = b.dataset.view === view; b.style.background = on ? 'var(--accent)' : 'transparent'; b.style.color = on ? '#fff' : 'inherit'; });
+    fetch('/agenda/items.json?from=' + r[0].toISOString() + '&to=' + r[1].toISOString()).then(function (x) { return x.json(); }).then(function (d) { data = d; render(); }).catch(function () {});
+  }
+  function shift(n) {
+    if (view === 'day') cursor = addDays(cursor, n);
+    else if (view === 'week') cursor = addDays(cursor, 7 * n);
+    else if (view === 'month') cursor = new Date(cursor.getFullYear(), cursor.getMonth() + n, 1);
+    else cursor = new Date(cursor.getFullYear() + n, 0, 1);
+    load();
+  }
+  document.getElementById('ag-prev').onclick = function () { shift(-1); };
+  document.getElementById('ag-next').onclick = function () { shift(1); };
+  document.getElementById('ag-today').onclick = function () { cursor = new Date(); load(); };
+  document.querySelectorAll('#ag-views button').forEach(function (b) { b.onclick = function () { view = b.dataset.view; try { localStorage.setItem('agenda-view', view); } catch (e) { /* ignore */ } load(); }; });
+
+  document.getElementById('ag-legend').innerHTML = '<span style="margin-right:0.9rem;">🚗 = car needed</span><span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; border:1.5px dashed #9aa4b2; border-radius:2px;"></span> ready by (learned)</span>' +
+    '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; background:var(--accent); border-radius:2px;"></span> planned charging</span><span><span style="display:inline-block; width:10px; height:10px; background:#9aa4b2; opacity:0.6; border-radius:2px;"></span> charged</span>';
+
+  function itemColor(i) { return i.color || '#3b82c4'; }
+  // The car marker only once: not again in front of a title that already has one.
+  function carMark(i) { return i.needsCar && !/[\u{1F697}\u{1F699}\u{1F698}]/u.test(i.title || '') ? '🚗 ' : ''; }
+  function itemsOnDay(day) { var e = addDays(day, 1); return (data.items || []).filter(function (i) { return new Date(i.start) < e && new Date(i.end) > day; }); }
+
+  function render() {
+    if (!data) return;
+    if (view === 'week' || view === 'day') renderGrid(view === 'week' ? 7 : 1);
+    else if (view === 'month') renderMonth();
+    else renderYear();
+    renderDetail();
+  }
+
+  function renderGrid(ndays) {
+    var r = range();
+    var H0 = 0, H1 = 24, PX = 26;
+    var colW = ndays === 7 ? 'minmax(96px,1fr)' : '1fr';
+    var html = '<div style="display:grid; grid-template-columns:44px repeat(' + ndays + ',' + colW + '); min-width:' + (ndays === 7 ? 720 : 300) + 'px;">';
+    html += '<div></div>';
+    for (var d = 0; d < ndays; d++) {
+      var day = addDays(r[0], d);
+      var allDay = itemsOnDay(day).filter(function (i) { return i.allDay; });
+      html += '<div style="padding:0 4px 4px; font-size:12px; font-weight:600; border-left:1px solid var(--border);' + (sameDay(day, new Date()) ? ' color:var(--accent);' : '') + '">' + DAYN[(day.getDay() + 6) % 7] + ' ' + day.getDate() +
+        allDay.map(function (i) { return '<div data-key="' + esc(key(i)) + '" style="margin-top:2px; font-weight:500; font-size:11px; padding:1px 4px; border-radius:4px; cursor:pointer; background:color-mix(in srgb, ' + itemColor(i) + ' 18%, transparent);">' + carMark(i) + esc(i.title) + '</div>'; }).join('') + '</div>';
+    }
+    html += '<div style="position:relative; height:' + ((H1 - H0) * PX) + 'px;">';
+    for (var h = H0; h < H1; h += 2) html += '<div style="position:absolute; right:4px; top:' + ((h - H0) * PX - 6) + 'px; font-size:10px; opacity:0.55;">' + String(h).padStart(2, '0') + ':00</div>';
+    html += '</div>';
+    for (var c = 0; c < ndays; c++) {
+      var day2 = addDays(r[0], c);
+      var dayEnd = addDays(day2, 1);
+      var col = '<div style="position:relative; height:' + ((H1 - H0) * PX) + 'px; border-left:1px solid var(--border);' + ((day2.getDay() + 6) % 7 >= 5 ? ' background:color-mix(in srgb, currentColor 3%, transparent);' : '') + '">';
+      for (var hh = H0; hh < H1; hh += 2) col += '<div style="position:absolute; left:0; right:0; top:' + ((hh - H0) * PX) + 'px; border-top:1px solid var(--border);"></div>';
+      var y = function (t) { var dd = new Date(t); return Math.max(0, Math.min(H1 - H0, (dd - day2) / 3600000 - H0)) * PX; };
+      (data.sessions || []).forEach(function (s) {
+        var a = new Date(s.connect_at), b = s.disconnect_at ? new Date(s.disconnect_at) : new Date();
+        if (b <= day2 || a >= dayEnd) return;
+        col += '<div title="charged ' + nf(s.kwh, 1) + ' kWh" style="position:absolute; left:1px; width:5px; top:' + y(a) + 'px; height:' + Math.max(3, y(b) - y(a)) + 'px; background:#9aa4b2; opacity:0.5; border-radius:2px;"></div>';
+      });
+      (data.plan || []).forEach(function (s) {
+        var a = new Date(s.start), b = new Date(s.end);
+        if (b <= day2 || a >= dayEnd) return;
+        col += '<div title="planned ' + nf(s.kw, 1) + ' kW" style="position:absolute; right:1px; width:7px; top:' + y(a) + 'px; height:' + Math.max(3, y(b) - y(a)) + 'px; background:' + (s.source === 'pv' ? '#d4a017' : 'var(--accent)') + '; border-radius:2px;"></div>';
+      });
+      (data.learned || []).forEach(function (l) {
+        var a = new Date(l.at);
+        if (a < day2 || a >= dayEnd) return;
+        col += '<div style="position:absolute; left:8px; right:10px; top:' + y(a) + 'px; border-top:2px dashed #9aa4b2; font-size:10px; opacity:0.85; padding-left:2px;">ready ' + tm(a) + '</div>';
+      });
+      itemsOnDay(day2).filter(function (i) { return !i.allDay; }).forEach(function (i) {
+        var a = new Date(i.start), b = new Date(i.end);
+        var col2 = itemColor(i);
+        var sel = selected && key(i) === selected;
+        var style = i.needsCar ? 'background:' + col2 + '; color:#fff;' : 'background:color-mix(in srgb, ' + col2 + ' 15%, var(--surface, #fff)); border-left:3px solid ' + col2 + ';';
+        col += '<div data-key="' + esc(key(i)) + '" style="position:absolute; left:8px; right:10px; top:' + (y(a) + 1) + 'px; height:' + Math.max(16, y(b) - y(a) - 2) + 'px; border-radius:6px; padding:2px 5px; font-size:11px; line-height:1.25; overflow:hidden; cursor:pointer; ' + style + (sel ? ' box-shadow:0 0 0 2px ' + col2 + ';' : '') + '">' +
+          '<strong>' + carMark(i) + esc(i.title) + '</strong><div style="opacity:0.85;">' + tm(a) + (i.location ? ' · ' + esc(i.location) : '') + '</div>' +
+          (i.askCar && canEdit ? '<div style="margin-top:2px; display:inline-block; border:1px solid ' + col2 + '; border-radius:8px; padding:0 5px; font-size:10px;">🚗 car needed?</div>' : '') +
+          (i.needsCar && i.needKwh != null ? '<div style="opacity:0.9;">' + nf(i.needKwh, 1) + ' kWh</div>' : '') + '</div>';
+      });
+      if (sameDay(day2, new Date())) col += '<div style="position:absolute; left:0; right:0; top:' + y(new Date()) + 'px; border-top:2px solid #e5534b;"></div>';
+      html += col + '</div>';
+    }
+    html += '</div>';
+    var el = document.getElementById('ag-view');
+    el.innerHTML = html;
+    el.scrollTop = 6 * PX;
+    bindClicks(el);
+  }
+
+  function renderMonth() {
+    var r = range();
+    var month = cursor.getMonth();
+    var html = '<div style="display:grid; grid-template-columns:repeat(7, minmax(90px,1fr)); border-top:1px solid var(--border); border-left:1px solid var(--border); min-width:640px;">';
+    DAYN.forEach(function (n) { html += '<div style="padding:4px 6px; font-size:12px; font-weight:600; border-right:1px solid var(--border); border-bottom:1px solid var(--border);">' + n + '</div>'; });
+    for (var i = 0; i < 42; i++) {
+      var day = addDays(r[0], i);
+      var list = itemsOnDay(day);
+      var kwh = (data.sessions || []).filter(function (s) { return sameDay(new Date(s.connect_at), day); }).reduce(function (a, s) { return a + (s.kwh || 0); }, 0);
+      var cell = '<div style="min-height:92px; padding:4px 5px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); font-size:11px;' + (day.getMonth() !== month ? ' opacity:0.45;' : '') + '">' +
+        '<div style="display:flex; justify-content:space-between;"><span style="font-weight:600;' + (sameDay(day, new Date()) ? ' color:var(--accent);' : '') + '">' + day.getDate() + '</span>' + (kwh ? '<span class="hint" style="margin:0;">⚡' + nf(kwh, 1) + '</span>' : '') + '</div>';
+      list.slice(0, 3).forEach(function (it) { cell += '<div data-key="' + esc(key(it)) + '" style="margin-top:2px; padding:1px 4px; border-radius:4px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ' + (it.needsCar ? 'background:' + itemColor(it) + '; color:#fff;' : 'background:color-mix(in srgb, ' + itemColor(it) + ' 15%, transparent);') + '">' + carMark(it) + (it.allDay ? '' : tm(it.start) + ' ') + esc(it.title) + '</div>'; });
+      if (list.length > 3) cell += '<div class="hint" style="margin:2px 0 0;">+' + (list.length - 3) + ' more</div>';
+      html += cell + '</div>';
+    }
+    var el = document.getElementById('ag-view');
+    el.innerHTML = html + '</div>';
+    bindClicks(el);
+  }
+
+  function renderYear() {
+    var year = cursor.getFullYear();
+    var kwhByDay = {};
+    (data.sessions || []).forEach(function (s) { var k = startOfDay(new Date(s.connect_at)).toDateString(); kwhByDay[k] = (kwhByDay[k] || 0) + (s.kwh || 0); });
+    var carDays = {};
+    (data.items || []).forEach(function (i) { if (i.needsCar) carDays[startOfDay(new Date(i.start)).toDateString()] = true; });
+    var html = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(190px,1fr)); gap:1rem;">';
+    for (var m = 0; m < 12; m++) {
+      var first = new Date(year, m, 1);
+      var g = startOfWeek(first);
+      var mh = '<div><div style="font-weight:600; font-size:13px; margin-bottom:4px; cursor:pointer;" data-month="' + m + '">' + first.toLocaleDateString([], { month: 'long' }) + '</div><div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:2px;">';
+      for (var i = 0; i < 42; i++) {
+        var d = addDays(g, i);
+        if (d.getMonth() !== m) { mh += '<div></div>'; continue; }
+        var k = kwhByDay[d.toDateString()] || 0;
+        var a = Math.min(1, k / 20);
+        mh += '<div title="' + d.toLocaleDateString() + (k ? ': ' + nf(k, 1) + ' kWh' : '') + '" style="aspect-ratio:1; border-radius:3px; font-size:9px; display:flex; align-items:center; justify-content:center; position:relative; background:' + (k ? 'color-mix(in srgb, var(--accent) ' + Math.round(15 + a * 70) + '%, transparent)' : 'color-mix(in srgb, currentColor 5%, transparent)') + ';' + (sameDay(d, new Date()) ? ' outline:2px solid #e5534b;' : '') + '">' + d.getDate() +
+          (carDays[d.toDateString()] ? '<span style="position:absolute; right:1px; top:-1px; font-size:7px;">🚗</span>' : '') + '</div>';
+      }
+      html += mh + '</div></div>';
+    }
+    var el = document.getElementById('ag-view');
+    el.innerHTML = html + '</div><p class="hint" style="margin:0.6rem 0 0;">Colour = kWh charged that day · 🚗 = car needed</p>';
+    el.querySelectorAll('[data-month]').forEach(function (x) { x.onclick = function () { cursor = new Date(year, Number(x.dataset.month), 1); view = 'month'; load(); }; });
+  }
+
+  function key(i) { return i.kind + '|' + (i.calendar_id || i.id) + '|' + (i.uid || '') + '|' + i.start; }
+  function bindClicks(el) { el.querySelectorAll('[data-key]').forEach(function (x) { x.onclick = function () { selected = x.dataset.key; render(); }; }); }
+
+  function renderDetail() {
+    var el = document.getElementById('ag-detail');
+    var it = selected && (data.items || []).find(function (i) { return key(i) === selected; });
+    if (!it) {
+      var up = (data.items || []).filter(function (i) { return i.needsCar && new Date(i.start) > new Date(); }).slice(0, 4);
+      el.innerHTML = '<div style="border:1px solid var(--border); border-radius:12px; padding:0.9rem 1rem;"><strong>Coming up with the car</strong>' +
+        (up.length ? up.map(function (i) { return '<div data-key="' + esc(key(i)) + '" style="margin-top:0.5rem; cursor:pointer;">🚗 <strong>' + esc(i.title) + '</strong><div class="hint" style="margin:0;">' + new Date(i.start).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + (i.needKwh != null ? ' · ' + nf(i.needKwh, 1) + ' kWh' : '') + '</div></div>'; }).join('') : '<p class="hint" style="margin:0.4rem 0 0;">Nothing in this period. Click an appointment for details.</p>') + '</div>';
+      bindClicks(el);
+      return;
+    }
+    var when = it.allDay ? new Date(it.start).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + ' (all day)' : new Date(it.start).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' – ' + tm(it.end);
+    var html = '<div style="border:1px solid var(--border); border-radius:12px; padding:0.9rem 1rem;">' +
+      '<div class="hint" style="margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;">' + esc(it.calendar || (it.kind === 'trip' ? 'LoxSuite trip' : '')) + '</div>' +
+      '<div style="font-size:1.1rem; font-weight:700; margin:0.15rem 0;">' + carMark(it) + esc(it.title) + '</div>' +
+      '<div class="hint" style="margin:0;">' + when + (it.location ? ' · 📍 ' + esc(it.location) : '') + '</div>';
+    if (it.kind === 'event' && canEdit) {
+      html += '<div style="display:flex; align-items:center; justify-content:space-between; margin:0.8rem 0 0.3rem; padding:0.5rem 0.7rem; border-radius:10px; background:var(--accent-soft, #EAF7E4);"><strong>Car needed</strong>' +
+        '<select id="ag-need"><option value="">auto' + (it.carTag ? ' (yes, marker)' : ' (no)') + '</option><option value="1"' + (it.carSource === 'you' && it.needsCar ? ' selected' : '') + '>yes</option><option value="0"' + (it.carSource === 'you' && !it.needsCar ? ' selected' : '') + '>no</option></select></div>' +
+        '<div class="hint" style="margin:0 0 0.4rem; font-size:0.75rem;">Stored in LoxSuite only; your calendar isn\'t changed.</div>';
+    }
+    if (it.needsCar) {
+      html += '<table style="font-size:0.85rem; margin-top:0.4rem; width:100%;" class="ag-need">' +
+        (it.distanceKm != null ? '<tr><td>Distance (there and back)</td><td style="text-align:right;">2 × ' + nf(it.distanceKm, 0) + ' km</td></tr>' : '') +
+        '<tr><td>Basis</td><td style="text-align:right;">' + esc(it.needBasis || '') + '</td></tr>' +
+        '<tr><td>Consumption</td><td style="text-align:right;">' + nf(it.kwhPerKm, 2) + ' kWh/km</td></tr>' +
+        '<tr><td><strong>Needs</strong></td><td style="text-align:right;"><strong>' + (it.needKwh != null ? nf(it.needKwh, 1) + ' kWh' : '—') + '</strong></td></tr>' +
+        (it.travelMin ? '<tr><td>Leave (travel ' + Math.floor(it.travelMin / 60) + ' h ' + String(it.travelMin % 60).padStart(2, '0') + ')</td><td style="text-align:right;">' + tm(it.leaveAt) + '</td></tr>' : '') +
+        '<tr><td>Ready by</td><td style="text-align:right;">' + tm(it.readyAt) + '</td></tr></table>';
+      if (it.usableKwh && it.needKwh > it.usableKwh) html += '<p class="hint" style="margin:0.4rem 0 0; color:#b8860b;">More than the battery (' + nf(it.usableKwh, 1) + ' kWh): ' + (it.vehicleType === 'phev' ? 'it leaves full, the rest is fuel.' : 'plan a charging stop.') + '</p>';
+      if (it.geoError) html += '<p class="hint" style="margin:0.4rem 0 0; color:var(--danger);">Distance: ' + esc(it.geoError) + '</p>';
+      if (it.location && it.distanceKm == null && !it.geoError && canEdit) html += '<button type="button" class="btn-soft" id="ag-dist" style="margin-top:0.5rem;">Look up distance</button>';
+    }
+    if (it.kind === 'event' && canEdit && it.needsCar) html += '<div style="margin-top:0.7rem;"><label>Own value (optional)</label><input type="text" id="ag-own" value="' + esc(it.own || '') + '" placeholder="150 km, 30 kWh or full"><button type="button" class="btn-soft" id="ag-own-save" style="margin-top:0.3rem;">Save</button></div>';
+    html += '<p style="margin:0.6rem 0 0;"><a href="#" id="ag-close">Close</a></p></div>';
+    el.innerHTML = html;
+    var save = function (patch) {
+      post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.start, needs_car: document.getElementById('ag-need') ? document.getElementById('ag-need').value : '', own_value: document.getElementById('ag-own') ? document.getElementById('ag-own').value : it.own }, patch || {})).then(load);
+    };
+    var need = document.getElementById('ag-need');
+    if (need) need.onchange = function () { save(); };
+    var own = document.getElementById('ag-own-save');
+    if (own) own.onclick = function () { save(); };
+    var dist = document.getElementById('ag-dist');
+    if (dist) dist.onclick = function () { dist.disabled = true; dist.textContent = 'Looking up…'; post('/agenda/distance.json', { location: it.location }).then(load); };
+    document.getElementById('ag-close').onclick = function (e) { e.preventDefault(); selected = null; render(); };
+  }
+
+  var syncBtn = document.getElementById('ag-sync');
+  if (syncBtn) syncBtn.onclick = function () { syncBtn.disabled = true; post('/agenda/sync.json', {}).then(function (d) { document.getElementById('ag-sync-msg').textContent = (d.results || []).map(function (r) { return r.ok ? r.events + ' events' : r.message; }).join(' · '); load(); }).finally(function () { syncBtn.disabled = false; }); };
+  var tf = document.getElementById('ag-trip-form');
+  if (tf) tf.addEventListener('submit', function () {
+    var dep = document.getElementById('ag-dep').value; var ret = document.getElementById('ag-ret').value;
+    tf.depart_at.value = dep ? new Date(dep).toISOString() : '';
+    tf.return_at.value = ret ? new Date(ret).toISOString() : '';
+  });
+  load();
+  setInterval(load, 5 * 60 * 1000);
+})();
+</script>
+
+<%- include('partials/foot') %>

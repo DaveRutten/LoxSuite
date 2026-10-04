@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.24.0-alpha.1] - 2026-10-04
+
+### Added
+- **Smart charging** (Wallbox → Smart charging): modes Off / Now / Solar / Min + Solar / Smart plan, session buttons
+  (*Charge now*, *Pause*, ready-by), a plan for the connected car that is ready on time at the lowest cost (solar
+  valued at its export value, cheapest intervals, price cap, fuel break-even for plug-in hybrids), a 30 s control loop
+  with solar start/stop delays and the grid connection limit, and output to Loxone virtual inputs — in *Advise* mode by
+  default (shows what it would do) until set to *Live*; a test button for the wiring.
+- **Electricity prices**: EnergyZero or ENTSO-E day-ahead prices, all-in by tariff formula or calibrated against a Loxone
+  Spot Price Optimizer; an estimate from the Spot Price Optimizer without internet prices; fixed price option.
+- **Meters** (Wallbox → Meters): grid / PV / Wallbox / home battery from Loxone, live, per minute and per hour, derived house
+  load, history import from the Miniserver statistics (MCP), MQTT topics, and the notification trigger *Energy meter
+  failing/recovered*.
+- **Learned** (Wallbox → Learned): departures per weekday with own overrides, energy per trip, solar forecast (Open-Meteo,
+  corrected per hour with the PV meter, error band, last 28 days) and the house profile with tomorrow's expected surplus.
+  Wallbox sessions are kept beyond the Wallbox's own log.
+- **Agenda** (Wallbox → Agenda): ICS calendars in day/week/month/year views, car markers (🚗, #auto) and hints (km/kWh/full),
+  *Car needed* per appointment, LoxSuite trips (one-off or weekly), driving distance from home (OpenStreetMap) plus a margin
+  turned into kWh, and the planner's deadline from the agenda.
+- **App & push**: LoxSuite installable on the home screen (manifest, service worker, icons) and web push as a notification
+  channel (`loxsuite-push://all` / `loxsuite-push://user/<id>`), with buttons in notifications.
+- **Car reminders**: notification triggers *Car: plug in / swap reminders* (with the saving against fuel for hybrids,
+  snooze / not today, learns from ignored reminders) and *Car: charging plan warnings*.
+- **Several cars on one Wallbox**: per vehicle NFC tags, Loxone users and *Report over OCPP*; sessions of a car that isn't
+  reported are not sent to the OCPP backend and left out of the quarterly export; push question when the car can't be told.
+- **Phone layout / app feel**: a bottom tab bar on phones (Home, Charging, Agenda, Monitor, Menu), wide tables and tab rows
+  scroll within themselves instead of widening the page (checked on all pages at 390 px), no zoom-in on input focus, live
+  status badges (online/offline, connected…) shrink to their coloured dot, the agenda opens in day view on a phone.
+  *App & push* lives in the account menu (it isn't Wallbox-specific).
+- **Vehicles**: separate *total range incl. fuel* for plug-in hybrids (Homey's range is usually the combined one); the
+  electric range is estimated from the battery % when the car doesn't report it.
+
 ## [0.23.1-alpha.1] - 2026-10-04
 
 ### Fixed

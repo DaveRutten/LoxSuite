@@ -4675,3 +4675,40 @@ body.no-scroll { overflow: hidden; }
   .ai-chat-sidebar { width: 100%; }
 }
 }
+
+/* ---- Phone / installed app ----
+   Everything on a phone stays inside the screen: wide tables and tab rows scroll sideways within
+   themselves instead of pushing the page wider, inputs use 16px text so iOS doesn't zoom in on
+   focus, and a bottom tab bar (Dashboard, Smart charging, Agenda, Monitor, Menu) makes LoxSuite
+   feel like an app — also when it's installed on the home screen. Live status badges
+   (online/offline, connected...) shrink to just their coloured dot; the word stays available as a
+   tooltip and to screen readers (see public/mobile.js). */
+.mobile-tabbar { display: none; }
+@media (max-width: 768px) {
+  main table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  main .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  main .card { max-width: 100%; min-width: 0; }
+  main img, main svg, main canvas { max-width: 100%; }
+  main table svg { max-width: none; } /* timelines in tables keep their width; the table scrolls */
+  input, select, textarea { font-size: 16px; }
+  * { -webkit-tap-highlight-color: transparent; }
+  html, body { overflow-x: clip; } /* off-canvas drawers (help, AI chat) must never widen the page */
+  body { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+  .mobile-tabbar {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
+    height: calc(58px + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--surface, #fff); border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.06);
+  }
+  .mobile-tabbar a, .mobile-tabbar button {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    font-size: 10.5px; font-weight: 600; color: var(--text-muted); text-decoration: none;
+    background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit;
+  }
+  .mobile-tabbar svg { width: 22px; height: 22px; }
+  .mobile-tabbar .active { color: var(--accent); }
+  .ai-chat-widget { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  .hide-phone { display: none; }
+  .badge-dot { font-size: 0; padding: 0.3rem; gap: 0; background: transparent !important; }
+  .badge-dot::before { width: 10px; height: 10px; }
+}

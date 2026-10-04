@@ -76,10 +76,12 @@ function recentQuarters(now = new Date(), count = 6) {
 //   currentTotalKwh: the Wallbox's current MID total (anchor for derived readings)
 // Returns { rows: [{ start, end, meterStart, meterStop, energy, source }], incomplete }.
 // meterStart/meterStop in kWh; source 'gemeten' (bridge reading) or 'afgeleid' (derived).
-function buildQuarterRows({ tracker, recorded, currentTotalKwh, start, end }) {
+function buildQuarterRows({ tracker, recorded, currentTotalKwh, start, end, excludeVehicleIds = [] }) {
+  const excluded = new Set(excludeVehicleIds.map(Number));
   const rec = (recorded || [])
     .filter((r) => r.stopped_at && r.meter_stop_wh != null)
     .map((r) => ({
+      skip: r.vehicle_id != null && excluded.has(Number(r.vehicle_id)),
       connect: Math.round(Date.parse(r.started_at) / 1000),
       disconnect: Math.round(Date.parse(r.stopped_at) / 1000),
       meterStart: r.meter_start_wh / 1000,
@@ -102,6 +104,7 @@ function buildQuarterRows({ tracker, recorded, currentTotalKwh, start, end }) {
     const match = rec.find((r) => !usedRec.has(r) && Math.abs(r.connect - s.connect) <= MATCH_S);
     if (match) {
       usedRec.add(match);
+      if (match.skip) continue; // a car whose sessions are not reported (Vehicles)
       rows.push({ start: s.connect, end: s.disconnect, meterStart: match.meterStart, meterStop: match.meterStop, source: 'gemeten' });
     } else {
       const d = derived.get(s);
@@ -110,7 +113,7 @@ function buildQuarterRows({ tracker, recorded, currentTotalKwh, start, end }) {
   }
   // Recorded sessions the tracker no longer holds (it keeps only ~100 entries).
   for (const r of rec) {
-    if (usedRec.has(r) || r.connect < start || r.connect >= end) continue;
+    if (usedRec.has(r) || r.skip || r.connect < start || r.connect >= end) continue;
     rows.push({ start: r.connect, end: r.disconnect, meterStart: r.meterStart, meterStop: r.meterStop, source: 'gemeten' });
   }
   rows.sort((a, b) => a.start - b.start);

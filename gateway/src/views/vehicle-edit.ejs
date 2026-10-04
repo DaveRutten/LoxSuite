@@ -59,14 +59,14 @@
     if (!s.enabled) { el.innerHTML = '<p class="hint" style="margin:0;">Disabled.</p>'; return; }
     var r = s.reading || {};
     var h = s.health || { status: 'unknown' };
-    var badge = h.status === 'ok' ? '<span style="color:var(--success); font-weight:600;">● working</span>'
+    var badge = h.status === 'ok' ? '<span style="color:var(--success); font-weight:600;" title="working">● <span class="hide-phone">working</span></span>'
       : h.status === 'failing' ? '<span style="color:var(--danger); font-weight:600;">● failing</span> <span class="hint">' + esc(h.detail) + '</span>'
       : '<span class="hint">● ' + esc(h.detail || 'not read yet') + '</span>';
     var html = '<p style="margin:0 0 0.6rem;">' + esc(srcLabels[s.sourceType] || s.sourceType) + ': ' + badge + '</p>';
     var soc = r.soc != null ? r.soc + '%' : '—';
     html += '<div style="display:flex; gap:0.7rem; flex-wrap:wrap;">' +
       tile('Battery', soc, r.energy_kwh != null ? r.energy_kwh + ' kWh' + (r.limit_soc != null ? ' · limit ' + r.limit_soc + '%' : '') : (r.limit_soc != null ? 'limit ' + r.limit_soc + '%' : '')) +
-      tile('Range', r.range_km != null ? r.range_km + ' km' : '—', '') +
+      tile('Electric range', r.range_km != null ? (r.range_estimated ? '≈ ' : '') + r.range_km + ' km' : '—', r.total_range_km != null ? 'total incl. fuel ' + r.total_range_km + ' km' : '') +
       tile('Plugged in', yn(r.plugged, 'yes', 'no'), r.charging === true ? 'charging' : r.charging === false ? 'not charging' : '') +
       tile('At home', yn(r.home, 'yes', 'no'), r.distance_m != null ? (r.distance_m < 2000 ? r.distance_m + ' m' : (r.distance_m / 1000).toFixed(1) + ' km') + ' from home' : (r.location ? esc(r.location) : '')) +
       tile('Odometer', r.odometer_km != null ? Math.round(r.odometer_km) + ' km' : '—', '') +

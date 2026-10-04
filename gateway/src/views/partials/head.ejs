@@ -7,6 +7,12 @@
   <meta name="display-timezone" content="<%= displayTimezone %>">
   <title><%= pageTitle %> · LoxSuite</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#5CA83F">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="LoxSuite">
   <link rel="stylesheet" href="/style.css?v=<%= assetVersion %>">
   <script>
     // Applied before first paint to avoid a flash of the wrong theme.
@@ -119,12 +125,16 @@
       <% } %>
 
       <% if (canView('miniservers')) { %>
-        <% const wallboxExpanded = active === 'vehicles' || active === 'ocpp'; %>
+        <% const wallboxExpanded = ['planner', 'agenda', 'vehicles', 'energy', 'learned', 'ocpp'].includes(active); %>
         <button type="button" class="nav-section-label" data-nav-section="wallbox" aria-expanded="<%= isCollapsed('wallbox', wallboxExpanded) ? 'false' : 'true' %>">
           <span>Wallbox</span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('wallbox', wallboxExpanded) ? 'hidden' : '' %>>
+          <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>">Smart charging</a>
+          <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>">Agenda</a>
           <a href="/vehicles" class="<%= active === 'vehicles' ? 'active' : '' %>">Vehicles</a>
+          <a href="/energy" class="<%= active === 'energy' ? 'active' : '' %>">Meters</a>
+          <a href="/learned" class="<%= active === 'learned' ? 'active' : '' %>">Learned</a>
           <a href="/ocpp" class="<%= active === 'ocpp' ? 'active' : '' %>">OCPP (charging costs)</a>
         </div>
       <% } %>
@@ -333,6 +343,7 @@
             </button>
             <div id="account-menu-panel" class="account-menu-panel" hidden>
               <a href="/profile" class="<%= active === 'profile' ? 'active' : '' %>">Profile</a>
+              <a href="/app" class="<%= active === 'app' ? 'active' : '' %>">App &amp; push</a>
               <% /* Settings has no meaningful read-only view — every field on it is an edit
                      control, nothing to look at without also being able to change it — so this
                      (and the page's own content, see settings-general.ejs) gates on edit, not

@@ -1,0 +1,301 @@
+<%- include('partials/head', { pageTitle: 'Smart charging', active: 'planner' }) %>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);">Saved.</p><% } %>
+
+<% if (cfg.output !== 'live') { %>
+<div class="card" style="border-left:4px solid #d4a017;">
+  <strong>Advise mode.</strong> LoxSuite calculates the plan and shows what it would do, but doesn't control the Wallbox yet.
+  To let it charge, connect a Loxone virtual input to the Wallbox and set <em>Output</em> to <em>Live</em> under
+  <a href="#settings">Settings &rarr; Charging</a>.
+</div>
+<% } %>
+
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
+    <h2 style="margin:0;">Smart charging</h2>
+    <span class="hint" style="margin:0;" id="pl-updated"></span>
+  </div>
+  <div style="display:flex; gap:0.8rem; flex-wrap:wrap; align-items:center; margin-top:0.8rem;">
+    <div id="pl-modes" style="display:inline-flex; border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+      <% [['off', 'Off'], ['now', 'Now'], ['pv', 'Solar'], ['minpv', 'Min + Solar'], ['plan', 'Smart plan']].forEach(([k, l]) => { %>
+        <button type="button" data-mode="<%= k %>" style="border:0; padding:0.55rem 1rem; font-weight:600; cursor:pointer; background:<%= cfg.mode === k ? 'var(--accent)' : 'transparent' %>; color:<%= cfg.mode === k ? '#fff' : 'inherit' %>;"><%= l %></button>
+      <% }) %>
+    </div>
+    <div class="btn-row" style="margin:0;" id="pl-session">
+      <button type="button" class="btn-soft" data-ov="now">Charge now</button>
+      <button type="button" class="btn-soft" data-ov="off">Pause</button>
+      <button type="button" class="btn-soft" data-ov="">Back to mode</button>
+    </div>
+  </div>
+  <p class="hint" style="margin:0.5rem 0 0;">
+    <strong>Now</strong>: full power. <strong>Solar</strong>: only with solar surplus. <strong>Min + Solar</strong>: minimum power plus surplus.
+    <strong>Smart plan</strong>: ready on time in the cheapest way — solar first, then the cheapest hours. The session buttons only apply until the car is unplugged.
+  </p>
+
+  <div id="pl-tiles" style="display:flex; gap:0.7rem; flex-wrap:wrap; margin-top:1rem;"></div>
+  <div id="pl-target" style="margin-top:1rem;"></div>
+  <div id="pl-plan" style="margin-top:0.8rem;"></div>
+  <div style="margin-top:0.8rem;">
+    <div class="hint" style="margin:0 0 0.2rem; font-size:0.8rem;">Price per interval (all-in) &mdash; <span style="color:var(--accent); font-weight:700;">■</span> planned &nbsp;<span style="color:#d4a017; font-weight:700;">━</span> expected solar surplus (kW) &nbsp;<span style="color:#e5534b; font-weight:700;">┆</span> ready by</div>
+    <div id="pl-chart"></div>
+  </div>
+</div>
+
+<div class="card" id="settings">
+  <h2 style="margin-top:0;">Settings</h2>
+
+  <details <%= saved === 'charging' ? 'open' : '' %>>
+    <summary><strong>Charging &amp; output to Loxone</strong></summary>
+    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+      <input type="hidden" name="section" value="charging">
+      <div class="form-grid">
+        <div><label>Minimum power (kW)</label><input type="text" name="min_kw" value="<%= cfg.min_kw %>"></div>
+        <div><label>Maximum power (kW)</label><input type="text" name="max_kw" value="<%= cfg.max_kw %>"></div>
+        <div><label>Grid connection limit (kW)</label><input type="text" name="grid_limit_kw" value="<%= cfg.grid_limit_kw %>"></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div><label>Output</label><select name="output"><option value="advise" <%= cfg.output !== 'live' ? 'selected' : '' %>>Advise (don't control the Wallbox)</option><option value="live" <%= cfg.output === 'live' ? 'selected' : '' %>>Live (write to Loxone)</option></select></div>
+        <div><label>Virtual input for the power (kW, 0 = stop)</label><input type="text" name="vi_setpoint" value="<%= cfg.vi_setpoint %>" placeholder="LoxSuite laadvermogen"></div>
+        <div><label>Virtual input "charging allowed" (optional, 1/0)</label><input type="text" name="vi_enable" value="<%= cfg.vi_enable %>" placeholder="LoxSuite laden"></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;">
+        In Loxone Config, create a virtual input (analog) with the name above and connect it to the Wallbox block where the
+        charging power is set by logic &mdash; in your project mode 1 "Max. laadvermogen" is the logic-controlled mode. Optionally a
+        second (digital) virtual input to the Wallbox's enable input. LoxSuite writes the power on every change and at least every
+        5 minutes. Test the wiring with no car connected.
+      </p>
+      <div class="btn-row" style="margin-top:0.5rem; align-items:flex-end;">
+        <div><label>Test value (kW)</label><input type="text" id="pl-test-kw" value="0" style="width:6rem;"></div>
+        <button type="button" class="btn-soft" id="pl-test-btn">Send test value</button>
+        <span class="hint" id="pl-test-msg" style="margin:0;"></span>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div><label>Solar: start at surplus (kW)</label><input type="text" name="pv_start_kw" value="<%= cfg.pv_start_kw ?? '' %>" placeholder="= minimum power"></div>
+        <div><label>Solar: start after (s)</label><input type="text" name="pv_start_delay_s" value="<%= cfg.pv_start_delay_s %>"></div>
+        <div><label>Solar: stop after shortfall for (s)</label><input type="text" name="pv_stop_delay_s" value="<%= cfg.pv_stop_delay_s %>"></div>
+        <div><label>Solar: grid import allowed (kW)</label><input type="text" name="pv_allowed_import_kw" value="<%= cfg.pv_allowed_import_kw %>"></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div><label>Use solar outside the plan too</label><%- toggleSwitch('pv_opportunistic', !!cfg.pv_opportunistic) %></div>
+        <div><label>Count on solar when planning</label><select name="solar_trust">
+          <option value="low" <%= cfg.solar_trust === 'low' ? 'selected' : '' %>>Careful (70% of the forecast)</option>
+          <option value="expected" <%= cfg.solar_trust === 'expected' ? 'selected' : '' %>>As forecast</option>
+          <option value="bonus" <%= cfg.solar_trust === 'bonus' ? 'selected' : '' %>>Not at all (solar is a bonus)</option></select></div>
+        <div><label>Max. price (€/kWh, optional)</label><input type="text" name="max_price_eur_kwh" value="<%= cfg.max_price_eur_kwh ?? '' %>"></div>
+        <div><label>Too few cheap intervals (full electric)</label><select name="insufficient"><option value="charge" <%= cfg.insufficient !== 'stop' ? 'selected' : '' %>>Charge anyway</option><option value="stop" <%= cfg.insufficient === 'stop' ? 'selected' : '' %>>Stop at the max. price</option></select></div>
+        <div><label>Value of exported solar</label><select name="feed_in"><option value="saldering" <%= cfg.feed_in !== 'fixed' ? 'selected' : '' %>>Net metering (price of that moment)</option><option value="fixed" <%= cfg.feed_in === 'fixed' ? 'selected' : '' %>>Fixed feed-in tariff</option></select></div>
+        <div><label>Feed-in tariff (€/kWh)</label><input type="text" name="feed_in_eur_kwh" value="<%= cfg.feed_in_eur_kwh %>"></div>
+      </div>
+      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save</button></div>
+    </form>
+  </details>
+
+  <details style="margin-top:0.6rem;" <%= saved === 'prices' ? 'open' : '' %>>
+    <summary><strong>Electricity price</strong> <span class="hint"><%= priceStatus ? (priceStatus.ok ? `· ${priceStatus.count} intervals, until ${formatDateTime(priceStatus.until)}` : `· ${priceStatus.error}`) : '' %></span></summary>
+    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+      <input type="hidden" name="section" value="prices">
+      <div class="form-grid">
+        <div><label>Source</label><select name="source">
+          <option value="energyzero" <%= priceCfg.source === 'energyzero' ? 'selected' : '' %>>EnergyZero (day-ahead, free)</option>
+          <option value="entsoe" <%= priceCfg.source === 'entsoe' ? 'selected' : '' %>>ENTSO-E (day-ahead, API key)</option>
+          <option value="loxone" <%= priceCfg.source === 'loxone' ? 'selected' : '' %>>Loxone Spot Price Optimizer (estimate from recent prices)</option>
+          <option value="fixed" <%= priceCfg.source === 'fixed' ? 'selected' : '' %>>Fixed price</option></select></div>
+        <div><label>ENTSO-E token</label><input type="password" name="entsoe_token" autocomplete="new-password" placeholder="<%= priceCfg.hasEntsoeToken ? 'Leave blank to keep' : '' %>"></div>
+        <div><label>Fixed price (€/kWh)</label><input type="text" name="fixed_eur_kwh" value="<%= priceCfg.fixed_eur_kwh %>"></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div><label>Supplier markup (€/kWh, excl. VAT)</label><input type="text" name="markup_eur_kwh" value="<%= priceCfg.markup_eur_kwh %>"></div>
+        <div><label>Energy tax (€/kWh, incl. VAT)</label><input type="text" name="energy_tax_eur_kwh" value="<%= priceCfg.energy_tax_eur_kwh %>"></div>
+        <div><label>VAT (%)</label><input type="text" name="vat_pct" value="<%= priceCfg.vat_pct %>"></div>
+        <div><label>Calibrate to Loxone<%= spo ? ` (${spo.name})` : '' %></label><%- toggleSwitch('calibrate_loxone', !!priceCfg.calibrate_loxone) %></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;">
+        All-in price = (market + markup) &times; VAT + energy tax. With <em>Calibrate</em> LoxSuite instead learns the formula from the price your
+        Spot Price Optimizer shows (sampled every 15 minutes, fitted over two weeks)<%= priceStatus && priceStatus.calib ? ` — now: all-in = ${priceStatus.calib.a} × market + ${priceStatus.calib.b} (${priceStatus.calib.n} samples)` : spo ? ' — needs a day of samples first' : ' — no Spot Price Optimizer found' %>.
+      </p>
+      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save</button><button type="button" class="btn-soft" data-recalc="prices">Fetch prices now</button></div>
+    </form>
+  </details>
+
+  <details style="margin-top:0.6rem;" <%= saved === 'solar' ? 'open' : '' %>>
+    <summary><strong>Home &amp; solar forecast</strong> <span class="hint"><%= solarStatus ? (solarStatus.ok ? `· updated ${formatDateTime(solarStatus.at)}` : `· ${solarStatus.error}`) : '' %></span></summary>
+    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+      <input type="hidden" name="section" value="solar">
+      <div class="form-grid">
+        <div><label>Home latitude</label><input type="text" name="lat" value="<%= site.lat ?? '' %>" placeholder="51.6"></div>
+        <div><label>Home longitude</label><input type="text" name="lon" value="<%= site.lon ?? '' %>" placeholder="5.5"></div>
+        <div><label>Forecast on</label><%- toggleSwitch('enabled', !!solarCfg.enabled) %></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div><label>Installed power (kWp)</label><input type="text" name="kwp" value="<%= solarCfg.kwp ?? '' %>" placeholder="11.8"></div>
+        <div><label>Tilt (°)</label><input type="text" name="tilt" value="<%= solarCfg.tilt %>"></div>
+        <div><label>Azimuth (° , 0 = south, -90 = east, 90 = west)</label><input type="text" name="azimuth" value="<%= solarCfg.azimuth %>"></div>
+        <div><label>System efficiency</label><input type="text" name="efficiency" value="<%= solarCfg.efficiency %>"></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;">Weather forecast from Open-Meteo (irradiance on your panels), corrected per hour of the day with what the PV meter really produced. The home location is also used for distances in the agenda.</p>
+      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save</button><button type="button" class="btn-soft" data-recalc="solar">Fetch forecast now</button></div>
+    </form>
+  </details>
+
+  <details style="margin-top:0.6rem;" <%= saved === 'fuel' ? 'open' : '' %>>
+    <summary><strong>Fuel (plug-in hybrid)</strong> <span class="hint">· € <%= fuel.eur_l.toFixed(3) %>/l (<%= fuel.source %><%= fuel.date ? ', ' + fuel.date : '' %>)</span></summary>
+    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+      <input type="hidden" name="section" value="fuel">
+      <div class="form-grid">
+        <div><label>Fuel price (€/l)</label><input type="text" name="fuel_eur_l" value="<%= cfg.fuel_eur_l %>"></div>
+        <div><label>Automatic (CBS national average)</label><%- toggleSwitch('fuel_auto', !!cfg.fuel_auto) %></div>
+        <div><label>Default consumption (kWh/km)</label><input type="text" name="default_kwh_per_km" value="<%= cfg.default_kwh_per_km %>"></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;">For a plug-in hybrid LoxSuite compares the cost per km on electricity with fuel (using the car's l/100 km), and doesn't charge in intervals where fuel is cheaper.</p>
+      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save</button><button type="button" class="btn-soft" data-recalc="fuel">Fetch fuel price now</button></div>
+    </form>
+  </details>
+
+  <details style="margin-top:0.6rem;" <%= saved === 'reminders' ? 'open' : '' %>>
+    <summary><strong>Reminders</strong></summary>
+    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+      <input type="hidden" name="section" value="reminders">
+      <div class="form-grid">
+        <div><label>"Plug in" reminders</label><%- toggleSwitch('enabled', !!remCfg.enabled) %></div>
+        <div><label>Only when it saves at least (€)</label><input type="text" name="threshold_eur" value="<%= remCfg.threshold_eur %>"></div>
+        <div><label>Evening starts at</label><input type="text" name="evening_from" value="<%= remCfg.evening_from %>"></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div><label>Quiet from</label><input type="text" name="quiet_from" value="<%= remCfg.quiet_from %>"></div>
+        <div><label>Quiet until</label><input type="text" name="quiet_until" value="<%= remCfg.quiet_until %>"></div>
+        <div><label>"Remind me later" at</label><input type="text" name="snooze_to" value="<%= remCfg.snooze_to %>"></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;">Reminders go through notification rules of type <a href="/admin/notifications?trigger_type=car_reminder">Car: plug in / swap reminders</a> and <a href="/admin/notifications?trigger_type=charging_plan">Car: charging plan warnings</a> &mdash; with the <a href="/app">LoxSuite app</a> channel they arrive as push messages with buttons.</p>
+      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save</button></div>
+    </form>
+  </details>
+</div>
+
+<script>
+(function () {
+  var canEdit = <%- JSON.stringify(canEdit('miniservers')) %>;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function eur(v, d) { return v == null ? '—' : '€ ' + nf(v, d == null ? 2 : d); }
+  function tm(s) { return s ? new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'; }
+  function dtm(s) { if (!s) return '—'; var d = new Date(s); var today = new Date(); var day = d.toDateString() === today.toDateString() ? '' : d.toLocaleDateString([], { weekday: 'short' }) + ' '; return day + tm(s); }
+  function post(url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); }
+  function tile(label, value, sub, color) {
+    return '<div style="flex:1; min-width:140px; border:1px solid var(--border); border-radius:10px; padding:0.6rem 0.8rem;">' +
+      '<div class="hint" style="margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;">' + esc(label) + '</div>' +
+      '<div style="font-size:1.3rem; font-weight:700;' + (color ? ' color:' + color + ';' : '') + '">' + value + '</div>' + (sub ? '<div class="hint" style="margin:0; font-size:0.75rem;">' + sub + '</div>' : '') + '</div>';
+  }
+  // Adjacent intervals with the same source shown as one block.
+  function mergeSlots(slots) {
+    var out = [];
+    slots.forEach(function (x) {
+      var last = out[out.length - 1];
+      if (last && last.end === x.start && last.source === x.source) { last.end = x.end; last.kwh += x.kwh; }
+      else out.push({ start: x.start, end: x.end, kwh: x.kwh, source: x.source });
+    });
+    return out;
+  }
+  var MODE_LABEL = { off: 'Off', now: 'Now', pv: 'Solar', minpv: 'Min + Solar', plan: 'Smart plan' };
+
+  function render(d) {
+    var s = d.status || {};
+    var p = d.plan;
+    document.getElementById('pl-updated').textContent = s.at ? 'Updated ' + tm(s.at) + (s.output === 'live' ? ' · controlling the Wallbox' : ' · advise only') : (s.error || '');
+    document.querySelectorAll('#pl-modes button').forEach(function (b) { var on = b.dataset.mode === d.cfg.mode; b.style.background = on ? 'var(--accent)' : 'transparent'; b.style.color = on ? '#fff' : 'inherit'; });
+    document.querySelectorAll('#pl-session button').forEach(function (b) { b.style.outline = (b.dataset.ov || '') === (d.override || '') && d.override ? '2px solid var(--accent)' : ''; });
+    var wb = s.wallbox || {};
+    var t = '';
+    t += tile('Car', s.connected ? 'connected' : 'not connected', s.connected ? (p && p.target && p.target.vehicle ? esc(p.target.vehicle.name) + ' · ' : '') + nf(wb.sessionKwh, 1) + ' kWh this session' : '', s.connected ? 'var(--accent)' : '');
+    t += tile('Charging', nf(wb.kw, 2) + ' <span style="font-size:0.8rem; font-weight:500;">kW</span>', 'setpoint ' + nf(s.setpointKw, 2) + ' kW' + (d.override ? ' · ' + esc(MODE_LABEL[d.override]) + ' for this session' : ''));
+    t += tile('Solar surplus', nf(s.surplusKw, 2) + ' <span style="font-size:0.8rem; font-weight:500;">kW</span>', 'export + what the car uses', '#d4a017');
+    if (p && p.fuelBreakEven) t += tile('Fuel break-even', eur(p.fuelBreakEven, 3) + '<span style="font-size:0.8rem; font-weight:500;">/kWh</span>', 'above this, fuel is cheaper');
+    document.getElementById('pl-tiles').innerHTML = t + '<div class="hint" style="flex-basis:100%; margin:0.2rem 0 0;">' + esc(s.reason || '') + (s.outputResult && s.outputResult.error ? ' <span style="color:var(--danger);">Output: ' + esc(s.outputResult.error) + '</span>' : '') + (s.done ? ' <strong>Car is full.</strong>' : '') + '</div>';
+
+    var tg = p && p.target ? p.target : null;
+    var th = '';
+    if (tg) {
+      th = '<div class="form-grid" style="align-items:end;">' +
+        '<div><div class="hint" style="margin:0; font-size:0.75rem;">NEEDS</div><div style="font-size:1.15rem; font-weight:700;">' + nf(p.needKwh, 1) + ' kWh</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.needSource) + '</div></div>' +
+        '<div><div class="hint" style="margin:0; font-size:0.75rem;">READY BY</div><div style="font-size:1.15rem; font-weight:700;">' + dtm(p.readyAt) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.readySource || 'no departure known — within 24 h') + '</div></div>' +
+        (canEdit ? '<div><label>Ready by (this session)</label><input type="datetime-local" id="pl-ready"> <button type="button" class="btn-soft" id="pl-ready-btn" style="margin-top:0.3rem;">Set</button></div>' : '') +
+        '</div>';
+    }
+    document.getElementById('pl-target').innerHTML = th;
+    var rb = document.getElementById('pl-ready-btn');
+    if (rb) rb.addEventListener('click', function () { var v = document.getElementById('pl-ready').value; post('/planner/ready.json', { at: v ? new Date(v).toISOString() : null }).then(load); });
+
+    var ph = '';
+    if (p) {
+      if (p.slots.length) {
+        var first = p.slots[0];
+        var last = p.slots[p.slots.length - 1];
+        ph = '<div style="padding:0.8rem 1rem; border-radius:10px; background:color-mix(in srgb, var(--accent) 10%, transparent); border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);">' +
+          '<strong>Plan:</strong> ' + p.slots.length + ' interval(s), ' + dtm(first.start) + ' – ' + dtm(last.end) + ' &rarr; <strong>' + nf(p.kwh, 1) + ' kWh</strong>' +
+          (p.pvKwh ? ' (' + nf(p.pvKwh, 1) + ' kWh solar)' : '') + ' · avg. <strong>' + eur(p.avgPrice, 3) + '</strong>/kWh · expected <strong>' + eur(p.cost) + '</strong>' +
+          (p.compare && p.compare.saving > 0.05 ? '<span class="hint" style="margin:0;"> (charging straight away: ' + eur(p.compare.avgPrice, 3) + ' avg. — saves ' + eur(p.compare.saving) + ')</span>' : '') +
+          '<div class="hint" style="margin:0.3rem 0 0;">' + mergeSlots(p.slots).map(function (x) { return dtm(x.start) + '–' + tm(x.end) + ' ' + nf(x.kwh, 1) + ' kWh ' + (x.source === 'pv' ? '☀' : x.source === 'mixed' ? '☀+⚡' : '⚡'); }).join(' · ') + '</div></div>';
+      } else {
+        ph = '<p class="hint" style="margin:0;">' + (p.needKwh > 0 ? 'Nothing planned.' : 'Nothing to charge.') + '</p>';
+      }
+      if (p.notes && p.notes.length) ph += '<p class="hint" style="margin:0.4rem 0 0; color:#b8860b;">' + p.notes.map(esc).join(' ') + '</p>';
+    }
+    document.getElementById('pl-plan').innerHTML = ph;
+    renderChart(p);
+  }
+
+  function renderChart(p) {
+    var el = document.getElementById('pl-chart');
+    if (!p || !p.slotsAll || !p.slotsAll.length) { el.innerHTML = '<p class="hint" style="margin:0;">No prices yet.</p>'; return; }
+    var slots = p.slotsAll.slice(0, 160);
+    var W = 900, H = 160, left = 40, n = slots.length, bw = (W - left - 8) / n;
+    var maxP = Math.max(0.1, Math.max.apply(null, slots.map(function (s) { return s.price || 0; })));
+    var maxPv = Math.max(1, Math.max.apply(null, slots.map(function (s) { return s.pvKw || 0; })));
+    var planned = {};
+    p.slots.forEach(function (x) { planned[x.start] = true; });
+    var t0 = Date.parse(slots[0].start), t1 = Date.parse(slots[n - 1].end);
+    var X = function (ms) { return left + (ms - t0) / (t1 - t0) * (W - left - 8); };
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 34) + '" width="100%" style="max-width:' + W + 'px;">';
+    [0.25, 0.5, 0.75, 1].forEach(function (f) { var v = maxP * f; var y = 10 + H - f * H; svg += '<line x1="' + left + '" y1="' + y + '" x2="' + (W - 5) + '" y2="' + y + '" stroke="currentColor" opacity="0.08"/><text x="' + (left - 4) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + v.toFixed(2) + '</text>'; });
+    slots.forEach(function (s, i) {
+      var x = X(Date.parse(s.start));
+      var w = Math.max(1, X(Date.parse(s.end)) - x - 1);
+      if (s.price == null) { svg += '<rect x="' + x + '" y="' + (10 + H - 4) + '" width="' + w + '" height="4" fill="currentColor" opacity="0.1"/>'; return; }
+      var h = s.price / maxP * H;
+      var isPlan = !!planned[s.start] || p.slots.some(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); });
+      svg += '<rect x="' + x + '" y="' + (10 + H - h) + '" width="' + w + '" height="' + h + '" rx="1.5" fill="' + (isPlan ? 'var(--accent)' : '#c9d0d8') + '" opacity="' + (isPlan ? 0.95 : 0.75) + '"><title>' + tm(s.start) + ' € ' + s.price.toFixed(3) + '</title></rect>';
+    });
+    var pts = slots.map(function (s) { return X((Date.parse(s.start) + Date.parse(s.end)) / 2).toFixed(1) + ',' + (10 + H - (s.pvKw || 0) / maxPv * H * 0.9).toFixed(1); });
+    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#d4a017" stroke-width="2" opacity="0.9"/>';
+    if (p.readyAt) { var rx = X(Date.parse(p.readyAt)); if (rx > left && rx < W) svg += '<line x1="' + rx + '" y1="4" x2="' + rx + '" y2="' + (10 + H) + '" stroke="#e5534b" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (rx > W - 90 ? rx - 3 : rx + 3) + '" y="9" font-size="10" text-anchor="' + (rx > W - 90 ? 'end' : 'start') + '" fill="#e5534b">ready ' + tm(p.readyAt) + '</text>'; }
+    var lastLabel = -1;
+    slots.forEach(function (s) { var ms = Date.parse(s.start); var d = new Date(ms); if (d.getMinutes() === 0 && d.getHours() % 3 === 0 && ms !== lastLabel) { lastLabel = ms; svg += '<text x="' + X(ms) + '" y="' + (H + 26) + '" font-size="10" fill="currentColor" opacity="0.6">' + (d.getHours() === 0 ? d.toLocaleDateString([], { weekday: 'short' }) : String(d.getHours()).padStart(2, '0')) + '</text>'; } });
+    svg += '</svg>';
+    el.innerHTML = svg;
+  }
+
+  function load() { fetch('/planner/status.json').then(function (r) { return r.json(); }).then(render).catch(function () {}); }
+  load();
+  setInterval(load, 30000);
+
+  if (canEdit) {
+    document.querySelectorAll('#pl-modes button').forEach(function (b) { b.addEventListener('click', function () { post('/planner/mode.json', { mode: b.dataset.mode }).then(load); }); });
+    document.querySelectorAll('#pl-session button').forEach(function (b) { b.addEventListener('click', function () { post('/planner/override.json', { mode: b.dataset.ov || null }).then(load); }); });
+    document.querySelectorAll('[data-recalc]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var body = {}; body[b.dataset.recalc] = true; b.disabled = true;
+        post('/planner/recalc.json', body).then(function (d) { var r = d[b.dataset.recalc]; b.textContent = r && r.ok ? 'Done' : 'Failed: ' + (r && r.message || ''); load(); }).finally(function () { b.disabled = false; });
+      });
+    });
+    var tb = document.getElementById('pl-test-btn');
+    if (tb) tb.addEventListener('click', function () {
+      if (!confirm('Send this value to the Loxone virtual input now? Do this with no car connected.')) return;
+      post('/planner/test-output.json', { kw: document.getElementById('pl-test-kw').value }).then(function (d) { document.getElementById('pl-test-msg').textContent = d.message || ''; });
+    });
+  } else {
+    document.querySelectorAll('#pl-modes button, #pl-session button').forEach(function (b) { b.disabled = true; });
+  }
+})();
+</script>
+
+<%- include('partials/foot') %>

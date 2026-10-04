@@ -1,0 +1,82 @@
+<%- include('partials/head', { pageTitle: 'App & push', active: 'app' }) %>
+
+<% if (saved === 'channel') { %><p class="hint" style="color: var(--success);">Channel "LoxSuite app (all devices)" is ready &mdash; pick it in a <a href="/admin/notifications">notification rule</a>.</p><% } %>
+<% if (saved === 'me') { %><p class="hint" style="color: var(--success);">Your personal notifications now arrive as push messages on your devices.</p><% } %>
+
+<div class="card">
+  <h2 style="margin-top:0;">LoxSuite on your phone</h2>
+  <div id="app-secure" class="hint" style="margin:0 0 0.6rem;"></div>
+  <ol style="margin:0; padding-left:1.2rem; line-height:1.6;">
+    <li><strong>iPhone</strong>: open LoxSuite in Safari &rarr; Share &rarr; <em>Add to Home Screen</em>. Then open LoxSuite <em>from the home screen</em> and switch push on below (iOS 16.4 or newer).</li>
+    <li><strong>Android</strong>: open LoxSuite in Chrome &rarr; menu &rarr; <em>Install app</em> (or <em>Add to home screen</em>).</li>
+    <li>Switch push on for each device that should receive notifications.</li>
+  </ol>
+  <div class="btn-row" style="margin-top:0.9rem; flex-wrap:wrap;">
+    <button type="button" class="btn-edit" id="app-on"><%- icon('plus') %> Push on for this device</button>
+    <button type="button" class="btn-soft" id="app-off">Push off for this device</button>
+    <button type="button" class="btn-soft" id="app-test">Send a test</button>
+  </div>
+  <p class="hint" id="app-msg" style="margin:0.5rem 0 0;"></p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Which notifications</h2>
+  <p class="hint">Push is a notification channel like Telegram or e-mail. Use it for the car reminders (<em>Car: plug in / swap reminders</em>, <em>Car: charging plan warnings</em>) and for anything else.</p>
+  <div class="btn-row" style="flex-wrap:wrap;">
+    <% if (isAdminUser) { %>
+      <form method="post" action="/app/channel" style="margin:0;"><button type="submit" class="btn-soft" <%= channel ? 'disabled' : '' %>><%= channel ? 'Channel "' + channel.name + '" exists' : 'Create channel for all devices' %></button></form>
+      <a class="btn-soft" href="/admin/notifications?trigger_type=car_reminder" style="text-decoration:none;">Add a car reminder rule</a>
+    <% } %>
+    <form method="post" action="/app/me" style="margin:0;"><button type="submit" class="btn-soft" <%= myPush ? 'disabled' : '' %>><%= myPush ? 'My notifications go to push' : 'Send my personal notifications as push' %></button></form>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Devices with push</h2>
+  <% if (!devices.length) { %><p class="hint" style="margin:0;">None yet.</p><% } else { %>
+    <table><thead><tr><th>User</th><th>Device</th><th>Since</th><th>Last problem</th></tr></thead><tbody>
+      <% devices.forEach(d => { %><tr><td><%= d.username || '—' %></td><td class="hint"><%= (d.user_agent || '').replace(/\(.*?\)/g, '').slice(0, 60) %></td><td class="hint"><%= formatDateTime(d.created_at) %></td><td class="hint"><%= d.last_error || '' %></td></tr><% }) %>
+    </tbody></table>
+  <% } %>
+</div>
+
+<script>
+(function () {
+  var msg = document.getElementById('app-msg');
+  var sec = document.getElementById('app-secure');
+  var supported = 'serviceWorker' in navigator && 'PushManager' in window;
+  if (!window.isSecureContext) {
+    sec.innerHTML = '<span style="color:var(--danger);">LoxSuite is opened over plain http.</span> Browsers only allow installing as an app and push over <strong>https</strong> with a valid certificate (for example via a reverse proxy with Let\'s Encrypt, Tailscale or a Cloudflare tunnel).';
+  } else if (!supported) {
+    sec.textContent = 'This browser does not support push here. On iPhone: add LoxSuite to the home screen first and open it from there.';
+  } else {
+    sec.textContent = window.matchMedia('(display-mode: standalone)').matches ? 'Running as an app.' : 'Running in the browser.';
+  }
+  function b64ToBytes(b64) { var p = '='.repeat((4 - b64.length % 4) % 4); var raw = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/')); var out = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out; }
+  function post(url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); }
+  document.getElementById('app-on').onclick = function () {
+    if (!supported || !window.isSecureContext) { msg.textContent = 'Not possible here (see above).'; return; }
+    msg.textContent = 'Asking permission…';
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== 'granted') throw new Error('Notifications were not allowed for LoxSuite.');
+      return navigator.serviceWorker.register('/sw.js').then(function () { return navigator.serviceWorker.ready; });
+    }).then(function (reg) {
+      return fetch('/app/vapid.json').then(function (r) { return r.json(); }).then(function (k) {
+        return reg.pushManager.getSubscription().then(function (s) { return s || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(k.publicKey) }); });
+      });
+    }).then(function (sub) { return post('/app/subscribe', { subscription: sub.toJSON() }); })
+      .then(function (d) { msg.textContent = d.ok ? 'Push is on for this device.' : d.message; if (d.ok) setTimeout(function () { location.reload(); }, 800); })
+      .catch(function (e) { msg.textContent = e.message; });
+  };
+  document.getElementById('app-off').onclick = function () {
+    if (!supported) return;
+    navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (s) {
+      if (!s) { msg.textContent = 'Push was not on for this device.'; return; }
+      return post('/app/unsubscribe', { endpoint: s.endpoint }).then(function () { return s.unsubscribe(); }).then(function () { msg.textContent = 'Push is off for this device.'; });
+    }).catch(function (e) { msg.textContent = e.message; });
+  };
+  document.getElementById('app-test').onclick = function () { post('/app/test', {}).then(function (d) { msg.textContent = d.ok ? 'Sent to ' + d.sent + ' device(s).' : d.message; }); };
+})();
+</script>
+
+<%- include('partials/foot') %>

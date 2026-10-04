@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.23.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.24.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -512,6 +512,71 @@ and alerting are independent.
 
 *(Real data from a live installation.)*
 
+### Smart charging (Wallbox menu)
+
+Charges the car on time in the cheapest way, from your own data. Starts in **Advise** mode (it shows what it
+would do); set *Output* to *Live* to let it control the Wallbox through a Loxone virtual input.
+
+- **Modes**: *Off*, *Now* (full power), *Solar* (only solar surplus, with start/stop delays), *Min + Solar*
+  (minimum power plus surplus) and *Smart plan* (ready by the deadline at the lowest cost). *Charge now* / *Pause*
+  apply until the car is unplugged; a "ready by" can be set per session.
+- **Plan**: how much the car needs (from its own state of charge when a vehicle data source gives it, otherwise
+  learned from the energy of the trip it came back from) and by when (the agenda or the learned weekday pattern,
+  whichever is first). Solar surplus is valued at what exporting it earns (net metering = the price of that
+  moment, or a fixed feed-in tariff), grid energy at the all-in price; the cheapest intervals win. For a plug-in
+  hybrid intervals above the fuel break-even price (fuel price x l/100 km vs kWh/km) are skipped.
+- **Control** every 30 s: the charging power is written to a Loxone virtual input (kW, 0 = stop; optional 1/0
+  "charging allowed" input) on change and at least every 5 minutes, never above the grid connection limit.
+  A *Send test value* button checks the wiring. Published as `loxsuite/planner/{setpoint_kw,mode,need_kwh,…}`.
+- **Prices**: EnergyZero (free) or ENTSO-E (API key) day-ahead prices, turned into all-in prices by a tariff
+  formula, or calibrated automatically against a Loxone *Spot Price Optimizer* (samples every 15 min, linear fit
+  over two weeks). Without internet prices: an estimate per hour of day from the Spot Price Optimizer.
+- **Fuel**: manual price, or the CBS national average for Euro95 (daily).
+
+### Meters
+
+Wallbox → Meters: pick the Loxone grid (bidirectional), PV, Wallbox and optional home-battery meters. Live power,
+per-minute samples (14 days) and kWh per hour (kept); house load = grid + solar − Wallbox − battery. *Import*
+reads the Miniserver's own hourly statistics (via its MCP server) so learning doesn't start from zero. A meter
+that stops reporting for 10 minutes triggers *Energy meter failing/recovered*. MQTT: `loxsuite/energy/<role>/…`.
+
+### Learned
+
+What the planner learned, viewable: **departures per weekday** (unplug times, median, "ready by" = early
+quartile − 15 min, overridable per weekday), **energy per trip** (weekday × part of day × time away; trips that
+emptied a hybrid's battery are marked), the **solar forecast** (Open-Meteo irradiance on your panel plane x kWp,
+corrected per hour of the day with what the PV meter really produced; error band and the last 28 days) and the
+**house profile** (workday/weekend per hour) with tomorrow's expected surplus. Every Wallbox session is kept
+beyond the Wallbox's own log of ~100.
+
+### Agenda
+
+Day, week, month and year views of ICS calendars (Nextcloud, Google, Outlook, iCloud — secret/subscription link,
+stored encrypted) plus trips planned in LoxSuite (one-off or weekly). An appointment needs the car when its title
+holds a marker (🚗 / #auto by default) or when you switch *Car needed* on in LoxSuite (stored in LoxSuite only).
+Hints like `🚗 120 km`, `🚗 30 kWh` or `🚗 full` are understood. For car appointments with an address LoxSuite
+looks up the driving distance and time from home (OpenStreetMap Nominatim + OSRM; only those addresses are sent,
+results cached), adds the margin (default 20 km) and turns it into kWh; the planner makes sure the car is ready
+before you have to leave. Learned departures, planned charging and past sessions are shown in the views.
+
+### App & push
+
+On a phone LoxSuite gets a bottom tab bar and fits the screen; it also installs as an app on the phone's home screen (manifest + service worker) and can send **web push**
+notifications (VAPID keys generated per installation). Switch push on per device under the account menu → App & push;
+use the channel `loxsuite-push://all` (one click) or send your personal notifications to your own devices
+(`loxsuite-push://user/<id>`). Requires LoxSuite over HTTPS with a valid certificate; on iPhone from iOS 16.4
+when added to the home screen. Notification triggers for the car: **plug-in / swap reminders** (the car is home,
+not plugged in and needed soon; for a hybrid only when the saving against fuel is above your threshold; push
+buttons *Remind me at 22:00* / *Not today*; reminders that keep being ignored raise the threshold for that
+weekday) and **charging plan warnings** (a trip longer than the battery, a plan that won't make it).
+
+### Several cars on one Wallbox
+
+Per vehicle NFC tags and Loxone users identify which car is plugged in (or the cars' own data sources, or a push
+question "Which car is plugged in?"); the planner plans for that car and suggests when to swap. *Report over OCPP*
+off for a car (e.g. a private car next to the company car) keeps its sessions away from the OCPP backend and out of
+the quarterly export.
+
 ### Vehicles
 
 The cars charged at home (Wallbox → Vehicles), with what the charging planner needs to know about each
@@ -531,8 +596,9 @@ hybrid can run its battery empty and drive on fuel, so its reserve defaults to 0
     pick from the topics the broker has seen, with an optional JSON path. Presets for evcc and Home
     Assistant's MQTT Statestream fill in typical topic names.
   - **HTTP / JSON URL** with optional headers.
-  Values read: state of charge, range, plugged in, charging, charge limit, odometer, coordinates and a
-  location text. *Test source* reads once with the form's settings and shows raw and interpreted
+  Values read: state of charge, electric range, total range incl. fuel (hybrids — a single "range" from
+  Homey is usually the combined one), plugged in, charging, charge limit, odometer, coordinates and a location
+  text. Without an electric range it is estimated from the battery % and the consumption. *Test source* reads once with the form's settings and shows raw and interpreted
   values side by side. API keys, tokens and headers are stored encrypted.
 - **At home**: within a radius of the home coordinates, or when the location text equals e.g. `home`;
   plugged in always counts as home.

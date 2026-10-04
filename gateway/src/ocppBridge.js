@@ -331,8 +331,23 @@ class BridgeRunner {
     tx.idTag = decision.tag;
     tx.idTagSource = decision.source;
     this.log('id-tag', { idTag: decision.tag, source: decision.source });
-    db.prepare('UPDATE ocpp_bridge_sessions SET id_tag = ?, id_tag_source = ? WHERE bridge_id = ? AND local_id = ? AND mode = ?')
-      .run(decision.tag, decision.source, this.row.id, tx.localId, this.mode).catch(() => {});
+    // Which car is this (Vehicles: NFC tags / Loxone users per car)? A car set to not report its
+    // sessions (e.g. the private one next to the company car) is recorded but never sent.
+    let vehicle = null;
+    try {
+      vehicle = require('./vehicles').identifyVehicleCached({
+        idTag: ['nfc', 'user'].includes(decision.source) ? decision.tag : null, loxoneUser: this.sessionUser,
+      });
+    } catch { vehicle = null; }
+    tx.vehicleId = vehicle?.id ?? null;
+    tx.skip = !!(vehicle && vehicle.ocpp_report === 0);
+    if (vehicle) this.log('vehicle', { name: vehicle.name, reported: !tx.skip });
+    db.prepare('UPDATE ocpp_bridge_sessions SET id_tag = ?, id_tag_source = ?, vehicle_id = ? WHERE bridge_id = ? AND local_id = ? AND mode = ?')
+      .run(decision.tag, decision.source, tx.vehicleId, this.row.id, tx.localId, this.mode).catch(() => {});
+    if (tx.skip) {
+      this.log('not reported', { msg: `${vehicle.name} is set to not report its sessions over OCPP` });
+      return true;
+    }
     this.enqueue('StartTransaction', { connectorId: 1, idTag: decision.tag, meterStart: tx.meterStart, timestamp: tx.startedAt }, tx.localId);
     return true;
   }
@@ -347,6 +362,12 @@ class BridgeRunner {
     db.prepare('UPDATE ocpp_bridge_sessions SET stopped_at = ?, meter_stop_wh = ?, energy_loxone_kwh = ?, stop_reason = ? WHERE bridge_id = ? AND local_id = ? AND mode = ?')
       .run(ts, meterStop, energyLoxone ?? null, reason, this.row.id, tx.localId, this.mode).catch((e) => this.log('db-error', { error: e.message }));
     logSystemEvent(`OCPP bridge "${this.row.name}": session stopped, ${((meterStop - tx.meterStart) / 1000).toFixed(3)} kWh (${this.mode})`).catch(() => {});
+    if (tx.skip) {
+      this.state.tx = null;
+      this.persist();
+      this.sendStatus();
+      return;
+    }
     this.enqueue('StopTransaction', {
       idTag: tx.idTag || this.row.id_tag, meterStop, timestamp: ts, reason,
       transactionData: [{ timestamp: ts, sampledValue: [{ value: String(meterStop), measurand: 'Energy.Active.Import.Register', unit: 'Wh', context: 'Transaction.End' }] }],
@@ -357,7 +378,7 @@ class BridgeRunner {
   }
 
   sendMeterValues() {
-    if (!this.state.tx || this.state.tx.pendingStart || this.values.total === undefined) return;
+    if (!this.state.tx || this.state.tx.pendingStart || this.state.tx.skip || this.values.total === undefined) return;
     this.enqueue('MeterValues', { connectorId: 1, meterValue: [{ timestamp: new Date().toISOString(), sampledValue: [
       { value: String(toWh(this.values.total)), measurand: 'Energy.Active.Import.Register', unit: 'Wh', context: 'Sample.Periodic' },
       { value: String(toWh(this.values.actual)), measurand: 'Power.Active.Import', unit: 'W', context: 'Sample.Periodic' },

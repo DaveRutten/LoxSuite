@@ -1,0 +1,135 @@
+// Wallbox > Planner (planner.js): mode, live status, the plan for the connected car, and all
+// settings of smart charging (charger, output to Loxone, prices, solar, fuel, reminders).
+const express = require('express');
+const asyncHandler = require('../middleware/asyncHandler');
+const { requirePermission } = require('../middleware/requirePermission');
+const planner = require('../planner');
+const prices = require('../prices');
+const solar = require('../solarForecast');
+const settings = require('../wallboxSettings');
+const reminders = require('../reminders');
+const fuelPrice = require('../fuelPrice');
+const { logSystemEvent } = require('../auditLog');
+
+const router = express.Router();
+
+const num = (v, def = null) => {
+  if (v === undefined || v === null || String(v).trim() === '') return def;
+  const n = Number(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : def;
+};
+
+router.get('/', asyncHandler(async (req, res) => {
+  const pcfg = await prices.getConfig();
+  res.render('planner', {
+    cfg: await planner.getConfig(), priceCfg: { ...pcfg, entsoe_token: undefined, hasEntsoeToken: !!pcfg.entsoe_token },
+    solarCfg: await solar.getConfig(), site: await solar.getSite(), remCfg: await reminders.getConfig(),
+    priceStatus: await settings.get('prices_status', null), solarStatus: await settings.get('solar_status', null),
+    fuel: await fuelPrice.currentFuelPrice(), spo: await prices.findSpotOptimizer().catch(() => null),
+    saved: req.query.saved || null, error: req.query.error || null,
+  });
+}));
+
+router.get('/status.json', asyncHandler(async (req, res) => {
+  const rt = planner.getRuntime();
+  if (!rt.status) await planner.tick().catch(() => {});
+  const r = planner.getRuntime();
+  const plan = r.plan ? { ...r.plan } : null;
+  res.json({ status: r.status, plan, override: r.override, readyOverride: r.readyOverride, cfg: await planner.getConfig() });
+}));
+
+// JSON actions from the page (CSRF-exempt like the other JSON endpoints).
+router.post('/mode.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const mode = String(req.body?.mode || '');
+  if (!planner.MODES.includes(mode)) return res.json({ ok: false, message: 'Unknown mode.' });
+  await planner.saveConfig({ mode });
+  planner.setOverride(null);
+  await planner.recalc().catch(() => {});
+  await planner.tick().catch(() => {});
+  res.json({ ok: true });
+}));
+
+// Session buttons: "Charge now", "Pause", back to "Smart" (null).
+router.post('/override.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const m = req.body?.mode;
+  planner.setOverride(m === 'now' || m === 'off' ? m : null);
+  await planner.recalc().catch(() => {});
+  await planner.tick().catch(() => {});
+  res.json({ ok: true });
+}));
+
+router.post('/ready.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const t = req.body?.at ? Date.parse(req.body.at) : null;
+  planner.setReadyOverride(Number.isFinite(t) ? t : null);
+  await planner.recalc().catch(() => {});
+  res.json({ ok: true });
+}));
+
+router.post('/recalc.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const out = {};
+  if (req.body?.prices) out.prices = await prices.refreshPrices().then((r) => ({ ok: true, ...r })).catch((e) => ({ ok: false, message: e.message }));
+  if (req.body?.solar) out.solar = await solar.refreshForecast().then((r) => ({ ok: true, ...r })).catch((e) => ({ ok: false, message: e.message }));
+  if (req.body?.fuel) out.fuel = await fuelPrice.refreshFuelPrice().then((r) => ({ ok: true, ...r })).catch((e) => ({ ok: false, message: e.message }));
+  await planner.recalc().catch((e) => { out.plan = { ok: false, message: e.message }; });
+  res.json({ ok: true, ...out });
+}));
+
+// Write a test value to the configured virtual input(s) — only when asked, never automatically.
+router.post('/test-output.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const cfg = await planner.getConfig();
+  if (!cfg.vi_setpoint) return res.json({ ok: false, message: 'Fill in the virtual input name first.' });
+  const db = require('../db');
+  const { sendHttpVirtualInput } = require('../loxone');
+  const ms = await db.prepare('SELECT * FROM miniservers ORDER BY id LIMIT 1').get();
+  const kw = num(req.body?.kw, 0);
+  try {
+    await sendHttpVirtualInput(ms, cfg.vi_setpoint, String(kw));
+    if (cfg.vi_enable) await sendHttpVirtualInput(ms, cfg.vi_enable, kw > 0 ? '1' : '0');
+    await logSystemEvent(`Planner: test value ${kw} kW written to "${cfg.vi_setpoint}" by ${req.session?.username || 'unknown user'}`).catch(() => {});
+    res.json({ ok: true, message: `Sent ${kw} to "${cfg.vi_setpoint}"${cfg.vi_enable ? ` and ${kw > 0 ? 1 : 0} to "${cfg.vi_enable}"` : ''} on ${ms.name}.` });
+  } catch (err) {
+    res.json({ ok: false, message: err.message });
+  }
+}));
+
+router.post('/settings', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const b = req.body;
+  const section = b.section;
+  if (section === 'charging') {
+    await planner.saveConfig({
+      min_kw: num(b.min_kw, 4.16), max_kw: num(b.max_kw, 11), grid_limit_kw: num(b.grid_limit_kw, 17.3),
+      output: b.output === 'live' ? 'live' : 'advise', vi_setpoint: String(b.vi_setpoint || '').trim(), vi_enable: String(b.vi_enable || '').trim(),
+      pv_start_kw: num(b.pv_start_kw), pv_start_delay_s: num(b.pv_start_delay_s, 120), pv_stop_delay_s: num(b.pv_stop_delay_s, 300),
+      pv_allowed_import_kw: num(b.pv_allowed_import_kw, 0.5), pv_opportunistic: !!b.pv_opportunistic,
+      solar_trust: ['low', 'expected', 'bonus'].includes(b.solar_trust) ? b.solar_trust : 'low',
+      max_price_eur_kwh: num(b.max_price_eur_kwh), insufficient: b.insufficient === 'stop' ? 'stop' : 'charge',
+      feed_in: b.feed_in === 'fixed' ? 'fixed' : 'saldering', feed_in_eur_kwh: num(b.feed_in_eur_kwh, 0.05),
+      target_policy: b.target_policy === 'needed' ? 'needed' : 'full',
+    });
+    const cfg = await planner.getConfig();
+    if (cfg.output === 'live') await logSystemEvent(`Planner output set to Live (virtual input "${cfg.vi_setpoint}") by ${req.session?.username || 'unknown user'}`).catch(() => {});
+  } else if (section === 'prices') {
+    await prices.saveConfig({
+      source: ['energyzero', 'entsoe', 'loxone', 'fixed'].includes(b.source) ? b.source : 'energyzero',
+      entsoe_token: String(b.entsoe_token || ''), markup_eur_kwh: num(b.markup_eur_kwh, 0), energy_tax_eur_kwh: num(b.energy_tax_eur_kwh, 0),
+      vat_pct: num(b.vat_pct, 21), fixed_eur_kwh: num(b.fixed_eur_kwh, 0.3), calibrate_loxone: !!b.calibrate_loxone,
+    });
+    prices.refreshPrices().catch(() => {});
+  } else if (section === 'solar') {
+    await settings.set('site', { lat: num(b.lat), lon: num(b.lon) });
+    await settings.patch('solar', { enabled: !!b.enabled, kwp: num(b.kwp), tilt: num(b.tilt, 35), azimuth: num(b.azimuth, 0), efficiency: num(b.efficiency, 0.85) }, solar.DEFAULTS);
+    solar.refreshForecast().catch(() => {});
+  } else if (section === 'fuel') {
+    await planner.saveConfig({ fuel_eur_l: num(b.fuel_eur_l, 2.1), fuel_auto: !!b.fuel_auto, default_kwh_per_km: num(b.default_kwh_per_km, 0.2) });
+    if (b.fuel_auto) fuelPrice.refreshFuelPrice().catch(() => {});
+  } else if (section === 'reminders') {
+    await settings.patch('reminders', {
+      enabled: !!b.enabled, threshold_eur: num(b.threshold_eur, 1), evening_from: String(b.evening_from || '17:30'),
+      quiet_from: String(b.quiet_from || '22:30'), quiet_until: String(b.quiet_until || '07:00'), snooze_to: String(b.snooze_to || '22:00'),
+    }, reminders.DEFAULTS);
+  }
+  await planner.recalc().catch(() => {});
+  res.redirect(`/planner?saved=${encodeURIComponent(section || '1')}#settings`);
+}));
+
+module.exports = router;

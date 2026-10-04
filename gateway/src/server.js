@@ -60,6 +60,14 @@ const { startLiveConnections } = require('./loxoneWebSocket');
 const { startOcppBridges, shutdownOcppBridges } = require('./ocppBridge');
 const { startStatsPublisher } = require('./ocppStats');
 const { startVehicles } = require('./vehicles');
+const { startEnergyMeters } = require('./energyMeters');
+const { startPrices } = require('./prices');
+const { startSolarForecast } = require('./solarForecast');
+const { startLearning } = require('./learning');
+const { startPlanner } = require('./planner');
+const { startAgenda } = require('./agenda');
+const { startReminders } = require('./reminders');
+const { startFuelPrice } = require('./fuelPrice');
 const mcpClient = require('./mcpClient');
 const requireAuth = require('./middleware/requireAuth');
 const loadUserContext = require('./middleware/loadUserContext');
@@ -83,6 +91,11 @@ const monitorRoutes = require('./routes/monitor');
 const hardwareRoutes = require('./routes/hardware');
 const ocppRoutes = require('./routes/ocpp');
 const vehicleRoutes = require('./routes/vehicles');
+const energyRoutes = require('./routes/energy');
+const plannerRoutes = require('./routes/planner');
+const learnedRoutes = require('./routes/learned');
+const agendaRoutes = require('./routes/agenda');
+const appRoutes = require('./routes/app');
 const logsRoutes = require('./routes/logs');
 const dashboardsRoutes = require('./routes/dashboards');
 const aiChatRoutes = require('./routes/aiChat');
@@ -290,6 +303,11 @@ async function main() {
   app.use('/hardware', requireAuth, requirePermission('hardware', 'view'), hardwareRoutes);
   app.use('/ocpp', requireAuth, requirePermission('miniservers', 'view'), ocppRoutes);
   app.use('/vehicles', requireAuth, requirePermission('miniservers', 'view'), vehicleRoutes);
+  app.use('/energy', requireAuth, requirePermission('miniservers', 'view'), energyRoutes);
+  app.use('/planner', requireAuth, requirePermission('miniservers', 'view'), plannerRoutes);
+  app.use('/learned', requireAuth, requirePermission('miniservers', 'view'), learnedRoutes);
+  app.use('/agenda', requireAuth, requirePermission('miniservers', 'view'), agendaRoutes);
+  app.use('/app', requireAuth, appRoutes);
   // logs.js serves four distinct areas (one per tab: logs_mqtt/logs_loxone/logs_loxone_commands/
   // logs_system), so it's gated per-route inside that file instead of once here — same reasoning as
   // mappings.js above.
@@ -356,6 +374,14 @@ async function main() {
   startOcppBridges();
   startStatsPublisher();
   startVehicles();
+  startEnergyMeters();
+  startPrices();
+  startSolarForecast();
+  startLearning();
+  startAgenda();
+  startFuelPrice();
+  startPlanner();
+  startReminders();
   mcpClient.startMcpClients().catch((err) => console.error('Failed to start MCP clients:', err.message));
   // A restart mid-turn (deploy, crash) abandons any AI Assistant reply still marked 'streaming' —
   // nothing will ever finalize that row otherwise, since the code path that would (routes/aiChat.js's

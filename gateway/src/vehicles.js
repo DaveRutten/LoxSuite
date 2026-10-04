@@ -24,6 +24,7 @@ const { decrypt } = require('./secretCrypto');
 const FIELDS = [
   { key: 'soc', label: 'State of charge (%)', kind: 'number' },
   { key: 'range_km', label: 'Electric range (km)', kind: 'number' },
+  { key: 'total_range_km', label: 'Total range incl. fuel (km, hybrid)', kind: 'number' },
   { key: 'plugged', label: 'Plugged in', kind: 'plugged' },
   { key: 'charging', label: 'Charging', kind: 'charging' },
   { key: 'limit_soc', label: 'Charge limit in the car (%)', kind: 'number' },
@@ -161,6 +162,11 @@ function normalizeReading(raw, vehicle = {}) {
   // Energy in the battery, when both the SoC and the capacity are known.
   const cap = Number(vehicle.battery_kwh);
   r.energy_kwh = r.soc !== null && cap > 0 ? Math.round(((r.soc / 100) * cap) * 10) / 10 : null;
+  // Without an electric range from the car (a hybrid often only reports the combined range):
+  // estimate it from the energy in the battery and the consumption.
+  const kpk = Number(vehicle.kwh_per_km);
+  r.range_estimated = false;
+  if (r.range_km === null && r.energy_kwh !== null && kpk > 0) { r.range_km = Math.round(r.energy_kwh / kpk); r.range_estimated = true; }
   return r;
 }
 
@@ -175,12 +181,18 @@ function readingChanged(prev, next, prevAtMs, nowMs, minIntervalMs = 15 * 60 * 1
 
 // Best guess of which Homey capability carries which field, from the capability ids alone. Only
 // a default for the form — every mapping can be changed by hand.
-function guessHomeyFields(capabilities = []) {
+// For a plug-in hybrid a single "range" capability is usually the combined range (battery + fuel),
+// so it goes to total_range_km; only a capability that says electric/EV/battery is the electric range.
+function guessHomeyFields(capabilities = [], type = null) {
   const caps = capabilities.map((c) => String(c));
   const find = (...tests) => caps.find((c) => tests.some((t) => (typeof t === 'string' ? c === t : t.test(c)))) || '';
+  const evRange = find(/(electric|ev|battery|elec).*range|range.*(electric|ev|battery|elec)/i);
+  const anyRange = find(/range/i);
+  const totalRange = find(/(total|combined|fuel|combustion).*range|range.*(total|combined)/i);
   return {
     soc: find('measure_battery', 'ev_battery_level', /battery.*(level|percent|soc)/i, /(^|_)soc($|_|\.)/i, /^measure_battery/),
-    range_km: find(/range/i),
+    range_km: evRange || (type === 'phev' ? '' : anyRange),
+    total_range_km: totalRange || (type === 'phev' && !evRange ? anyRange : ''),
     plugged: find('ev_charging_state', /plug/i, /cable/i, /connected/i),
     charging: find('ev_charging_state', /charging/i),
     limit_soc: find(/target|limit/i),
@@ -352,7 +364,8 @@ function guessHaFields(entities = []) {
   const tracker = find(/./, 'device_tracker');
   return {
     soc: { entity: find(/battery_(level|percent)|state_of_charge|(^|_)soc($|_)|battery$/i, 'sensor') },
-    range_km: { entity: find(/electric_range|ev_range|range/i, 'sensor') },
+    range_km: { entity: find(/electric_range|ev_range|battery_range|electric.*range/i, 'sensor') },
+    total_range_km: { entity: find(/total_range|combined_range|^sensor\.[a-z0-9_]*_range$/i, 'sensor') },
     plugged: { entity: find(/plug|cable|charger_connected|connected/i) },
     charging: { entity: find(/charging(_state)?$|is_charging/i) },
     limit_soc: { entity: find(/target|charge_limit|limit/i) },
@@ -414,10 +427,52 @@ async function readVehicle(vehicle, { getTopicValue } = {}) {
   }
 }
 
+// --------------------------------------------------------------------------- which car is it?
+
+function normTag(t) {
+  let hex = String(t || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+  if (/^[0-9A-F]+$/.test(hex)) {
+    if (hex.length > 4 && hex.startsWith('EC') && hex.endsWith('EC')) hex = hex.slice(2, -2);
+    while (hex.length > 2 && hex.endsWith('00')) hex = hex.slice(0, -2);
+  }
+  return hex;
+}
+const lines = (text) => String(text || '').split(/[\r\n,;]+/).map((x) => x.trim()).filter(Boolean);
+
+// The vehicle a session belongs to: by NFC tag, by Loxone user, by "plugged in" from the cars' own
+// data sources, or — with only one car — that car. Null when it can't be told apart.
+function identifyVehicle(vehicles, { idTag = null, loxoneUser = null, pluggedIds = [] } = {}) {
+  const list = (vehicles || []).filter((v) => v.enabled !== 0);
+  if (idTag) {
+    const t = normTag(idTag);
+    const hit = list.find((v) => lines(v.id_tags).some((x) => normTag(x) === t));
+    if (hit) return hit;
+  }
+  if (loxoneUser) {
+    const u = String(loxoneUser).trim().toLowerCase();
+    const hit = list.find((v) => lines(v.loxone_users).some((x) => x.toLowerCase() === u));
+    if (hit) return hit;
+  }
+  const plugged = list.filter((v) => pluggedIds.includes(v.id));
+  if (plugged.length === 1) return plugged[0];
+  if (list.length === 1) return list[0];
+  return null;
+}
+
+let vehicleCache = [];
+function identifyVehicleCached(opts) {
+  const plugged = vehicleCache.filter((v) => state.get(v.id)?.reading?.plugged === true).map((v) => v.id);
+  return identifyVehicle(vehicleCache, { ...opts, pluggedIds: plugged });
+}
+async function refreshVehicleCache() {
+  try { vehicleCache = await db.prepare('SELECT * FROM vehicles').all(); } catch { /* not migrated yet */ }
+  return vehicleCache;
+}
+
 // --------------------------------------------------------------------------- runtime
 
 const TICK_MS = 15 * 1000;
-const PUBLISH_FIELDS = ['soc', 'range_km', 'plugged', 'charging', 'home', 'energy_kwh', 'limit_soc', 'odometer_km'];
+const PUBLISH_FIELDS = ['soc', 'range_km', 'total_range_km', 'plugged', 'charging', 'home', 'energy_kwh', 'limit_soc', 'odometer_km'];
 const state = new Map(); // vehicle id -> { reading, raw, error, fetchedAt, sourceUpdatedAt, nextPollAt, historyAt }
 const lastPublished = new Map(); // topic -> string
 let timer = null;
@@ -428,7 +483,7 @@ function vehicleTopics(id) {
 }
 
 const TOPIC_LABELS = {
-  soc: 'State of charge (%)', range_km: 'Range (km)', plugged: 'Plugged in', charging: 'Charging', home: 'At home',
+  soc: 'State of charge (%)', range_km: 'Electric range (km)', total_range_km: 'Total range incl. fuel (km)', plugged: 'Plugged in', charging: 'Charging', home: 'At home',
   energy_kwh: 'Energy in battery (kWh)', limit_soc: 'Charge limit (%)', odometer_km: 'Odometer (km)',
 };
 
@@ -522,6 +577,7 @@ async function tick() {
   if (ticking) return;
   ticking = true;
   try {
+    await refreshVehicleCache();
     let vehicles;
     try { vehicles = await db.prepare('SELECT * FROM vehicles WHERE enabled = 1 AND source_type <> ?').all('none'); } catch { return; }
     const nowMs = Date.now();
@@ -582,6 +638,10 @@ function startVehicles() {
 }
 
 module.exports = {
+  identifyVehicle,
+  identifyVehicleCached,
+  refreshVehicleCache,
+  normTag,
   FIELDS,
   FIELD_KEYS,
   MQTT_PRESETS,

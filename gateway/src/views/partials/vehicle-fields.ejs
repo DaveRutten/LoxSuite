@@ -163,6 +163,19 @@
   </p>
 </div>
 
+<h2 style="margin-top:1.3rem;">Which car is plugged in</h2>
+<div class="form-grid">
+  <div><label>NFC tags of this car (one per line)</label><textarea name="id_tags" rows="2" placeholder="B02B058D414C27"><%= v.id_tags || '' %></textarea></div>
+  <div><label>Loxone users of this car (one per line)</label><textarea name="loxone_users" rows="2" placeholder="Dave Rutten"><%= v.loxone_users || '' %></textarea></div>
+  <div><label>Report its sessions over OCPP</label><%- toggleSwitch('ocpp_report', v.ocpp_report === undefined || v.ocpp_report === null ? true : !!v.ocpp_report) %></div>
+</div>
+<p class="hint" style="margin-top:0.5rem;">
+  Only needed with more than one car on the same Wallbox. A session belongs to this car when its NFC tag or the Loxone user of
+  the session matches, or when this car's data source says it is plugged in. Switch <em>Report over OCPP</em> off for a car
+  whose charging isn't reimbursed (e.g. the private car next to the company car): its sessions are then not sent to the
+  backend and left out of the quarterly export.
+</p>
+
 <h2 style="margin-top:1.3rem;">At home</h2>
 <div class="form-grid">
   <div><label>Home latitude</label><input type="text" name="home_lat" value="<%= val(v.home_lat) %>" placeholder="51.6"></div>
@@ -244,7 +257,7 @@
   document.getElementById('homey-load').addEventListener('click', function () {
     var msg = document.getElementById('homey-msg');
     msg.textContent = 'Loading devices from the Homey…';
-    post('/vehicles/homey-devices.json', { url: form.homey_url.value, key: form.homey_key.value, vehicle_id: vehicleId }).then(function (d) {
+    post('/vehicles/homey-devices.json', { url: form.homey_url.value, key: form.homey_key.value, vehicle_id: vehicleId, type: typeSel.value }).then(function (d) {
       if (!d.ok) { msg.textContent = 'Could not load devices: ' + d.message; return; }
       homeyDevices = d.devices;
       var cur = document.getElementById('homey-device-id').value;

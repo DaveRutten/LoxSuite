@@ -1,0 +1,20 @@
+{
+  "name": "LoxSuite",
+  "short_name": "LoxSuite",
+  "description": "Loxone gateway, monitoring and smart charging",
+  "start_url": "/planner",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f4f7",
+  "theme_color": "#5CA83F",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Smart charging", "url": "/planner" },
+    { "name": "Agenda", "url": "/agenda" },
+    { "name": "Dashboard", "url": "/" }
+  ]
+}
