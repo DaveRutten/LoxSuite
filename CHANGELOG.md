@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.27.1-alpha.1] - 2026-10-04
+
+### Fixed
+- **Smart charging switched on and off every few minutes for a nearly full battery** (seen live: 11 kW for ~90 s, then
+  0, then again). The need came from the car's battery % (99% = 0.26 kWh), which lags behind; a partial interval was
+  charged at full power for a minute; and nothing stopped quick restarts. Now:
+  - the energy charged since the car's last battery reading is subtracted from the need;
+  - in Smart plan mode no grid charging is started for less than 1 kWh (setting *min_topup_kwh*; solar surplus still
+    counts);
+  - a partial interval charges at lower power for longer (never below the Wallbox minimum of 4.16 kW) instead of full
+    power for a minute;
+  - once charging it keeps going at least 5 minutes, once stopped it waits 5 minutes before starting again (except
+    when the car is unplugged, the target is reached, or the mode is Off/Now).
+- **Charge log**: a lower power than asked at 90%+ battery is reported as the car tapering, not as a failure.
+
 ## [0.27.0-alpha.1] - 2026-10-04
 
 ### Added

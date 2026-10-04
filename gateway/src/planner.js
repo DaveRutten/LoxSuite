@@ -30,6 +30,9 @@ const DEFAULTS = {
   pv_stop_delay_s: 300,
   pv_allowed_import_kw: 0.5,      // grid import tolerated while solar charging before the stop timer runs
   pv_opportunistic: true,         // in "plan" mode also use solar surplus outside the planned intervals
+  min_topup_kwh: 1,               // "plan" mode: don't start a session for less than this (a nearly full battery)
+  min_on_s: 300,                  // once charging, keep going at least this long (no on/off flapping)
+  min_off_s: 300,                 // once stopped, wait at least this long before starting again
   solar_trust: 'low',             // 'low' (p10 of the forecast band) | 'expected' | 'bonus' (ignore solar when planning)
   max_price_eur_kwh: null,
   insufficient: 'charge',         // too few cheap intervals: 'charge' anyway | 'stop' at the price cap
@@ -103,11 +106,13 @@ function makePlan({
     const kwh = c.kw * c.h;
     if (kwh <= 0) continue;
     const take = Math.min(kwh, remaining);
-    const frac = take / kwh;
-    // A partial interval is charged at full power for part of the time, never below the minimum.
+    // A partial interval: lower power for longer (never below the minimum) rather than full power for
+    // a minute or two — fewer start/stops for the car and the Wallbox.
+    const kwUse = take < kwh ? Math.max(Math.min(c.kw, minKw), take / c.h) : c.kw;
+    const frac = Math.min(1, take / (kwUse * c.h));
     result.push({
       start: new Date(c.slot.s).toISOString(), end: new Date(c.slot.s + (c.slot.e - c.slot.s) * frac).toISOString(),
-      kw: round2(c.kw), kwh: round3(take), source: c.source, price: c.slot.price ?? null, cost: round3(take * c.cost), topUp: !!c.topUp,
+      kw: round2(kwUse), kwh: round3(take), source: c.source, price: c.slot.price ?? null, cost: round3(take * c.cost), topUp: !!c.topUp,
     });
     remaining -= take;
     if (sequential && mode === 'pv' && remaining <= 0) break;
@@ -227,6 +232,7 @@ async function saveConfig(v) {
 const rt = {
   plan: null, planAt: 0, planKey: '', ctrl: { state: {} }, lastWrite: { kw: null, at: 0 }, override: null,
   session: null, status: null, readyOverride: null, doneSince: null, lowDrawSince: null,
+  socBase: null, onSince: null, offSince: null,
 };
 
 // The car this session is for: the only one, or identified by NFC tag / Loxone user / its own data
@@ -301,6 +307,15 @@ async function computeTarget(nowMs, wb) {
     const limitPct = reading.limit_soc ?? vehicle.charge_limit_pct ?? 100;
     needKwh = Math.max(0, vehicle.battery_kwh * (limitPct - reading.soc) / 100);
     needSource = `car reports ${reading.soc}%`;
+    // The car's own data often lags (cloud updates every few minutes or only when it wakes up):
+    // subtract what this session charged since that reading came in.
+    const readAt = require('./vehicles').getVehicleStatus(vehicle).sourceUpdatedAt || null;
+    const sessKwh = wb?.sessionKwh ?? null;
+    if (sessKwh !== null) {
+      if (!rt.socBase || rt.socBase.readAt !== readAt || rt.socBase.session !== rt.session || sessKwh < rt.socBase.kwh) rt.socBase = { readAt, kwh: sessKwh, session: rt.session };
+      const since = Math.max(0, sessKwh - rt.socBase.kwh);
+      if (since > 0.05) { needKwh = Math.max(0, needKwh - since); needSource += `, minus ${since.toFixed(1)} kWh charged since`; }
+    }
   } else {
     // Estimate: energy of the trip the car just came back from (learned), minus what this session charged.
     const sessions = await learning.loadSessions(60, vehicle?.id || null);
@@ -337,6 +352,11 @@ async function computeTarget(nowMs, wb) {
     if (nx && (!readyAtMs || nx.at < readyAtMs)) { readyAtMs = nx.at; readySource = `${nx.source} ${nx.weekday} departure (${nx.confidence})`; }
   }
   if (readyAtMs) readyAtMs -= 0; // ready time already includes the learned margin
+  const minTopup = Number(cfg.min_topup_kwh) || 0;
+  if ((rt.override || cfg.mode) === 'plan' && needKwh > 0 && needKwh < minTopup) {
+    needSource += ` — less than the ${minTopup} kWh minimum top-up, so no grid charging (solar surplus still counts)`;
+    needKwh = 0;
+  }
   return { needKwh: round3(needKwh || 0), needSource, readyAtMs, readySource, vehicle, usable, reading };
 }
 
@@ -440,7 +460,7 @@ async function tick(nowMs = Date.now()) {
   const key = connected ? String(wb.connectAt || 'c') : 'none';
   if (rt.session !== key) {
     try { require('./vehicles').notifyWallbox(connected); } catch { /* vehicles not loaded */ }
-    rt.session = key; rt.override = null; rt.readyOverride = null; rt.doneSince = null; rt.lowDrawSince = null; rt.ctrl.state = {}; rt.sessionVehicle = null;
+    rt.session = key; rt.override = null; rt.readyOverride = null; rt.doneSince = null; rt.lowDrawSince = null; rt.ctrl.state = {}; rt.sessionVehicle = null; rt.onSince = null; rt.offSince = null; rt.socBase = null;
     rt.planAt = 0;
   }
   if (!rt.plan || nowMs - rt.planAt > 15 * 60 * 1000) await recalc(nowMs).catch((err) => { rt.status = { error: err.message }; });
@@ -454,6 +474,19 @@ async function tick(nowMs = Date.now()) {
     live: { connected, gridKw, wallboxKw: wb?.kw ?? 0, houseKw: live.house_kw },
   });
   rt.ctrl.state = step.state;
+  // No flapping: once on, keep going for min_on_s; once off, wait min_off_s before starting again —
+  // unless the car is gone, the target is reached, or the mode says off/now.
+  const effMode = rt.override || cfg.mode;
+  const prevKw = rt.lastSet || 0;
+  if (connected && !rt.doneSince && effMode !== 'off' && effMode !== 'now') {
+    if (prevKw > 0 && step.kw === 0 && rt.onSince && nowMs - rt.onSince < (Number(cfg.min_on_s) || 0) * 1000) {
+      step.kw = prevKw; step.reason = `${step.reason} Keeps charging for at least ${Math.round((Number(cfg.min_on_s) || 0) / 60)} min (no on/off flapping).`;
+    } else if (prevKw === 0 && step.kw > 0 && rt.offSince && nowMs - rt.offSince < (Number(cfg.min_off_s) || 0) * 1000) {
+      step.reason = `${step.reason} Waits ${Math.ceil(((Number(cfg.min_off_s) || 0) * 1000 - (nowMs - rt.offSince)) / 1000)} s before starting again (no on/off flapping).`; step.kw = 0;
+    }
+  }
+  if (step.kw > 0 && prevKw === 0) rt.onSince = nowMs;
+  if (step.kw === 0 && prevKw > 0) rt.offSince = nowMs;
   rt.lastSet = step.kw;
   let out = { written: false };
   try { out = await writeOutput(cfg, step.kw, nowMs); } catch (err) { out = { written: false, error: err.message }; }

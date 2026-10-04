@@ -194,6 +194,12 @@ function analyzeSession(rows, nowMs = Date.now()) {
     const follow = startResults.filter((s) => s.steady !== null && s.secs !== null);
     if (follow.length) {
       const bad = follow.filter((s) => Math.abs(s.steady - s.q.kw) > Math.max(0.8, s.q.kw * 0.15));
+      // Near full a car tapers its own charging power: lower than asked is then normal.
+      const nearFull = bad.length && bad.every((s) => s.socAt !== null && s.socAt >= 90);
+      if (nearFull) {
+        add('follow', 'info', 'The power follows the value sent',
+          follow.map((s) => `${s.q.kw} kW sent → about ${s.steady.toFixed(1)} kW`).join('; ') + ` — battery at ${Math.round(follow[0].socAt)}%: the car tapers near full, test again with a lower battery.`);
+      } else
       add('follow', bad.length ? 'fail' : 'pass', 'The power follows the value sent',
         follow.map((s) => `${s.q.kw} kW sent → about ${s.steady.toFixed(1)} kW`).join('; ') + (bad.length ? ' (the car may limit it, e.g. near full or a charge-current setting in the car).' : '.'));
     }

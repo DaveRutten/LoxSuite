@@ -273,3 +273,15 @@ test('web push: the VAPID contact must be real (Apple rejects made-up ones) and 
   assert.match(w.explainError({ statusCode: 400, body: 'bad' }), /switch push off and on again/);
   assert.equal(w.explainError(new Error('boom')), 'boom');
 });
+
+test('a small top-up runs at the minimum power for longer, never below 4.16 kW and never 11 kW for a minute', () => {
+  const now = Date.parse('2026-10-04T14:30:00Z');
+  const slots = [{ start: '2026-10-04T14:30:00Z', end: '2026-10-04T14:45:00Z', price: 0.2, pvKw: 0 }, { start: '2026-10-04T14:45:00Z', end: '2026-10-04T15:00:00Z', price: 0.3, pvKw: 0 }];
+  const p = planner.makePlan({ nowMs: now, needKwh: 0.26, slots, mode: 'plan', minKw: 4.16, maxKw: 11 });
+  assert.equal(p.slots.length, 1);
+  assert.equal(p.slots[0].kw, 4.16);
+  const min = (Date.parse(p.slots[0].end) - Date.parse(p.slots[0].start)) / 60000;
+  assert.ok(min > 3.5 && min < 4, `${min} min`);
+  const q = planner.makePlan({ nowMs: now, needKwh: 1.5, slots, mode: 'plan', minKw: 4.16, maxKw: 11 });
+  assert.equal(q.slots[0].kw, 6); // 1.5 kWh in a 15-min interval = 6 kW for the whole interval
+});
