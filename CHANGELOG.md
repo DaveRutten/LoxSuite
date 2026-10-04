@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.24.3-alpha.1] - 2026-10-04
+
+### Fixed
+- **Giant icons on desktop**: the phone tab bar (0.24.0) showed below every page on a desktop browser with huge icons.
+  A stray `}` at the end of the existing AI-chat styles made browsers drop the rule that hides the tab bar outside phone
+  widths. The brace is removed, the tab-bar icons carry a fixed size of their own, and a test now checks that
+  `style.css` has balanced braces.
+
 ## [0.24.1-alpha.1] - 2026-10-04
 
 ### Fixed

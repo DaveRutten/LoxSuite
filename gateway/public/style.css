@@ -4674,7 +4674,6 @@ body.no-scroll { overflow: hidden; }
   .ai-chat-layout { flex-direction: column; }
   .ai-chat-sidebar { width: 100%; }
 }
-}
 
 /* ---- Phone / installed app ----
    Everything on a phone stays inside the screen: wide tables and tab rows scroll sideways within
@@ -4684,6 +4683,7 @@ body.no-scroll { overflow: hidden; }
    (online/offline, connected...) shrink to just their coloured dot; the word stays available as a
    tooltip and to screen readers (see public/mobile.js). */
 .mobile-tabbar { display: none; }
+.mobile-tabbar svg { width: 22px; height: 22px; flex: none; }
 @media (max-width: 768px) {
   main table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   main .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
