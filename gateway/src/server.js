@@ -59,6 +59,7 @@ const { startHardwarePolling } = require('./loxoneHardware');
 const { startLiveConnections } = require('./loxoneWebSocket');
 const { startOcppBridges } = require('./ocppBridge');
 const { startStatsPublisher } = require('./ocppStats');
+const { startVehicles } = require('./vehicles');
 const mcpClient = require('./mcpClient');
 const requireAuth = require('./middleware/requireAuth');
 const loadUserContext = require('./middleware/loadUserContext');
@@ -81,6 +82,7 @@ const navPrefsRoutes = require('./routes/navPrefs');
 const monitorRoutes = require('./routes/monitor');
 const hardwareRoutes = require('./routes/hardware');
 const ocppRoutes = require('./routes/ocpp');
+const vehicleRoutes = require('./routes/vehicles');
 const logsRoutes = require('./routes/logs');
 const dashboardsRoutes = require('./routes/dashboards');
 const aiChatRoutes = require('./routes/aiChat');
@@ -287,6 +289,7 @@ async function main() {
   app.use('/monitor', requireAuth, requirePermission('monitor', 'view'), monitorRoutes);
   app.use('/hardware', requireAuth, requirePermission('hardware', 'view'), hardwareRoutes);
   app.use('/ocpp', requireAuth, requirePermission('miniservers', 'view'), ocppRoutes);
+  app.use('/vehicles', requireAuth, requirePermission('miniservers', 'view'), vehicleRoutes);
   // logs.js serves four distinct areas (one per tab: logs_mqtt/logs_loxone/logs_loxone_commands/
   // logs_system), so it's gated per-route inside that file instead of once here — same reasoning as
   // mappings.js above.
@@ -352,6 +355,7 @@ async function main() {
   startLiveConnections().catch((err) => console.error('Failed to start live Loxone connections:', err.message));
   startOcppBridges();
   startStatsPublisher();
+  startVehicles();
   mcpClient.startMcpClients().catch((err) => console.error('Failed to start MCP clients:', err.message));
   // A restart mid-turn (deploy, crash) abandons any AI Assistant reply still marked 'streaming' —
   // nothing will ever finalize that row otherwise, since the code path that would (routes/aiChat.js's

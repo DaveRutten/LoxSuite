@@ -1,0 +1,327 @@
+<%
+  const cfg = v.config || {};
+  const cf = (key) => (cfg.fields && cfg.fields[key]) || {};
+  const src = v.source_type || 'none';
+  const val = (x) => (x === null || x === undefined ? '' : x);
+%>
+<div class="form-grid">
+  <div><label>Name</label><input type="text" name="name" value="<%= v.name || '' %>" placeholder="Skoda" required></div>
+  <div>
+    <label>Type</label>
+    <select name="type" id="veh-type">
+      <option value="phev" <%= v.type === 'phev' ? 'selected' : '' %>>Plug-in hybrid</option>
+      <option value="bev" <%= v.type === 'bev' ? 'selected' : '' %>>Full electric</option>
+    </select>
+  </div>
+  <div><label>Enabled</label><%- toggleSwitch('enabled', !!v.enabled) %></div>
+</div>
+<div class="form-grid" style="margin-top:0.85rem;">
+  <div><label>Usable battery (kWh)</label><input type="text" name="battery_kwh" value="<%= val(v.battery_kwh) %>" placeholder="26"></div>
+  <div><label>Charge limit in the car (%)</label><input type="text" name="charge_limit_pct" value="<%= val(v.charge_limit_pct) %>" placeholder="100"></div>
+  <div><label>Reserve (%)</label><input type="text" name="reserve_pct" value="<%= val(v.reserve_pct) %>" placeholder="0"></div>
+  <div><label>Consumption (kWh/km, optional)</label><input type="text" name="kwh_per_km" value="<%= val(v.kwh_per_km) %>" placeholder="learned later"></div>
+  <div id="veh-fuel-wrap" <%= v.type === 'bev' ? 'hidden' : '' %>><label>Fuel use (l/100 km)</label><input type="text" name="fuel_l_per_100km" value="<%= val(v.fuel_l_per_100km) %>" placeholder="6.5"></div>
+</div>
+<p class="hint" style="margin-top:0.5rem;">
+  A plug-in hybrid can run empty without harm (it drives on fuel), so its reserve is normally 0. The battery size and
+  charge limit turn a state of charge into kWh; without a data source the charging planner estimates it.
+</p>
+
+<h2 style="margin-top:1.3rem;">Data source</h2>
+<div class="form-grid">
+  <div>
+    <label>Source</label>
+    <select name="source_type" id="veh-source">
+      <option value="none" <%= src === 'none' ? 'selected' : '' %>>None (estimate)</option>
+      <option value="homey" <%= src === 'homey' ? 'selected' : '' %>>Homey Pro (local Web API)</option>
+      <option value="homeassistant" <%= src === 'homeassistant' ? 'selected' : '' %>>Home Assistant (REST API)</option>
+      <option value="mqtt" <%= src === 'mqtt' ? 'selected' : '' %>>MQTT topics (Node-RED, evcc, ...)</option>
+      <option value="http" <%= src === 'http' ? 'selected' : '' %>>HTTP / JSON URL</option>
+    </select>
+  </div>
+  <div class="veh-src" data-src="http homey homeassistant" <%= ['http', 'homey', 'homeassistant'].includes(src) ? '' : 'hidden' %>>
+    <label>Poll every (s)</label><input type="number" name="poll_interval_s" min="60" max="86400" value="<%= cfg.interval_s || 300 %>">
+  </div>
+  <div class="veh-src" data-src="mqtt http homey homeassistant" <%= src === 'none' ? 'hidden' : '' %>>
+    <label>Alert when no update for (h)</label><input type="number" name="stale_after_h" min="0" max="720" value="<%= cfg.stale_after_h != null ? cfg.stale_after_h : 24 %>">
+  </div>
+</div>
+
+<!-- Homey -->
+<div class="veh-src" data-src="homey" <%= src === 'homey' ? '' : 'hidden' %> style="margin-top:0.85rem;">
+  <div class="form-grid">
+    <div><label>Homey address</label><input type="text" name="homey_url" value="<%= src === 'homey' ? (cfg.url || '') : '' %>" placeholder="http://192.168.15.20"></div>
+    <div>
+      <label>API key</label>
+      <input type="password" name="homey_key" autocomplete="new-password" placeholder="<%= src === 'homey' && v.hasSecret ? 'Leave blank to keep the saved key' : 'Homey > Settings > API Keys' %>">
+    </div>
+    <div>
+      <label>Device</label>
+      <input type="hidden" name="homey_device_id" id="homey-device-id" value="<%= cfg.device_id || '' %>">
+      <input type="hidden" name="homey_device_name" id="homey-device-name" value="<%= cfg.device_name || '' %>">
+      <select id="homey-device"><option value=""><%= cfg.device_name ? cfg.device_name : '— load devices first —' %></option></select>
+      <button type="button" class="btn-soft" id="homey-load" style="margin-top:0.35rem;"><%- icon('refresh') %> Load devices</button>
+    </div>
+  </div>
+  <p class="hint" id="homey-msg" style="margin:0.4rem 0 0;">
+    Create an API key on the Homey (Settings &rarr; API Keys, with the "View devices" permission). Every car app on the
+    Homey works this way: pick the car, then which capability is which value.
+  </p>
+  <datalist id="homey-cap-list"></datalist>
+  <table style="margin-top:0.6rem;">
+    <thead><tr><th>Value</th><th>Homey capability</th><th>Now</th></tr></thead>
+    <tbody>
+      <% fields.forEach(f => { %>
+        <tr><td><%= f.label %></td>
+          <td><input type="text" name="homey_cap_<%= f.key %>" list="homey-cap-list" value="<%= src === 'homey' ? (cf(f.key).capability || '') : '' %>" data-field="<%= f.key %>" class="homey-cap" placeholder="—"></td>
+          <td class="hint homey-now" data-field="<%= f.key %>"></td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<!-- Home Assistant -->
+<div class="veh-src" data-src="homeassistant" <%= src === 'homeassistant' ? '' : 'hidden' %> style="margin-top:0.85rem;">
+  <div class="form-grid">
+    <div><label>Home Assistant address</label><input type="text" name="ha_url" value="<%= src === 'homeassistant' ? (cfg.url || '') : '' %>" placeholder="http://homeassistant.local:8123"></div>
+    <div>
+      <label>Long-lived access token</label>
+      <input type="password" name="ha_token" autocomplete="new-password" placeholder="<%= src === 'homeassistant' && v.hasSecret ? 'Leave blank to keep the saved token' : 'Profile > Security > Long-lived tokens' %>">
+    </div>
+    <div><label>&nbsp;</label><button type="button" class="btn-soft" id="ha-load"><%- icon('refresh') %> Load entities</button></div>
+  </div>
+  <p class="hint" id="ha-msg" style="margin:0.4rem 0 0;">A field can use an entity's state, or one of its attributes (a device_tracker's latitude/longitude, for example).</p>
+  <datalist id="ha-entity-list"></datalist>
+  <table style="margin-top:0.6rem;">
+    <thead><tr><th>Value</th><th>Entity</th><th>Attribute (optional)</th><th>Now</th></tr></thead>
+    <tbody>
+      <% fields.forEach(f => { %>
+        <tr><td><%= f.label %></td>
+          <td><input type="text" name="ha_entity_<%= f.key %>" list="ha-entity-list" value="<%= src === 'homeassistant' ? (cf(f.key).entity || '') : '' %>" data-field="<%= f.key %>" class="ha-entity" placeholder="—"></td>
+          <td><input type="text" name="ha_attr_<%= f.key %>" value="<%= src === 'homeassistant' ? (cf(f.key).attribute || '') : '' %>" data-field="<%= f.key %>" class="ha-attr" placeholder="state"></td>
+          <td class="hint ha-now" data-field="<%= f.key %>"></td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<!-- MQTT -->
+<div class="veh-src" data-src="mqtt" <%= src === 'mqtt' ? '' : 'hidden' %> style="margin-top:0.85rem;">
+  <div class="form-grid">
+    <div>
+      <label>Fill in from preset</label>
+      <select id="mqtt-preset"><option value="">—</option>
+        <% Object.entries(presets).forEach(([k, p]) => { %><option value="<%= k %>"><%= p.label %></option><% }) %>
+      </select>
+    </div>
+  </div>
+  <p class="hint" style="margin:0.4rem 0 0;">
+    Topics on LoxSuite's own broker. Node-RED, Homey (MQTT Client app), evcc, TeslaMate and others can publish there. Pick
+    a topic from what the broker has seen; for a JSON payload give the path to the value (<code>battery.soc</code>).
+  </p>
+  <datalist id="mqtt-topic-list"></datalist>
+  <table style="margin-top:0.6rem;">
+    <thead><tr><th>Value</th><th>Topic</th><th>JSON path (optional)</th><th>Now</th></tr></thead>
+    <tbody>
+      <% fields.forEach(f => { %>
+        <tr><td><%= f.label %></td>
+          <td><input type="text" name="mqtt_topic_<%= f.key %>" list="mqtt-topic-list" value="<%= src === 'mqtt' ? (cf(f.key).topic || '') : '' %>" data-field="<%= f.key %>" class="mqtt-topic" placeholder="—"></td>
+          <td><input type="text" name="mqtt_path_<%= f.key %>" value="<%= src === 'mqtt' ? (cf(f.key).path || '') : '' %>" placeholder="(whole payload)"></td>
+          <td class="hint mqtt-now" data-field="<%= f.key %>"></td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<!-- HTTP -->
+<div class="veh-src" data-src="http" <%= src === 'http' ? '' : 'hidden' %> style="margin-top:0.85rem;">
+  <div class="form-grid">
+    <div><label>URL (returns JSON)</label><input type="text" name="http_url" value="<%= src === 'http' ? (cfg.url || '') : '' %>" placeholder="http://192.168.15.30:1880/car"></div>
+    <div>
+      <label>Headers (optional, one per line)</label>
+      <textarea name="http_headers" rows="2" placeholder="<%= src === 'http' && v.hasSecret ? 'Leave blank to keep the saved headers' : 'Authorization: Bearer …' %>"></textarea>
+    </div>
+  </div>
+  <table style="margin-top:0.6rem;">
+    <thead><tr><th>Value</th><th>JSON path</th></tr></thead>
+    <tbody>
+      <% fields.forEach(f => { %>
+        <tr><td><%= f.label %></td><td><input type="text" name="http_path_<%= f.key %>" value="<%= src === 'http' ? (cf(f.key).path || '') : '' %>" placeholder="—"></td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<div class="veh-src" data-src="mqtt http homey homeassistant" <%= src === 'none' ? 'hidden' : '' %>>
+  <div class="btn-row" style="margin-top:0.8rem;">
+    <button type="button" class="btn-test" id="veh-test-btn"><%- icon('refresh') %> Test source</button>
+  </div>
+  <div id="veh-test-result" style="margin-top:0.6rem;"></div>
+  <p class="hint" style="margin:0.4rem 0 0;">
+    Reads the source once with the settings in this form (nothing is saved). When the source fails or stops updating,
+    a notification rule of type <a href="/admin/notifications?trigger_type=vehicle_source_status">Vehicle data source failing/recovered</a> tells you.
+  </p>
+</div>
+
+<h2 style="margin-top:1.3rem;">At home</h2>
+<div class="form-grid">
+  <div><label>Home latitude</label><input type="text" name="home_lat" value="<%= val(v.home_lat) %>" placeholder="51.6"></div>
+  <div><label>Home longitude</label><input type="text" name="home_lon" value="<%= val(v.home_lon) %>" placeholder="5.5"></div>
+  <div><label>Radius (m)</label><input type="text" name="home_radius_m" value="<%= val(v.home_radius_m) %>"></div>
+  <div><label>Or: location text that means home</label><input type="text" name="home_value" value="<%= val(v.home_value) %>" placeholder="home"></div>
+</div>
+<p class="hint" style="margin-top:0.5rem;">
+  Decides whether the car is at home when it isn't plugged in (for "car is home but not plugged in" reminders). With
+  coordinates from the source the car counts as home within the radius; otherwise when the location field equals the
+  text (a Home Assistant device_tracker reports <code>home</code>). Plugged in always counts as home.
+</p>
+
+<script>
+(function () {
+  var vehicleId = <%- JSON.stringify(v.id || null) %>;
+  var presets = <%- JSON.stringify(presets) %>;
+  var form = document.getElementById('veh-source').form;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function showSrc() {
+    var s = document.getElementById('veh-source').value;
+    document.querySelectorAll('.veh-src').forEach(function (el) { el.hidden = el.dataset.src.split(' ').indexOf(s) === -1; });
+    if (s === 'mqtt') loadTopics();
+  }
+  document.getElementById('veh-source').addEventListener('change', showSrc);
+  var typeSel = document.getElementById('veh-type');
+  typeSel.addEventListener('change', function () {
+    document.getElementById('veh-fuel-wrap').hidden = typeSel.value === 'bev';
+    var r = form.querySelector('[name=reserve_pct]');
+    if (r && (r.value === '' || r.value === '0' || r.value === '15')) r.value = typeSel.value === 'bev' ? '15' : '0';
+  });
+  function body() {
+    var o = { vehicle_id: vehicleId };
+    new FormData(form).forEach(function (v, k) { if (k !== '_csrf') o[k] = v; });
+    return o;
+  }
+  function post(url, data) {
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(function (r) { return r.json(); });
+  }
+
+  // MQTT: topics the broker has seen, with their current value.
+  var topicValues = {};
+  var topicsLoaded = false;
+  function showMqttNow() {
+    document.querySelectorAll('.mqtt-topic').forEach(function (inp) {
+      var cell = document.querySelector('.mqtt-now[data-field="' + inp.dataset.field + '"]');
+      cell.textContent = inp.value && topicValues[inp.value] !== undefined ? topicValues[inp.value] : '';
+    });
+  }
+  function loadTopics() {
+    if (topicsLoaded) return;
+    topicsLoaded = true;
+    fetch('/vehicles/topics.json').then(function (r) { return r.json(); }).then(function (d) {
+      var dl = document.getElementById('mqtt-topic-list');
+      dl.innerHTML = (d.topics || []).map(function (t) { topicValues[t.topic] = t.value; return '<option value="' + esc(t.topic) + '">' + esc(t.value) + '</option>'; }).join('');
+      showMqttNow();
+    }).catch(function () {});
+  }
+  document.querySelectorAll('.mqtt-topic').forEach(function (inp) { inp.addEventListener('input', showMqttNow); });
+  document.getElementById('mqtt-preset').addEventListener('change', function (e) {
+    var p = presets[e.target.value];
+    if (!p) return;
+    document.querySelectorAll('.mqtt-topic').forEach(function (inp) { inp.value = p.fields[inp.dataset.field] || ''; });
+    showMqttNow();
+  });
+
+  // Homey: devices and their capabilities.
+  var homeyDevices = [];
+  function homeyShowCaps(dev, fillGuess) {
+    var dl = document.getElementById('homey-cap-list');
+    dl.innerHTML = dev ? dev.capabilities.map(function (c) { return '<option value="' + esc(c) + '">' + esc(dev.values[c]) + '</option>'; }).join('') : '';
+    document.querySelectorAll('.homey-cap').forEach(function (inp) {
+      if (fillGuess && dev && !inp.value) inp.value = dev.guess[inp.dataset.field] || '';
+      var cell = document.querySelector('.homey-now[data-field="' + inp.dataset.field + '"]');
+      cell.textContent = dev && inp.value && dev.values[inp.value] !== undefined ? String(dev.values[inp.value]) : '';
+    });
+  }
+  var hSel = document.getElementById('homey-device');
+  document.getElementById('homey-load').addEventListener('click', function () {
+    var msg = document.getElementById('homey-msg');
+    msg.textContent = 'Loading devices from the Homey…';
+    post('/vehicles/homey-devices.json', { url: form.homey_url.value, key: form.homey_key.value, vehicle_id: vehicleId }).then(function (d) {
+      if (!d.ok) { msg.textContent = 'Could not load devices: ' + d.message; return; }
+      homeyDevices = d.devices;
+      var cur = document.getElementById('homey-device-id').value;
+      hSel.innerHTML = '<option value="">— choose the car —</option>' + d.devices.map(function (x) {
+        return '<option value="' + esc(x.id) + '"' + (x.id === cur ? ' selected' : '') + '>' + esc(x.name) + (x.zone ? ' (' + esc(x.zone) + ')' : '') + (x.class === 'car' ? ' 🚗' : '') + '</option>';
+      }).join('');
+      msg.textContent = d.devices.length + ' device(s). Cars and devices with a battery are listed first.';
+      homeyShowCaps(d.devices.find(function (x) { return x.id === cur; }), false);
+    }).catch(function (e) { msg.textContent = e.message; });
+  });
+  hSel.addEventListener('change', function () {
+    var dev = homeyDevices.find(function (x) { return x.id === hSel.value; });
+    document.getElementById('homey-device-id').value = dev ? dev.id : '';
+    document.getElementById('homey-device-name').value = dev ? dev.name : '';
+    homeyShowCaps(dev, true);
+  });
+  document.querySelectorAll('.homey-cap').forEach(function (inp) {
+    inp.addEventListener('input', function () { homeyShowCaps(homeyDevices.find(function (x) { return x.id === hSel.value; }), false); });
+  });
+
+  // Home Assistant: entities and their state/attributes.
+  var haById = {};
+  function haShowNow() {
+    document.querySelectorAll('.ha-entity').forEach(function (inp) {
+      var e = haById[inp.value];
+      var attr = document.querySelector('.ha-attr[data-field="' + inp.dataset.field + '"]').value;
+      var cell = document.querySelector('.ha-now[data-field="' + inp.dataset.field + '"]');
+      cell.textContent = e ? (attr ? (e.attributes.indexOf(attr) !== -1 ? '(attribute)' : 'no such attribute') : e.state + (e.unit ? ' ' + e.unit : '')) : '';
+    });
+  }
+  document.getElementById('ha-load').addEventListener('click', function () {
+    var msg = document.getElementById('ha-msg');
+    msg.textContent = 'Loading entities from Home Assistant…';
+    post('/vehicles/ha-entities.json', { url: form.ha_url.value, token: form.ha_token.value, vehicle_id: vehicleId }).then(function (d) {
+      if (!d.ok) { msg.textContent = 'Could not load entities: ' + d.message; return; }
+      haById = {};
+      document.getElementById('ha-entity-list').innerHTML = d.entities.map(function (e) {
+        haById[e.id] = e;
+        return '<option value="' + esc(e.id) + '">' + esc(e.name + ' — ' + e.state + (e.unit ? ' ' + e.unit : '')) + '</option>';
+      }).join('');
+      var filled = 0;
+      document.querySelectorAll('.ha-entity').forEach(function (inp) {
+        var g = d.guess[inp.dataset.field];
+        if (!inp.value && g && g.entity) {
+          inp.value = g.entity; filled++;
+          if (g.attribute) document.querySelector('.ha-attr[data-field="' + inp.dataset.field + '"]').value = g.attribute;
+        }
+      });
+      msg.textContent = d.entities.length + ' entities' + (filled ? ', ' + filled + ' field(s) filled in as a suggestion — check them' : '') + '.';
+      haShowNow();
+    }).catch(function (e) { msg.textContent = e.message; });
+  });
+  document.querySelectorAll('.ha-entity, .ha-attr').forEach(function (inp) { inp.addEventListener('input', haShowNow); });
+
+  // Test: read once with the form's current settings.
+  document.getElementById('veh-test-btn').addEventListener('click', function () {
+    var btn = this;
+    var out = document.getElementById('veh-test-result');
+    btn.disabled = true;
+    out.innerHTML = '<p class="hint" style="margin:0;">Reading…</p>';
+    post('/vehicles/test', body()).then(function (d) {
+      if (!d.ok) { out.innerHTML = '<p class="error" style="margin:0;">' + esc(d.message) + '</p>'; return; }
+      var r = d.reading || {};
+      var rows = <%- JSON.stringify(fields.map(f => [f.key, f.label])) %>.map(function (f) {
+        var raw = d.raw && d.raw[f[0]] !== undefined ? d.raw[f[0]] : '';
+        var norm = r[f[0]];
+        return '<tr><td>' + esc(f[1]) + '</td><td><code>' + esc(typeof raw === 'object' ? JSON.stringify(raw) : raw) + '</code></td><td><strong>' + esc(norm === null || norm === undefined ? '—' : norm) + '</strong></td></tr>';
+      }).join('');
+      rows += '<tr><td>At home</td><td></td><td><strong>' + esc(r.home === null || r.home === undefined ? 'unknown' : r.home ? 'yes' : 'no') + '</strong>' + (r.distance_m != null ? ' <span class="hint">(' + r.distance_m + ' m)</span>' : '') + '</td></tr>';
+      rows += '<tr><td>Energy in battery</td><td></td><td><strong>' + esc(r.energy_kwh == null ? '—' : r.energy_kwh + ' kWh') + '</strong></td></tr>';
+      out.innerHTML = '<p style="margin:0 0 0.3rem; color:var(--success);">The source answered' + (d.sourceUpdatedAt ? ' (data from ' + esc(new Date(d.sourceUpdatedAt).toLocaleString()) + ')' : '') + '.</p>' +
+        (d.missing && d.missing.length ? '<p class="hint" style="margin:0 0 0.3rem;">Not seen yet: ' + esc(d.missing.join(', ')) + '</p>' : '') +
+        '<table><thead><tr><th>Value</th><th>Raw</th><th>Read as</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }).catch(function (e) { out.innerHTML = '<p class="error">' + esc(e.message) + '</p>'; })
+      .finally(function () { btn.disabled = false; });
+  });
+
+  if (document.getElementById('veh-source').value === 'mqtt') loadTopics();
+})();
+</script>

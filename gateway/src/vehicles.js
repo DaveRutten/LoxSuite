@@ -1,0 +1,615 @@
+// Vehicles: the cars charged at home and their live state from an optional data source (see
+// migration 020 for the model). This module has three layers:
+//
+//   1. Pure helpers — parse numbers/booleans out of whatever a source sends, pick a value out of
+//      a JSON payload by path, decide "at home", turn raw source values into one normalised
+//      reading. No I/O, fully unit-tested.
+//   2. Source readers — 'mqtt' (latest value of a topic as already seen by mqttClient's '#'
+//      subscription, so no extra broker connection), 'http' (poll any JSON URL) and 'homey' (a
+//      device's capabilities from a Homey Pro's local Web API), 'homeassistant' (entity states and
+//      attributes from Home Assistant's REST API). Each returns { raw, updatedAt }. Node-RED and
+//      similar tools publish to the LoxSuite broker and use 'mqtt'.
+//   3. A small runtime — every enabled vehicle is read on a fixed tick (MQTT every tick, HTTP/Homey
+//      at their own poll interval), the latest reading kept in memory and on the vehicle row,
+//      history written to vehicle_readings, and the values published as retained MQTT topics
+//      loxsuite/vehicles/<id>/<field> (for Monitor, dashboards and Loxone mappings).
+//
+// The normalised reading is the only thing the rest of LoxSuite (the charging planner, later) reads.
+const db = require('./db');
+const { decrypt } = require('./secretCrypto');
+
+// --------------------------------------------------------------------------- fields & presets
+
+// Every field a source can map. `kind` drives parsing; `label`/`hint` are for the form.
+const FIELDS = [
+  { key: 'soc', label: 'State of charge (%)', kind: 'number' },
+  { key: 'range_km', label: 'Electric range (km)', kind: 'number' },
+  { key: 'plugged', label: 'Plugged in', kind: 'plugged' },
+  { key: 'charging', label: 'Charging', kind: 'charging' },
+  { key: 'limit_soc', label: 'Charge limit in the car (%)', kind: 'number' },
+  { key: 'odometer_km', label: 'Odometer (km)', kind: 'number' },
+  { key: 'latitude', label: 'Latitude', kind: 'number' },
+  { key: 'longitude', label: 'Longitude', kind: 'number' },
+  { key: 'location', label: 'Location / presence (text)', kind: 'text' },
+];
+const FIELD_KEYS = FIELDS.map((f) => f.key);
+
+// MQTT presets fill the topic fields as a starting point; every topic stays editable since the
+// exact names depend on the other tool's own configuration (loadpoint number, entity names...).
+const MQTT_PRESETS = {
+  evcc: {
+    label: 'evcc (loadpoint 1)',
+    fields: {
+      soc: 'evcc/loadpoints/1/vehicleSoc',
+      range_km: 'evcc/loadpoints/1/vehicleRange',
+      plugged: 'evcc/loadpoints/1/connected',
+      charging: 'evcc/loadpoints/1/charging',
+      limit_soc: 'evcc/loadpoints/1/vehicleLimitSoc',
+      odometer_km: 'evcc/loadpoints/1/vehicleOdometer',
+    },
+  },
+  homeassistant: {
+    label: 'Home Assistant (MQTT Statestream)',
+    fields: {
+      soc: 'homeassistant/sensor/CAR_battery_level/state',
+      range_km: 'homeassistant/sensor/CAR_electric_range/state',
+      plugged: 'homeassistant/binary_sensor/CAR_charger_connected/state',
+      charging: 'homeassistant/binary_sensor/CAR_charging/state',
+      location: 'homeassistant/device_tracker/CAR_position/state',
+    },
+  },
+};
+
+// --------------------------------------------------------------------------- pure helpers
+
+// "78", "78 %", "78,5", 78, {value: 78} -> 78; anything without a number -> null.
+function parseNumber(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'object' && !Array.isArray(value) && 'value' in value) return parseNumber(value.value);
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  const m = String(value).trim().replace(',', '.').match(/^[-+]?\d*\.?\d+(e[-+]?\d+)?/i);
+  if (!m) return null;
+  const n = Number(m[0]);
+  return Number.isFinite(n) ? n : null;
+}
+
+const FALSE_WORDS = new Set(['0', 'false', 'off', 'no', 'nee', 'none', 'null', '', 'disconnected', 'unplugged',
+  'not_connected', 'notconnected', 'plugged_out', 'not_charging', 'notcharging', 'idle', 'stopped', 'complete',
+  'completed', 'finished', 'ready', 'unknown', 'unavailable', 'away', 'not_home']);
+
+// Booleans as the many shapes sources send them. `kind` matters for state strings that mean
+// different things per field: Homey's ev_charging_state "plugged_in" is plugged=true but
+// charging=false, "plugged_in_charging" is both; evcc/HA send plain true/false/on/off.
+function parseBool(value, kind = 'bool') {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'object' && !Array.isArray(value) && 'value' in value) return parseBool(value.value, kind);
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const s = String(value).trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (s === 'unknown' || s === 'unavailable') return null;
+  if (kind === 'charging') {
+    if (/(dis|not_|no_|stop|paus)charg|charging_(paused|stopped|complete|done|finished)|(ready|waiting)_(for_)?charg/.test(s)) return false;
+    if (s.includes('charging') || s === 'charge') return true;
+    if (s.startsWith('plugged') || s === 'connected' || s === 'disconnected') return false; // a plug state, not charging
+  }
+  if (kind === 'plugged') {
+    if (s.startsWith('plugged_in') || s === 'plugged' || s === 'connected' || s === 'charging') return true;
+  }
+  if (FALSE_WORDS.has(s)) return false;
+  if (['1', 'true', 'on', 'yes', 'ja', 'connected', 'plugged', 'plugged_in', 'charging', 'home'].includes(s)) return true;
+  const n = parseNumber(s);
+  if (n !== null && /^[-+]?\d/.test(s)) return n !== 0;
+  return null;
+}
+
+// Value at a dot path in a JSON value: "data.battery.soc", "vehicles[0].soc", "" = the value
+// itself. A string payload is parsed as JSON first when a path is given (MQTT payloads).
+function getPath(input, path) {
+  let obj = input;
+  const p = (path || '').trim();
+  if (!p) return obj;
+  if (typeof obj === 'string') {
+    try { obj = JSON.parse(obj); } catch { return undefined; }
+  }
+  const parts = p.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
+  for (const part of parts) {
+    if (obj === null || obj === undefined) return undefined;
+    obj = obj[part];
+  }
+  return obj;
+}
+
+// Great-circle distance in metres.
+function distanceM(lat1, lon1, lat2, lon2) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// raw: { fieldKey: value as the source delivered it }. Returns the normalised reading; fields the
+// source didn't map are null. `home` is decided by (in order) coordinates vs. the home position,
+// a location text equal to home_value, or — when the car reports itself plugged in — true (it can
+// only be plugged in at the home Wallbox, since LoxSuite only knows that one).
+function normalizeReading(raw, vehicle = {}) {
+  const r = {};
+  for (const f of FIELDS) {
+    const v = raw ? raw[f.key] : undefined;
+    if (f.kind === 'number') r[f.key] = parseNumber(v);
+    else if (f.kind === 'plugged' || f.kind === 'charging') r[f.key] = parseBool(v, f.kind);
+    else r[f.key] = v === undefined || v === null ? null : String(v).slice(0, 200);
+  }
+  if (r.soc !== null) {
+    if (r.soc > 0 && r.soc <= 1 && raw && typeof raw.soc === 'number' && !Number.isInteger(raw.soc)) r.soc *= 100; // 0..1 fraction
+    r.soc = Math.max(0, Math.min(100, Math.round(r.soc * 10) / 10));
+  }
+  if (r.charging === true && r.plugged === null) r.plugged = true;
+
+  r.home = null;
+  r.distance_m = null;
+  const hasCoords = r.latitude !== null && r.longitude !== null && !(r.latitude === 0 && r.longitude === 0);
+  if (hasCoords && vehicle.home_lat !== null && vehicle.home_lat !== undefined && vehicle.home_lon !== null && vehicle.home_lon !== undefined) {
+    r.distance_m = Math.round(distanceM(r.latitude, r.longitude, Number(vehicle.home_lat), Number(vehicle.home_lon)));
+    r.home = r.distance_m <= (Number(vehicle.home_radius_m) || 150);
+  } else if (r.location !== null && vehicle.home_value) {
+    r.home = r.location.trim().toLowerCase() === String(vehicle.home_value).trim().toLowerCase();
+  }
+  if (r.plugged === true && r.home === null) r.home = true;
+
+  // Energy in the battery, when both the SoC and the capacity are known.
+  const cap = Number(vehicle.battery_kwh);
+  r.energy_kwh = r.soc !== null && cap > 0 ? Math.round(((r.soc / 100) * cap) * 10) / 10 : null;
+  return r;
+}
+
+// Whether a reading is worth a history row: something meaningful changed, or it's been a while.
+function readingChanged(prev, next, prevAtMs, nowMs, minIntervalMs = 15 * 60 * 1000) {
+  if (!prev) return true;
+  if (nowMs - prevAtMs >= minIntervalMs) return true;
+  if (prev.plugged !== next.plugged || prev.charging !== next.charging || prev.home !== next.home) return true;
+  if (prev.soc !== next.soc && (prev.soc === null || next.soc === null || Math.abs(prev.soc - next.soc) >= 1)) return true;
+  return false;
+}
+
+// Best guess of which Homey capability carries which field, from the capability ids alone. Only
+// a default for the form — every mapping can be changed by hand.
+function guessHomeyFields(capabilities = []) {
+  const caps = capabilities.map((c) => String(c));
+  const find = (...tests) => caps.find((c) => tests.some((t) => (typeof t === 'string' ? c === t : t.test(c)))) || '';
+  return {
+    soc: find('measure_battery', 'ev_battery_level', /battery.*(level|percent|soc)/i, /(^|_)soc($|_|\.)/i, /^measure_battery/),
+    range_km: find(/range/i),
+    plugged: find('ev_charging_state', /plug/i, /cable/i, /connected/i),
+    charging: find('ev_charging_state', /charging/i),
+    limit_soc: find(/target|limit/i),
+    odometer_km: find(/odometer|mileage|milage/i),
+    latitude: find(/lat(itude)?$/i),
+    longitude: find(/lon(gitude)?$|lng$/i),
+    location: find(/location|position|presence|home/i),
+  };
+}
+
+// "Name: value" lines -> headers object.
+function parseHeaderLines(text) {
+  const out = {};
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const i = line.indexOf(':');
+    if (i <= 0) continue;
+    const k = line.slice(0, i).trim();
+    const v = line.slice(i + 1).trim();
+    if (k) out[k] = v;
+  }
+  return out;
+}
+
+function parseConfig(vehicle) {
+  if (!vehicle?.source_config) return {};
+  try { return JSON.parse(vehicle.source_config) || {}; } catch { return {}; }
+}
+
+function secretOf(vehicle) {
+  if (!vehicle?.secret) return '';
+  try { return decrypt(vehicle.secret) || ''; } catch { return ''; }
+}
+
+function pollIntervalS(vehicle, cfg = parseConfig(vehicle)) {
+  const n = Number(cfg.interval_s);
+  return Number.isFinite(n) && n >= 60 ? Math.min(n, 86400) : 300;
+}
+
+// --------------------------------------------------------------------------- source readers
+
+const HTTP_TIMEOUT_MS = 10000;
+
+async function fetchJson(url, headers = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/json', ...headers }, signal: ctrl.signal });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`HTTP ${res.status}${text ? `: ${text.slice(0, 120)}` : ''}`);
+    try { return JSON.parse(text); } catch { throw new Error('The response is not JSON.'); }
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error(`No answer within ${HTTP_TIMEOUT_MS / 1000} s.`);
+    if (err.message === 'fetch failed') {
+      let host = url;
+      try { host = new URL(url).host; } catch { /* keep url */ }
+      throw new Error(`Cannot reach ${host} (${err.cause?.code || err.cause?.message || 'network error'}).`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function readMqtt(cfg, getTopicValue) {
+  const raw = {};
+  let newest = null;
+  const missing = [];
+  for (const key of FIELD_KEYS) {
+    const f = cfg.fields?.[key];
+    if (!f?.topic) continue;
+    const entry = getTopicValue(f.topic);
+    if (!entry) { missing.push(f.topic); continue; }
+    raw[key] = f.path ? getPath(entry.value, f.path) : entry.value;
+    if (!newest || entry.lastSeen > newest) newest = entry.lastSeen;
+  }
+  return { raw, updatedAt: newest, missing };
+}
+
+async function readHttp(cfg, secret) {
+  if (!cfg.url) throw new Error('No URL set.');
+  const body = await fetchJson(cfg.url, parseHeaderLines(secret));
+  const raw = {};
+  for (const key of FIELD_KEYS) {
+    const f = cfg.fields?.[key];
+    if (f?.path) raw[key] = getPath(body, f.path);
+  }
+  return { raw, updatedAt: new Date().toISOString(), body };
+}
+
+function homeyBase(url) {
+  let u = String(url || '').trim().replace(/\/+$/, '');
+  if (u && !/^https?:\/\//i.test(u)) u = `http://${u}`;
+  return u;
+}
+
+async function listHomeyDevices(url, apiKey) {
+  const base = homeyBase(url);
+  if (!base) throw new Error('No Homey address set.');
+  if (!apiKey) throw new Error('No Homey API key set.');
+  const body = await fetchJson(`${base}/api/manager/devices/device/`, { Authorization: `Bearer ${apiKey}` });
+  const list = Array.isArray(body) ? body : Object.values(body || {});
+  return list.map((d) => ({
+    id: d.id,
+    name: d.name,
+    class: d.class || d.virtualClass || null,
+    zone: d.zoneName || null,
+    capabilities: Array.isArray(d.capabilities) ? d.capabilities : Object.keys(d.capabilitiesObj || {}),
+    values: Object.fromEntries(Object.entries(d.capabilitiesObj || {}).map(([k, v]) => [k, v?.value ?? null])),
+  })).sort((a, b) => {
+    const score = (d) => (d.class === 'car' ? 0 : d.capabilities.some((c) => /battery|ev_/.test(c)) ? 1 : 2);
+    return score(a) - score(b) || String(a.name).localeCompare(String(b.name));
+  });
+}
+
+async function readHomey(cfg, apiKey) {
+  const base = homeyBase(cfg.url);
+  if (!base) throw new Error('No Homey address set.');
+  if (!cfg.device_id) throw new Error('No Homey device chosen.');
+  if (!apiKey) throw new Error('No Homey API key set.');
+  const d = await fetchJson(`${base}/api/manager/devices/device/${encodeURIComponent(cfg.device_id)}`, { Authorization: `Bearer ${apiKey}` });
+  const caps = d.capabilitiesObj || {};
+  const raw = {};
+  let newest = null;
+  for (const key of FIELD_KEYS) {
+    const cap = cfg.fields?.[key]?.capability;
+    if (!cap || !caps[cap]) continue;
+    raw[key] = caps[cap].value;
+    const lu = caps[cap].lastUpdated;
+    if (lu && (!newest || lu > newest)) newest = lu;
+  }
+  return { raw, updatedAt: newest || new Date().toISOString(), body: { name: d.name, capabilities: Object.fromEntries(Object.entries(caps).map(([k, v]) => [k, v?.value ?? null])) } };
+}
+
+// --- Home Assistant: entity states via the REST API with a long-lived access token. A field maps to
+// an entity's state, or to one of its attributes (a device_tracker's latitude/longitude, say).
+function haBase(url) {
+  let u = String(url || '').trim().replace(/\/+$/, '').replace(/\/api$/, '');
+  if (u && !/^https?:\/\//i.test(u)) u = `http://${u}`;
+  return u;
+}
+
+async function haStates(url, token) {
+  const base = haBase(url);
+  if (!base) throw new Error('No Home Assistant address set.');
+  if (!token) throw new Error('No Home Assistant access token set.');
+  const body = await fetchJson(`${base}/api/states`, { Authorization: `Bearer ${token}` });
+  if (!Array.isArray(body)) throw new Error('Unexpected answer from Home Assistant.');
+  return body;
+}
+
+// Entities for the picker: id, friendly name, state, unit and the attribute names, most car-like first.
+async function listHaEntities(url, token) {
+  const states = await haStates(url, token);
+  const carish = /battery|soc|range|charg|plug|odometer|mileage|device_tracker|position|location|ev_|car|auto|skoda|vw|tesla|enyaq|octavia|superb/i;
+  return states.map((s) => ({
+    id: s.entity_id,
+    name: s.attributes?.friendly_name || s.entity_id,
+    state: s.state,
+    unit: s.attributes?.unit_of_measurement || null,
+    attributes: Object.keys(s.attributes || {}).filter((k) => !['friendly_name', 'icon', 'entity_picture', 'unit_of_measurement', 'device_class', 'state_class', 'attribution', 'supported_features'].includes(k)),
+    carish: carish.test(`${s.entity_id} ${s.attributes?.friendly_name || ''}`),
+  })).sort((a, b) => (b.carish - a.carish) || a.id.localeCompare(b.id));
+}
+
+// Default mapping from entity ids (only a starting point for the form).
+function guessHaFields(entities = []) {
+  const ids = entities.map((e) => (typeof e === 'string' ? e : e.id));
+  const find = (re, domain) => ids.find((id) => (!domain || id.startsWith(`${domain}.`)) && re.test(id)) || '';
+  const tracker = find(/./, 'device_tracker');
+  return {
+    soc: { entity: find(/battery_(level|percent)|state_of_charge|(^|_)soc($|_)|battery$/i, 'sensor') },
+    range_km: { entity: find(/electric_range|ev_range|range/i, 'sensor') },
+    plugged: { entity: find(/plug|cable|charger_connected|connected/i) },
+    charging: { entity: find(/charging(_state)?$|is_charging/i) },
+    limit_soc: { entity: find(/target|charge_limit|limit/i) },
+    odometer_km: { entity: find(/odometer|mileage/i, 'sensor') },
+    latitude: tracker ? { entity: tracker, attribute: 'latitude' } : { entity: '' },
+    longitude: tracker ? { entity: tracker, attribute: 'longitude' } : { entity: '' },
+    location: tracker ? { entity: tracker } : { entity: '' },
+  };
+}
+
+function readHaFromStates(cfg, states) {
+  const byId = new Map(states.map((s) => [s.entity_id, s]));
+  const raw = {};
+  let newest = null;
+  const missing = [];
+  for (const key of FIELD_KEYS) {
+    const f = cfg.fields?.[key];
+    if (!f?.entity) continue;
+    const s = byId.get(f.entity);
+    if (!s) { missing.push(f.entity); continue; }
+    raw[key] = f.attribute ? s.attributes?.[f.attribute] : s.state;
+    const lu = s.last_updated || s.last_changed;
+    if (lu && (!newest || lu > newest)) newest = lu;
+  }
+  return { raw, updatedAt: newest || new Date().toISOString(), missing };
+}
+
+async function readHa(cfg, token) {
+  const states = await haStates(cfg.url, token);
+  const result = readHaFromStates(cfg, states);
+  if (!Object.keys(result.raw).length && result.missing.length) throw new Error(`Entity not found: ${result.missing.slice(0, 3).join(', ')}.`);
+  return result;
+}
+
+// One read of a vehicle's source, normalised. Never throws: errors come back as { error }.
+async function readVehicle(vehicle, { getTopicValue } = {}) {
+  const cfg = parseConfig(vehicle);
+  try {
+    let result;
+    if (vehicle.source_type === 'mqtt') {
+      const lookup = getTopicValue || require('./mqttClient').getTopicValue;
+      result = readMqtt(cfg, lookup);
+      if (!Object.keys(result.raw).length) {
+        const why = result.missing.length ? `No message seen yet on ${result.missing.slice(0, 3).join(', ')}${result.missing.length > 3 ? '…' : ''}.` : 'No topics mapped.';
+        return { ok: false, error: why, raw: {}, reading: null };
+      }
+    } else if (vehicle.source_type === 'http') {
+      result = await readHttp(cfg, secretOf(vehicle));
+    } else if (vehicle.source_type === 'homey') {
+      result = await readHomey(cfg, secretOf(vehicle));
+    } else if (vehicle.source_type === 'homeassistant') {
+      result = await readHa(cfg, secretOf(vehicle));
+    } else {
+      return { ok: false, error: 'No data source.', raw: {}, reading: null };
+    }
+    return { ok: true, raw: result.raw, reading: normalizeReading(result.raw, vehicle), sourceUpdatedAt: result.updatedAt, body: result.body, missing: result.missing || [] };
+  } catch (err) {
+    return { ok: false, error: err.message, raw: {}, reading: null };
+  }
+}
+
+// --------------------------------------------------------------------------- runtime
+
+const TICK_MS = 15 * 1000;
+const PUBLISH_FIELDS = ['soc', 'range_km', 'plugged', 'charging', 'home', 'energy_kwh', 'limit_soc', 'odometer_km'];
+const state = new Map(); // vehicle id -> { reading, raw, error, fetchedAt, sourceUpdatedAt, nextPollAt, historyAt }
+const lastPublished = new Map(); // topic -> string
+let timer = null;
+let ticking = false;
+
+function vehicleTopics(id) {
+  return Object.fromEntries(PUBLISH_FIELDS.map((k) => [k, `loxsuite/vehicles/${id}/${k}`]));
+}
+
+const TOPIC_LABELS = {
+  soc: 'State of charge (%)', range_km: 'Range (km)', plugged: 'Plugged in', charging: 'Charging', home: 'At home',
+  energy_kwh: 'Energy in battery (kWh)', limit_soc: 'Charge limit (%)', odometer_km: 'Odometer (km)',
+};
+
+function publishReading(id, reading) {
+  let mqttClient;
+  try { mqttClient = require('./mqttClient'); } catch { return; }
+  const client = mqttClient.getClient();
+  if (!client || !mqttClient.state?.connected || !reading) return;
+  for (const [key, topic] of Object.entries(vehicleTopics(id))) {
+    const v = reading[key];
+    if (v === null || v === undefined) continue;
+    const s = typeof v === 'boolean' ? (v ? '1' : '0') : String(v);
+    if (lastPublished.get(topic) === s) continue;
+    lastPublished.set(topic, s);
+    client.publish(topic, s, { qos: 0, retain: true });
+  }
+}
+
+async function storeReading(vehicle, result, nowMs) {
+  const st = state.get(vehicle.id) || {};
+  const prev = st.reading || null;
+  const next = result.reading;
+  const nowIso = new Date(nowMs).toISOString();
+  if (readingChanged(prev, next, st.historyAt || 0, nowMs)) {
+    await db.prepare(
+      'INSERT INTO vehicle_readings (vehicle_id, ts, soc, range_km, plugged, charging, home, odometer_km) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(vehicle.id, nowIso, next.soc, next.range_km,
+      next.plugged === null ? null : next.plugged ? 1 : 0, next.charging === null ? null : next.charging ? 1 : 0,
+      next.home === null ? null : next.home ? 1 : 0, next.odometer_km);
+    await db.prepare('UPDATE vehicles SET last_reading = ?, last_reading_at = ? WHERE id = ?')
+      .run(JSON.stringify({ ...next, source_updated_at: result.sourceUpdatedAt || null }), nowIso, vehicle.id);
+    st.historyAt = nowMs;
+  }
+  Object.assign(st, { reading: next, raw: result.raw, error: null, fetchedAt: nowIso, sourceUpdatedAt: result.sourceUpdatedAt || null });
+  state.set(vehicle.id, st);
+  publishReading(vehicle.id, next);
+}
+
+const SOURCE_LABELS = { mqtt: 'MQTT', http: 'HTTP', homey: 'Homey', homeassistant: 'Home Assistant', none: 'none' };
+const MQTT_GRACE_MS = 10 * 60 * 1000;
+
+function staleAfterH(cfg) {
+  const n = Number(cfg?.stale_after_h);
+  return Number.isFinite(n) && n >= 0 ? n : 24;
+}
+
+function fmtAge(ms) {
+  const min = Math.round(ms / 60000);
+  if (min < 120) return `${min} min`;
+  const h = Math.round(min / 60);
+  return h < 48 ? `${h} h` : `${Math.round(h / 24)} days`;
+}
+
+// Health of a vehicle's data source, from what the runtime saw: 'ok' or 'failing' with a reason.
+// Failing = reading keeps failing (twice in a row for a polled source; for MQTT, no usable
+// message for 10 minutes — retained topics arrive right after a broker reconnect, so a short gap
+// right after a restart isn't a fault), or the source answers but its data hasn't changed for
+// longer than stale_after_h (0 = don't check; a parked car that's asleep may legitimately not
+// report for hours, hence the generous 24 h default).
+function sourceHealth(vehicle, st, nowMs, cfg = parseConfig(vehicle)) {
+  if (!st) return { status: 'unknown', detail: 'not read yet' };
+  if (st.error) {
+    const longEnough = vehicle.source_type === 'mqtt'
+      ? (st.errorSince && nowMs - st.errorSince >= MQTT_GRACE_MS)
+      : (st.failCount || 0) >= 2;
+    if (longEnough) return { status: 'failing', detail: st.error };
+    return { status: st.reading ? 'ok' : 'unknown', detail: st.error };
+  }
+  const limitH = staleAfterH(cfg);
+  const ts = st.sourceUpdatedAt ? Date.parse(st.sourceUpdatedAt) : NaN;
+  if (limitH > 0 && Number.isFinite(ts) && nowMs - ts > limitH * 3600 * 1000) {
+    return { status: 'failing', detail: `no update for ${fmtAge(nowMs - ts)} (limit ${limitH} h)` };
+  }
+  return { status: 'ok', detail: null };
+}
+
+async function reportHealth(vehicle, st, nowMs) {
+  const h = sourceHealth(vehicle, st, nowMs);
+  st.health = h;
+  if (h.status === 'unknown' || st.reportedHealth === h.status) return;
+  st.reportedHealth = h.status;
+  try {
+    const { checkVehicleSourceStatus } = require('./notifications');
+    await checkVehicleSourceStatus(vehicle, h.status, h.detail, SOURCE_LABELS[vehicle.source_type] || vehicle.source_type);
+  } catch (err) {
+    console.error(`[vehicles] notification for ${vehicle.name} failed: ${err.message}`);
+  }
+}
+
+async function tick() {
+  if (ticking) return;
+  ticking = true;
+  try {
+    let vehicles;
+    try { vehicles = await db.prepare('SELECT * FROM vehicles WHERE enabled = 1 AND source_type <> ?').all('none'); } catch { return; }
+    const nowMs = Date.now();
+    const seen = new Set();
+    for (const v of vehicles) {
+      seen.add(v.id);
+      const st = state.get(v.id) || {};
+      if (v.source_type !== 'mqtt' && st.nextPollAt && nowMs < st.nextPollAt) continue;
+      st.nextPollAt = nowMs + pollIntervalS(v) * 1000;
+      state.set(v.id, st);
+      const result = await readVehicle(v);
+      if (result.ok) {
+        st.failCount = 0;
+        st.errorSince = null;
+        await storeReading(v, result, nowMs).catch((err) => console.error(`[vehicles] ${v.name}: ${err.message}`));
+      } else {
+        st.failCount = (st.failCount || 0) + 1;
+        if (!st.errorSince) st.errorSince = nowMs;
+        Object.assign(st, { error: result.error, fetchedAt: new Date(nowMs).toISOString() });
+      }
+      await reportHealth(v, state.get(v.id) || st, nowMs);
+    }
+    for (const id of state.keys()) if (!seen.has(id)) state.delete(id);
+  } finally {
+    ticking = false;
+  }
+}
+
+// Forget cached state for one vehicle (after its settings change) and read it right away.
+function refreshVehicle(id) {
+  state.delete(Number(id));
+  tick().catch(() => {});
+}
+
+function getVehicleStatus(vehicle) {
+  const st = state.get(vehicle.id);
+  let stored = null;
+  try { stored = vehicle.last_reading ? JSON.parse(vehicle.last_reading) : null; } catch { stored = null; }
+  return {
+    enabled: !!vehicle.enabled,
+    sourceType: vehicle.source_type,
+    reading: st?.reading || stored,
+    raw: st?.raw || null,
+    error: st?.error || null,
+    fetchedAt: st?.fetchedAt || vehicle.last_reading_at || null,
+    sourceUpdatedAt: st?.sourceUpdatedAt || stored?.source_updated_at || null,
+    live: !!st?.reading,
+    health: st?.health || (vehicle.source_type === 'none' ? null : { status: 'unknown', detail: 'not read yet' }),
+    staleAfterH: staleAfterH(parseConfig(vehicle)),
+  };
+}
+
+function startVehicles() {
+  if (timer) return;
+  timer = setInterval(() => { tick().catch(() => {}); }, TICK_MS);
+  timer.unref?.();
+  setTimeout(() => { tick().catch(() => {}); }, 5000).unref?.();
+}
+
+module.exports = {
+  FIELDS,
+  FIELD_KEYS,
+  MQTT_PRESETS,
+  TOPIC_LABELS,
+  parseNumber,
+  parseBool,
+  getPath,
+  distanceM,
+  normalizeReading,
+  readingChanged,
+  sourceHealth,
+  staleAfterH,
+  SOURCE_LABELS,
+  guessHomeyFields,
+  parseHeaderLines,
+  parseConfig,
+  pollIntervalS,
+  homeyBase,
+  readMqtt,
+  readVehicle,
+  listHomeyDevices,
+  listHaEntities,
+  guessHaFields,
+  readHaFromStates,
+  haBase,
+  vehicleTopics,
+  getVehicleStatus,
+  refreshVehicle,
+  startVehicles,
+  tick,
+};

@@ -22,6 +22,7 @@ function notificationSourceLink(eventType, sourceId, canView, sourceRef) {
     const base = `/hardware?miniserver_id=${sourceId}`;
     return sourceRef ? `${base}&device=${encodeURIComponent(sourceRef)}` : base;
   }
+  if (eventType === 'vehicle_source_status' && canView('miniservers')) return `/vehicles/${sourceId}`;
   return null;
 }
 

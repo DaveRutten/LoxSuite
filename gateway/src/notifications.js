@@ -18,6 +18,7 @@ const TRIGGER_TYPES = [
   { key: 'battery_weak', label: 'Loxone device battery weak' },
   { key: 'device_firmware_changed', label: 'Loxone device firmware changed' },
   { key: 'device_offline', label: 'Loxone device online/offline' },
+  { key: 'vehicle_source_status', label: 'Vehicle data source failing/recovered' },
 ];
 
 // Sending goes through Apprise (https://github.com/caronc/apprise, installed as a CLI in the
@@ -104,6 +105,12 @@ function substituteTemplate(text, context) {
 // REAL event, so the preview's available {{placeholders}} always match what a real notification
 // would actually have to substitute.
 const TEMPLATE_PREVIEW_SAMPLES = {
+  vehicle_source_status: {
+    title: 'Skoda: data source failing',
+    message: 'The Home Assistant data source of vehicle "Skoda" is failing: no update for 3 h (limit 2 h).',
+    severity: 'warning',
+    fields: [{ label: 'Vehicle', value: 'Skoda' }, { label: 'Source', value: 'Home Assistant' }, { label: 'Status', value: 'failing' }, { label: 'Detail', value: 'no update for 3 h (limit 2 h)' }],
+  },
   monitor_threshold: {
     title: 'Living room temp: threshold breached',
     message: 'Living room temp is now > 25 (current: 26.4).',
@@ -793,6 +800,36 @@ async function notifyBackupSucceeded(context) {
   }
 }
 
+// Called by vehicles.js's watchdog every tick with the current health of each vehicle's data source
+// ('ok' | 'failing'). Fires only on a transition; the very first observation of a vehicle that is
+// fine is recorded silently (nobody needs "it works" right after a restart), a first observation
+// that is already failing does fire. Optional config.vehicle_id scopes a rule to one vehicle.
+async function checkVehicleSourceStatus(vehicle, status, detail, sourceLabel) {
+  for (const rule of await getRulesByTrigger('vehicle_source_status')) {
+    const cfg = JSON.parse(rule.config || '{}');
+    if (cfg.vehicle_id && Number(cfg.vehicle_id) !== Number(vehicle.id)) continue;
+    const state = JSON.parse(rule.last_state || '{}');
+    const key = String(vehicle.id);
+    const previous = state[key];
+    if (previous === status) continue;
+    await updateRuleState(rule.id, { ...state, [key]: status });
+    if (previous === undefined && status === 'ok') continue;
+    const failing = status !== 'ok';
+    await fireRule(rule, {
+      title: `${vehicle.name}: data source ${failing ? 'failing' : 'working again'}`,
+      message: failing
+        ? `The ${sourceLabel} data source of vehicle "${vehicle.name}" is failing: ${detail}.`
+        : `The ${sourceLabel} data source of vehicle "${vehicle.name}" is working again.`,
+      severity: failing ? 'warning' : 'info',
+      fields: [{ label: 'Vehicle', value: vehicle.name }, { label: 'Source', value: sourceLabel },
+        { label: 'Status', value: failing ? 'failing' : 'ok' }, ...(failing ? [{ label: 'Detail', value: detail }] : [])],
+      sourceId: vehicle.id,
+      sourceLabel: vehicle.name,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
 module.exports = {
   TRIGGER_TYPES,
   retryDelayMs,
@@ -808,6 +845,7 @@ module.exports = {
   checkBatteryWeak,
   checkDeviceFirmwareChanged,
   checkDeviceOffline,
+  checkVehicleSourceStatus,
   notifyBackupFailed,
   notifyBackupSucceeded,
   // Not a formal rule-driven trigger type (no notification_rules.trigger_type CHECK entry, no

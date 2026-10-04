@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.22.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.23.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -512,6 +512,39 @@ and alerting are independent.
 
 *(Real data from a live installation.)*
 
+### Vehicles
+
+The cars charged at home (Wallbox → Vehicles), with what the charging planner needs to know about each
+one and, optionally, the car's own live state. Works for full-electric cars and plug-in hybrids (a
+hybrid can run its battery empty and drive on fuel, so its reserve defaults to 0).
+
+- **Per vehicle**: type, usable battery (kWh), the car's own charge limit, reserve, consumption
+  (kWh/km, optional) and, for a plug-in hybrid, fuel use (l/100 km).
+- **Data source** (optional) — instead of one integration per car brand, LoxSuite reads from something
+  that already talks to the car:
+  - **Homey Pro** — local Web API with an API key (Homey → Settings → API Keys). *Load devices* lists
+    the Homey's devices (cars first); pick the car and which capability is which value.
+  - **Home Assistant** — REST API with a long-lived access token. *Load entities* lists the entities
+    with their current state; a field can use an entity's state or one of its attributes (a
+    device_tracker's latitude/longitude).
+  - **MQTT topics** on LoxSuite's broker, for Node-RED, evcc, TeslaMate, Homey's MQTT app and the like —
+    pick from the topics the broker has seen, with an optional JSON path. Presets for evcc and Home
+    Assistant's MQTT Statestream fill in typical topic names.
+  - **HTTP / JSON URL** with optional headers.
+  Values read: state of charge, range, plugged in, charging, charge limit, odometer, coordinates and a
+  location text. *Test source* reads once with the form's settings and shows raw and interpreted
+  values side by side. API keys, tokens and headers are stored encrypted.
+- **At home**: within a radius of the home coordinates, or when the location text equals e.g. `home`;
+  plugged in always counts as home.
+- **Monitoring**: the source is marked *failing* when reading keeps failing (twice in a row; MQTT after
+  10 minutes without the mapped topics) or when the car's data hasn't changed for longer than *Alert
+  when no update for* (default 24 h, 0 = off). A notification rule of type *Vehicle data source
+  failing/recovered* reports both transitions.
+- **Use elsewhere**: the values are published as retained MQTT topics `loxsuite/vehicles/<id>/{soc,
+  range_km,plugged,charging,home,energy_kwh,limit_soc,odometer_km}`; *Use in Monitor, dashboards &
+  Loxone* adds them as monitors in one click, and they can be mapped to Loxone like any topic. A
+  history of readings is kept for learning consumption and driving patterns later.
+
 ### OCPP (Loxone Wallbox → OCPP backend)
 
 Reports a Loxone Wallbox to an OCPP 1.6 backend (for example [Laadloon](https://www.laadloon.nl))
@@ -520,7 +553,7 @@ OCPP Server Connector can't be used — that connector needs the Wallbox and its
 same current-generation Miniserver, so a Wallbox on a Gen 1 Client of a Gen 2 Gateway never comes
 online there.
 
-- **Setup**: Loxone → OCPP → *Add OCPP bridge*: pick the Wallbox, enter the backend's Server URL
+- **Setup**: Wallbox → OCPP (charging costs) → *Add OCPP bridge*: pick the Wallbox, enter the backend's Server URL
   (`wss://…`, without the ID), ChargePoint ID, password and the ID tag you registered at the backend.
 - **ID tag**: *Fixed*, or *Automatic* — taken from an NFC Code Touch badge read around plug-in or from
   the Loxone user of the session ("User = TAG" mapping), falling back to the fixed tag. *Choose a Loxone

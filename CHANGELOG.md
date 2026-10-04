@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.23.0-alpha.1] - 2026-10-04
+
+### Added
+- **Vehicles** (new *Wallbox* menu section) — the cars charged at home, full electric or plug-in hybrid,
+  with usable battery, the car's charge limit, reserve, consumption and (hybrid) fuel use: the input
+  for the upcoming charging planner.
+- **Live vehicle data from Homey, Home Assistant, MQTT or HTTP** — state of charge, range, plugged in,
+  charging, charge limit, odometer and location, read from a Homey Pro (local Web API, device and
+  capability pickers), Home Assistant (REST API, entity/attribute pickers), MQTT topics on the LoxSuite
+  broker (Node-RED, evcc, TeslaMate, …; topic picker with current values, JSON paths, presets) or any
+  JSON URL. *Test source* shows raw and interpreted values before saving. Secrets are stored encrypted.
+- **"At home" detection** from the car's coordinates (radius around home) or a location text.
+- **Monitoring of the vehicle data source** — *failing* when reading keeps failing or the car's data is
+  older than a configurable limit (default 24 h), shown on the vehicle pages; new notification trigger
+  *Vehicle data source failing/recovered* reports both transitions.
+- **Vehicle values on MQTT** — retained topics `loxsuite/vehicles/<id>/…` for Monitor, dashboards and
+  Loxone mappings, plus a reading history in the database.
+
+### Changed
+- **OCPP moved to the new *Wallbox* menu section** as *OCPP (charging costs)*.
+
 ## [0.22.0-alpha.1] - 2026-10-03
 
 ### Added

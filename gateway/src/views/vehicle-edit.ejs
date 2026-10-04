@@ -1,0 +1,95 @@
+<%- include('partials/head', { pageTitle: 'Vehicle: ' + v.name, active: 'vehicles' }) %>
+
+<p><a href="/vehicles">&larr; All vehicles</a></p>
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);">Saved.</p><% } %>
+
+<div class="card">
+  <h2 style="margin-top:0;">Now</h2>
+  <div id="veh-status"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+</div>
+
+<% if (v.source_type !== 'none' && canEdit('monitor')) { %>
+<div class="card">
+  <details>
+    <summary><strong>Use in Monitor, dashboards &amp; Loxone</strong></summary>
+    <p class="hint">
+      LoxSuite publishes this car's values as retained MQTT topics (<code>loxsuite/vehicles/<%= v.id %>/&hellip;</code>, on change).
+      Add them as monitors, or map them to Loxone under Mappings.
+    </p>
+    <div id="veh-monitor-picks" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:0.3rem 1rem;">
+      <% Object.entries(topics).forEach(([k, t]) => { %>
+        <label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" value="<%= k %>" <%= ['soc', 'plugged', 'home'].includes(k) ? 'checked' : '' %>> <%= topicLabels[k] %> <code class="hint" style="font-size:0.72rem;"><%= t %></code></label>
+      <% }) %>
+    </div>
+    <div class="btn-row" style="margin-top:0.6rem;"><button type="button" class="btn-soft" id="veh-monitor-btn"><%- icon('plus') %> Add to Monitor</button></div>
+    <div id="veh-monitor-result" class="hint" style="margin-top:0.4rem;"></div>
+  </details>
+</div>
+<% } %>
+
+<% if (canEdit('miniservers')) { %>
+<div class="card">
+  <form method="post" action="/vehicles/<%= v.id %>/update">
+    <%- include('partials/vehicle-fields', { v, fields, presets }) %>
+    <div class="btn-row" style="margin-top:0.9rem;">
+      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+    </div>
+  </form>
+  <form method="post" action="/vehicles/<%= v.id %>/delete" style="margin-top:0.8rem;" onsubmit="return confirm('Delete this vehicle and its history?');">
+    <button type="submit" class="btn-soft"><%- icon('trash') %> Delete</button>
+  </form>
+</div>
+<% } %>
+
+<script>
+(function () {
+  var el = document.getElementById('veh-status');
+  var srcLabels = <%- JSON.stringify(sourceLabels) %>;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function dt(s) { return s ? new Date(s).toLocaleString() : '—'; }
+  function yn(b, yes, no) { return b === true ? yes : b === false ? no : 'unknown'; }
+  function tile(label, value, sub) {
+    return '<div style="flex:1; min-width:140px; border:1px solid var(--border); border-radius:10px; padding:0.6rem 0.8rem;">' +
+      '<div class="hint" style="margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;">' + esc(label) + '</div>' +
+      '<div style="font-size:1.3rem; font-weight:700;">' + value + '</div>' + (sub ? '<div class="hint" style="margin:0; font-size:0.75rem;">' + sub + '</div>' : '') + '</div>';
+  }
+  function render(s) {
+    if (s.sourceType === 'none') { el.innerHTML = '<p class="hint" style="margin:0;">No data source: the charging planner estimates the battery level.</p>'; return; }
+    if (!s.enabled) { el.innerHTML = '<p class="hint" style="margin:0;">Disabled.</p>'; return; }
+    var r = s.reading || {};
+    var h = s.health || { status: 'unknown' };
+    var badge = h.status === 'ok' ? '<span style="color:var(--success); font-weight:600;">● working</span>'
+      : h.status === 'failing' ? '<span style="color:var(--danger); font-weight:600;">● failing</span> <span class="hint">' + esc(h.detail) + '</span>'
+      : '<span class="hint">● ' + esc(h.detail || 'not read yet') + '</span>';
+    var html = '<p style="margin:0 0 0.6rem;">' + esc(srcLabels[s.sourceType] || s.sourceType) + ': ' + badge + '</p>';
+    var soc = r.soc != null ? r.soc + '%' : '—';
+    html += '<div style="display:flex; gap:0.7rem; flex-wrap:wrap;">' +
+      tile('Battery', soc, r.energy_kwh != null ? r.energy_kwh + ' kWh' + (r.limit_soc != null ? ' · limit ' + r.limit_soc + '%' : '') : (r.limit_soc != null ? 'limit ' + r.limit_soc + '%' : '')) +
+      tile('Range', r.range_km != null ? r.range_km + ' km' : '—', '') +
+      tile('Plugged in', yn(r.plugged, 'yes', 'no'), r.charging === true ? 'charging' : r.charging === false ? 'not charging' : '') +
+      tile('At home', yn(r.home, 'yes', 'no'), r.distance_m != null ? (r.distance_m < 2000 ? r.distance_m + ' m' : (r.distance_m / 1000).toFixed(1) + ' km') + ' from home' : (r.location ? esc(r.location) : '')) +
+      tile('Odometer', r.odometer_km != null ? Math.round(r.odometer_km) + ' km' : '—', '') +
+      '</div>';
+    html += '<p class="hint" style="margin:0.6rem 0 0;">Data from the car: ' + esc(dt(s.sourceUpdatedAt)) + ' &middot; last read: ' + esc(dt(s.fetchedAt)) +
+      ' &middot; alert after ' + s.staleAfterH + ' h without an update' + (s.staleAfterH === 0 ? ' (off)' : '') + '</p>';
+    el.innerHTML = html;
+  }
+  function tick() { fetch('/vehicles/<%= v.id %>/status.json').then(function (r) { return r.json(); }).then(render).catch(function () {}); }
+  tick();
+  setInterval(tick, 10000);
+  var monBtn = document.getElementById('veh-monitor-btn');
+  if (monBtn) monBtn.addEventListener('click', function () {
+    var metrics = Array.prototype.slice.call(document.querySelectorAll('#veh-monitor-picks input:checked')).map(function (c) { return c.value; });
+    var out = document.getElementById('veh-monitor-result');
+    monBtn.disabled = true;
+    fetch('/vehicles/<%= v.id %>/monitor', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metrics: metrics }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { out.innerHTML = !d.ok ? esc(d.message) : ('Added ' + d.created.length + ' monitor(s)' + (d.skipped.length ? ', ' + d.skipped.length + ' already existed' : '') + '. <a href="/monitor">Open Monitor</a>'); })
+      .catch(function (e) { out.textContent = e.message; })
+      .finally(function () { monBtn.disabled = false; });
+  });
+})();
+</script>
+
+<%- include('partials/foot') %>

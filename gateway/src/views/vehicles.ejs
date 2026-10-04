@@ -1,0 +1,55 @@
+<%- include('partials/head', { pageTitle: 'Vehicles', active: 'vehicles' }) %>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+
+<p class="hint">
+  The cars charged at home. Each one can read its live state &mdash; battery %, range, plugged in, location &mdash; from
+  something that already talks to the car: a Homey Pro or Home Assistant (which have apps for most car brands), or
+  MQTT topics from Node-RED, evcc and similar tools. Without a source the charging planner estimates the battery level.
+</p>
+
+<div class="card">
+  <% if (!vehicles.length) { %>
+    <p class="hint" style="margin:0;">No vehicles yet.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Name</th><th>Type</th><th>Battery</th><th>Source</th><th>Now</th><th>Updated</th></tr></thead>
+      <tbody>
+        <% vehicles.forEach(x => { const s = x.status; const r = s.reading || {}; %>
+          <tr>
+            <td><a href="/vehicles/<%= x.id %>"><%= x.name %></a></td>
+            <td><%= x.type === 'phev' ? 'Plug-in hybrid' : 'Full electric' %></td>
+            <td><%= x.battery_kwh ? x.battery_kwh + ' kWh' : '—' %></td>
+            <td>
+              <%= sourceLabels[x.source_type] || x.source_type %>
+              <% if (!x.enabled) { %><span class="hint"> (disabled)</span>
+              <% } else if (s.health && s.health.status === 'failing') { %><span style="color: var(--danger);"> &middot; failing</span>
+              <% } else if (s.health && s.health.status === 'ok') { %><span style="color: var(--success);"> &middot; ok</span><% } %>
+            </td>
+            <td>
+              <% if (r.soc != null) { %><strong><%= r.soc %>%</strong><% } %>
+              <% if (r.range_km != null) { %> &middot; <%= r.range_km %> km<% } %>
+              <% if (r.plugged === true) { %> &middot; plugged in<% } else if (r.home === true) { %> &middot; home<% } else if (r.home === false) { %> &middot; away<% } %>
+              <% if (r.soc == null && r.plugged == null && r.home == null) { %>&mdash;<% } %>
+            </td>
+            <td class="hint"><%= s.sourceUpdatedAt ? formatDateTime(s.sourceUpdatedAt) : '—' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</div>
+
+<% if (canEdit('miniservers')) { %>
+<details class="card" <%= vehicles.length ? '' : 'open' %>>
+  <summary><strong>Add vehicle</strong></summary>
+  <form method="post" action="/vehicles" style="margin-top:0.8rem;">
+    <%- include('partials/vehicle-fields', { v, fields, presets }) %>
+    <div class="btn-row" style="margin-top:0.9rem;">
+      <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+    </div>
+  </form>
+</details>
+<% } %>
+
+<%- include('partials/foot') %>

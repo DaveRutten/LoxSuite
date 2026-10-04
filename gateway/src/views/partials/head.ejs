@@ -106,7 +106,7 @@
       </div>
 
       <% if (loxoneSectionVisible) { %>
-        <% const loxoneExpanded = active === 'miniservers' || active === 'live-data' || active === 'hardware' || active === 'ocpp' || mappingsActive; %>
+        <% const loxoneExpanded = active === 'miniservers' || active === 'live-data' || active === 'hardware' || mappingsActive; %>
         <button type="button" class="nav-section-label" data-nav-section="loxone-mappings" aria-expanded="<%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'false' : 'true' %>">
           <span>Loxone</span><%- icon('chevron') %>
         </button>
@@ -114,8 +114,18 @@
           <% if (canView('miniservers')) { %><a href="/miniservers" class="<%= active === 'miniservers' ? 'active' : '' %>">Miniservers</a><% } %>
           <% if (canView('live_data')) { %><a href="/live-data" class="<%= active === 'live-data' ? 'active' : '' %>">Live Data</a><% } %>
           <% if (canView('hardware')) { %><a href="/hardware" class="<%= active === 'hardware' ? 'active' : '' %>">Hardware</a><% } %>
-          <% if (canView('miniservers')) { %><a href="/ocpp" class="<%= active === 'ocpp' ? 'active' : '' %>">OCPP</a><% } %>
           <% if (mappingsHref) { %><a href="<%= mappingsHref %>" class="<%= mappingsActive ? 'active' : '' %>">Mappings</a><% } %>
+        </div>
+      <% } %>
+
+      <% if (canView('miniservers')) { %>
+        <% const wallboxExpanded = active === 'vehicles' || active === 'ocpp'; %>
+        <button type="button" class="nav-section-label" data-nav-section="wallbox" aria-expanded="<%= isCollapsed('wallbox', wallboxExpanded) ? 'false' : 'true' %>">
+          <span>Wallbox</span><%- icon('chevron') %>
+        </button>
+        <div class="nav-group" <%= isCollapsed('wallbox', wallboxExpanded) ? 'hidden' : '' %>>
+          <a href="/vehicles" class="<%= active === 'vehicles' ? 'active' : '' %>">Vehicles</a>
+          <a href="/ocpp" class="<%= active === 'ocpp' ? 'active' : '' %>">OCPP (charging costs)</a>
         </div>
       <% } %>
 

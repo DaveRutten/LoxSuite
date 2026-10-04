@@ -319,6 +319,13 @@ function getTopicOverview() {
     .sort((a, b) => b.lastSeen.localeCompare(a.lastSeen));
 }
 
+// Latest value of one topic ({ value, lastSeen, retained, ... }) or null — a plain Map lookup for
+// readers that only need a handful of known topics (vehicles.js), instead of getTopicOverview()'s
+// copy-and-sort of everything the broker has ever carried.
+function getTopicValue(topic) {
+  return topicOverview.get(topic) || null;
+}
+
 function clearTopicOverview() {
   topicOverview.clear();
 }
@@ -385,6 +392,7 @@ module.exports = {
   topicMatches,
   getMessageLog: () => messageLog,
   getTopicOverview,
+  getTopicValue,
   clearTopicOverview,
   getStats,
   getBrokerStats,
