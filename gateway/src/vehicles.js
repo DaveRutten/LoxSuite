@@ -95,8 +95,10 @@ function parseBool(value, kind = 'bool') {
     if (s.startsWith('plugged') || s === 'connected' || s === 'disconnected') return false; // a plug state, not charging
   }
   if (kind === 'plugged') {
-    if (s.startsWith('plugged_in') || s === 'plugged' || s === 'connected' || s === 'charging') return true;
+    if (/^(dis|un|not_|no_)|connect_cable|plug_in_cable|_out$/.test(s)) return false; // "CONNECT_CABLE" = cable not in yet
+    if (s.startsWith('plugged') || s === 'connected' || s.includes('charg') || s === 'conserving' || s === 'locked') return true;
   }
+  if (kind === 'charging' && (s === 'connect_cable' || s === 'conserving')) return false;
   if (FALSE_WORDS.has(s)) return false;
   if (['1', 'true', 'on', 'yes', 'ja', 'connected', 'plugged', 'plugged_in', 'charging', 'home'].includes(s)) return true;
   const n = parseNumber(s);
@@ -226,9 +228,15 @@ function secretOf(vehicle) {
   try { return decrypt(vehicle.secret) || ''; } catch { return ''; }
 }
 
-function pollIntervalS(vehicle, cfg = parseConfig(vehicle)) {
+// Local sources (Homey, Home Assistant) are read at least every minute while the Wallbox has a car
+// connected or this car says it's plugged in or charging, so a plug-in shows up within a minute
+// instead of after the (default 5 min) poll interval. A cloud HTTP source keeps its own interval.
+const FAST_POLL_S = 60;
+const LOCAL_SOURCES = new Set(['homey', 'homeassistant']);
+function pollIntervalS(vehicle, cfg = parseConfig(vehicle), { fast = false } = {}) {
   const n = Number(cfg.interval_s);
-  return Number.isFinite(n) && n >= 60 ? Math.min(n, 86400) : 300;
+  const base = Number.isFinite(n) && n >= 60 ? Math.min(n, 86400) : 300;
+  return fast && LOCAL_SOURCES.has(vehicle?.source_type) ? Math.min(base, FAST_POLL_S) : base;
 }
 
 // --------------------------------------------------------------------------- source readers
@@ -477,6 +485,8 @@ const state = new Map(); // vehicle id -> { reading, raw, error, fetchedAt, sour
 const lastPublished = new Map(); // topic -> string
 let timer = null;
 let ticking = false;
+let wallboxConnected = false;
+let burstTimers = [];
 
 function vehicleTopics(id) {
   return Object.fromEntries(PUBLISH_FIELDS.map((k) => [k, `loxsuite/vehicles/${id}/${k}`]));
@@ -586,7 +596,8 @@ async function tick() {
       seen.add(v.id);
       const st = state.get(v.id) || {};
       if (v.source_type !== 'mqtt' && st.nextPollAt && nowMs < st.nextPollAt) continue;
-      st.nextPollAt = nowMs + pollIntervalS(v) * 1000;
+      const fast = wallboxConnected || st.reading?.plugged === true || st.reading?.charging === true;
+      st.nextPollAt = nowMs + pollIntervalS(v, parseConfig(v), { fast }) * 1000;
       state.set(v.id, st);
       const result = await readVehicle(v);
       if (result.ok) {
@@ -610,6 +621,18 @@ async function tick() {
 function refreshVehicle(id) {
   state.delete(Number(id));
   tick().catch(() => {});
+}
+
+// The Wallbox (Loxone) saw a car plug in or unplug: read every polled source now, and again after
+// 1 and 3 minutes (a car's cloud often reports the new state a little later than the Wallbox).
+function notifyWallbox(connected) {
+  const c = !!connected;
+  if (c === wallboxConnected) return;
+  wallboxConnected = c;
+  const readAll = () => { for (const st of state.values()) st.nextPollAt = 0; tick().catch(() => {}); };
+  burstTimers.forEach(clearTimeout);
+  burstTimers = [60 * 1000, 180 * 1000].map((ms) => { const t = setTimeout(readAll, ms); t.unref?.(); return t; });
+  readAll();
 }
 
 function getVehicleStatus(vehicle) {
@@ -670,6 +693,7 @@ module.exports = {
   vehicleTopics,
   getVehicleStatus,
   refreshVehicle,
+  notifyWallbox,
   startVehicles,
   tick,
 };

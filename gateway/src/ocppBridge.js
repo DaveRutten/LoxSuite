@@ -298,6 +298,7 @@ class BridgeRunner {
     this.sessionUser = null;
     this.state.tx = { localId, meterStart, startedAt, pendingStart: true, idTag: null };
     this.log('SESSION START', { meterStart_kWh: meterStart / 1000 });
+    try { require('./vehicles').notifyWallbox(true); } catch { /* vehicles not loaded */ }
     db.prepare('INSERT INTO ocpp_bridge_sessions (bridge_id, local_id, mode, started_at, meter_start_wh) VALUES (?, ?, ?, ?, ?)')
       .run(this.row.id, localId, this.mode, startedAt, meterStart).catch((e) => this.log('db-error', { error: e.message }));
     this.persist();
@@ -355,6 +356,7 @@ class BridgeRunner {
   stopTx(reason, energyLoxone, at = null) {
     const tx = this.state.tx;
     if (!tx) return;
+    try { require('./vehicles').notifyWallbox(false); } catch { /* vehicles not loaded */ }
     if (tx.pendingStart) this.tryStartTransaction(true); // unplugged before any authorization arrived
     const meterStop = toWh(this.values.total);
     const ts = at || new Date().toISOString();

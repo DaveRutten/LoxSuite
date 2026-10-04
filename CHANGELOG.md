@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.24.4-alpha.1] - 2026-10-04
+
+### Fixed
+- **Car plugged in shows up within a minute**: a Homey or Home Assistant car was only read every 5 minutes (the default
+  poll interval), so a plug-in could take minutes to appear. Now every car is read immediately when the Wallbox (Loxone
+  or the OCPP bridge) sees a plug-in or unplug, again after 1 and 3 minutes, and local sources (Homey, Home Assistant)
+  are read every minute while a car is connected or reports itself plugged in/charging.
+- **More plug states understood**: MySkoda-style charging states (`CONNECT_CABLE` = no cable, `READY_FOR_CHARGING`,
+  `CONSERVING`, `CHARGING`) now set *plugged in* correctly when mapped to the plugged field.
+
 ## [0.24.3-alpha.1] - 2026-10-04
 
 ### Fixed

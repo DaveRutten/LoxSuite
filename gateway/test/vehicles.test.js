@@ -40,6 +40,24 @@ test('parseBool knows plug/charge states per field', () => {
   assert.equal(parseBool('Charging', 'charging'), true);
   assert.equal(parseBool('Not charging', 'charging'), false);
   assert.equal(parseBool('ready_for_charging', 'charging'), false);
+  // MySkoda charging-state enums: CONNECT_CABLE = no cable yet; the rest means the cable is in
+  assert.equal(parseBool('CONNECT_CABLE', 'plugged'), false);
+  assert.equal(parseBool('CONNECT_CABLE', 'charging'), false);
+  assert.equal(parseBool('READY_FOR_CHARGING', 'plugged'), true);
+  assert.equal(parseBool('CONSERVING', 'plugged'), true);
+  assert.equal(parseBool('CONSERVING', 'charging'), false);
+  assert.equal(parseBool('CHARGING', 'plugged'), true);
+  assert.equal(parseBool('plugged_in_discharging', 'plugged'), true);
+});
+
+test('local sources are polled every minute while a car is (probably) at the Wallbox', () => {
+  const homey = { source_type: 'homey', source_config: JSON.stringify({ interval_s: 300 }) };
+  const ha = { source_type: 'homeassistant', source_config: JSON.stringify({ interval_s: 30 }) };
+  const http = { source_type: 'http', source_config: JSON.stringify({ interval_s: 300 }) };
+  assert.equal(pollIntervalS(homey), 300);
+  assert.equal(pollIntervalS(homey, undefined, { fast: true }), 60);
+  assert.equal(pollIntervalS(ha, undefined, { fast: true }), 60);
+  assert.equal(pollIntervalS(http, undefined, { fast: true }), 300);
 });
 
 test('getPath picks values out of JSON, also from a string payload', () => {

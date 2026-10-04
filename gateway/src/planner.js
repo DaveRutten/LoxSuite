@@ -421,6 +421,7 @@ async function tick(nowMs = Date.now()) {
   // New session / unplug resets per-session choices.
   const key = connected ? String(wb.connectAt || 'c') : 'none';
   if (rt.session !== key) {
+    try { require('./vehicles').notifyWallbox(connected); } catch { /* vehicles not loaded */ }
     rt.session = key; rt.override = null; rt.readyOverride = null; rt.doneSince = null; rt.lowDrawSince = null; rt.ctrl.state = {}; rt.sessionVehicle = null;
     rt.planAt = 0;
   }
