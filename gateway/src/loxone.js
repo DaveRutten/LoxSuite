@@ -85,6 +85,27 @@ async function sendHttpVirtualInput(miniserver, target, value) {
   if (!res.ok) {
     throw new Error(`Miniserver responded with HTTP ${res.status}`);
   }
+  // The Miniserver answers HTTP 200 even when the command failed; the real result is the Code in
+  // the body (<LL control="…" value="…" Code="200"/>, or {"LL":{"Code":"200"}} for /jdev).
+  const body = await res.text().catch(() => '');
+  const code = llCode(body);
+  if (code && code !== 200) throw new Error(llError(code, target, miniserver));
+  return { code, value: llValue(body) };
+}
+
+function llCode(body) {
+  const m = /Code"?\s*[=:]\s*"?(\d{3})/i.exec(String(body || ''));
+  return m ? Number(m[1]) : null;
+}
+function llValue(body) {
+  const m = /value"?\s*[=:]\s*"([^"]*)"/i.exec(String(body || ''));
+  return m ? m[1] : null;
+}
+function llError(code, target, miniserver) {
+  const where = `on ${miniserver?.name || 'the Miniserver'}`;
+  if (code === 404 || code === 500) return `"${target}" does not exist ${where} (Loxone code ${code}) — create the virtual input on this Miniserver, or pick the Miniserver that has it.`;
+  if (code === 401 || code === 403) return `The LoxSuite user has no rights on "${target}" ${where} (Loxone code ${code}) — give that user access in Loxone Config.`;
+  return `Loxone refused the command for "${target}" ${where} (code ${code}).`;
 }
 
 // Sends "MQTT:<topic>=<value>" over UDP, and configure the Loxone Virtual Input's "Command
@@ -348,6 +369,7 @@ async function forwardToLoxone(mapping, rawValue, actualTopic) {
 }
 
 module.exports = {
+  llCode,
   forwardToLoxone,
   applyTransform,
   applyLoxoneToMqttTransform,

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.25.1-alpha.1] - 2026-10-04
+
+### Fixed
+- **Writing to a Loxone virtual input reported success when it failed**: the Miniserver answers HTTP 200 even when the
+  input doesn't exist or the user has no rights; LoxSuite now reads Loxone's own result code and says what is wrong
+  (input missing on that Miniserver, or no rights for the LoxSuite user). Affects Smart charging's output and its
+  *Send test value* button.
+
 ## [0.25.0-alpha.1] - 2026-10-04
 
 ### Added
