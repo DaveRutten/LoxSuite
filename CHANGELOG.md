@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.26.0-alpha.1] - 2026-10-04
+
+### Added
+- **Charge log** (Smart charging → Charge log): every charging session is recorded automatically — what the Wallbox
+  did (connected, enabled, active, power, limit, mode, session kWh), what LoxSuite sent to the virtual inputs (test
+  button or Live output, including failures), what the planner advised and what the car reported (battery %, plugged,
+  its own charging state). Every 10 s on change and at least once a minute, kept 45 days. Per session LoxSuite checks:
+  no charging at 0 kW, the car waits without an error, it starts within 2 minutes when asked (also after waiting 10+
+  minutes), the power follows the value sent, it stops at 0, and values reach Loxone. With a chart, an event list, a
+  CSV download and a copyable summary — so the Wallbox control can be tested whenever it suits and looked at later.
+  Values sent with no car connected are listed too.
+
 ## [0.25.2-alpha.1] - 2026-10-04
 
 ### Fixed

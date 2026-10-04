@@ -280,7 +280,7 @@ async function wallboxLive() {
   try { session = JSON.parse(read('session') || 'null'); } catch { session = null; }
   return {
     name: wb.control.name, connected: Number(read('connected')) === 1, active: Number(read('active')) === 1,
-    kw: Number(read('actual')) || 0, total: Number(read('total')) || null, mode: read('mode'), limit: read('limit'),
+    kw: Number(read('actual')) || 0, total: Number(read('total')) || null, mode: read('mode'), limit: read('limit'), enabled: read('enabled'),
     sessionKwh: session ? Number(session.energy) || 0 : null, connectAt: session?.connect ? session.connect * 1000 : null, miniserver: wb.miniserver,
     sessionUser: session?.user || null,
   };
@@ -402,8 +402,15 @@ async function writeOutput(cfg, kw, nowMs) {
   const { sendHttpVirtualInput } = require('./loxone');
   const ms = await outputMiniserver(cfg);
   if (!ms) return { written: false, error: 'No Miniserver.' };
-  await sendHttpVirtualInput(ms, cfg.vi_setpoint, String(kw));
-  if (cfg.vi_enable) await sendHttpVirtualInput(ms, cfg.vi_enable, kw > 0 ? '1' : '0');
+  const chargeLog = require('./chargeLog');
+  try {
+    await sendHttpVirtualInput(ms, cfg.vi_setpoint, String(kw));
+    if (cfg.vi_enable) await sendHttpVirtualInput(ms, cfg.vi_enable, kw > 0 ? '1' : '0');
+  } catch (err) {
+    if (!same) chargeLog.recordSent({ kw, enable: cfg.vi_enable ? (kw > 0 ? 1 : 0) : null, source: 'live', ok: false, error: err.message }).catch(() => {});
+    throw err;
+  }
+  if (!same) chargeLog.recordSent({ kw, enable: cfg.vi_enable ? (kw > 0 ? 1 : 0) : null, source: 'live', miniserver: ms.name }).catch(() => {});
   rt.lastWrite = { kw, at: nowMs };
   if (!same) {
     const { logSystemEvent } = require('./auditLog');

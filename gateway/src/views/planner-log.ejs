@@ -1,0 +1,99 @@
+<%- include('partials/head', { pageTitle: 'Charge log', active: 'planner' }) %>
+
+<p class="hint">
+  Every charging session is recorded here automatically: what the Wallbox did, what LoxSuite sent to the virtual inputs and
+  what the car reported. LoxSuite checks per session whether the control works. You can test at any moment and look at the
+  result later &mdash; no need to watch.
+  <a href="/planner#settings">&larr; Smart charging</a>
+</p>
+
+<details class="card" style="padding-bottom:0.6rem;">
+  <summary style="cursor:pointer; font-weight:600;">How to test the Wallbox control</summary>
+  <ol class="hint" style="margin:0.5rem 0 0; padding-left:1.2rem; line-height:1.6;">
+    <li>Under <a href="/planner#settings">Smart charging &rarr; Output</a>, send <strong>0</strong> with <em>Send test value</em> (Output can stay on <em>Advise</em>).</li>
+    <li>Plug the car in (battery not full) and leave it at 0 for at least <strong>10 minutes</strong>: it should not charge and the car should just wait.</li>
+    <li>Send <strong>6</strong>: it should start within 2 minutes at about 6 kW.</li>
+    <li>Send <strong>0</strong>: it should stop within a minute. Then send the value you want to charge at, or switch Output to <em>Live</em> once everything passed.</li>
+  </ol>
+</details>
+
+<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr)); gap:1rem; align-items:start;">
+  <div class="card" style="margin:0;">
+    <h2 style="margin-top:0;">Sessions</h2>
+    <div id="cl-list"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+    <h3 style="margin:1rem 0 0.3rem; font-size:0.95rem;">Sent without a car connected</h3>
+    <div id="cl-idle" class="hint" style="margin:0;"></div>
+  </div>
+  <div class="card" style="margin:0; grid-column: span 2; min-width:0;" id="cl-detail-card">
+    <div id="cl-detail"><p class="hint" style="margin:0;">Choose a session.</p></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var current = <%- JSON.stringify(sessionKey) %> || null, timer = null, lastDetail = null;
+  var ICON = { pass: '<span style="color:var(--success);">&#10004;</span>', fail: '<span style="color:var(--danger,#c0392b);">&#10008;</span>', info: '<span style="color:#d4a017;">&#9432;</span>', pending: '<span class="hint">&#9675;</span>' };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function dt(t) { return new Date(t).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  function tm(t) { return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+  function badges(checks) { return checks.map(function (c) { return '<span title="' + esc(c.title + ': ' + c.detail) + '">' + ICON[c.status] + '</span>'; }).join(' '); }
+
+  function loadList() {
+    return fetch('/planner/log/sessions.json').then(function (r) { return r.json(); }).then(function (d) {
+      var el = document.getElementById('cl-list');
+      if (!d.sessions.length) el.innerHTML = '<p class="hint" style="margin:0;">No sessions recorded yet &mdash; they appear as soon as a car is plugged in.</p>';
+      else el.innerHTML = '<table style="width:100%;"><tbody>' + d.sessions.map(function (s) {
+        return '<tr data-key="' + esc(s.key) + '" style="cursor:pointer;' + (s.key === current ? 'background:var(--accent-soft);' : '') + '"><td><strong>' + esc(dt(s.from)) + '</strong><div class="hint" style="margin:0; font-size:0.75rem;">' +
+          Math.round((s.to - s.from) / 60000) + ' min' + (s.kwh ? ' · ' + s.kwh + ' kWh' : '') + (s.car ? ' · ' + esc(s.car) : '') + '</div></td><td style="text-align:right; white-space:nowrap;">' + badges(s.checks) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+      Array.prototype.forEach.call(el.querySelectorAll('tr[data-key]'), function (tr) { tr.addEventListener('click', function () { current = tr.dataset.key; history.replaceState(null, '', '/planner/log?session=' + encodeURIComponent(current)); loadList(); loadDetail(); }); });
+      document.getElementById('cl-idle').innerHTML = d.idle.length ? d.idle.slice(0, 8).map(function (r) { return esc(dt(r.t)) + ' &mdash; ' + esc(r.event) + ' <span class="hint">(limit ' + (r.d.limit == null ? '?' : r.d.limit) + ' kW, mode ' + (r.d.mode == null ? '?' : r.d.mode) + ')</span>'; }).join('<br>') : 'Nothing yet.';
+      if (!current && d.sessions.length) { current = d.sessions[0].key; loadList(); loadDetail(); }
+      return d;
+    });
+  }
+
+  function chart(rows) {
+    var el = document.getElementById('cl-chart');
+    if (!el || rows.length < 2) { if (el) el.innerHTML = ''; return; }
+    var W = lsChartW(el, 700), H = 170, left = 34, t0 = rows[0].t, t1 = rows[rows.length - 1].t || t0 + 1;
+    var max = Math.max(4, Math.max.apply(null, rows.map(function (r) { return Math.max(r.d.kw || 0, r.d.sentKw || 0, r.d.limit || 0); })) * 1.1);
+    var X = function (t) { return left + (t - t0) / Math.max(1, t1 - t0) * (W - left - 8); }, Y = function (v) { return 8 + H - (v || 0) / max * H; };
+    function step(key) { var p = ''; rows.forEach(function (r, i) { var v = r.d[key]; if (v == null) return; p += (p ? ' L' + X(r.t) + ' ' + Y(rows[i - 1] && rows[i - 1].d[key] != null ? rows[i - 1].d[key] : v) + ' L' : 'M') + X(r.t) + ' ' + Y(v); }); return p; }
+    var s = '<svg viewBox="0 0 ' + W + ' ' + (H + 30) + '" width="100%" style="display:block;">';
+    [0.5, 1].forEach(function (f) { var v = max * f; s += '<line x1="' + left + '" x2="' + (W - 6) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="currentColor" opacity="0.08"/><text x="' + (left - 4) + '" y="' + (Y(v) + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + v.toFixed(0) + '</text>'; });
+    s += '<path d="' + step('limit') + '" fill="none" stroke="#9b59b6" stroke-width="1.5" stroke-dasharray="4 3"/>';
+    s += '<path d="' + step('sentKw') + '" fill="none" stroke="#d4a017" stroke-width="2"/>';
+    s += '<path d="' + step('kw') + '" fill="none" stroke="#4caf50" stroke-width="2.5"/>';
+    rows.forEach(function (r) { if (r.event) s += '<line x1="' + X(r.t) + '" x2="' + X(r.t) + '" y1="8" y2="' + (H + 8) + '" stroke="currentColor" opacity="0.18"><title>' + esc(tm(r.t) + ' ' + r.event) + '</title></line>'; });
+    [t0, (t0 + t1) / 2, t1].forEach(function (t, i) { s += '<text x="' + X(t) + '" y="' + (H + 24) + '" text-anchor="' + ['start', 'middle', 'end'][i] + '" font-size="10" fill="currentColor" opacity="0.6">' + tm(t).slice(0, 5) + '</text>'; });
+    el.innerHTML = s + '</svg><div class="hint" style="margin:0.2rem 0 0;"><span style="color:#4caf50;">&#9632;</span> Wallbox power (kW) &nbsp;<span style="color:#d4a017;">&#9632;</span> value sent &nbsp;<span style="color:#9b59b6;">&#9632;</span> Wallbox limit &nbsp;| = event</div>';
+  }
+
+  function loadDetail() {
+    if (!current) return;
+    fetch('/planner/log/session.json?key=' + encodeURIComponent(current)).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.error) { document.getElementById('cl-detail').innerHTML = '<p class="hint">' + esc(d.error) + '</p>'; return; }
+      lastDetail = d;
+      var live = Date.now() - d.to < 120000 && d.rows[d.rows.length - 1].d.connected === 1;
+      var html = '<div style="display:flex; justify-content:space-between; gap:0.5rem; flex-wrap:wrap; align-items:center;"><h2 style="margin:0;">' + esc(dt(d.from)) + (live ? ' <span class="badge" style="font-size:0.7rem;">live</span>' : '') + '</h2>' +
+        '<div class="btn-row" style="margin:0;"><a class="btn-soft" href="/planner/log/session.csv?key=' + encodeURIComponent(d.key) + '">Download CSV</a><button type="button" class="btn-soft" id="cl-copy">Copy summary</button></div></div>';
+      html += '<ul style="list-style:none; padding:0; margin:0.8rem 0;">' + d.checks.map(function (c) { return '<li style="margin:0.35rem 0;">' + ICON[c.status] + ' <strong>' + esc(c.title) + '</strong><div class="hint" style="margin:0 0 0 1.3rem;">' + esc(c.detail) + '</div></li>'; }).join('') + '</ul>';
+      html += '<div id="cl-chart"></div>';
+      var ev = d.rows.filter(function (r) { return r.event; });
+      html += '<h3 style="margin:1rem 0 0.3rem; font-size:0.95rem;">Events</h3><div style="overflow-x:auto;"><table><thead><tr><th>Time</th><th>Event</th><th>Wallbox</th><th>Limit</th><th>Mode</th><th>Car</th></tr></thead><tbody>' +
+        (ev.length ? ev.map(function (r) { return '<tr><td>' + tm(r.t) + '</td><td>' + esc(r.event) + '</td><td>' + (r.d.kw == null ? '—' : r.d.kw + ' kW') + '</td><td>' + (r.d.limit == null ? '—' : r.d.limit) + '</td><td>' + (r.d.mode == null ? '—' : r.d.mode) + '</td><td>' + (r.d.soc == null ? '' : Math.round(r.d.soc) + '% ') + esc(r.d.carState || '') + '</td></tr>'; }).join('') : '<tr><td colspan="6" class="hint">No events.</td></tr>') + '</tbody></table></div>';
+      html += '<textarea id="cl-summary" readonly style="width:100%; min-height:7rem; margin-top:0.8rem; font-family:monospace; font-size:0.75rem;">' + esc(d.summary) + '</textarea>';
+      document.getElementById('cl-detail').innerHTML = html;
+      chart(d.rows);
+      document.getElementById('cl-copy').addEventListener('click', function () { var t = document.getElementById('cl-summary'); t.select(); try { navigator.clipboard.writeText(t.value); } catch (e) { document.execCommand('copy'); } this.textContent = 'Copied'; });
+      clearTimeout(timer);
+      if (live) timer = setTimeout(function () { loadList(); loadDetail(); }, 15000);
+    });
+  }
+  lsOnResize(function () { if (lastDetail) chart(lastDetail.rows); });
+  loadList().then(function () { if (current) loadDetail(); });
+})();
+</script>
+
+<%- include('partials/foot') %>

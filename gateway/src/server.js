@@ -65,6 +65,7 @@ const { startPrices } = require('./prices');
 const { startSolarForecast } = require('./solarForecast');
 const { startLearning } = require('./learning');
 const { startDriving } = require('./driving');
+const { startChargeLog } = require('./chargeLog');
 const { startPlanner } = require('./planner');
 const { startAgenda } = require('./agenda');
 const { startReminders } = require('./reminders');
@@ -382,6 +383,7 @@ async function main() {
   startSolarForecast();
   startLearning();
   startDriving();
+  startChargeLog();
   startAgenda();
   startFuelPrice();
   startPlanner();

@@ -88,10 +88,37 @@ router.post('/test-output.json', requirePermission('miniservers', 'edit'), async
     await sendHttpVirtualInput(ms, cfg.vi_setpoint, String(kw));
     if (cfg.vi_enable) await sendHttpVirtualInput(ms, cfg.vi_enable, kw > 0 ? '1' : '0');
     await logSystemEvent(`Planner: test value ${kw} kW written to "${cfg.vi_setpoint}" by ${req.session?.username || 'unknown user'}`).catch(() => {});
+    await require('../chargeLog').recordSent({ kw, enable: cfg.vi_enable ? (kw > 0 ? 1 : 0) : null, source: 'test', miniserver: ms.name }).catch(() => {});
     res.json({ ok: true, message: `Sent ${kw} to "${cfg.vi_setpoint}"${cfg.vi_enable ? ` and ${kw > 0 ? 1 : 0} to "${cfg.vi_enable}"` : ''} on ${ms.name}.` });
   } catch (err) {
+    await require('../chargeLog').recordSent({ kw, source: 'test', ok: false, error: err.message }).catch(() => {});
     res.json({ ok: false, message: err.message });
   }
+}));
+
+// Charge log (chargeLog.js): every session recorded with automatic checks, for testing the Wallbox
+// control at any moment and looking at it later.
+router.get('/log', asyncHandler(async (req, res) => {
+  res.render('planner-log', { sessionKey: String(req.query.session || '') });
+}));
+router.get('/log/sessions.json', asyncHandler(async (req, res) => {
+  const chargeLog = require('../chargeLog');
+  res.json({ sessions: await chargeLog.sessions(), idle: await chargeLog.idleEvents(30) });
+}));
+router.get('/log/session.json', asyncHandler(async (req, res) => {
+  const d = await require('../chargeLog').sessionDetail(String(req.query.key || ''));
+  if (!d) return res.status(404).json({ error: 'Session not found.' });
+  res.json(d);
+}));
+router.get('/log/session.csv', asyncHandler(async (req, res) => {
+  const d = await require('../chargeLog').sessionDetail(String(req.query.key || ''));
+  if (!d) return res.status(404).send('Session not found.');
+  const cols = ['connected', 'enabled', 'active', 'kw', 'limit', 'mode', 'sessionKwh', 'sentKw', 'sentEnable', 'sentSource', 'advisedKw', 'reason', 'output', 'car', 'soc', 'plugged', 'charging', 'carState'];
+  const esc = (v) => (v === null || v === undefined ? '' : /[",;\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+  const lines = [['time', 'event', ...cols].join(',')].concat(d.rows.map((r) => [new Date(r.t).toISOString(), r.event, ...cols.map((c) => r.d[c])].map(esc).join(',')));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="loxsuite-charge-log-${new Date(d.from).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.csv"`);
+  res.send(lines.join('\n'));
 }));
 
 router.post('/settings', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {

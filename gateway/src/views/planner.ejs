@@ -76,13 +76,16 @@
         <li>Save to the Miniserver, keep Output on <em>Advise</em>, and test with <em>Send test value</em> while no car is connected:
           the value of mode 1 in the Loxone app should follow it.</li>
       </ol>
-      <p class="hint" style="margin:0.3rem 0 0;">LoxSuite writes the power on every change and at least every 5 minutes; it never
+      <p class="hint" style="margin:0.3rem 0 0;">Every value sent and what the Wallbox and the car did with it is recorded in the
+        <a href="/planner/log">Charge log</a>, with automatic checks per session &mdash; test whenever it suits you and look later.
+        LoxSuite writes the power on every change and at least every 5 minutes; it never
         controls the Wallbox directly, only through these virtual inputs.
       </p>
       <div class="btn-row" style="margin-top:0.5rem; align-items:flex-end;">
         <div><label>Test value (kW)</label><input type="text" id="pl-test-kw" value="0" style="width:6rem;"></div>
         <button type="button" class="btn-soft" id="pl-test-btn">Send test value</button>
         <span class="hint" id="pl-test-msg" style="margin:0;"></span>
+        <a href="/planner/log" class="btn-soft" style="margin-left:auto;">Charge log &rarr;</a>
       </div>
       <div class="form-grid" style="margin-top:0.8rem;">
         <div><label>Solar: start at surplus (kW)</label><input type="text" name="pv_start_kw" value="<%= cfg.pv_start_kw ?? '' %>" placeholder="= minimum power"></div>
