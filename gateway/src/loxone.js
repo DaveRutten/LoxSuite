@@ -370,6 +370,7 @@ async function forwardToLoxone(mapping, rawValue, actualTopic) {
 
 module.exports = {
   llCode,
+  sendHttpVirtualInput,
   forwardToLoxone,
   applyTransform,
   applyLoxoneToMqttTransform,

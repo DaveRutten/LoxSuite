@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.25.2-alpha.1] - 2026-10-04
+
+### Fixed
+- **Smart charging could not write to Loxone at all**: *Send test value* and the Live output failed with
+  "sendHttpVirtualInput is not a function" (the function was never exported). A new test checks every destructured
+  `require` in the code against what the module really exports, so this kind of mistake fails the build.
+
 ## [0.25.1-alpha.1] - 2026-10-04
 
 ### Fixed
