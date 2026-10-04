@@ -196,7 +196,26 @@ class BridgeRunner {
     clearTimeout(this.reconnectTimer);
     clearTimeout(this.stopTimer);
     clearTimeout(this.authTimer);
-    try { this.ws?.close(); } catch { /* already closing */ }
+    try { this.ws?.close(1000, 'LoxSuite stopping'); } catch { /* already closing */ }
+  }
+
+  // Graceful stop for a container restart/shutdown: save the state (running transaction, unsent
+  // queue) and close the OCPP connection with a normal 1000 close instead of letting the socket die
+  // with the process (the backend would see an abnormal 1006 and may keep a stale connection for
+  // this ChargePoint ID around, which is what made Laadloon answer 1011 earlier). A session whose
+  // stop delay was still running is NOT stopped here: the last MID reading may not be in yet, so it
+  // stays open and is closed after the restart with Loxone's own unplug time (see onChange).
+  async shutdown(timeoutMs = 2000) {
+    const ws = this.ws;
+    const wasOpen = ws && ws.readyState === WebSocket.OPEN;
+    await this.persist();
+    this.log('shutdown', { msg: this.stopTimer ? 'session stop still pending; finished after the restart' : 'state saved', ocpp: wasOpen ? 'closing' : 'not connected' });
+    const closed = wasOpen ? new Promise((resolve) => { ws.once('close', resolve); }) : Promise.resolve();
+    this.destroy();
+    if (wasOpen) {
+      await Promise.race([closed, new Promise((resolve) => { const t = setTimeout(resolve, timeoutMs); t.unref?.(); })]);
+      if (ws.readyState !== WebSocket.CLOSED) { try { ws.terminate(); } catch { /* gone */ } }
+    }
   }
 
   // ---------------- Loxone side
@@ -218,6 +237,7 @@ class BridgeRunner {
       try {
         const sess = JSON.parse(value);
         this.lastSessionEnergy = sess.energy;
+        this.lastSessionDisconnect = Number(sess.disconnect) || 0; // epoch s of the last unplug, 0 while plugged in
         if (sess.user && sess.user !== this.sessionUser) { this.sessionUser = sess.user; this.log('loxone-user', { user: sess.user }); }
       } catch { /* not JSON */ }
     }
@@ -235,7 +255,18 @@ class BridgeRunner {
       if (['connected', 'active', 'total'].every((k) => this.values[k] !== undefined)) {
         this.ready = true;
         this.log('wallbox-state', { connected: this.values.connected, active: this.values.active, total_kWh: this.values.total });
-        if (this.state.tx && Number(this.values.connected) !== 1) this.stopTx('Other', null);
+        if (this.state.tx && Number(this.values.connected) !== 1) {
+          // The session state may simply not have been polled yet in this round: read it now.
+          if (this.values.session === undefined && this.stateUuids.session) {
+            const sv = loxoneWebSocket.getLiveValue(this.miniserver.id, this.stateUuids.session);
+            if (sv !== undefined) { this.values.session = sv; this.onChange('session', sv, undefined); }
+          }
+          // Unplugged while LoxSuite was down (a restart, or a stop still in its delay window at
+          // shutdown): close the session at the moment Loxone saw the unplug, not at restart time.
+          const at = unplugTimeDuringDowntime(this.state.tx.startedAt, this.lastSessionDisconnect);
+          this.log('note', { msg: at ? `car was unplugged at ${at} while LoxSuite was down` : 'car was unplugged while LoxSuite was down' });
+          this.stopTx(at ? 'EVDisconnected' : 'Other', this.lastSessionEnergy ?? null, at);
+        }
         else if (this.state.tx?.pendingStart) this.scheduleAuthTimeout();
         if (!this.state.tx && Number(this.values.connected) === 1) {
           this.log('note', { msg: 'car was already plugged in at start; that session is not reported' });
@@ -306,12 +337,12 @@ class BridgeRunner {
     return true;
   }
 
-  stopTx(reason, energyLoxone) {
+  stopTx(reason, energyLoxone, at = null) {
     const tx = this.state.tx;
     if (!tx) return;
     if (tx.pendingStart) this.tryStartTransaction(true); // unplugged before any authorization arrived
     const meterStop = toWh(this.values.total);
-    const ts = new Date().toISOString();
+    const ts = at || new Date().toISOString();
     this.log('SESSION STOP', { charged_kWh: (meterStop - tx.meterStart) / 1000, loxone_kWh: energyLoxone, reason });
     db.prepare('UPDATE ocpp_bridge_sessions SET stopped_at = ?, meter_stop_wh = ?, energy_loxone_kwh = ?, stop_reason = ? WHERE bridge_id = ? AND local_id = ? AND mode = ?')
       .run(ts, meterStop, energyLoxone ?? null, reason, this.row.id, tx.localId, this.mode).catch((e) => this.log('db-error', { error: e.message }));
@@ -593,6 +624,24 @@ async function testBackendConnection(row, timeoutMs = 10000) {
   });
 }
 
+// Unplug time from the Wallbox's session state (epoch seconds) when it is plausible for this
+// transaction: after its start and not in the future. ISO string, or null when unknown.
+function unplugTimeDuringDowntime(startedAtIso, disconnectEpochS, nowMs = Date.now()) {
+  const d = Number(disconnectEpochS);
+  if (!Number.isFinite(d) || d <= 0) return null;
+  const ms = d * 1000;
+  const start = Date.parse(startedAtIso);
+  if (!Number.isFinite(start) || ms < start || ms > nowMs + 60000) return null;
+  return new Date(ms).toISOString();
+}
+
+// Called on SIGTERM (server.js): every bridge saves its state and closes its OCPP connection.
+async function shutdownOcppBridges(timeoutMs = 2000) {
+  const all = [...runners.values()];
+  runners.clear();
+  await Promise.all(all.map((r) => r.shutdown(timeoutMs).catch(() => {})));
+}
+
 function getBridgeStatus(id) {
   const r = runners.get(Number(id));
   return r ? r.status() : null;
@@ -604,6 +653,6 @@ function getBridgeLog(id) {
 }
 
 module.exports = {
-  startOcppBridges, syncRunners, getBridgeStatus, getBridgeLog, testBackendConnection,
+  startOcppBridges, syncRunners, shutdownOcppBridges, getBridgeStatus, getBridgeLog, testBackendConnection, unplugTimeDuringDowntime,
   wallboxStatus, getConfigurationReply, restoreState, normalizeNfcTag, parseUserTagMap, resolveIdTag,
 };

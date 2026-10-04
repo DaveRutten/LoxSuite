@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.23.1-alpha.1] - 2026-10-04
+
+### Fixed
+- **OCPP bridge on container restart/stop** — on SIGTERM every bridge now saves its state and closes
+  its backend connection with a normal close (1000) instead of the socket dying with the process, so
+  the backend doesn't keep a stale connection for the ChargePoint ID. A session whose stop delay was
+  still running stays open over the restart and is then closed with the unplug time Loxone recorded
+  (reason EVDisconnected) instead of the restart time.
+
 ## [0.23.0-alpha.1] - 2026-10-04
 
 ### Added

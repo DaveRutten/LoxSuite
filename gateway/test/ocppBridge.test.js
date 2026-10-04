@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { wallboxStatus, getConfigurationReply, restoreState } = require('../src/ocppBridge');
+const { wallboxStatus, getConfigurationReply, restoreState, unplugTimeDuringDowntime } = require('../src/ocppBridge');
 const {
   parseTrackerEntries, quarterRange, recentQuarters, buildQuarterRows, buildXlsx, buildCsv,
 } = require('../src/ocppExport');
@@ -126,4 +126,15 @@ test('computeStats: counters from Loxone, quarters and months from sessions', ()
   assert.equal(s.months[0].incomplete, true); // May: before the session log starts
   assert.equal(statTopics(3).quarter_kwh, 'loxsuite/ocpp/3/quarter_kwh');
   assert.equal(statValues(s).power_kw, 10.7);
+});
+
+test('unplugTimeDuringDowntime uses Loxone\'s unplug time only when it fits the transaction', () => {
+  const start = '2026-10-04T06:00:00.000Z';
+  const now = Date.parse('2026-10-04T09:00:00.000Z');
+  const unplug = Date.parse('2026-10-04T07:30:00.000Z') / 1000;
+  assert.equal(unplugTimeDuringDowntime(start, unplug, now), '2026-10-04T07:30:00.000Z');
+  assert.equal(unplugTimeDuringDowntime(start, 0, now), null); // still plugged in according to Loxone
+  assert.equal(unplugTimeDuringDowntime(start, Date.parse('2026-10-04T05:00:00Z') / 1000, now), null); // an older session
+  assert.equal(unplugTimeDuringDowntime(start, Date.parse('2026-10-05T05:00:00Z') / 1000, now), null); // in the future
+  assert.equal(unplugTimeDuringDowntime(start, undefined, now), null);
 });

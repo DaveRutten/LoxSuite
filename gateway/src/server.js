@@ -57,7 +57,7 @@ const { startHeartbeat } = require('./heartbeat');
 const { geoBlockMiddleware, startGeoBlockUpdater } = require('./geoBlock');
 const { startHardwarePolling } = require('./loxoneHardware');
 const { startLiveConnections } = require('./loxoneWebSocket');
-const { startOcppBridges } = require('./ocppBridge');
+const { startOcppBridges, shutdownOcppBridges } = require('./ocppBridge');
 const { startStatsPublisher } = require('./ocppStats');
 const { startVehicles } = require('./vehicles');
 const mcpClient = require('./mcpClient');
@@ -408,7 +408,12 @@ process.on('SIGTERM', () => {
     else process.exit(0);
   };
   setTimeout(proceed, 3000);
-  mqttClient.publishOffline(proceed);
+  // OCPP bridges save their state and close their backend connection cleanly (normal 1000 close)
+  // alongside the MQTT offline publish, inside the same 3s cap.
+  let pending = 2;
+  const done = () => { pending -= 1; if (pending === 0) proceed(); };
+  shutdownOcppBridges(2000).catch(() => {}).finally(done);
+  mqttClient.publishOffline(done);
 });
 
 // A broken/unreachable DB at startup can't be "warned and limped through" the way a missing

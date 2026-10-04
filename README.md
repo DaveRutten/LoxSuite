@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.23.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.23.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -563,7 +563,9 @@ online there.
   connection, no OCPP messages) and the Wallbox's live data.
 - **Sessions**: start at plug-in, stop shortly after unplug (Stop delay, default 90 s, so the last
   MID meter update is included). Transaction messages are queued persistently and re-sent after an
-  outage or restart. Make sure Loxone's own OCPP connector isn't using the same ChargePoint ID.
+  outage or restart; on a container stop the connection is closed cleanly, and a car unplugged while
+  LoxSuite was down is stopped at the unplug time Loxone recorded. Make sure Loxone's own OCPP connector
+  isn't using the same ChargePoint ID.
 - **Quarterly export**: Excel or CSV of all sessions in a quarter with meter readings at start/end,
   for manual uploads when sessions can't go over OCPP.
 - **Statistics**: today / week / month / quarter / previous quarter / year tiles, a per-month chart and
