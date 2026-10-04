@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.24.1-alpha.1] - 2026-10-04
+
+### Fixed
+- **MySQL/MariaDB**: the migrations of 0.23/0.24 failed there ("Specified key was too long") because indexed and unique
+  text columns were TEXT; they are now VARCHAR on MySQL (unchanged on SQLite/Postgres). The migrations also skip tables
+  that a half-finished earlier run left behind, so they can be retried.
+- **MySQL**: `wallbox_settings.key` is renamed to `setting_key` (KEY is a reserved word there), and push subscriptions are
+  unique by a SHA-256 of the endpoint instead of the endpoint itself (too long to index on MySQL). Verified against
+  MariaDB, Postgres and SQLite, including upgrading an existing 0.24 SQLite database.
+
 ## [0.24.0-alpha.1] - 2026-10-04
 
 ### Added

@@ -13,33 +13,34 @@
 //
 // Also allows the notification triggers of the Wallbox features (meters, planner, reminders).
 const { setNotificationTriggerTypes, BASE_TRIGGER_TYPES } = require('../notificationTriggerCheck');
+const { stringOnMysql, createTableIfMissing } = require('../migrationHelpers');
 
 exports.up = async function up(knex) {
-  await knex.schema.createTable('energy_meters', (t) => {
+  await createTableIfMissing(knex, 'energy_meters', (t) => {
     t.increments('id');
-    t.text('role').notNullable().unique();
+    stringOnMysql(t, knex, 'role', 32).notNullable().unique();
     t.integer('miniserver_id').unsigned().references('id').inTable('miniservers').onDelete('CASCADE');
     t.text('control_uuid');
     t.integer('invert').notNullable().defaultTo(0);
     t.integer('enabled').notNullable().defaultTo(1);
     t.text('updated_at');
   });
-  await knex.schema.createTable('energy_samples', (t) => {
+  await createTableIfMissing(knex, 'energy_samples', (t) => {
     t.increments('id');
-    t.text('ts').notNullable();
-    t.text('role').notNullable();
+    stringOnMysql(t, knex, 'ts', 32).notNullable();
+    stringOnMysql(t, knex, 'role', 32).notNullable();
     t.float('power_kw');
     t.float('import_kwh');
     t.float('export_kwh');
     t.index(['role', 'ts'], 'idx_energy_samples_role_ts');
   });
-  await knex.schema.createTable('energy_hourly', (t) => {
+  await createTableIfMissing(knex, 'energy_hourly', (t) => {
     t.increments('id');
-    t.text('hour').notNullable();
-    t.text('role').notNullable();
+    stringOnMysql(t, knex, 'hour', 32).notNullable();
+    stringOnMysql(t, knex, 'role', 32).notNullable();
     t.float('import_kwh');
     t.float('export_kwh');
-    t.text('source').notNullable().defaultTo('live');
+    stringOnMysql(t, knex, 'source', 16).notNullable().defaultTo('live');
     t.unique(['role', 'hour'], { indexName: 'uq_energy_hourly_role_hour' });
   });
   await setNotificationTriggerTypes(knex, [...BASE_TRIGGER_TYPES, 'energy_meter_status', 'charging_plan', 'car_reminder']);

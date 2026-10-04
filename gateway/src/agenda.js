@@ -150,7 +150,7 @@ async function syncCalendar(cal, { nowMs = Date.now(), fetchText = fetchIcs } = 
       const car = hasCarTag(tagText, cfg.tags);
       const hint = car ? parseCarHint(o.title) || parseCarHint(o.description) : null;
       await db.upsert('calendar_events', {
-        calendar_id: cal.id, uid: o.uid, start_at: o.start, end_at: o.end, all_day: o.allDay ? 1 : 0,
+        calendar_id: cal.id, uid: o.uid.slice(0, 255), start_at: o.start, end_at: o.end, all_day: o.allDay ? 1 : 0,
         title: o.title.slice(0, 300), location: o.location.slice(0, 300) || null, car_tag: car ? 1 : 0, car_hint: hint ? JSON.stringify(hint) : null,
       }, ['calendar_id', 'uid', 'start_at']);
       seen.add(`${o.uid}|${o.start}`);
@@ -197,7 +197,7 @@ async function distanceFromHome(address, { get = geoFetch } = {}) {
   if (!q) return null;
   const site = await settings.get('site', { lat: null, lon: null });
   if (site.lat === null || site.lon === null) return { error: 'Home location not set.' };
-  const key = `${q.toLowerCase()}|${Number(site.lat).toFixed(4)},${Number(site.lon).toFixed(4)}`;
+  const key = `${q.toLowerCase().slice(0, 230)}|${Number(site.lat).toFixed(4)},${Number(site.lon).toFixed(4)}`;
   const cached = await db.prepare('SELECT * FROM geo_cache WHERE query = ?').get(key);
   if (cached && (!cached.error || Date.now() - Date.parse(cached.fetched_at) < 86400000)) return cached;
   // Nominatim's usage policy: at most one request per second.
@@ -316,7 +316,7 @@ async function enrichNeed(item, cfg, withGeo) {
 async function cachedDistance(address) {
   const site = await settings.get('site', { lat: null, lon: null });
   if (site.lat === null) return null;
-  const key = `${String(address).trim().replace(/\s+/g, ' ').toLowerCase()}|${Number(site.lat).toFixed(4)},${Number(site.lon).toFixed(4)}`;
+  const key = `${String(address).trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 230)}|${Number(site.lat).toFixed(4)},${Number(site.lon).toFixed(4)}`;
   return db.prepare('SELECT * FROM geo_cache WHERE query = ?').get(key);
 }
 

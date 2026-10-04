@@ -8,7 +8,10 @@
 // on iPhone it works from iOS 16.4 for LoxSuite added to the home screen.
 const db = require('./db');
 const settings = require('./wallboxSettings');
+const crypto = require('crypto');
 const { encrypt, decrypt } = require('./secretCrypto');
+
+const endpointHash = (e) => crypto.createHash('sha256').update(String(e)).digest('hex');
 
 async function keys() {
   const webpush = require('web-push');
@@ -26,13 +29,13 @@ async function publicKey() { return (await keys()).publicKey; }
 async function subscribe(userId, sub, userAgent) {
   if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) throw new Error('Invalid subscription.');
   await db.upsert('push_subscriptions', {
-    user_id: userId || null, endpoint: sub.endpoint, keys_json: JSON.stringify(sub.keys),
+    user_id: userId || null, endpoint: sub.endpoint, endpoint_hash: endpointHash(sub.endpoint), keys_json: JSON.stringify(sub.keys),
     user_agent: String(userAgent || '').slice(0, 200), created_at: new Date().toISOString(), last_error: null,
-  }, ['endpoint']);
+  }, ['endpoint_hash']);
 }
 
 async function unsubscribe(endpoint) {
-  await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+  await db.prepare('DELETE FROM push_subscriptions WHERE endpoint_hash = ?').run(endpointHash(endpoint));
 }
 
 function parseTarget(url) {

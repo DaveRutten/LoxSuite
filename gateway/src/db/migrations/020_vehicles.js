@@ -22,18 +22,20 @@
 //   last_reading    last normalised reading (JSON) so the page has something right after a restart
 // vehicle_readings  history of the normalised reading (on change, at most every few minutes), the
 //                   raw material for learning consumption and departure patterns later.
+const { stringOnMysql, createTableIfMissing } = require('../migrationHelpers');
+
 exports.up = async function up(knex) {
-  await knex.schema.createTable('vehicles', (t) => {
+  await createTableIfMissing(knex, 'vehicles', (t) => {
     t.increments('id');
     t.text('name').notNullable();
-    t.text('type').notNullable().defaultTo('bev');
+    stringOnMysql(t, knex, 'type', 16).notNullable().defaultTo('bev');
     t.float('battery_kwh');
     t.integer('charge_limit_pct').notNullable().defaultTo(100);
     t.integer('reserve_pct').notNullable().defaultTo(15);
     t.float('kwh_per_km');
     t.float('fuel_l_per_100km');
     t.integer('enabled').notNullable().defaultTo(1);
-    t.text('source_type').notNullable().defaultTo('none');
+    stringOnMysql(t, knex, 'source_type', 32).notNullable().defaultTo('none');
     t.text('source_config');
     t.text('secret');
     t.float('home_lat');
@@ -47,10 +49,10 @@ exports.up = async function up(knex) {
     t.check('?? IN (?, ?)', ['type', 'bev', 'phev'], 'chk_vehicles_type');
     t.check('?? IN (?, ?, ?, ?, ?)', ['source_type', 'none', 'mqtt', 'http', 'homey', 'homeassistant'], 'chk_vehicles_source_type');
   });
-  await knex.schema.createTable('vehicle_readings', (t) => {
+  await createTableIfMissing(knex, 'vehicle_readings', (t) => {
     t.increments('id');
     t.integer('vehicle_id').unsigned().notNullable().references('id').inTable('vehicles').onDelete('CASCADE');
-    t.text('ts').notNullable();
+    stringOnMysql(t, knex, 'ts', 32).notNullable(); // indexed: VARCHAR on MySQL
     t.float('soc');
     t.float('range_km');
     t.integer('plugged');

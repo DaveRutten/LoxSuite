@@ -9,7 +9,7 @@ async function get(key, defaults = {}) {
   let value = memo.get(key);
   if (value === undefined) {
     try {
-      const row = await db.prepare('SELECT value FROM wallbox_settings WHERE key = ?').get(key);
+      const row = await db.prepare('SELECT value FROM wallbox_settings WHERE setting_key = ?').get(key);
       value = row?.value ? JSON.parse(row.value) : null;
     } catch {
       value = null;
@@ -24,7 +24,7 @@ async function get(key, defaults = {}) {
 
 async function set(key, value) {
   memo.set(key, value);
-  await db.upsert('wallbox_settings', { key, value: JSON.stringify(value), updated_at: new Date().toISOString() }, ['key']);
+  await db.upsert('wallbox_settings', { setting_key: key, value: JSON.stringify(value), updated_at: new Date().toISOString() }, ['setting_key']);
   return value;
 }
 

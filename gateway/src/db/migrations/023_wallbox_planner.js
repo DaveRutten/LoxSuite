@@ -19,30 +19,32 @@
 //                    ~100, the raw material for learning departures and consumption per trip.
 // vehicles           + identification (NFC tags, Loxone users) and whether its sessions go to OCPP.
 // ocpp_bridge_sessions + vehicle_id: which car a session belonged to.
+const { stringOnMysql, createTableIfMissing, addColumnsIfMissing } = require('../migrationHelpers');
+
 exports.up = async function up(knex) {
-  await knex.schema.createTable('wallbox_settings', (t) => {
-    t.text('key').primary();
+  await createTableIfMissing(knex, 'wallbox_settings', (t) => {
+    stringOnMysql(t, knex, 'key', 64).primary();
     t.text('value');
     t.text('updated_at');
   });
-  await knex.schema.createTable('energy_prices', (t) => {
+  await createTableIfMissing(knex, 'energy_prices', (t) => {
     t.increments('id');
-    t.text('start_at').notNullable().unique();
+    stringOnMysql(t, knex, 'start_at', 32).notNullable().unique();
     t.text('end_at').notNullable();
     t.float('market_eur_kwh');
     t.float('allin_eur_kwh');
-    t.text('source').notNullable();
+    stringOnMysql(t, knex, 'source', 16).notNullable();
     t.text('fetched_at');
   });
-  await knex.schema.createTable('solar_forecast', (t) => {
+  await createTableIfMissing(knex, 'solar_forecast', (t) => {
     t.increments('id');
-    t.text('hour').notNullable().unique();
+    stringOnMysql(t, knex, 'hour', 32).notNullable().unique();
     t.float('raw_kwh');
     t.float('dayahead_raw_kwh');
     t.float('corrected_kwh');
     t.text('made_at');
   });
-  await knex.schema.createTable('calendars', (t) => {
+  await createTableIfMissing(knex, 'calendars', (t) => {
     t.increments('id');
     t.text('name').notNullable();
     t.text('url').notNullable();
@@ -53,11 +55,11 @@ exports.up = async function up(knex) {
     t.text('last_error');
     t.text('created_at').notNullable();
   });
-  await knex.schema.createTable('calendar_events', (t) => {
+  await createTableIfMissing(knex, 'calendar_events', (t) => {
     t.increments('id');
     t.integer('calendar_id').unsigned().notNullable().references('id').inTable('calendars').onDelete('CASCADE');
-    t.text('uid').notNullable();
-    t.text('start_at').notNullable();
+    stringOnMysql(t, knex, 'uid', 255).notNullable();
+    stringOnMysql(t, knex, 'start_at', 32).notNullable();
     t.text('end_at');
     t.integer('all_day').notNullable().defaultTo(0);
     t.text('title');
@@ -67,17 +69,17 @@ exports.up = async function up(knex) {
     t.unique(['calendar_id', 'uid', 'start_at'], { indexName: 'uq_calendar_events_occurrence' });
     t.index(['start_at'], 'idx_calendar_events_start');
   });
-  await knex.schema.createTable('event_overrides', (t) => {
+  await createTableIfMissing(knex, 'event_overrides', (t) => {
     t.increments('id');
     t.integer('calendar_id').unsigned().notNullable().references('id').inTable('calendars').onDelete('CASCADE');
-    t.text('uid').notNullable();
-    t.text('start_at').notNullable();
+    stringOnMysql(t, knex, 'uid', 255).notNullable();
+    stringOnMysql(t, knex, 'start_at', 32).notNullable();
     t.integer('needs_car');
     t.integer('vehicle_id');
     t.text('own_value');
     t.unique(['calendar_id', 'uid', 'start_at'], { indexName: 'uq_event_overrides_occurrence' });
   });
-  await knex.schema.createTable('trips', (t) => {
+  await createTableIfMissing(knex, 'trips', (t) => {
     t.increments('id');
     t.integer('vehicle_id').unsigned().references('id').inTable('vehicles').onDelete('CASCADE');
     t.text('title').notNullable();
@@ -88,9 +90,9 @@ exports.up = async function up(knex) {
     t.integer('weekly').notNullable().defaultTo(0);
     t.text('created_at').notNullable();
   });
-  await knex.schema.createTable('geo_cache', (t) => {
+  await createTableIfMissing(knex, 'geo_cache', (t) => {
     t.increments('id');
-    t.text('query').notNullable().unique();
+    stringOnMysql(t, knex, 'query', 255).notNullable().unique();
     t.float('lat');
     t.float('lon');
     t.float('distance_km');
@@ -98,33 +100,32 @@ exports.up = async function up(knex) {
     t.text('error');
     t.text('fetched_at');
   });
-  await knex.schema.createTable('push_subscriptions', (t) => {
+  await createTableIfMissing(knex, 'push_subscriptions', (t) => {
     t.increments('id');
     t.integer('user_id').unsigned().references('id').inTable('users').onDelete('CASCADE');
-    t.text('endpoint').notNullable().unique();
+    if (knex.client.config.client === 'mysql2') t.text('endpoint').notNullable();
+    else t.text('endpoint').notNullable().unique();
     t.text('keys_json').notNullable();
     t.text('user_agent');
     t.text('created_at').notNullable();
     t.text('last_error');
   });
-  await knex.schema.createTable('charging_sessions', (t) => {
+  await createTableIfMissing(knex, 'charging_sessions', (t) => {
     t.increments('id');
-    t.text('connect_at').notNullable().unique();
+    stringOnMysql(t, knex, 'connect_at', 32).notNullable().unique();
     t.text('disconnect_at');
     t.float('kwh');
     t.integer('vehicle_id');
     t.text('id_tag');
     t.text('loxone_user');
-    t.text('source').notNullable().defaultTo('loxone');
+    stringOnMysql(t, knex, 'source', 16).notNullable().defaultTo('loxone');
   });
-  await knex.schema.alterTable('vehicles', (t) => {
-    t.text('id_tags');
-    t.text('loxone_users');
-    t.integer('ocpp_report').notNullable().defaultTo(1);
+  await addColumnsIfMissing(knex, 'vehicles', {
+    id_tags: (t) => t.text('id_tags'),
+    loxone_users: (t) => t.text('loxone_users'),
+    ocpp_report: (t) => t.integer('ocpp_report').notNullable().defaultTo(1),
   });
-  await knex.schema.alterTable('ocpp_bridge_sessions', (t) => {
-    t.integer('vehicle_id');
-  });
+  await addColumnsIfMissing(knex, 'ocpp_bridge_sessions', { vehicle_id: (t) => t.integer('vehicle_id') });
 };
 
 exports.down = async function down(knex) {
