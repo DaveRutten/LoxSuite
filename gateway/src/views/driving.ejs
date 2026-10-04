@@ -1,0 +1,147 @@
+<%- include('partials/head', { pageTitle: 'Driving & costs', active: 'driving' }) %>
+
+<p class="hint">
+  How the car is driven and what it costs, from its own odometer and battery percentage (Wallbox &gt; Vehicles). The
+  electric consumption is learned from the battery drop per km on stretches where the battery didn't run empty; LoxSuite
+  plans with it unless you set a consumption yourself. <span id="dr-meta"></span>
+</p>
+
+<% if (cars.length > 1) { %>
+<div class="tabs" style="margin-bottom:0.8rem;">
+  <% cars.forEach(c => { %><a href="/driving?vehicle=<%= c.id %>" class="tab <%= c.id === vehicleId ? 'active' : '' %>"><%= c.name %></a><% }) %>
+</div>
+<% } %>
+
+<div id="dr-warn"></div>
+
+<div class="card">
+  <div id="dr-tiles" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr)); gap:0.8rem;"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+</div>
+
+<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr)); gap:1rem;">
+  <div class="card">
+    <h2 style="margin-top:0;">Km per month</h2>
+    <div id="dr-km"></div>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0;">Consumption per month</h2>
+    <p class="hint" style="margin:0 0 0.4rem;">kWh per 100 km on electricity &mdash; usually higher in winter (heating, cold battery).</p>
+    <div id="dr-cons"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Per month</h2>
+  <div style="overflow-x:auto;"><table id="dr-months"><tbody><tr><td class="hint">Loading&hellip;</td></tr></tbody></table></div>
+  <p class="hint" id="dr-cost-note" style="margin:0.5rem 0 0; font-size:0.8rem;"></p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Recent trips</h2>
+  <div style="overflow-x:auto;"><table id="dr-trips"><tbody><tr><td class="hint">Loading&hellip;</td></tr></tbody></table></div>
+</div>
+
+<script>
+(function () {
+  var VID = <%- JSON.stringify(vehicleId) %>;
+  function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function eur(v, d) { return v == null ? '—' : '€ ' + nf(v, d == null ? 2 : d); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function monthLabel(m) { var p = m.split('-'); return new Date(+p[0], +p[1] - 1, 1).toLocaleDateString(undefined, { month: 'short', year: '2-digit' }); }
+  function tile(label, value, sub, color) {
+    return '<div style="padding:0.7rem 0.8rem; border:1px solid var(--border); border-radius:var(--radius);"><div class="hint" style="margin:0; font-size:0.78rem;">' + label + '</div>' +
+      '<div style="font-size:1.45rem; font-weight:700;' + (color ? 'color:' + color + ';' : '') + '">' + value + '</div>' + (sub ? '<div class="hint" style="margin:0; font-size:0.75rem;">' + sub + '</div>' : '') + '</div>';
+  }
+  var CONF = { high: 'var(--success)', medium: '#d4a017', low: 'var(--danger, #c0392b)', none: 'var(--text-muted)' };
+
+  function kmChart(months, phev) {
+    if (!months.length) return '<p class="hint" style="margin:0;">No driving recorded yet.</p>';
+    var W = lsChartW(document.getElementById('dr-km'), 520), H = 170, max = Math.max.apply(null, months.map(function (m) { return m.km || 0; }).concat([10]));
+    var bw = (W - 40) / months.length, bwid = Math.min(bw - 8, 70), off = (bw - bwid) / 2;
+    var s = '<svg viewBox="0 0 ' + W + ' ' + (H + 24) + '" width="100%" style="display:block;">';
+    months.forEach(function (m, i) {
+      var x = 30 + i * bw + off, e = (m.elecKm || 0) / max * H, f = (m.fuelKm || 0) / max * H, u = (m.unknownKm || 0) / max * H;
+      var y = H + 4;
+      s += '<rect x="' + x + '" y="' + (y - e) + '" width="' + bwid + '" height="' + e + '" fill="#4caf50" rx="2"><title>' + esc(monthLabel(m.month)) + ': ' + nf(m.elecKm, 0) + ' km electric</title></rect>';
+      y -= e;
+      if (f) { s += '<rect x="' + x + '" y="' + (y - f) + '" width="' + bwid + '" height="' + f + '" fill="#e67e22" rx="2"><title>' + nf(m.fuelKm, 0) + ' km on fuel</title></rect>'; y -= f; }
+      if (u) { s += '<rect x="' + x + '" y="' + (y - u) + '" width="' + bwid + '" height="' + u + '" fill="currentColor" opacity="0.2" rx="2"><title>' + nf(m.unknownKm, 0) + ' km (no battery data)</title></rect>'; }
+      s += '<text x="' + (x + bwid / 2) + '" y="' + (H + 20) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + esc(monthLabel(m.month)) + '</text>';
+    });
+    s += '<text x="26" y="12" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + Math.round(max) + '</text></svg>';
+    s += '<div class="hint" style="margin:0.3rem 0 0;"><span style="color:#4caf50;">&#9632;</span> electric' + (phev ? ' &nbsp;<span style="color:#e67e22;">&#9632;</span> on fuel' : '') + '</div>';
+    return s;
+  }
+  function consChart(months, avg) {
+    var pts = months.filter(function (m) { return m.kwhPer100 != null; });
+    if (!pts.length) return '<p class="hint" style="margin:0;">Not enough electric driving per month yet (at least 20 km with battery data).</p>';
+    var W = lsChartW(document.getElementById('dr-cons'), 520), H = 150, max = Math.max.apply(null, pts.map(function (m) { return m.kwhPer100; }).concat([avg || 0, 10])) * 1.15;
+    var bw = (W - 40) / pts.length, bwid = Math.min(bw - 8, 70), off = (bw - bwid) / 2;
+    var s = '<svg viewBox="0 0 ' + W + ' ' + (H + 24) + '" width="100%" style="display:block;">';
+    if (avg) { var ay = H + 4 - avg / max * H; s += '<line x1="30" x2="' + W + '" y1="' + ay + '" y2="' + ay + '" stroke="#4a7bd0" stroke-dasharray="4 3" opacity="0.7"/><text x="' + (W - 2) + '" y="' + (ay - 3) + '" text-anchor="end" font-size="9" fill="#4a7bd0">avg ' + nf(avg, 1) + '</text>'; }
+    pts.forEach(function (m, i) {
+      var x = 30 + i * bw + off, h = m.kwhPer100 / max * H;
+      s += '<rect x="' + x + '" y="' + (H + 4 - h) + '" width="' + bwid + '" height="' + h + '" fill="#4a7bd0" opacity="0.8" rx="2"><title>' + esc(monthLabel(m.month)) + ': ' + nf(m.kwhPer100, 1) + ' kWh/100 km</title></rect>' +
+        '<text x="' + (x + bwid / 2) + '" y="' + (H + 1 - h) + '" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.7">' + nf(m.kwhPer100, 1) + '</text>' +
+        '<text x="' + (x + bwid / 2) + '" y="' + (H + 20) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + esc(monthLabel(m.month)) + '</text>';
+    });
+    return s + '</svg>';
+  }
+
+  fetch('/driving/data.json' + (VID ? '?vehicle=' + VID : '')).then(function (r) { return r.json(); }).then(function (d) {
+    if (d.error) { document.getElementById('dr-tiles').innerHTML = '<p class="hint" style="margin:0;">' + esc(d.error) + '</p>'; return; }
+    var v = d.vehicle, phev = v.type === 'phev';
+    var warn = [];
+    if (!v.hasOdometerField) warn.push('No <strong>odometer</strong> is mapped for ' + esc(v.name) + ' &mdash; map it under <a href="/vehicles">Vehicles</a> (Homey: often <code>meter_mileage</code> / <code>odometer</code>) to see trips and km.');
+    if (!v.hasSocField) warn.push('No <strong>battery %</strong> is mapped &mdash; without it the consumption and electric/fuel split can\'t be learned.');
+    if (!v.battery_kwh) warn.push('No <strong>battery size</strong> set for ' + esc(v.name) + ' &mdash; needed to turn battery % into kWh.');
+    document.getElementById('dr-warn').innerHTML = warn.map(function (w) { return '<p class="hint" style="border-left:3px solid #d4a017; padding-left:0.6rem;">' + w + '</p>'; }).join('');
+
+    var c = d.consumption, cur = d.months[d.months.length - 1] || null, tot = d.months.reduce(function (a, m) { a.km += m.km || 0; a.e += m.elecKm || 0; a.f += m.fuelKm || 0; return a; }, { km: 0, e: 0, f: 0 });
+    var used = v.kwh_per_km ? 'your own setting: ' + nf(v.kwh_per_km * 100, 1) + ' kWh/100 km' : (c.kwhPer100 && c.confidence !== 'none' ? 'used for planning' : 'not enough data yet — planning uses ' + nf(d.kwhPerKmUsed * 100, 1));
+    var tiles = [
+      tile('Electric consumption', c.kwhPer100 != null ? nf(c.kwhPer100, 1) + ' <span style="font-size:0.8rem; font-weight:500;">kWh/100 km</span>' : '—',
+        '<span style="color:' + CONF[c.confidence] + ';">' + c.confidence + '</span> · ' + nf(c.km, 0) + ' km · ' + used),
+      tile('Driven this month', nf(cur ? cur.km : 0, 0) + ' <span style="font-size:0.8rem; font-weight:500;">km</span>', cur ? cur.trips + ' trip(s), avg ' + nf(cur.avgTripKm, 0) + ' km' : ''),
+    ];
+    if (phev) tiles.push(tile('On electricity', tot.e + tot.f > 0 ? Math.round(tot.e / (tot.e + tot.f) * 100) + '%' : '—', nf(tot.e, 0) + ' km electric · ' + nf(tot.f, 0) + ' km fuel', '#4caf50'));
+    tiles.push(tile('Cost per km', eur(d.prices.elecPerKm, 3), 'electric · fuel ' + eur(d.prices.fuelPerKm, 3) + ' (' + eur(d.prices.fuelEurL) + '/l)'));
+    tiles.push(tile('Saved by driving electric', eur(d.savedTotal, 0), 'vs. the same km on fuel', d.savedTotal > 0 ? 'var(--success)' : null));
+    document.getElementById('dr-tiles').innerHTML = tiles.join('');
+    document.getElementById('dr-meta').textContent = phev && d.emptyLevel ? 'The hybrid switches to fuel at about ' + Math.round(d.emptyLevel) + '% (learned).' : '';
+
+    var drawCharts = function () {
+      document.getElementById('dr-km').innerHTML = kmChart(d.months.slice(-12), phev);
+      document.getElementById('dr-cons').innerHTML = consChart(d.months.slice(-12), c.kwhPer100);
+    };
+    drawCharts();
+    lsOnResize(drawCharts);
+
+    var mh = '<thead><tr><th>Month</th><th>Km</th>' + (phev ? '<th>Electric</th><th>Fuel</th>' : '') + '<th>Trips</th><th>Avg trip</th><th>kWh/100 km</th><th>Charged</th><th>Solar</th><th>€/kWh</th><th>€/km elec.</th><th>€/km fuel</th><th>Saved</th></tr></thead><tbody>';
+    if (!d.months.length) mh += '<tr><td colspan="13" class="hint">No driving recorded yet.</td></tr>';
+    d.months.slice().reverse().forEach(function (m) {
+      mh += '<tr><td><strong>' + esc(monthLabel(m.month)) + '</strong></td><td>' + nf(m.km, 0) + '</td>' +
+        (phev ? '<td>' + nf(m.elecKm, 0) + (m.elecShare != null ? ' <span class="hint">(' + m.elecShare + '%)</span>' : '') + '</td><td>' + nf(m.fuelKm, 0) + '</td>' : '') +
+        '<td>' + m.trips + '</td><td>' + nf(m.avgTripKm, 0) + ' km</td><td>' + nf(m.kwhPer100, 1) + '</td><td>' + (m.chargedKwh != null ? nf(m.chargedKwh, 0) + ' kWh' : '—') + '</td>' +
+        '<td>' + (m.solarShare != null ? m.solarShare + '%' : '—') + '</td><td>' + eur(m.eurPerKwh, 3) + (m.eurPerKwhEstimated && m.eurPerKwh != null ? '*' : '') + '</td><td>' + eur(m.elecEurKm, 3) + '</td><td>' + eur(m.fuelEurKm, 3) + '</td>' +
+        '<td style="color:' + (m.saved > 0 ? 'var(--success)' : 'inherit') + ';">' + eur(m.saved, 0) + '</td></tr>';
+    });
+    document.getElementById('dr-months').innerHTML = mh + '</tbody>';
+    document.getElementById('dr-cost-note').innerHTML = 'Charging cost per hour from the Wallbox and grid meters: grid energy at that hour\'s all-in price, solar at its feed-in value (as in Smart charging). ' +
+      '* = no meter data for that month, estimated from the average price. Fuel at today\'s price' + (v.fuel_l_per_100km ? ' and ' + nf(v.fuel_l_per_100km, 1) + ' l/100 km' : ', compared with a car using 6.5 l/100 km') + '.';
+
+    var th = '<thead><tr><th>Date</th><th>Duration</th><th>Km</th>' + (phev ? '<th>Electric</th><th>Fuel</th>' : '') + '<th>Battery</th><th>kWh</th><th>kWh/100 km</th></tr></thead><tbody>';
+    if (!d.trips.length) th += '<tr><td colspan="8" class="hint">No trips yet &mdash; they appear once the odometer changes between readings.</td></tr>';
+    d.trips.forEach(function (t) {
+      var dt = new Date(t.start);
+      th += '<tr><td>' + dt.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</td>' +
+        '<td>' + (t.minutes >= 60 ? Math.floor(t.minutes / 60) + ' h ' + (t.minutes % 60) + ' min' : t.minutes + ' min') + '</td><td><strong>' + nf(t.km, 1) + '</strong></td>' +
+        (phev ? (t.unknownKm > 0 ? '<td class="hint" title="no battery data for (part of) this trip">—</td><td class="hint">—</td>' : '<td>' + nf(t.elecKm, 0) + '</td><td>' + nf(t.fuelKm, 0) + '</td>') : '') +
+        '<td>' + (t.socFrom != null ? Math.round(t.socFrom) + '% → ' + Math.round(t.socTo) + '%' : '—') + '</td><td>' + nf(t.kwh, 1) + '</td><td>' + nf(t.kwhPer100, 1) + '</td></tr>';
+    });
+    document.getElementById('dr-trips').innerHTML = th + '</tbody>';
+  }).catch(function (e) { document.getElementById('dr-tiles').innerHTML = '<p class="error">' + esc(e.message) + '</p>'; });
+})();
+</script>
+
+<%- include('partials/foot') %>

@@ -148,7 +148,10 @@
       .finally(function () { testBtn.disabled = false; });
   });
   var nf = function (v, d) { return v == null ? '—' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  var statsData = null;
+  lsOnResize(function () { if (statsData) renderStats(statsData); });
   function renderStats(d) {
+    statsData = d;
     var el = document.getElementById('ocpp-stats');
     if (!d || d.error || !d.stats) { el.innerHTML = '<p class="hint" style="margin:0;">' + esc(d && d.error ? d.error : 'No data yet.') + '</p>'; return; }
     var st = d.stats;
@@ -168,10 +171,10 @@
     var ms = (st.months || []).slice();
     while (ms.length > 6 && ms[0].incomplete && !ms[0].kwh) ms.shift(); // hide empty months before the session log starts
     var max = Math.max.apply(null, ms.map(function (m) { return m.incomplete && !m.kwh ? 0 : m.kwh; }).concat([1]));
-    var w = 46, gap = 14, H = 120, width = ms.length * (w + gap) + 20;
-    var svg = '<svg viewBox="0 0 ' + width + ' 165" width="100%" style="max-width:' + Math.max(width, 360) + 'px;">';
+    var width = lsChartW(el, 600), H = 120, slot = (width - 20) / Math.max(1, ms.length), w = Math.max(14, Math.min(70, slot - 14));
+    var svg = '<svg viewBox="0 0 ' + width + ' 165" width="100%" style="display:block;">';
     ms.forEach(function (m, i) {
-      var x = 10 + i * (w + gap);
+      var x = 10 + i * slot + (slot - w) / 2;
       if (m.incomplete && !m.kwh) {
         svg += '<text x="' + (x + w / 2) + '" y="134" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.45">no data</text>';
       } else {

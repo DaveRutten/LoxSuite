@@ -130,8 +130,11 @@
   // Day chart: solar and house as lines, Wallbox as bars, grid export below zero.
   var dayOffset = 0;
   function dayStr(off) { var d = new Date(Date.now() + off * 86400000); return d.toISOString().slice(0, 10); }
+  var chartData = null;
+  lsOnResize(function () { if (chartData) renderChart(chartData); });
   function renderChart(s) {
-    var W = 860, H = 170, left = 34, n = s.hours.length || 24, bw = (W - left - 10) / n;
+    chartData = s;
+    var W = lsChartW(document.getElementById('en-chart'), 860), H = 170, left = 34, n = s.hours.length || 24, bw = (W - left - 10) / n;
     var all = [];
     Object.keys(s.series).forEach(function (k) { s.series[k].forEach(function (v) { if (v != null) all.push(v); }); });
     var ex = (s.exported.grid || []).map(function (v) { return v || 0; });
@@ -139,7 +142,7 @@
     var maxEx = Math.max.apply(null, ex.concat([0]));
     var zero = 14 + H * (max / (max + maxEx || 1));
     var scale = (zero - 14) / max;
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 40) + '" width="100%" style="max-width:' + W + 'px;">';
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 40) + '" width="100%" style="display:block;">';
     for (var g = 0; g <= max; g += max > 6 ? 2 : max > 3 ? 1 : 0.5) {
       var gy = zero - g * scale;
       svg += '<line x1="' + left + '" y1="' + gy + '" x2="' + (W - 5) + '" y2="' + gy + '" stroke="currentColor" opacity="0.08"/><text x="' + (left - 4) + '" y="' + (gy + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + g + '</text>';

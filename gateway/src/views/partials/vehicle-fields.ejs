@@ -19,7 +19,7 @@
   <div><label>Usable battery (kWh)</label><input type="text" name="battery_kwh" value="<%= val(v.battery_kwh) %>" placeholder="26"></div>
   <div><label>Charge limit in the car (%)</label><input type="text" name="charge_limit_pct" value="<%= val(v.charge_limit_pct) %>" placeholder="100"></div>
   <div><label>Reserve (%)</label><input type="text" name="reserve_pct" value="<%= val(v.reserve_pct) %>" placeholder="0"></div>
-  <div><label>Consumption (kWh/km, optional)</label><input type="text" name="kwh_per_km" value="<%= val(v.kwh_per_km) %>" placeholder="learned later"></div>
+  <div><label>Consumption (kWh/km, optional)</label><input type="text" name="kwh_per_km" value="<%= val(v.kwh_per_km) %>" placeholder="<%= v.kwh_per_km_learned ? 'learned: ' + v.kwh_per_km_learned : 'learned from the odometer' %>"><% if (v.kwh_per_km_learned) { %><span class="hint" style="display:block;font-size:0.78rem;">Learned <%= Math.round(v.kwh_per_km_learned * 1000) / 10 %> kWh/100 km over <%= Math.round(v.kwh_per_km_learned_km || 0) %> km &mdash; leave empty to use it.</span><% } else { %><span class="hint" style="display:block;font-size:0.78rem;">Leave empty: learned automatically when the odometer and battery % are mapped.</span><% } %></div>
   <div id="veh-fuel-wrap" <%= v.type === 'bev' ? 'hidden' : '' %>><label>Fuel use (l/100 km)</label><input type="text" name="fuel_l_per_100km" value="<%= val(v.fuel_l_per_100km) %>" placeholder="6.5"></div>
 </div>
 <p class="hint" style="margin-top:0.5rem;">

@@ -21,7 +21,9 @@ const num = (v, def = null) => {
 
 router.get('/', asyncHandler(async (req, res) => {
   const pcfg = await prices.getConfig();
+  const miniservers = await require('../db').prepare('SELECT id, name FROM miniservers ORDER BY id').all().catch(() => []);
   res.render('planner', {
+    miniservers,
     cfg: await planner.getConfig(), priceCfg: { ...pcfg, entsoe_token: undefined, hasEntsoeToken: !!pcfg.entsoe_token },
     solarCfg: await solar.getConfig(), site: await solar.getSite(), remCfg: await reminders.getConfig(),
     priceStatus: await settings.get('prices_status', null), solarStatus: await settings.get('solar_status', null),
@@ -78,9 +80,9 @@ router.post('/recalc.json', requirePermission('miniservers', 'edit'), asyncHandl
 router.post('/test-output.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
   const cfg = await planner.getConfig();
   if (!cfg.vi_setpoint) return res.json({ ok: false, message: 'Fill in the virtual input name first.' });
-  const db = require('../db');
   const { sendHttpVirtualInput } = require('../loxone');
-  const ms = await db.prepare('SELECT * FROM miniservers ORDER BY id LIMIT 1').get();
+  const ms = await planner.outputMiniserver(cfg);
+  if (!ms) return res.json({ ok: false, message: 'No Miniserver configured.' });
   const kw = num(req.body?.kw, 0);
   try {
     await sendHttpVirtualInput(ms, cfg.vi_setpoint, String(kw));
@@ -98,7 +100,7 @@ router.post('/settings', requirePermission('miniservers', 'edit'), asyncHandler(
   if (section === 'charging') {
     await planner.saveConfig({
       min_kw: num(b.min_kw, 4.16), max_kw: num(b.max_kw, 11), grid_limit_kw: num(b.grid_limit_kw, 17.3),
-      output: b.output === 'live' ? 'live' : 'advise', vi_setpoint: String(b.vi_setpoint || '').trim(), vi_enable: String(b.vi_enable || '').trim(),
+      output: b.output === 'live' ? 'live' : 'advise', vi_setpoint: String(b.vi_setpoint || '').trim(), vi_enable: String(b.vi_enable || '').trim(), vi_miniserver_id: num(b.vi_miniserver_id) || null,
       pv_start_kw: num(b.pv_start_kw), pv_start_delay_s: num(b.pv_start_delay_s, 120), pv_stop_delay_s: num(b.pv_stop_delay_s, 300),
       pv_allowed_import_kw: num(b.pv_allowed_import_kw, 0.5), pv_opportunistic: !!b.pv_opportunistic,
       solar_trust: ['low', 'expected', 'bonus'].includes(b.solar_trust) ? b.solar_trust : 'low',

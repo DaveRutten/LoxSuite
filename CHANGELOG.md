@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.25.0-alpha.1] - 2026-10-04
+
+### Added
+- **Driving & costs** (Wallbox → Driving & costs), from the car's own odometer and battery %:
+  - trips (date, duration, km, battery from → to, kWh, kWh/100 km), recognised from the odometer moving between readings;
+  - **learned electric consumption** (kWh/100 km) from the battery drop per km on stretches where the battery didn't run
+    empty and wasn't charged; once there is enough data it is used by the planner, agenda and reminders whenever no
+    consumption is set by hand (the vehicle form shows the learned value);
+  - for a plug-in hybrid **km on electricity vs. km on fuel**, with the level at which it switches to fuel learned from
+    the lowest battery % it reaches;
+  - **costs**: € per kWh charged per month from the Wallbox and grid meters (grid part at that hour's all-in price,
+    solar at its feed-in value, as in Smart charging), € per km electric vs. on fuel, and what driving electric saved;
+  - km and consumption per month (seasonal differences show up), solar share of the charged energy.
+  Odometer changes of 1 km or more are now kept in the vehicle history so trips can be found.
+- **Smart charging → Output**: choice of the Miniserver that holds the virtual inputs (gateway/client projects), and the
+  wiring explained per input of the Wallbox block: power → **Lm1**, optional "charging allowed" → **Ec**, parameter
+  **Muv** = 1.
+
+### Changed
+- **Charts use the full width** of their card on every page (Smart charging, Meters, Learned, Driving, OCPP statistics)
+  and are redrawn when the window changes size, instead of a fixed width.
+
 ## [0.24.4-alpha.1] - 2026-10-04
 
 ### Fixed

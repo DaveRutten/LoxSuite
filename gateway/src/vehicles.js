@@ -166,7 +166,7 @@ function normalizeReading(raw, vehicle = {}) {
   r.energy_kwh = r.soc !== null && cap > 0 ? Math.round(((r.soc / 100) * cap) * 10) / 10 : null;
   // Without an electric range from the car (a hybrid often only reports the combined range):
   // estimate it from the energy in the battery and the consumption.
-  const kpk = Number(vehicle.kwh_per_km);
+  const kpk = Number(vehicle.kwh_per_km) > 0 ? Number(vehicle.kwh_per_km) : Number(vehicle.kwh_per_km_learned);
   r.range_estimated = false;
   if (r.range_km === null && r.energy_kwh !== null && kpk > 0) { r.range_km = Math.round(r.energy_kwh / kpk); r.range_estimated = true; }
   return r;
@@ -177,6 +177,8 @@ function readingChanged(prev, next, prevAtMs, nowMs, minIntervalMs = 15 * 60 * 1
   if (!prev) return true;
   if (nowMs - prevAtMs >= minIntervalMs) return true;
   if (prev.plugged !== next.plugged || prev.charging !== next.charging || prev.home !== next.home) return true;
+  if (next.odometer_km !== null && next.odometer_km !== undefined && prev.odometer_km !== next.odometer_km
+    && (prev.odometer_km === null || prev.odometer_km === undefined || Math.abs(next.odometer_km - prev.odometer_km) >= 1)) return true;
   if (prev.soc !== next.soc && (prev.soc === null || next.soc === null || Math.abs(prev.soc - next.soc) >= 1)) return true;
   return false;
 }

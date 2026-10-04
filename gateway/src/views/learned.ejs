@@ -99,13 +99,13 @@
     var html = '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700; color:#d4a017;">' + nf(s.tomorrow.total_kwh, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh</span></div>' +
       '<div class="hint" style="margin:0;">range ' + nf(s.tomorrow.low_kwh, 0) + ' – ' + nf(s.tomorrow.high_kwh, 0) + ' kWh' + (s.status && s.status.ok ? ' · updated ' + new Date(s.status.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : s.status && s.status.error ? ' · <span style="color:var(--danger);">' + esc(s.status.error) + '</span>' : '') + '</div></div>';
     if (hours.length) {
-      var W = 520, H = 120, max = Math.max(1, Math.max.apply(null, hours.map(function (h) { return h.corrected_kwh || 0; })) * 1.15);
+      var W = lsChartW(el, 520), H = 120, max = Math.max(1, Math.max.apply(null, hours.map(function (h) { return h.corrected_kwh || 0; })) * 1.15);
       var band = s.tomorrow.band;
       var X = function (i) { return 30 + i / Math.max(1, hours.length - 1) * (W - 40); };
       var Y = function (v) { return 8 + H - v / max * H; };
       var up = hours.map(function (h, i) { return X(i) + ',' + Y((h.corrected_kwh || 0) * band.high); });
       var lo = hours.map(function (h, i) { return X(i) + ',' + Y((h.corrected_kwh || 0) * band.low); }).reverse();
-      var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 28) + '" width="100%" style="max-width:' + W + 'px;"><polygon points="' + up.concat(lo).join(' ') + '" fill="#d4a017" opacity="0.15"/>' +
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 28) + '" width="100%" style="display:block;"><polygon points="' + up.concat(lo).join(' ') + '" fill="#d4a017" opacity="0.15"/>' +
         '<polyline points="' + hours.map(function (h, i) { return X(i) + ',' + Y(h.corrected_kwh || 0); }).join(' ') + '" fill="none" stroke="#d4a017" stroke-width="2.4"/>';
       hours.forEach(function (h, i) { if (i % 3 === 0) svg += '<text x="' + X(i) + '" y="' + (H + 24) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + new Date(h.hour).toLocaleTimeString([], { hour: '2-digit' }) + '</text>'; });
       html += svg + '</svg>';
@@ -114,9 +114,9 @@
     html += '<p class="hint" style="margin:0.2rem 0 0;">Weather forecast (irradiance on your panels, Open-Meteo) &times; your ' + nf(s.config.kwp, 1) + ' kWp, corrected per hour with what the PV meter really produced' + (f ? ' (overall factor ' + nf(f.overall, 2) + ', ' + f.samples + ' hours compared)' : '') + '.</p>';
     var hist = s.history;
     if (hist.length) {
-      var W2 = 520, H2 = 80, mx = Math.max(1, Math.max.apply(null, hist.map(function (x) { return Math.max(x.actual, x.forecast); })));
+      var W2 = W, H2 = 80, mx = Math.max(1, Math.max.apply(null, hist.map(function (x) { return Math.max(x.actual, x.forecast); })));
       var bw = (W2 - 10) / hist.length;
-      var svg2 = '<svg viewBox="0 0 ' + W2 + ' ' + (H2 + 18) + '" width="100%" style="max-width:' + W2 + 'px;">';
+      var svg2 = '<svg viewBox="0 0 ' + W2 + ' ' + (H2 + 18) + '" width="100%" style="display:block;">';
       hist.forEach(function (x, i) {
         var hgt = x.actual / mx * H2;
         svg2 += '<rect x="' + (5 + i * bw + 1) + '" y="' + (4 + H2 - hgt) + '" width="' + (bw - 2) + '" height="' + hgt + '" fill="#d4a017" opacity="0.75" rx="2"><title>' + new Date(x.day).toLocaleDateString() + ': ' + nf(x.actual, 1) + ' kWh (forecast ' + nf(x.forecast, 1) + ')</title></rect>' +
@@ -135,12 +135,12 @@
     var h = d.house;
     var el = document.getElementById('ln-house');
     if (!h.days && !h.workday.some(function (x) { return x != null; })) { el.innerHTML = '<p class="hint" style="margin:0;">No hourly data yet. Choose the meters under <a href="/energy">Meters</a> and import the history from Loxone.</p>'; return; }
-    var W = 520, H = 120, all = h.workday.concat(h.weekend).filter(function (x) { return x != null; });
+    var W = lsChartW(el, 520), H = 120, all = h.workday.concat(h.weekend).filter(function (x) { return x != null; });
     var max = Math.max(0.5, Math.max.apply(null, all) * 1.1);
     var X = function (i) { return 30 + i / 23 * (W - 40); };
     var Y = function (v) { return 8 + H - v / max * H; };
     var line = function (arr, color, dash) { var pts = []; arr.forEach(function (v, i) { if (v != null) pts.push(X(i) + ',' + Y(v)); }); return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="2.2"' + (dash ? ' stroke-dasharray="5 3"' : '') + '/>'; };
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 26) + '" width="100%" style="max-width:' + W + 'px;">';
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 26) + '" width="100%" style="display:block;">';
     [max / 2, max].forEach(function (v) { svg += '<line x1="30" x2="' + (W - 10) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="currentColor" opacity="0.08"/><text x="26" y="' + (Y(v) + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + v.toFixed(1) + '</text>'; });
     svg += line(h.workday, '#4a7bd0') + line(h.weekend, '#9b59b6', true);
     [0, 6, 12, 18, 23].forEach(function (i) { svg += '<text x="' + X(i) + '" y="' + (H + 22) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + String(i).padStart(2, '0') + '</text>'; });
@@ -153,10 +153,12 @@
     el.innerHTML = html;
   }
 
+  var lastData = null;
+  lsOnResize(function () { if (lastData) { renderSolar(lastData); renderHouse(lastData); } });
   function load() {
     fetch('/learned/data.json').then(function (r) { return r.json(); }).then(function (d) {
       document.getElementById('ln-meta').textContent = d.sessions ? 'Based on ' + d.sessions + ' charging sessions since ' + new Date(d.firstSession).toLocaleDateString() + '.' : 'No charging sessions yet.';
-      renderDep(d); renderTrips(d); renderSolar(d); renderHouse(d);
+      renderDep(d); renderTrips(d); renderSolar(d); renderHouse(d); lastData = d;
     }).catch(function () {});
   }
   load();

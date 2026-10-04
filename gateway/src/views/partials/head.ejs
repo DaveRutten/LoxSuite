@@ -20,6 +20,17 @@
       var saved = localStorage.getItem('theme');
       if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
     })();
+    // Charts are drawn at the width of their container (1 SVG unit = 1 px, so text stays its size)
+    // and redrawn when the window width changes. lsChartW(el, fallback) -> width to draw at;
+    // lsOnResize(fn) -> fn runs after a (debounced) width change.
+    window.lsChartW = function (el, fallback) { var w = el && el.clientWidth; return Math.max(260, Math.round(w || fallback || 600)); };
+    window.lsOnResize = function (fn) {
+      var last = window.innerWidth, t = null;
+      window.addEventListener('resize', function () {
+        clearTimeout(t);
+        t = setTimeout(function () { if (Math.abs(window.innerWidth - last) >= 16) { last = window.innerWidth; fn(); } }, 180);
+      });
+    };
   </script>
 </head>
 <body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>" data-page-size="<%= tablePageSize %>">
@@ -125,7 +136,7 @@
       <% } %>
 
       <% if (canView('miniservers')) { %>
-        <% const wallboxExpanded = ['planner', 'agenda', 'vehicles', 'energy', 'learned', 'ocpp'].includes(active); %>
+        <% const wallboxExpanded = ['planner', 'agenda', 'vehicles', 'driving', 'energy', 'learned', 'ocpp'].includes(active); %>
         <button type="button" class="nav-section-label" data-nav-section="wallbox" aria-expanded="<%= isCollapsed('wallbox', wallboxExpanded) ? 'false' : 'true' %>">
           <span>Wallbox</span><%- icon('chevron') %>
         </button>
@@ -133,6 +144,7 @@
           <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>">Smart charging</a>
           <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>">Agenda</a>
           <a href="/vehicles" class="<%= active === 'vehicles' ? 'active' : '' %>">Vehicles</a>
+          <a href="/driving" class="<%= active === 'driving' ? 'active' : '' %>">Driving &amp; costs</a>
           <a href="/energy" class="<%= active === 'energy' ? 'active' : '' %>">Meters</a>
           <a href="/learned" class="<%= active === 'learned' ? 'active' : '' %>">Learned</a>
           <a href="/ocpp" class="<%= active === 'ocpp' ? 'active' : '' %>">OCPP (charging costs)</a>

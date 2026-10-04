@@ -57,13 +57,27 @@
       <div class="form-grid" style="margin-top:0.8rem;">
         <div><label>Output</label><select name="output"><option value="advise" <%= cfg.output !== 'live' ? 'selected' : '' %>>Advise (don't control the Wallbox)</option><option value="live" <%= cfg.output === 'live' ? 'selected' : '' %>>Live (write to Loxone)</option></select></div>
         <div><label>Virtual input for the power (kW, 0 = stop)</label><input type="text" name="vi_setpoint" value="<%= cfg.vi_setpoint %>" placeholder="LoxSuite laadvermogen"></div>
+        <% if (miniservers.length > 1) { %><div><label>Miniserver with the virtual inputs</label><select name="vi_miniserver_id"><% miniservers.forEach(m => { %><option value="<%= m.id %>" <%= Number(cfg.vi_miniserver_id || miniservers[0].id) === m.id ? 'selected' : '' %>><%= m.name %></option><% }) %></select></div><% } %>
         <div><label>Virtual input "charging allowed" (optional, 1/0)</label><input type="text" name="vi_enable" value="<%= cfg.vi_enable %>" placeholder="LoxSuite laden"></div>
       </div>
       <p class="hint" style="margin:0.5rem 0 0;">
-        In Loxone Config, create a virtual input (analog) with the name above and connect it to the Wallbox block where the
-        charging power is set by logic &mdash; in your project mode 1 "Max. laadvermogen" is the logic-controlled mode. Optionally a
-        second (digital) virtual input to the Wallbox's enable input. LoxSuite writes the power on every change and at least every
-        5 minutes. Test the wiring with no car connected.
+        <strong>Wiring in Loxone Config</strong> (Wallbox block):
+      </p>
+      <ol class="hint" style="margin:0.3rem 0 0; padding-left:1.2rem; line-height:1.55;">
+        <li>Create the virtual inputs on the Miniserver LoxSuite sends to<% if (miniservers.length > 1) { %> (chosen above)<% } %> &mdash; in a
+          gateway/client project that is usually the gateway; the Wallbox block may sit on a client, Loxone Config links across.</li>
+        <li>Virtual input (analog, kW) with the power name above &rarr; input <strong>Lm1</strong> (<em>Limit charging mode 1</em>).
+          Mode 1 then becomes the mode "set by logic"; LoxSuite sends 0 to stop and otherwise a value between the block's min and max.</li>
+        <li>Optional: virtual input (digital) with the "charging allowed" name &rarr; input <strong>Ec</strong> (<em>Enable charging</em>).
+          LoxSuite keeps it at 1 while it wants to charge and 0 to stop (a falling edge stops the session's charging).
+          Note: once Ec is wired, charging needs LoxSuite (or other logic) to set it &mdash; leave it unwired until Output is <em>Live</em> and tested.</li>
+        <li>Parameter <strong>Muv</strong> (<em>Mode after unplugging vehicle</em>) = <strong>1</strong>, so every new session starts in
+          the LoxSuite-controlled mode. With 0 the Wallbox keeps the last mode, e.g. "Max power", and charges straight away.</li>
+        <li>Save to the Miniserver, keep Output on <em>Advise</em>, and test with <em>Send test value</em> while no car is connected:
+          the value of mode 1 in the Loxone app should follow it.</li>
+      </ol>
+      <p class="hint" style="margin:0.3rem 0 0;">LoxSuite writes the power on every change and at least every 5 minutes; it never
+        controls the Wallbox directly, only through these virtual inputs.
       </p>
       <div class="btn-row" style="margin-top:0.5rem; align-items:flex-end;">
         <div><label>Test value (kW)</label><input type="text" id="pl-test-kw" value="0" style="width:6rem;"></div>
@@ -244,18 +258,21 @@
     renderChart(p);
   }
 
+  var chartPlan = null;
+  lsOnResize(function () { if (chartPlan) renderChart(chartPlan); });
   function renderChart(p) {
+    chartPlan = p;
     var el = document.getElementById('pl-chart');
     if (!p || !p.slotsAll || !p.slotsAll.length) { el.innerHTML = '<p class="hint" style="margin:0;">No prices yet.</p>'; return; }
     var slots = p.slotsAll.slice(0, 160);
-    var W = 900, H = 160, left = 40, n = slots.length, bw = (W - left - 8) / n;
+    var W = lsChartW(el, 900), H = 160, left = 40, n = slots.length, bw = (W - left - 8) / n;
     var maxP = Math.max(0.1, Math.max.apply(null, slots.map(function (s) { return s.price || 0; })));
     var maxPv = Math.max(1, Math.max.apply(null, slots.map(function (s) { return s.pvKw || 0; })));
     var planned = {};
     p.slots.forEach(function (x) { planned[x.start] = true; });
     var t0 = Date.parse(slots[0].start), t1 = Date.parse(slots[n - 1].end);
     var X = function (ms) { return left + (ms - t0) / (t1 - t0) * (W - left - 8); };
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 34) + '" width="100%" style="max-width:' + W + 'px;">';
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 34) + '" width="100%" style="display:block;">';
     [0.25, 0.5, 0.75, 1].forEach(function (f) { var v = maxP * f; var y = 10 + H - f * H; svg += '<line x1="' + left + '" y1="' + y + '" x2="' + (W - 5) + '" y2="' + y + '" stroke="currentColor" opacity="0.08"/><text x="' + (left - 4) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + v.toFixed(2) + '</text>'; });
     slots.forEach(function (s, i) {
       var x = X(Date.parse(s.start));

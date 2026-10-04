@@ -21,6 +21,7 @@ const DEFAULTS = {
   output: 'advise',               // 'advise' (show only) | 'live' (write to Loxone)
   vi_setpoint: '',                // Loxone virtual input receiving the charging power in kW (0 = stop)
   vi_enable: '',                  // optional virtual input receiving 1/0 (charging allowed)
+  vi_miniserver_id: null,         // Miniserver holding the virtual inputs (null = the first one)
   min_kw: 4.16,                   // 6 A x 3 phases
   max_kw: 11,
   grid_limit_kw: 17.3,            // 3 x 25 A
@@ -376,7 +377,7 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   let fuel = null;
   if (vehicle?.type === 'phev') {
     const fuelPrice = await require('./fuelPrice').currentFuelPrice();
-    fuel = fuelBreakEven({ fuelEurL: fuelPrice?.eur_l ?? cfg.fuel_eur_l, lPer100km: vehicle.fuel_l_per_100km || 6.5, kwhPerKm: vehicle.kwh_per_km || cfg.default_kwh_per_km });
+    fuel = fuelBreakEven({ fuelEurL: fuelPrice?.eur_l ?? cfg.fuel_eur_l, lPer100km: vehicle.fuel_l_per_100km || 6.5, kwhPerKm: require('./driving').effectiveKwhPerKm(vehicle, cfg.default_kwh_per_km) });
     if (fuel !== null) priceCap = priceCap === null ? fuel : Math.min(priceCap, fuel);
   }
   const plan = makePlan({
@@ -398,9 +399,8 @@ async function writeOutput(cfg, kw, nowMs) {
   if (cfg.output !== 'live' || !cfg.vi_setpoint) return { written: false };
   const same = rt.lastWrite.kw === kw;
   if (same && nowMs - rt.lastWrite.at < 5 * 60 * 1000) return { written: false };
-  const db = require('./db');
   const { sendHttpVirtualInput } = require('./loxone');
-  const ms = await db.prepare('SELECT * FROM miniservers ORDER BY id LIMIT 1').get();
+  const ms = await outputMiniserver(cfg);
   if (!ms) return { written: false, error: 'No Miniserver.' };
   await sendHttpVirtualInput(ms, cfg.vi_setpoint, String(kw));
   if (cfg.vi_enable) await sendHttpVirtualInput(ms, cfg.vi_enable, kw > 0 ? '1' : '0');
@@ -410,6 +410,17 @@ async function writeOutput(cfg, kw, nowMs) {
     logSystemEvent(`Planner: charging power set to ${kw} kW`).catch(() => {});
   }
   return { written: true };
+}
+
+// The Miniserver that holds the virtual inputs (in a gateway/client project: the one LoxSuite talks
+// to; the Wallbox block itself may sit on a client). Default: the first Miniserver.
+async function outputMiniserver(cfg) {
+  const db = require('./db');
+  if (cfg.vi_miniserver_id) {
+    const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(Number(cfg.vi_miniserver_id));
+    if (ms) return ms;
+  }
+  return db.prepare('SELECT * FROM miniservers ORDER BY id LIMIT 1').get();
 }
 
 async function tick(nowMs = Date.now()) {
@@ -479,5 +490,5 @@ function startPlanner() {
 
 module.exports = {
   MODES, DEFAULTS, makePlan, fuelBreakEven, activeSlot, controlStep,
-  getConfig, saveConfig, recalc, tick, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, buildSlots, computeTarget, wallboxLive,
+  getConfig, saveConfig, recalc, tick, outputMiniserver, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, buildSlots, computeTarget, wallboxLive,
 };

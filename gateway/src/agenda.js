@@ -291,7 +291,7 @@ function tripOccurrences(t, fromMs, toMs) {
 async function enrichNeed(item, cfg, withGeo) {
   const vehicle = await vehicleFor(item.vehicle_id);
   const usable = vehicle?.battery_kwh ? vehicle.battery_kwh * ((vehicle.charge_limit_pct || 100) / 100) : null;
-  const kpk = vehicle?.kwh_per_km || cfg.default_kwh_per_km;
+  const kpk = require('./driving').effectiveKwhPerKm(vehicle, cfg.default_kwh_per_km);
   let geo = null;
   const own = parseOwnValue(item.own);
   if (!own && !item.hint?.km && !item.hint?.kwh && !item.hint?.full && item.location && cfg.geo) {
