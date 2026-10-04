@@ -136,12 +136,13 @@
       <% } %>
 
       <% if (canView('miniservers')) { %>
-        <% const wallboxExpanded = ['planner', 'agenda', 'vehicles', 'driving', 'energy', 'learned', 'ocpp'].includes(active); %>
+        <% const wallboxExpanded = ['planner', 'chargelog', 'agenda', 'vehicles', 'driving', 'energy', 'learned', 'ocpp'].includes(active); %>
         <button type="button" class="nav-section-label" data-nav-section="wallbox" aria-expanded="<%= isCollapsed('wallbox', wallboxExpanded) ? 'false' : 'true' %>">
           <span>Wallbox</span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('wallbox', wallboxExpanded) ? 'hidden' : '' %>>
           <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>">Smart charging</a>
+          <a href="/planner/log" class="<%= active === 'chargelog' ? 'active' : '' %>">Charge log</a>
           <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>">Agenda</a>
           <a href="/vehicles" class="<%= active === 'vehicles' ? 'active' : '' %>">Vehicles</a>
           <a href="/driving" class="<%= active === 'driving' ? 'active' : '' %>">Driving &amp; costs</a>

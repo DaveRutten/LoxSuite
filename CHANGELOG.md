@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.26.2-alpha.1] - 2026-10-04
+
+### Changed
+- **Charge log in the menu**: Wallbox → Charge log, right under Smart charging (it was only reachable from the Output
+  settings).
+
 ## [0.26.1-alpha.1] - 2026-10-04
 
 ### Fixed
