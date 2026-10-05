@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
-const { TRIGGER_TYPES, sendTestMessage } = require('../notifications');
+const { TRIGGER_TYPES, triggerTypesFor, sendTestMessage } = require('../notifications');
 const { buildRuleConfig } = require('./notifications');
 const asyncHandler = require('../middleware/asyncHandler');
 
@@ -57,7 +57,10 @@ async function renderPage(res, userId, extra = {}) {
     tab: 'account',
     notifyRules: await loadNotifyRules(userId),
     myRules: await loadMyRules(userId),
-    triggerTypes: TRIGGER_TYPES,
+    triggerTypes: triggerTypesFor(),
+    languages: require('../i18n').enabledLanguages(),
+    defaultLanguage: require('../i18n').defaultLanguage(),
+    myLanguage: res.locals.currentUser?.language || '',
     ...(await loadRuleFormOptions(res)),
     error: null,
     saved: false,
@@ -67,7 +70,7 @@ async function renderPage(res, userId, extra = {}) {
 }
 
 router.get('/', asyncHandler(async (req, res) => {
-  await renderPage(res, req.user.id, { tab: req.query.tab === 'notifications' ? 'notifications' : 'account' });
+  await renderPage(res, req.user.id, { tab: req.query.tab === 'notifications' ? 'notifications' : 'account', saved: req.query.saved === 'language' });
 }));
 
 router.post('/details', asyncHandler(async (req, res) => {
@@ -80,6 +83,15 @@ router.post('/details', asyncHandler(async (req, res) => {
   await db.prepare('UPDATE users SET display_name = ?, email = ? WHERE id = ?').run(displayName || null, email || null, req.user.id);
 
   await renderPage(res, req.user.id, { saved: true });
+}));
+
+// Language (for SSO users too — it isn't something Pocket ID manages).
+router.post('/language', asyncHandler(async (req, res) => {
+  const i18n = require('../i18n');
+  const code = String(req.body.language || '');
+  const value = code && i18n.enabledLanguages().some((l) => l.code === code) ? code : null;
+  await db.prepare('UPDATE users SET language = ? WHERE id = ?').run(value, req.user.id);
+  res.redirect('/profile?saved=language');
 }));
 
 router.post('/password', asyncHandler(async (req, res) => {

@@ -1,14 +1,15 @@
 <%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
 
 <div class="tabs">
-  <a href="/admin/general">General</a>
-  <a href="/admin/users">Users</a>
-  <a href="/admin/roles">Access Roles</a>
-  <a href="/admin/backup">Backups</a>
-  <a class="active" href="/admin/notifications">Notifications</a>
-  <a href="/admin/security">Security</a>
-  <a href="/admin/modules">Modules</a>
-  <% if (typeof moduleOn !== 'function' || moduleOn('ai')) { %><a href="/admin/ai">AI Assistant</a><% } %>
+  <a href="/admin/general"><%= t('General') %></a>
+  <a href="/admin/users"><%= t('Users') %></a>
+  <a href="/admin/roles"><%= t('Access Roles') %></a>
+  <a href="/admin/backup"><%= t('Backups') %></a>
+  <a class="active" href="/admin/notifications"><%= t('Notifications') %></a>
+  <a href="/admin/security"><%= t('Security') %></a>
+  <a href="/admin/modules"><%= t('Modules') %></a>
+  <a href="/admin/languages"><%= t('Languages') %></a>
+  <% if (typeof moduleOn !== 'function' || moduleOn('ai')) { %><a href="/admin/ai"><%= t('AI Assistant') %></a><% } %>
 </div>
 
 <% if (error) { %>
@@ -132,7 +133,7 @@
           <div>
             <label>Trigger</label>
             <select name="trigger_type" class="rule-trigger-select">
-              <% triggerTypes.forEach(t => { %><option value="<%= t.key %>" <%= t.key === presetTrigger ? 'selected' : '' %>><%= t.label %></option><% }) %>
+              <% triggerTypes.filter(t => !t.off).forEach(t => { %><option value="<%= t.key %>" <%= t.key === presetTrigger ? 'selected' : '' %>><%= t.label %></option><% }) %>
             </select>
           </div>
         </div>
@@ -324,7 +325,7 @@
                   <div>
                     <label>Trigger</label>
                     <select name="trigger_type" class="rule-trigger-select">
-                      <% triggerTypes.forEach(t => { %><option value="<%= t.key %>" <%= t.key === r.trigger_type ? 'selected' : '' %>><%= t.label %></option><% }) %>
+                      <% triggerTypes.filter(t => !t.off || t.key === r.trigger_type).forEach(t => { %><option value="<%= t.key %>" <%= t.key === r.trigger_type ? 'selected' : '' %>><%= t.label %></option><% }) %>
                     </select>
                   </div>
                   <div>

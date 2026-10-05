@@ -40,7 +40,7 @@
   <% } %>
 </div>
 
-<% if (canEdit('miniservers')) { %>
+<% if (canEdit('vehicles')) { %>
 <details class="card" <%= vehicles.length ? '' : 'open' %>>
   <summary><strong>Add vehicle</strong></summary>
   <form method="post" action="/vehicles" style="margin-top:0.8rem;">

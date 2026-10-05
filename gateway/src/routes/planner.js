@@ -41,7 +41,7 @@ router.get('/status.json', asyncHandler(async (req, res) => {
 }));
 
 // JSON actions from the page (CSRF-exempt like the other JSON endpoints).
-router.post('/mode.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/mode.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const mode = String(req.body?.mode || '');
   if (!planner.MODES.includes(mode)) return res.json({ ok: false, message: 'Unknown mode.' });
   await planner.saveConfig({ mode });
@@ -52,7 +52,7 @@ router.post('/mode.json', requirePermission('miniservers', 'edit'), asyncHandler
 }));
 
 // Session buttons: "Charge now", "Pause", back to "Smart" (null).
-router.post('/override.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/override.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const m = req.body?.mode;
   planner.setOverride(m === 'now' || m === 'off' ? m : null);
   await planner.recalc().catch(() => {});
@@ -60,14 +60,14 @@ router.post('/override.json', requirePermission('miniservers', 'edit'), asyncHan
   res.json({ ok: true });
 }));
 
-router.post('/ready.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/ready.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const t = req.body?.at ? Date.parse(req.body.at) : null;
   planner.setReadyOverride(Number.isFinite(t) ? t : null);
   await planner.recalc().catch(() => {});
   res.json({ ok: true });
 }));
 
-router.post('/recalc.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/recalc.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const out = {};
   if (req.body?.prices) out.prices = await prices.refreshPrices().then((r) => ({ ok: true, ...r })).catch((e) => ({ ok: false, message: e.message }));
   if (req.body?.solar) out.solar = await solar.refreshForecast().then((r) => ({ ok: true, ...r })).catch((e) => ({ ok: false, message: e.message }));
@@ -77,7 +77,7 @@ router.post('/recalc.json', requirePermission('miniservers', 'edit'), asyncHandl
 }));
 
 // Write a test value to the configured virtual input(s) — only when asked, never automatically.
-router.post('/test-output.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/test-output.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const cfg = await planner.getConfig();
   if (!cfg.vi_setpoint) return res.json({ ok: false, message: 'Fill in the virtual input name first.' });
   const { sendHttpVirtualInput } = require('../loxone');
@@ -121,7 +121,7 @@ router.get('/log/session.csv', asyncHandler(async (req, res) => {
   res.send(lines.join('\n'));
 }));
 
-router.post('/settings', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const b = req.body;
   const section = b.section;
   if (section === 'charging') {

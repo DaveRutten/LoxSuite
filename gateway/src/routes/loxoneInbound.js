@@ -13,6 +13,8 @@ const router = express.Router();
 // pre-registered token, the full path still reaches this handler.
 router.get('/*', asyncHandler(async (req, res) => {
   const token = req.params[0];
+  if (!require('../modules').isOn('mqtt')) return res.status(404).send('The MQTT bridge module is switched off');
+  if (!mqttClient.getClient()) return res.status(503).send('MQTT broker is not connected');
   const mapping = await findOrAutoCreateLoxoneMapping(token, 'http');
 
   if (!mapping) {

@@ -40,6 +40,23 @@
 <% } %>
 
 <% if (tab === 'account') { %>
+  <% if (typeof languages !== 'undefined' && languages.length > 1) { %>
+    <div class="card">
+      <h2><%= t('Language') %></h2>
+      <form method="post" action="/profile/language" class="btn-row" style="align-items:flex-end; gap:0.6rem;">
+        <div>
+          <label><%= t('Language of LoxSuite') %></label>
+          <select name="language">
+            <% const defName = (languages.find(l => l.code === defaultLanguage) || {}).name || defaultLanguage; %>
+            <option value="" <%= !myLanguage ? 'selected' : '' %>><%= t('Installation default ({language})', { language: defName }) %></option>
+            <% languages.forEach(l => { %><option value="<%= l.code %>" <%= myLanguage === l.code ? 'selected' : '' %>><%= l.name %></option><% }) %>
+          </select>
+        </div>
+        <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
+      </form>
+      <p class="hint" style="margin:0.5rem 0 0;"><%= t('Not everything is translated yet; untranslated texts are shown in English.') %><% if (canView('translations')) { %> <a href="/translations"><%= t('Help translate') %></a><% } %></p>
+    </div>
+  <% } %>
   <% if (profile.auth_provider === 'local') { %>
     <div class="card">
       <h2>Name &amp; email</h2>
@@ -119,7 +136,7 @@
             <div>
               <label>Trigger</label>
               <select name="trigger_type" class="rule-trigger-select">
-                <% triggerTypes.forEach(t => { %><option value="<%= t.key %>"><%= t.label %></option><% }) %>
+                <% triggerTypes.filter(t => !t.off).forEach(t => { %><option value="<%= t.key %>"><%= t.label %></option><% }) %>
               </select>
             </div>
           </div>
@@ -208,7 +225,7 @@
                       <div>
                         <label>Trigger</label>
                         <select name="trigger_type" class="rule-trigger-select">
-                          <% triggerTypes.forEach(t => { %><option value="<%= t.key %>" <%= t.key === r.trigger_type ? 'selected' : '' %>><%= t.label %></option><% }) %>
+                          <% triggerTypes.filter(t => !t.off || t.key === r.trigger_type).forEach(t => { %><option value="<%= t.key %>" <%= t.key === r.trigger_type ? 'selected' : '' %>><%= t.label %></option><% }) %>
                         </select>
                       </div>
                       <div>

@@ -24,7 +24,7 @@
   </div>
 </div>
 
-<% if (canEdit('miniservers')) { %>
+<% if (canEdit('charging')) { %>
 <div class="card">
   <h2 style="margin-top:0;">Calendars</h2>
   <% if (!site.lat) { %><p class="hint" style="color:#b8860b;">Set the home location under <a href="/planner#settings">Planner &rarr; Settings</a> so distances can be calculated.</p><% } %>
@@ -113,7 +113,7 @@
 <style>.ag-need td { padding:0.3rem 0.2rem; } .ag-need td:last-child { white-space:nowrap; text-align:right; }</style>
 <script>
 (function () {
-  var canEdit = <%- JSON.stringify(canEdit('miniservers')) %>;
+  var canEdit = <%- JSON.stringify(canEdit('charging')) %>;
   var view = window.matchMedia('(max-width: 768px)').matches ? 'day' : 'week'; // a week doesn't fit a phone
   try { view = localStorage.getItem('agenda-view') || view; } catch (e) { /* storage blocked */ }
   var cursor = new Date();

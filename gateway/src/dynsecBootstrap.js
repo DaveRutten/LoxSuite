@@ -70,6 +70,7 @@ async function ensureGatewayAccount(client, username, password) {
 // (which mqttClient.js is already retrying to connect as) become valid without
 // any manual mosquitto_ctrl steps, once the broker is reachable.
 async function runBootstrap() {
+  if (!require('./modules').isOn('mqtt')) return; // MQTT bridge module off: broker isn't running
   const adminUsername = process.env.MQTT_ADMIN_USERNAME || 'admin';
   const adminPassword = process.env.MQTT_ADMIN_PASSWORD;
   if (!adminPassword) {

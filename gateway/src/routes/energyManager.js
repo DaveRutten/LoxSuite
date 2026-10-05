@@ -22,17 +22,24 @@ router.get('/', asyncHandler(async (req, res) => {
 router.get('/data.json', asyncHandler(async (req, res) => {
   const loads = await em.listLoads();
   const rt = em.getRuntime();
+  const ep = require('../energyPatterns');
+  const names = Object.fromEntries(loads.map((l) => [l.id, l.name]));
   const out = [];
   for (const l of loads) {
     const plan = rt.plan?.loads.find((p) => p.id === l.id) || null;
     const signals = (em.KINDS[l.kind]?.signals || []).map((s) => ({ key: s.key, vi: em.viName(l, s), unit: s.unit, hint: s.hint, value: rt.signals.find((x) => x.id === l.id)?.values?.[s.key] ?? null }));
+    const lp = rt.loads.find((x) => x.id === l.id) || {};
+    const patterns = (lp.patterns || []).map((p) => ({ ...p, text: ep.describe(p, names) }));
+    const follows = rt.follows.filter((f) => f.from === l.id || f.to === l.id).map((f) => ({ ...f, text: ep.describe(f, names) }));
+    const expected = lp.profile && rt.localOf ? (rt.plan?.hours || []).slice(0, 24).map((h) => ({ ms: h.ms, kwh: ep.expectedKwh(lp.profile, h.ms, rt.localOf) })) : [];
     const runs = l.kind === 'appliance' ? await db.prepare("SELECT * FROM load_runs WHERE load_id = ? ORDER BY start_at DESC").all(l.id) : [];
     out.push({
       id: l.id, name: l.name, kind: l.kind, kindLabel: em.KINDS[l.kind]?.label, priority: l.priority, enabled: !!l.enabled, output: l.output,
       settings: l.settings, live: rt.samples[l.id] || null, running: rt.runs[l.id]?.running || false,
       reason: rt.signals.find((x) => x.id === l.id)?.reason || null, signals, learned: await em.learned(l),
       plan: plan ? plan.hours.map((h) => ({ hour: h.hour, values: h.values, reason: h.reason })) : [],
-      requests: (plan?.requests || []).map((q) => ({ id: q.id, readyBy: q.readyBy, label: q.label, plannedStart: q.plannedStart || null, plannedCost: q.plannedCost ?? null, kwh: q.kwh, durationH: q.durationH })),
+      requests: (plan?.requests || []).map((q) => ({ id: q.id, expected: !!q.expected, usualStart: q.usualStart || null, readyBy: q.readyBy, label: q.label, plannedStart: q.plannedStart || null, plannedCost: q.plannedCost ?? null, kwh: q.kwh, durationH: q.durationH })),
+      patterns, follows, expected, patternDays: lp.profile?.days || 0, usePatterns: l.settings.use_patterns !== false,
       daily: await em.dailyReport(l, 14),
       runs: runs.filter((r) => r.kind === 'run').slice(0, 15),
     });
@@ -49,6 +56,7 @@ function readLoadForm(b) {
     s[k] = k === 'season' ? (['heating', 'cooling', 'off'].includes(b.s_season) ? b.s_season : 'heating') : num(b[`s_${k}`], em.KINDS[kind].defaults[k]);
   }
   if (b.s_kw_fixed) s.kw_fixed = true;
+  if (b.s_use_patterns_sent) s.use_patterns = !!b.s_use_patterns;
   const vi = {};
   for (const sig of em.KINDS[kind].signals) { const v = String(b[`vi_${sig.key}`] || '').trim(); if (v) vi[sig.key] = v; }
   if (Object.keys(vi).length) s.vi = vi;
@@ -58,7 +66,7 @@ function readLoadForm(b) {
   };
 }
 
-router.post('/loads', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/loads', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   const v = readLoadForm(req.body);
   if (req.body.id) {
     await db.prepare('UPDATE energy_loads SET name = ?, kind = ?, enabled = ?, priority = ?, miniserver_id = ?, meter_uuid = ?, settings = ? WHERE id = ?')
@@ -71,7 +79,7 @@ router.post('/loads', requirePermission('miniservers', 'edit'), asyncHandler(asy
   res.redirect('/energy-manager?saved=load');
 }));
 
-router.post('/loads/:id/delete', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/loads/:id/delete', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   for (const t of ['em_log', 'load_runs', 'load_hourly']) await db.prepare(`DELETE FROM ${t} WHERE load_id = ?`).run(id);
   await db.prepare('DELETE FROM energy_loads WHERE id = ?').run(id);
@@ -79,13 +87,13 @@ router.post('/loads/:id/delete', requirePermission('miniservers', 'edit'), async
   res.redirect('/energy-manager?saved=deleted');
 }));
 
-router.post('/settings', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/settings', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   await em.saveConfig({ car_priority: Math.max(1, Math.min(9, num(req.body.car_priority, 3))), solar_bonus_eur: Math.max(0, num(req.body.solar_bonus_eur, 0.05)) });
   res.redirect('/energy-manager?saved=settings');
 }));
 
 // "Ready by": plan a run of an appliance (shadow: LoxSuite shows and notifies the best start).
-router.post('/loads/:id/request.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/loads/:id/request.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   const readyBy = Date.parse(String(req.body?.readyBy || ''));
   if (!Number.isFinite(readyBy) || readyBy < Date.now() + 30 * 60000) return res.json({ ok: false, message: 'Choose a "ready by" time at least 30 minutes from now.' });
   await db.prepare("INSERT INTO load_runs (load_id, start_at, ready_by, kwh, duration_h, label, kind) VALUES (?, ?, ?, ?, ?, ?, 'request')")
@@ -93,16 +101,16 @@ router.post('/loads/:id/request.json', requirePermission('miniservers', 'edit'),
   await em.recalc().catch(() => {});
   res.json({ ok: true });
 }));
-router.post('/requests/:id/delete.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/requests/:id/delete.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare("DELETE FROM load_runs WHERE id = ? AND kind = 'request'").run(Number(req.params.id));
   await em.recalc().catch(() => {});
   res.json({ ok: true });
 }));
 
-router.post('/import.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/import.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   try { res.json({ ok: true, report: await em.importHistory(Number(req.body?.days) || 30) }); } catch (err) { res.json({ ok: false, message: err.message }); }
 }));
-router.post('/recalc.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/recalc.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   try { await em.recalc(); await em.tick(); res.json({ ok: true }); } catch (err) { res.json({ ok: false, message: err.message }); }
 }));
 

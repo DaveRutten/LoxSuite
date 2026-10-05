@@ -43,7 +43,7 @@
   <% } %>
 </div>
 
-<% if (canEdit('miniservers')) { %>
+<% if (canEdit('ocpp')) { %>
 <details class="card" <%= bridges.length ? '' : 'open' %>>
   <summary><strong>Add OCPP bridge</strong></summary>
   <form method="post" action="/ocpp" style="margin-top:0.8rem;">

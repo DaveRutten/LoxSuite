@@ -1,7 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
-const { AREAS, MAIN_AREAS, LOG_AREAS } = require('../permissionAreas');
+const { AREAS, MAIN_AREAS: ALL_MAIN_AREAS, LOG_AREAS, visibleAreas } = require('../permissionAreas');
+const modules = require('../modules');
 const { logSystemEvent, describeChanges } = require('../auditLog');
 const { reloadLoginLimiter } = require('./auth');
 const { encrypt } = require('../secretCrypto');
@@ -246,7 +247,7 @@ router.post('/users/:id/delete', asyncHandler(async (req, res) => {
 }));
 
 router.get('/roles', asyncHandler(async (req, res) => {
-  res.render('admin-roles', { roles: await listRoles(), areas: MAIN_AREAS, logAreas: LOG_AREAS, error: null });
+  res.render('admin-roles', { roles: await listRoles(), areas: visibleAreas(ALL_MAIN_AREAS, modules.isOn), logAreas: LOG_AREAS, error: null });
 }));
 
 router.post('/roles', asyncHandler(async (req, res) => {
@@ -260,7 +261,7 @@ router.post('/roles', asyncHandler(async (req, res) => {
     await logSystemEvent(`"${req.user.username}" created role "${name}".`);
     res.redirect('/admin/roles');
   } catch (err) {
-    res.render('admin-roles', { roles: await listRoles(), areas: MAIN_AREAS, logAreas: LOG_AREAS, error: err.message });
+    res.render('admin-roles', { roles: await listRoles(), areas: visibleAreas(ALL_MAIN_AREAS, modules.isOn), logAreas: LOG_AREAS, error: err.message });
   }
 }));
 
@@ -283,12 +284,13 @@ router.post('/roles/:id/permissions', asyncHandler(async (req, res) => {
   const wasOnlyAdminRole = role.is_admin && (await db.prepare('SELECT COUNT(*) AS c FROM access_roles WHERE is_admin = 1').get()).c === 1;
   const stillAdmin = !!req.body.is_admin;
   if (wasOnlyAdminRole && !stillAdmin && (await db.prepare('SELECT COUNT(*) AS c FROM users WHERE role_id = ?').get(roleId)).c > 0) {
-    return res.render('admin-roles', { roles: await listRoles(), areas: MAIN_AREAS, logAreas: LOG_AREAS, error: 'This is the only administrator role and still has users on it — assign them elsewhere first.' });
+    return res.render('admin-roles', { roles: await listRoles(), areas: visibleAreas(ALL_MAIN_AREAS, modules.isOn), logAreas: LOG_AREAS, error: 'This is the only administrator role and still has users on it — assign them elsewhere first.' });
   }
 
   await db.transaction(async (tx) => {
     await tx.prepare('UPDATE access_roles SET is_admin = ? WHERE id = ?').run(stillAdmin ? 1 : 0, roleId);
-    for (const { key } of AREAS) {
+    for (const { key, module } of AREAS) {
+      if (module && !modules.isOn(module)) continue; // not shown while its module is off: keep as is
       const edit = req.body.perm?.[key]?.edit ? 1 : 0;
       const view = edit || req.body.perm?.[key]?.view ? 1 : 0; // edit implies view
       await tx.upsert('access_role_permissions', { role_id: roleId, area: key, can_view: view, can_edit: edit }, ['role_id', 'area']);
@@ -302,7 +304,7 @@ router.post('/roles/:id/permissions', asyncHandler(async (req, res) => {
 router.post('/roles/:id/delete', asyncHandler(async (req, res) => {
   const inUse = (await db.prepare('SELECT COUNT(*) AS c FROM users WHERE role_id = ?').get(req.params.id)).c;
   if (inUse > 0) {
-    return res.render('admin-roles', { roles: await listRoles(), areas: MAIN_AREAS, logAreas: LOG_AREAS, error: `${inUse} user(s) still have this role — reassign them first.` });
+    return res.render('admin-roles', { roles: await listRoles(), areas: visibleAreas(ALL_MAIN_AREAS, modules.isOn), logAreas: LOG_AREAS, error: `${inUse} user(s) still have this role — reassign them first.` });
   }
   const role = await db.prepare('SELECT name FROM access_roles WHERE id = ?').get(req.params.id);
   await db.prepare('DELETE FROM access_roles WHERE id = ?').run(req.params.id);

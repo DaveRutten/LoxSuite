@@ -1,5 +1,5 @@
 // OCPP bridges (see ocppBridge.js and migration 018): one row per Loxone Wallbox that LoxSuite
-// reports to an OCPP 1.6 backend as a charge point. Gated on the 'miniservers' permission area —
+// reports to an OCPP 1.6 backend as a charge point. Gated on the 'ocpp' permission area —
 // it's Miniserver-level configuration (and stores a backend secret), so viewing needs
 // miniservers/view and every change needs miniservers/edit, same as the Miniservers pages.
 const express = require('express');
@@ -117,7 +117,7 @@ router.get('/', asyncHandler(async (req, res) => {
   });
 }));
 
-router.post('/', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/', requirePermission('ocpp', 'edit'), asyncHandler(async (req, res) => {
   const { values, error } = parseForm(req.body, { requirePassword: true });
   if (error) return res.redirect(`/ocpp?error=${encodeURIComponent(error)}`);
   const now = new Date().toISOString();
@@ -143,7 +143,7 @@ function parseLL(body) {
   if (typeof v !== 'string') return v;
   try { return JSON.parse(v); } catch { return v; }
 }
-router.get('/loxone-nfc-tags.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.get('/loxone-nfc-tags.json', requirePermission('ocpp', 'edit'), asyncHandler(async (req, res) => {
   const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.query.miniserver_id);
   if (!ms) return res.status(404).json({ ok: false, message: 'Miniserver not found.' });
   try {
@@ -179,7 +179,9 @@ router.get('/:id', asyncHandler(async (req, res) => {
   ).get(req.params.id);
   if (!bridge) return res.status(404).render('forbidden', { message: 'OCPP bridge not found.' });
   const sessions = await db.prepare('SELECT * FROM ocpp_bridge_sessions WHERE bridge_id = ? ORDER BY id DESC LIMIT 25').all(bridge.id);
+  const ocppFinance = require('../ocppFinance');
   return res.render('ocpp-bridge-edit', {
+    finance: ocppFinance.parseSettings(bridge.finance), financeSaved: !!bridge.finance, tariffs: await ocppFinance.listTariffs(bridge.id),
     bridge, sessions, wallboxes: await wallboxOptions(), nfcs: await nfcOptions(), quarters: ocppExport.recentQuarters(),
     serialSuggestion: await wallboxSerialSuggestion(),
     status: ocppBridge.getBridgeStatus(bridge.id),
@@ -223,21 +225,27 @@ router.get('/:id/export', asyncHandler(async (req, res) => {
     tracker: ocppExport.parseTrackerEntries(trackerText), recorded, currentTotalKwh: Number(total), start: range.start, end: range.end,
     excludeVehicleIds: excluded,
   });
-  const fileBase = `laadsessies${range.name}`;
+  // ?finance=1: the same sessions with cost, reimbursement and balance (own administration). The
+  // plain export keeps exactly the layout Laadloon accepts.
+  const withFinance = req.query.finance === '1';
+  const finRows = withFinance ? await require('../ocppFinance').costRows(bridge, rows, timeZone) : null;
+  const fileBase = `laadsessies${range.name}${withFinance ? '-kosten' : ''}`;
   if (req.query.format === 'csv') {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${fileBase}.csv"`);
-    return res.send(ocppExport.buildCsv({ rows, timeZone }));
+    return res.send(withFinance ? ocppExport.buildFinanceCsv({ rows: finRows, timeZone }) : ocppExport.buildCsv({ rows, timeZone }));
   }
   const title = [`Gegevens ${ctl.name}`, bridge.serial ? `(SN ${bridge.serial})` : null, bridge.ean ? `– EAN ${bridge.ean}` : null].filter(Boolean).join(' ');
-  const { cells } = ocppExport.buildSheetCells({ title, rows, quarterName: range.name, timeZone, incomplete });
+  const { cells } = withFinance
+    ? ocppExport.buildFinanceSheetCells({ title, rows: finRows, quarterName: range.name, timeZone, incomplete })
+    : ocppExport.buildSheetCells({ title, rows, quarterName: range.name, timeZone, incomplete });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${fileBase}.xlsx"`);
-  return res.send(ocppExport.buildXlsx(cells, { colWidths: [8, 21, 21, 13, 13, 14, 10] }));
+  return res.send(ocppExport.buildXlsx(cells, { colWidths: withFinance ? [8, 21, 21, 14, 12, 12, 12, 12, 10, 10] : [8, 21, 21, 13, 13, 14, 10] }));
 }));
 
 // JSON (so CSRF-exempt, like the Miniservers "Test" button). Tests the SAVED settings.
-router.post('/:id/test', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/:id/test', requirePermission('ocpp', 'edit'), asyncHandler(async (req, res) => {
   const bridge = await db.prepare('SELECT * FROM ocpp_bridges WHERE id = ?').get(req.params.id);
   if (!bridge) return res.status(404).json({ ok: false, message: 'Not found.' });
   const backend = await ocppBridge.testBackendConnection(bridge);
@@ -291,7 +299,7 @@ router.post('/:id/monitor', requirePermission('monitor', 'edit'), asyncHandler(a
   return res.json({ ok: true, created, skipped });
 }));
 
-router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/:id/update', requirePermission('ocpp', 'edit'), asyncHandler(async (req, res) => {
   const existing = await db.prepare('SELECT * FROM ocpp_bridges WHERE id = ?').get(req.params.id);
   if (!existing) return res.redirect('/ocpp');
   const { values, error } = parseForm(req.body, { requirePassword: false });
@@ -316,8 +324,50 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandle
   return res.redirect(`/ocpp/${existing.id}?saved=1`);
 }));
 
-router.post('/:id/delete', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+// ---- Costs & reimbursement (ocppFinance.js) ----
+const money = (v) => { if (v === undefined || v === null || String(v).trim() === '') return null; const n = Number(String(v).replace(',', '.').replace('€', '').trim()); return Number.isFinite(n) && n >= 0 && n < 100 ? n : NaN; };
+
+router.post('/:id/finance', requirePermission('ocpp', 'edit'), asyncHandler(async (req, res) => {
+  const bridge = await db.prepare('SELECT id FROM ocpp_bridges WHERE id = ?').get(req.params.id);
+  if (!bridge) return res.redirect('/ocpp');
+  const b = req.body;
+  const fixed = money(b.fixed_eur_kwh);
+  const solar = money(b.solar_eur_kwh);
+  const vatPct = Number(String(b.vat_pct || '21').replace(',', '.'));
+  if (Number.isNaN(fixed) || Number.isNaN(solar) || !Number.isFinite(vatPct) || vatPct < 0 || vatPct > 50) {
+    return res.redirect(`/ocpp/${bridge.id}?error=${encodeURIComponent('Enter amounts as € per kWh, e.g. 0,25.')}#finance`);
+  }
+  if (b.cost_mode === 'fixed' && fixed === null) return res.redirect(`/ocpp/${bridge.id}?error=${encodeURIComponent('A fixed cost needs a rate per kWh.')}#finance`);
+  const settings = {
+    cost_mode: b.cost_mode === 'fixed' ? 'fixed' : 'hourly', fixed_eur_kwh: fixed,
+    solar_value: ['saldering', 'fixed', 'free'].includes(b.solar_value) ? b.solar_value : 'saldering', solar_eur_kwh: solar ?? 0.05,
+    tariff_vat: b.tariff_vat === 'excl' ? 'excl' : 'incl', show_vat: b.show_vat === 'excl' ? 'excl' : 'incl', vat_pct: vatPct,
+  };
+  await db.prepare('UPDATE ocpp_bridges SET finance = ? WHERE id = ?').run(JSON.stringify(settings), bridge.id);
+  res.redirect(`/ocpp/${bridge.id}?saved=1#finance`);
+}));
+
+router.post('/:id/tariffs', requirePermission('ocpp', 'edit'), asyncHandler(async (req, res) => {
+  const bridge = await db.prepare('SELECT id FROM ocpp_bridges WHERE id = ?').get(req.params.id);
+  if (!bridge) return res.redirect('/ocpp');
+  const rate = money(req.body.eur_per_kwh);
+  const from = String(req.body.valid_from || '').trim();
+  if (rate === null || Number.isNaN(rate) || !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+    return res.redirect(`/ocpp/${bridge.id}?error=${encodeURIComponent('A tariff needs a start date and an amount per kWh.')}#finance`);
+  }
+  await db.prepare('INSERT INTO ocpp_tariffs (bridge_id, valid_from, eur_per_kwh, note) VALUES (?, ?, ?, ?)')
+    .run(bridge.id, from, rate, String(req.body.note || '').trim().slice(0, 80) || null);
+  res.redirect(`/ocpp/${bridge.id}?saved=1#finance`);
+}));
+
+router.post('/:id/tariffs/:tid/delete', requirePermission('ocpp', 'edit'), asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM ocpp_tariffs WHERE id = ? AND bridge_id = ?').run(Number(req.params.tid), Number(req.params.id));
+  res.redirect(`/ocpp/${req.params.id}?saved=1#finance`);
+}));
+
+router.post('/:id/delete', requirePermission('ocpp', 'edit'), asyncHandler(async (req, res) => {
   const existing = await db.prepare('SELECT name FROM ocpp_bridges WHERE id = ?').get(req.params.id);
+  await db.prepare('DELETE FROM ocpp_tariffs WHERE bridge_id = ?').run(req.params.id).catch(() => {});
   await db.prepare('DELETE FROM ocpp_bridges WHERE id = ?').run(req.params.id);
   if (existing) await logSystemEvent(`OCPP bridge "${existing.name}" deleted`).catch(() => {});
   await ocppBridge.syncRunners();

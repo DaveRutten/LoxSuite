@@ -45,7 +45,7 @@ router.get('/data.json', asyncHandler(async (req, res) => {
   });
 }));
 
-router.post('/overrides', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/overrides', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const o = {};
   for (const k of ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']) {
     const v = String(req.body[`ready_${k}`] || '').trim();
@@ -55,7 +55,7 @@ router.post('/overrides', requirePermission('miniservers', 'edit'), asyncHandler
   res.redirect('/learned?saved=1');
 }));
 
-router.post('/sync.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/sync.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const added = await learning.syncSessions().catch((e) => ({ error: e.message }));
   res.json({ ok: true, added });
 }));

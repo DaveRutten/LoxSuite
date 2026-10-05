@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="<%= typeof lang !== 'undefined' ? lang : 'en' %>">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="<%= csrfToken %>">
   <meta name="display-timezone" content="<%= displayTimezone %>">
-  <title><%= pageTitle %> · LoxSuite</title>
+  <title><%= t(pageTitle) %> · LoxSuite</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -91,16 +91,16 @@
     %>
     <nav>
       <% const mod = typeof moduleOn === 'function' ? moduleOn : () => true; %>
-      <% if (canView('dashboard')) { %><a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>">Dashboard</a><% } %>
+      <% if (canView('dashboard')) { %><a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>"><%= t('Dashboard') %></a><% } %>
 
       <% if (mod('monitor')) { %>
       <% const monitorExpanded = active === 'monitor' || active === 'dashboards'; %>
       <button type="button" class="nav-section-label" data-nav-section="monitor" aria-expanded="<%= isCollapsed('monitor', monitorExpanded) ? 'false' : 'true' %>">
-        <span>Monitor</span><%- icon('chevron') %>
+        <span><%= t('Monitor') %></span><%- icon('chevron') %>
       </button>
       <div class="nav-group" <%= isCollapsed('monitor', monitorExpanded) ? 'hidden' : '' %>>
-        <% if (canView('monitor')) { %><a href="/monitor" class="<%= active === 'monitor' ? 'active' : '' %>">Monitor</a><% } %>
-        <a href="/dashboards" class="<%= active === 'dashboards' ? 'active' : '' %>">My Dashboards</a>
+        <% if (canView('monitor')) { %><a href="/monitor" class="<%= active === 'monitor' ? 'active' : '' %>"><%= t('Monitor') %></a><% } %>
+        <a href="/dashboards" class="<%= active === 'dashboards' ? 'active' : '' %>"><%= t('My Dashboards') %></a>
         <% if (favoriteDashboards.length > 0) { %>
           <%
             // Starred from a dashboard's own "Add to sidebar" button (dashboards.ejs,
@@ -114,7 +114,7 @@
             const favoritesExpanded = active === 'dashboards' || active === 'dashboard';
           %>
           <button type="button" class="nav-section-label" data-nav-section="favorite-dashboards" aria-expanded="<%= isCollapsed('favorite-dashboards', favoritesExpanded) ? 'false' : 'true' %>">
-            <span>Favorite Dashboards</span><%- icon('chevron') %>
+            <span><%= t('Favorite Dashboards') %></span><%- icon('chevron') %>
           </button>
           <div class="nav-group" <%= isCollapsed('favorite-dashboards', favoritesExpanded) ? 'hidden' : '' %>>
             <% favoriteDashboards.forEach(d => { %>
@@ -128,48 +128,48 @@
       <% if (loxoneSectionVisible) { %>
         <% const loxoneExpanded = active === 'miniservers' || active === 'live-data' || active === 'hardware' || mappingsActive; %>
         <button type="button" class="nav-section-label" data-nav-section="loxone-mappings" aria-expanded="<%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'false' : 'true' %>">
-          <span>Loxone</span><%- icon('chevron') %>
+          <span><%= t('Loxone') %></span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'hidden' : '' %>>
-          <% if (canView('miniservers')) { %><a href="/miniservers" class="<%= active === 'miniservers' ? 'active' : '' %>">Miniservers</a><% } %>
-          <% if (canView('live_data')) { %><a href="/live-data" class="<%= active === 'live-data' ? 'active' : '' %>">Live Data</a><% } %>
-          <% if (canView('hardware')) { %><a href="/hardware" class="<%= active === 'hardware' ? 'active' : '' %>">Hardware</a><% } %>
-          <% if (mappingsHref && mod('mqtt')) { %><a href="<%= mappingsHref %>" class="<%= mappingsActive ? 'active' : '' %>">Mappings</a><% } %>
+          <% if (canView('miniservers')) { %><a href="/miniservers" class="<%= active === 'miniservers' ? 'active' : '' %>"><%= t('Miniservers') %></a><% } %>
+          <% if (canView('live_data')) { %><a href="/live-data" class="<%= active === 'live-data' ? 'active' : '' %>"><%= t('Live Data') %></a><% } %>
+          <% if (canView('hardware')) { %><a href="/hardware" class="<%= active === 'hardware' ? 'active' : '' %>"><%= t('Hardware') %></a><% } %>
+          <% if (mappingsHref && mod('mqtt')) { %><a href="<%= mappingsHref %>" class="<%= mappingsActive ? 'active' : '' %>"><%= t('Mappings') %></a><% } %>
         </div>
       <% } %>
 
-      <% const energyAny = mod('charging') || mod('vehicles') || mod('energy') || mod('energy_manager') || mod('ocpp'); %>
-      <% if (canView('miniservers') && energyAny) { %>
+      <% const em = (k) => mod(k) && canView(k); const energyAny = em('charging') || em('vehicles') || em('energy') || em('energy_manager') || em('ocpp'); %>
+      <% if (energyAny) { %>
         <% const wallboxExpanded = ['planner', 'chargelog', 'energymanager', 'agenda', 'vehicles', 'driving', 'energy', 'learned', 'ocpp'].includes(active); %>
         <button type="button" class="nav-section-label" data-nav-section="wallbox" aria-expanded="<%= isCollapsed('wallbox', wallboxExpanded) ? 'false' : 'true' %>">
-          <span>Energy &amp; charging</span><%- icon('chevron') %>
+          <span><%= t('Energy & charging') %></span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('wallbox', wallboxExpanded) ? 'hidden' : '' %>>
-          <% if (mod('charging')) { %>
-            <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>">Smart charging</a>
-            <a href="/planner/log" class="<%= active === 'chargelog' ? 'active' : '' %>">Charge log</a>
-            <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>">Agenda</a>
-            <a href="/learned" class="<%= active === 'learned' ? 'active' : '' %>">Learned</a>
+          <% if (em('charging')) { %>
+            <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>"><%= t('Smart charging') %></a>
+            <a href="/planner/log" class="<%= active === 'chargelog' ? 'active' : '' %>"><%= t('Charge log') %></a>
+            <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>"><%= t('Agenda') %></a>
+            <a href="/learned" class="<%= active === 'learned' ? 'active' : '' %>"><%= t('Learned') %></a>
           <% } %>
-          <% if (mod('vehicles')) { %>
-            <a href="/vehicles" class="<%= active === 'vehicles' ? 'active' : '' %>">Vehicles</a>
-            <a href="/driving" class="<%= active === 'driving' ? 'active' : '' %>">Driving &amp; costs</a>
+          <% if (em('vehicles')) { %>
+            <a href="/vehicles" class="<%= active === 'vehicles' ? 'active' : '' %>"><%= t('Vehicles') %></a>
+            <a href="/driving" class="<%= active === 'driving' ? 'active' : '' %>"><%= t('Driving & costs') %></a>
           <% } %>
-          <% if (mod('energy')) { %><a href="/energy" class="<%= active === 'energy' ? 'active' : '' %>">Meters</a><% } %>
-          <% if (mod('energy_manager')) { %><a href="/energy-manager" class="<%= active === 'energymanager' ? 'active' : '' %>">Energy manager</a><% } %>
-          <% if (mod('ocpp')) { %><a href="/ocpp" class="<%= active === 'ocpp' ? 'active' : '' %>">OCPP (charging costs)</a><% } %>
+          <% if (em('energy')) { %><a href="/energy" class="<%= active === 'energy' ? 'active' : '' %>"><%= t('Meters') %></a><% } %>
+          <% if (em('energy_manager')) { %><a href="/energy-manager" class="<%= active === 'energymanager' ? 'active' : '' %>"><%= t('Energy manager') %></a><% } %>
+          <% if (em('ocpp')) { %><a href="/ocpp" class="<%= active === 'ocpp' ? 'active' : '' %>"><%= t('OCPP (charging costs)') %></a><% } %>
         </div>
       <% } %>
 
       <% if (mqttSectionVisible && mod('mqtt')) { %>
         <% const brokerExpanded = active === 'incoming' || active === 'incoming-clients' || brokerActive; %>
         <button type="button" class="nav-section-label" data-nav-section="mqtt-broker" aria-expanded="<%= isCollapsed('mqtt-broker', brokerExpanded) ? 'false' : 'true' %>">
-          <span>MQTT</span><%- icon('chevron') %>
+          <span><%= t('MQTT') %></span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('mqtt-broker', brokerExpanded) ? 'hidden' : '' %>>
-          <% if (brokerHref) { %><a href="<%= brokerHref %>" class="<%= brokerActive ? 'active' : '' %>">Broker</a><% } %>
-          <% if (canView('incoming')) { %><a href="/incoming/messages" class="<%= active === 'incoming' ? 'active' : '' %>">Live Data</a><% } %>
-          <% if (canView('incoming')) { %><a href="/incoming/clients" class="<%= active === 'incoming-clients' ? 'active' : '' %>">Client Activity</a><% } %>
+          <% if (brokerHref) { %><a href="<%= brokerHref %>" class="<%= brokerActive ? 'active' : '' %>"><%= t('Broker') %></a><% } %>
+          <% if (canView('incoming')) { %><a href="/incoming/messages" class="<%= active === 'incoming' ? 'active' : '' %>"><%= t('Live Data') %></a><% } %>
+          <% if (canView('incoming')) { %><a href="/incoming/clients" class="<%= active === 'incoming-clients' ? 'active' : '' %>"><%= t('Client Activity') %></a><% } %>
         </div>
       <% } %>
 
@@ -180,18 +180,19 @@
       <% if (logsSectionVisible) { %>
         <% const logsExpanded = logActiveKeys.includes(active); %>
         <button type="button" class="nav-section-label" data-nav-section="logs" aria-expanded="<%= isCollapsed('logs', logsExpanded) ? 'false' : 'true' %>">
-          <span>Logs</span><%- icon('chevron') %>
+          <span><%= t('Logs') %></span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('logs', logsExpanded) ? 'hidden' : '' %>>
-          <% if (canView('logs_system')) { %><a href="/logs/system" class="<%= active === 'logs-system' ? 'active' : '' %>">System</a><% } %>
-          <% if (canView('logs_notifications')) { %><a href="/logs/notifications" class="<%= active === 'logs-notifications' ? 'active' : '' %>">Notifications</a><% } %>
-          <% if (canView('logs_loxone') && mod('loxone_logs')) { %><a href="/logs/loxone" class="<%= active === 'logs-loxone' ? 'active' : '' %>">Loxone Miniservers</a><% } %>
-          <% if (canView('logs_loxone_commands') && mod('mqtt')) { %><a href="/logs/loxone-commands" class="<%= active === 'logs-loxone-commands' ? 'active' : '' %>">Loxone Commands</a><% } %>
-          <% if (canView('logs_mqtt') && mod('mqtt')) { %><a href="/logs/mqtt" class="<%= active === 'logs-mqtt' ? 'active' : '' %>">MQTT Broker</a><% } %>
+          <% if (canView('logs_system')) { %><a href="/logs/system" class="<%= active === 'logs-system' ? 'active' : '' %>"><%= t('System') %></a><% } %>
+          <% if (canView('logs_notifications')) { %><a href="/logs/notifications" class="<%= active === 'logs-notifications' ? 'active' : '' %>"><%= t('Notifications') %></a><% } %>
+          <% if (canView('logs_loxone') && mod('loxone_logs')) { %><a href="/logs/loxone" class="<%= active === 'logs-loxone' ? 'active' : '' %>"><%= t('Loxone Miniservers') %></a><% } %>
+          <% if (canView('logs_loxone_commands') && mod('mqtt')) { %><a href="/logs/loxone-commands" class="<%= active === 'logs-loxone-commands' ? 'active' : '' %>"><%= t('Loxone Commands') %></a><% } %>
+          <% if (canView('logs_mqtt') && mod('mqtt')) { %><a href="/logs/mqtt" class="<%= active === 'logs-mqtt' ? 'active' : '' %>"><%= t('MQTT Broker') %></a><% } %>
         </div>
       <% } %>
+      <% if (canView('translations') && typeof multiLang !== 'undefined' && multiLang) { %><a href="/translations" class="<%= active === 'translations' ? 'active' : '' %>"><%= t('Translations') %></a><% } %>
     </nav>
-    <button type="button" id="theme-toggle" class="theme-toggle"><%- icon('theme') %> Toggle theme</button>
+    <button type="button" id="theme-toggle" class="theme-toggle"><%- icon('theme') %> <%= t('Toggle theme') %></button>
     <%
       // getVersionStatus() (see versionCheck.js) is a plain in-memory read, cheap enough to call
       // on every page render — the actual GitHub check itself only ever runs on its own timer
@@ -212,7 +213,7 @@
     <header class="topbar">
       <button type="button" id="mobile-nav-toggle" class="icon-btn mobile-nav-toggle" title="Menu"><%- icon('menu') %></button>
       <div class="topbar-title">
-        <h1 id="page-title"><%= pageTitle %></h1>
+        <h1 id="page-title"><%= t(pageTitle) %></h1>
         <% if (typeof dashboardId !== 'undefined' && typeof canEditPanels !== 'undefined' && canEditPanels) { %>
         <button type="button" id="dashboard-rename-trigger" class="icon-btn" title="Rename dashboard" aria-label="Rename dashboard"><%- icon('edit') %></button>
         <form method="post" action="/dashboards/<%= dashboardId %>/rename" id="dashboard-rename-form" class="dashboard-rename-form" hidden>

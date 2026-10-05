@@ -115,6 +115,7 @@ function markReplayComplete() {
 }
 
 function poll() {
+  if (!require('./modules').isOn('mqtt')) return; // broker stopped with the MQTT bridge module
   fs.stat(LOG_PATH, (err, stats) => {
     if (err) return;
     if (stats.size < position) position = 0; // log file was rotated/truncated

@@ -11,6 +11,8 @@
 //
 // State: table app_modules (module_key, enabled). In memory after init(); setEnabled() updates both
 // and starts/stops the workers right away, no restart needed.
+const fs = require('fs');
+const path = require('path');
 const db = require('./db');
 
 const lazy = (file, fn) => (...a) => require(file)[fn](...a);
@@ -24,9 +26,16 @@ const GROUPS = [
 const MODULES = [
   {
     key: 'mqtt', group: 'integration', label: 'MQTT bridge', defaultOn: true, requires: [],
-    description: 'Mosquitto broker and the two-way bridge between MQTT and Loxone virtual inputs/outputs.',
+    description: 'Mosquitto broker and the two-way bridge between MQTT and Loxone virtual inputs/outputs. Switching it off also stops the broker (within seconds, Docker); the MQTT topics of energy, charging and OCPP are then not published and vehicles with an MQTT source get no new data.',
     parts: ['Broker, MQTT users and roles', 'Mappings MQTT → Loxone and Loxone → MQTT', 'Transformations, common commands', 'Live Data (MQTT), Client Activity', 'Logs: MQTT broker, Loxone commands'],
     routes: ['/mappings', '/incoming', '/mqtt-users', '/mqtt-roles', '/transformations', '/logs/mqtt', '/logs/loxone-commands'],
+    // Started by server.js itself at boot (each guards on isOn('mqtt')); here only for switching at
+    // runtime. Mosquitto follows via the flag file (see brokerFlagPath / docker-entrypoint.sh).
+    workers: [
+      { selfStarted: true, start: lazy('./dynsecBootstrap', 'runBootstrap'), stop: () => {} },
+      { selfStarted: true, start: lazy('./mqttClient', 'startMqttClient'), stop: lazy('./mqttClient', 'stopMqttClient') },
+      { selfStarted: true, start: lazy('./loxoneUdpServer', 'startUdpServer'), stop: lazy('./loxoneUdpServer', 'stopUdpServer') },
+    ],
     inUse: async () => true,
   },
   {
@@ -170,13 +179,30 @@ async function init() {
     }
   }
   ready = true;
+  syncBrokerFlag();
   return Object.fromEntries(state);
 }
 
-function startWorkers(key) {
+// Docker: docker-entrypoint.sh runs Mosquitto only while this file is absent, and starts or stops
+// it within a few seconds when it appears or disappears. Next to the database (the /data volume),
+// so it survives a restart and the broker stays off from the very first second.
+function brokerFlagPath() {
+  if (process.env.MODULES_FLAG_DIR) return path.join(process.env.MODULES_FLAG_DIR, 'mqtt.off');
+  const dbPath = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data', 'gateway.db');
+  return path.join(path.dirname(dbPath), 'modules', 'mqtt.off');
+}
+function syncBrokerFlag() {
+  const file = brokerFlagPath();
+  try {
+    if (isOn('mqtt')) { if (fs.existsSync(file)) fs.unlinkSync(file); } else { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `MQTT bridge module switched off ${new Date().toISOString()}\n`); }
+  } catch (e) { console.error(`[modules] broker flag: ${e.message}`); }
+}
+
+function startWorkers(key, { boot = false } = {}) {
   if (running.has(key)) return;
   running.add(key);
   for (const w of byKey.get(key)?.workers || []) {
+    if (boot && w.selfStarted) continue;
     try { const r = w.start(); if (r && r.catch) r.catch((e) => console.error(`[modules] ${key} start: ${e.message}`)); } catch (e) { console.error(`[modules] ${key} start: ${e.message}`); }
   }
 }
@@ -187,7 +213,7 @@ async function stopWorkers(key) {
     try { await w.stop(); } catch (e) { console.error(`[modules] ${key} stop: ${e.message}`); }
   }
 }
-function startEnabledWorkers() { for (const m of MODULES) if (isOn(m.key)) startWorkers(m.key); }
+function startEnabledWorkers() { for (const m of MODULES) if (isOn(m.key)) startWorkers(m.key, { boot: true }); }
 
 async function setEnabled(key, on, { by = null } = {}) {
   if (!byKey.has(key)) throw new Error(`Unknown module "${key}".`);
@@ -198,6 +224,7 @@ async function setEnabled(key, on, { by = null } = {}) {
     state.set(c.key, c.enabled);
   }
   for (const c of changed) { if (c.enabled) startWorkers(c.key); else await stopWorkers(c.key); }
+  if (changed.some((c) => c.key === 'mqtt')) syncBrokerFlag();
   if (changed.length) {
     const { logSystemEvent } = require('./auditLog');
     logSystemEvent(`Modules: ${changed.map((c) => `${byKey.get(c.key).label} ${c.enabled ? 'on' : 'off'}`).join(', ')}${by ? ` by ${by}` : ''}`).catch(() => {});
@@ -241,4 +268,4 @@ function overview() {
 
 function _reset(map = null) { state.clear(); running.clear(); ready = !!map; if (map) for (const [k, v] of Object.entries(map)) state.set(k, v); }
 
-module.exports = { MODULES, GROUPS, isOn, init, setEnabled, startEnabledWorkers, moduleForPath, middleware, overview, applySwitch, requiredBy, dependents, _reset };
+module.exports = { MODULES, GROUPS, isOn, brokerFlagPath, init, setEnabled, startEnabledWorkers, moduleForPath, middleware, overview, applySwitch, requiredBy, dependents, _reset };

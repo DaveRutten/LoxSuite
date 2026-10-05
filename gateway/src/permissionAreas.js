@@ -47,8 +47,21 @@ const AREAS = [
   // has no row for a given area, and an Administrator bypasses the matrix entirely via isAdmin. So
   // every existing custom role simply has no access to this until an admin explicitly grants it,
   // which is also the safe default for a brand new AI-powered feature.
-  { key: 'ai_chat', label: 'AI Assistant' },
+  { key: 'ai_chat', label: 'AI Assistant', module: 'ai' },
+  // One area per energy module (modules.js) instead of everything hanging off 'miniservers'. Only
+  // shown in Access Roles while that module is on; migration 029 copies each role's 'miniservers'
+  // rights into these so nobody loses access with the update.
+  { key: 'energy', label: 'Energy (meters, prices)', module: 'energy' },
+  { key: 'vehicles', label: 'Vehicles & driving', module: 'vehicles' },
+  { key: 'charging', label: 'Smart charging (planner, charge log, agenda)', module: 'charging' },
+  { key: 'energy_manager', label: 'Energy manager', module: 'energy_manager' },
+  { key: 'ocpp', label: 'OCPP & charging costs', module: 'ocpp' },
+  // View = see the Translations page, Edit = translate (Administration > Languages stays admin-only).
+  { key: 'translations', label: 'Translate' },
 ];
+
+// The areas added in 029 (copied from 'miniservers' for existing roles).
+const MODULE_AREAS = ['energy', 'vehicles', 'charging', 'energy_manager', 'ocpp'];
 
 const AREA_KEYS = AREAS.map((a) => a.key);
 
@@ -56,4 +69,7 @@ const AREA_KEYS = AREAS.map((a) => a.key);
 // View/Download table instead) — kept as a derived list so LOG_AREAS only has to be defined once.
 const MAIN_AREAS = AREAS.filter((a) => !LOG_AREAS.includes(a));
 
-module.exports = { AREAS, AREA_KEYS, LOG_AREAS, MAIN_AREAS };
+// For Access Roles: hide the areas of modules that are switched off (their stored rights stay).
+function visibleAreas(list, isOn) { return list.filter((a) => !a.module || isOn(a.module)); }
+
+module.exports = { AREAS, AREA_KEYS, LOG_AREAS, MAIN_AREAS, MODULE_AREAS, visibleAreas };

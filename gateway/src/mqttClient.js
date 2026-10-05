@@ -306,6 +306,7 @@ function connectWithSettings(settings) {
 }
 
 async function reconnect() {
+  if (!require('./modules').isOn('mqtt')) return;
   connectWithSettings(await loadSettings());
 }
 
@@ -377,14 +378,34 @@ function getBrokerStats() {
 // loadSettings() was a synchronous better-sqlite3 read, but the async facade means it can't be
 // awaited at plain require() time. server.js's main() calls this explicitly after db.init() instead.
 async function startMqttClient() {
+  // MQTT bridge module switched off (Administration > Modules): no connection at all — Mosquitto
+  // itself is stopped too (see modules.js's flag file and docker-entrypoint.sh).
+  if (!require('./modules').isOn('mqtt')) return;
   await reloadMappings();
   connectWithSettings(await loadSettings());
+}
+
+// The opposite, for switching the MQTT bridge module off at runtime: say "offline" while we still
+// can, then drop the connection for good (no reconnect loop against a broker that is stopping).
+function stopMqttClient() {
+  return new Promise((resolve) => {
+    if (!client) { state.connected = false; resolve(); return; }
+    const c = client;
+    publishOffline(() => {
+      c.removeAllListeners();
+      c.end(true);
+      if (client === c) client = null;
+      state.connected = false;
+      resolve();
+    });
+  });
 }
 
 module.exports = {
   getClient,
   state,
   startMqttClient,
+  stopMqttClient,
   reconnect,
   reloadMappings,
   buildMappingIndex,

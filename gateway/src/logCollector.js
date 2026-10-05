@@ -34,8 +34,11 @@ async function startLogCollector() {
   await pruneOldClients();
   setInterval(pruneOldClients, RETENTION_TICK_MS);
 
-  await pollAllMiniservers();
-  setInterval(pollAllMiniservers, LOXONE_POLL_MS);
+  // Retention above is core (also notifications); only the Miniserver log polling belongs to the
+  // Loxone logs module and is skipped while that is switched off.
+  const pollLogs = () => (require('./modules').isOn('loxone_logs') ? pollAllMiniservers() : Promise.resolve());
+  await pollLogs();
+  setInterval(() => pollLogs().catch((e) => console.error('Loxone log poll failed:', e.message)), LOXONE_POLL_MS);
 }
 
 module.exports = { startLogCollector };

@@ -82,6 +82,27 @@ async function loadStats(bridge) {
   const stats = computeStats({
     tracker: ocppExport.parseTrackerEntries(trackerText || ''), recorded, currentTotalKwh: Number(total), live, timeZone: getDisplayTimezone(),
   });
+  // Costs & reimbursement (ocppFinance.js) over the months in the chart, reported sessions only.
+  try {
+    const finance = require('./ocppFinance');
+    const tariffs = await finance.listTariffs(bridge.id);
+    if (finance.isConfigured(bridge, tariffs)) {
+      const timeZone = getDisplayTimezone();
+      const first = stats.months[0]?.key.split('-').map(Number);
+      const start = first ? ocppExport.zonedMidnight(first[0], first[1], 1, timeZone) : 0;
+      const excluded = (await db.prepare('SELECT id FROM vehicles WHERE ocpp_report = 0').all().catch(() => [])).map((v) => v.id);
+      const { rows } = ocppExport.buildQuarterRows({
+        tracker: ocppExport.parseTrackerEntries(trackerText || ''), recorded, currentTotalKwh: Number(total), start, end: Math.ceil(Date.now() / 1000) + 86400, excludeVehicleIds: excluded,
+      });
+      const sum = finance.summarize(await finance.costRows(bridge, rows, timeZone), timeZone);
+      const cfg = finance.parseSettings(bridge.finance);
+      stats.finance = {
+        month: sum.month, quarter: sum.quarter, year: sum.year, hasTariff: tariffs.length > 0, currentTariff: finance.tariffOn(tariffs, finance.localDate(Date.now() / 1000, timeZone)),
+        costMode: cfg.cost_mode, showVat: cfg.show_vat,
+      };
+      for (const m of stats.months) { const f = sum.months[m.key]; m.cost = f?.cost ?? null; m.reimbursement = f?.reimbursement ?? null; m.saldo = f?.saldo ?? null; }
+    }
+  } catch (err) { stats.financeError = err.message; }
   const last = recorded.filter((r) => r.stopped_at && r.meter_stop_wh != null).sort((a, b) => b.id - a.id)[0];
   stats.lastSession = last ? { stoppedAt: last.stopped_at, kwh: round3((last.meter_stop_wh - last.meter_start_wh) / 1000) } : null;
   return { stats, wallboxName: ctl.name };
@@ -100,6 +121,13 @@ function statTopics(bridgeId) {
     last_session_kwh: `${base}/last_session_kwh`,
     power_kw: `${base}/power_kw`,
     meter_kwh: `${base}/meter_kwh`,
+    month_cost_eur: `${base}/month_cost_eur`,
+    month_reimbursement_eur: `${base}/month_reimbursement_eur`,
+    month_saldo_eur: `${base}/month_saldo_eur`,
+    quarter_saldo_eur: `${base}/quarter_saldo_eur`,
+    year_cost_eur: `${base}/year_cost_eur`,
+    year_reimbursement_eur: `${base}/year_reimbursement_eur`,
+    year_saldo_eur: `${base}/year_saldo_eur`,
   };
 }
 
@@ -114,6 +142,13 @@ function statValues(stats) {
     last_session_kwh: stats.lastSession?.kwh,
     power_kw: stats.powerKw,
     meter_kwh: stats.meterKwh,
+    month_cost_eur: stats.finance?.month.cost,
+    month_reimbursement_eur: stats.finance?.month.reimbursement,
+    month_saldo_eur: stats.finance?.month.saldo,
+    quarter_saldo_eur: stats.finance?.quarter.saldo,
+    year_cost_eur: stats.finance?.year.cost,
+    year_reimbursement_eur: stats.finance?.year.reimbursement,
+    year_saldo_eur: stats.finance?.year.saldo,
   };
 }
 
@@ -121,6 +156,8 @@ const STAT_LABELS = {
   today_kwh: 'Today (kWh)', week_kwh: 'This week (kWh)', month_kwh: 'This month (kWh)', quarter_kwh: 'This quarter (kWh)',
   prev_quarter_kwh: 'Previous quarter (kWh)', year_kwh: 'This year (kWh)', last_session_kwh: 'Last session (kWh)',
   power_kw: 'Charging power (kW)', meter_kwh: 'Meter reading (kWh)',
+  month_cost_eur: 'Cost this month (€)', month_reimbursement_eur: 'Reimbursement this month (€)', month_saldo_eur: 'Balance this month (€)',
+  quarter_saldo_eur: 'Balance this quarter (€)', year_cost_eur: 'Cost this year (€)', year_reimbursement_eur: 'Reimbursement this year (€)', year_saldo_eur: 'Balance this year (€)',
 };
 
 module.exports = { computeStats, loadStats, statTopics, statValues, STAT_LABELS };

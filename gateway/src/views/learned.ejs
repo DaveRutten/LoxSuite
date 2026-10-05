@@ -12,7 +12,7 @@
   <p class="hint" style="margin:0 0 0.5rem;">Each dot is an unplug; green = a morning departure, red line = median. "Ready by" = the early quartile of that day's departures minus 15 minutes, so the car is almost always ready in time. A weekday without a regular morning departure has none.</p>
   <form method="post" action="/learned/overrides">
     <div style="overflow-x:auto;"><table id="ln-dep"><tbody><tr><td class="hint">Loading&hellip;</td></tr></tbody></table></div>
-    <% if (canEdit('miniservers')) { %><div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save own times</button><button type="button" class="btn-soft" id="ln-sync">Read sessions from the Wallbox now</button></div><% } %>
+    <% if (canEdit('charging')) { %><div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save own times</button><button type="button" class="btn-soft" id="ln-sync">Read sessions from the Wallbox now</button></div><% } %>
   </form>
 </div>
 
@@ -39,7 +39,7 @@
   var SLOT = { morning: 'morning', afternoon: 'afternoon', evening: 'evening' };
   var DUR = { short: 'short · < 2 h away', medium: '2 – 6 h away', long: '> 6 h away' };
   var CONF = { high: ['high', '#2e7d32'], medium: ['medium', '#b8860b'], low: ['low', '#c0392b'], none: ['—', 'inherit'] };
-  var canEdit = <%- JSON.stringify(canEdit('miniservers')) %>;
+  var canEdit = <%- JSON.stringify(canEdit('charging')) %>;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
   function conf(c) { var x = CONF[c] || CONF.none; return '<span style="color:' + x[1] + '; font-weight:600;">' + x[0] + '</span>'; }

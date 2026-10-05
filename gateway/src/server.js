@@ -61,6 +61,7 @@ const { shutdownOcppBridges } = require('./ocppBridge');
 const mcpClient = require('./mcpClient');
 const requireAuth = require('./middleware/requireAuth');
 const loadUserContext = require('./middleware/loadUserContext');
+const i18n = require('./i18n');
 const { requirePermission, requireAdmin } = require('./middleware/requirePermission');
 const { attachCsrfToken, verifyCsrfToken } = require('./middleware/csrf');
 const asyncHandler = require('./middleware/asyncHandler');
@@ -128,6 +129,8 @@ async function main() {
   await db.init();
   // Which modules are on (Administration > Modules); seeded on the first start after the update.
   await modules.init().catch((err) => console.error('Modules init failed:', err.message));
+  // Languages and translations (Administration > Languages, Translations page).
+  await i18n.init().catch((err) => console.error('Languages init failed:', err.message));
   // Eagerly, once — getDisplayTimezone() (formatDateTime, res.locals.displayTimezone below) is
   // called synchronously all over template rendering and can't itself await a DB read. See
   // dateFormat.js's own comment on loadTimezoneCache/getDisplayTimezone for the full reasoning.
@@ -169,6 +172,10 @@ async function main() {
   // instead of needing a manual hard-refresh, while every request within the same run still shares
   // one cache-friendly value.
   app.locals.assetVersion = Date.now();
+  // t('English text') in every view: the installation default here, the user's own language once
+  // loadUserContext knows who is logged in (res.locals.t there).
+  app.locals.t = (key, vars) => i18n.translate(i18n.defaultLanguage(), key, vars);
+  app.locals.lang = 'en';
   app.locals.icon = icon;
   app.locals.toggleSwitch = toggleSwitch;
   app.locals.formatDateTime = formatDateTime;
@@ -228,6 +235,7 @@ async function main() {
   // Public: Loxone calls this directly, no login involved.
   app.use('/api/loxone-in', loxoneInboundRoutes);
   
+  app.use((req, res, next) => { const lang = i18n.defaultLanguage(); res.locals.lang = lang; res.locals.t = i18n.translator(lang); res.locals.multiLang = i18n.listLanguages().length > 1; next(); });
   app.use(attachCsrfToken);
   app.use(verifyCsrfToken);
   
@@ -299,14 +307,14 @@ async function main() {
   app.use('/transformations', requireAuth, requirePermission('transformations', 'view'), transformationsRoutes);
   app.use('/monitor', requireAuth, requirePermission('monitor', 'view'), monitorRoutes);
   app.use('/hardware', requireAuth, requirePermission('hardware', 'view'), hardwareRoutes);
-  app.use('/ocpp', requireAuth, requirePermission('miniservers', 'view'), ocppRoutes);
-  app.use('/vehicles', requireAuth, requirePermission('miniservers', 'view'), vehicleRoutes);
-  app.use('/energy', requireAuth, requirePermission('miniservers', 'view'), energyRoutes);
-  app.use('/planner', requireAuth, requirePermission('miniservers', 'view'), plannerRoutes);
-  app.use('/learned', requireAuth, requirePermission('miniservers', 'view'), learnedRoutes);
-  app.use('/driving', requireAuth, requirePermission('miniservers', 'view'), drivingRoutes);
-  app.use('/energy-manager', requireAuth, requirePermission('miniservers', 'view'), energyManagerRoutes);
-  app.use('/agenda', requireAuth, requirePermission('miniservers', 'view'), agendaRoutes);
+  app.use('/ocpp', requireAuth, requirePermission('ocpp', 'view'), ocppRoutes);
+  app.use('/vehicles', requireAuth, requirePermission('vehicles', 'view'), vehicleRoutes);
+  app.use('/energy', requireAuth, requirePermission('energy', 'view'), energyRoutes);
+  app.use('/planner', requireAuth, requirePermission('charging', 'view'), plannerRoutes);
+  app.use('/learned', requireAuth, requirePermission('charging', 'view'), learnedRoutes);
+  app.use('/driving', requireAuth, requirePermission('vehicles', 'view'), drivingRoutes);
+  app.use('/energy-manager', requireAuth, requirePermission('energy_manager', 'view'), energyManagerRoutes);
+  app.use('/agenda', requireAuth, requirePermission('charging', 'view'), agendaRoutes);
   app.use('/app', requireAuth, appRoutes);
   // logs.js serves four distinct areas (one per tab: logs_mqtt/logs_loxone/logs_loxone_commands/
   // logs_system), so it's gated per-route inside that file instead of once here — same reasoning as
@@ -322,6 +330,8 @@ async function main() {
   // Mounted before the general '/admin' router below so their routes take precedence without
   // relying on that router falling through for a path it doesn't recognize.
   app.use('/admin/modules', requireAuth, requireAdmin, modulesRoutes);
+  app.use('/admin/languages', requireAuth, requireAdmin, require('./routes/languages'));
+  app.use('/translations', requireAuth, requirePermission('translations', 'view'), require('./routes/translations'));
   app.use('/admin/backup', requireAuth, requireAdmin, backupRoutes);
   app.use('/admin/notifications', requireAuth, requireAdmin, notificationsRoutes);
   app.use('/admin', requireAuth, requireAdmin, adminRoutes);

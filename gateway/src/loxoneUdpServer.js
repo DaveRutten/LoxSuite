@@ -70,8 +70,13 @@ async function handleMessage(buffer, rinfo) {
   });
 }
 
+let udpSocket = null;
+
 function startUdpServer(port = process.env.LOXONE_UDP_PORT || 11885) {
+  if (udpSocket) return udpSocket;
+  if (!require('./modules').isOn('mqtt')) return null; // MQTT bridge module off
   const socket = dgram.createSocket('udp4');
+  udpSocket = socket;
   socket.on('message', (buffer, rinfo) => {
     handleMessage(buffer, rinfo).catch((err) => console.error('Loxone UDP: failed to handle message:', err.message));
   });
@@ -80,4 +85,11 @@ function startUdpServer(port = process.env.LOXONE_UDP_PORT || 11885) {
   return socket;
 }
 
-module.exports = { startUdpServer, handleMessage };
+function stopUdpServer() {
+  if (!udpSocket) return;
+  try { udpSocket.close(); } catch { /* already closed */ }
+  udpSocket = null;
+  console.log('Loxone UDP server stopped (MQTT bridge module off).');
+}
+
+module.exports = { startUdpServer, stopUdpServer, handleMessage };

@@ -14,7 +14,7 @@
     <h2 style="margin:0;">Now</h2>
     <div class="btn-row" style="margin:0;">
       <span class="hint" id="em-status" style="margin:0;"></span>
-      <% if (canEdit('miniservers')) { %><button type="button" class="btn-soft" id="em-recalc">Recalculate</button><button type="button" class="btn-soft" id="em-import">Import 30 days from Loxone</button><% } %>
+      <% if (canEdit('energy_manager')) { %><button type="button" class="btn-soft" id="em-recalc">Recalculate</button><button type="button" class="btn-soft" id="em-import">Import 30 days from Loxone</button><% } %>
     </div>
   </div>
   <div id="em-now" style="margin-top:0.6rem;"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
@@ -27,7 +27,7 @@
 
 <div id="em-loads"></div>
 
-<% if (canEdit('miniservers')) { %>
+<% if (canEdit('energy_manager')) { %>
 <div class="card">
   <h2 style="margin-top:0;">Consumers</h2>
   <p class="hint">Priority 1 is served first when there is solar surplus. The car (Smart charging) takes its place at the priority set below.</p>
@@ -52,7 +52,7 @@
 
 <script>
 (function () {
-  var CAN = <%- JSON.stringify(canEdit('miniservers')) %>;
+  var CAN = <%- JSON.stringify(canEdit('energy_manager')) %>;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
   function eur(v, d) { return v == null ? '—' : '€ ' + nf(v, d == null ? 2 : d); }
@@ -98,6 +98,20 @@
     el.innerHTML = s + '</svg><div class="hint" style="margin:0.3rem 0 0;">Green = would be 1 (release / now / start). Orange = higher setpoint (pre-heat), blue = lower. Hover for the reason.</div>';
   }
 
+  // Learned patterns: when it usually runs, how long, how much — and what usually follows what.
+  function patternsHtml(l) {
+    var h = '<div style="margin-top:0.8rem;"><div class="hint" style="margin:0 0 0.3rem; font-size:0.8rem;"><strong>Patterns</strong> (last 8 weeks, ' + l.patternDays + ' days measured' + (l.usePatterns ? '' : ' &mdash; not used in the plan') + ')</div>';
+    var list = (l.patterns || []).concat(l.follows || []);
+    if (!list.length) h += '<p class="hint" style="margin:0;">' + (l.patternDays < 7 ? 'Not enough days measured yet (patterns appear after about a week).' : 'No clear pattern yet.') + '</p>';
+    else h += '<ul style="margin:0 0 0.4rem; padding-left:1.1rem;">' + list.map(function (p) { return '<li>' + esc(p.text) + '</li>'; }).join('') + '</ul>';
+    var ex = l.expected || [], max = Math.max.apply(null, ex.map(function (x) { return x.kwh; }).concat([0.01]));
+    if (ex.some(function (x) { return x.kwh > 0; })) {
+      var w = 100 / ex.length;
+      h += '<div class="hint" style="margin:0.3rem 0 0.2rem; font-size:0.75rem;">Expected use, next 24 h (kWh per hour)</div><svg viewBox="0 0 100 34" preserveAspectRatio="none" width="100%" height="48" style="display:block;">' +
+        ex.map(function (x, i) { var bh = Math.round(x.kwh / max * 26); return '<rect x="' + (i * w + 0.3) + '" y="' + (28 - bh) + '" width="' + (w - 0.6) + '" height="' + bh + '" fill="var(--accent, #5CA83F)" opacity="0.7"><title>' + hh(x.ms) + ': ' + nf(x.kwh, 2) + ' kWh</title></rect>' + (i % 3 === 0 ? '<text x="' + (i * w + w / 2) + '" y="33.5" font-size="3.4" text-anchor="middle" fill="currentColor" opacity="0.6">' + String(new Date(x.ms).getHours()).padStart(2, '0') + '</text>' : ''); }).join('') + '</svg>';
+    }
+    return h + '</div>';
+  }
   function render(d) {
     last = d;
     document.getElementById('em-status').textContent = d.planAt ? 'plan ' + hh(d.planAt) + (d.status && d.status.exportKw != null ? ' · feeding in now ' + nf(d.status.exportKw, 1) + ' kW' : '') : '';
@@ -112,7 +126,7 @@
       if (l.kind === 'appliance') {
         h += '<p class="hint" style="margin:0 0 0.5rem;">Learned: ' + (lr.runs ? lr.runs + ' run(s), typically ' + nf(lr.kwh, 2) + ' kWh in ' + nf(lr.durationH, 1) + ' h' : 'no runs measured yet') + '.</p>';
         if (CAN) h += '<div class="btn-row" style="align-items:flex-end;"><div><label>Ready by</label><input type="datetime-local" id="em-ready-' + l.id + '"></div><div><label>Label</label><input type="text" id="em-label-' + l.id + '" placeholder="e.g. 40° wash"></div><button type="button" class="btn-soft" data-req="' + l.id + '">Plan the best start</button></div>';
-        if (l.requests.length) h += '<ul style="margin:0.5rem 0;">' + l.requests.map(function (q) { return '<li>' + esc(q.label) + ': ready by ' + esc(new Date(q.readyBy).toLocaleString()) + ' &rarr; <strong>' + (q.plannedStart ? 'start at ' + hh(q.plannedStart) : 'no start found') + '</strong>' + (q.plannedCost != null ? ' (' + eur(q.plannedCost) + ')' : '') + (CAN ? ' <a href="#" data-delreq="' + q.id + '">remove</a>' : '') + '</li>'; }).join('') + '</ul>';
+        if (l.requests.length) h += '<ul style="margin:0.5rem 0;">' + l.requests.map(function (q) { return '<li>' + esc(q.label) + (q.expected ? ': usually ' + hh(q.usualStart) : ': ready by ' + esc(new Date(q.readyBy).toLocaleString())) + ' &rarr; <strong>' + (q.plannedStart ? 'start at ' + hh(q.plannedStart) : 'no start found') + '</strong>' + (q.plannedCost != null ? ' (' + eur(q.plannedCost) + ')' : '') + (CAN && q.id ? ' <a href="#" data-delreq="' + q.id + '">remove</a>' : '') + (q.expected ? ' <span class="badge">expected</span>' : '') + '</li>'; }).join('') + '</ul>';
         h += '<div style="overflow-x:auto;"><table><thead><tr><th>Run</th><th>Duration</th><th>kWh</th><th>Cost</th><th>Best start (hindsight)</th><th>Then</th><th>Saving</th></tr></thead><tbody>' +
           (l.runs.length ? l.runs.map(function (r) { var dur = (Date.parse(r.end_at) - Date.parse(r.start_at)) / 60000; var sav = r.cost_eur != null && r.best_cost_eur != null ? r.cost_eur - r.best_cost_eur : null; return '<tr><td>' + esc(new Date(r.start_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + Math.round(dur) + ' min</td><td>' + nf(r.kwh, 2) + '</td><td>' + eur(r.cost_eur) + '</td><td>' + (r.best_start ? hh(r.best_start) : '—') + '</td><td>' + eur(r.best_cost_eur) + '</td><td style="color:' + (sav > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(sav) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No runs measured yet.</td></tr>') + '</tbody></table></div>';
       } else {
@@ -120,6 +134,7 @@
         h += '<div style="overflow-x:auto;"><table><thead><tr><th>Day</th><th>kWh</th><th>Cost</th><th>€/kWh</th><th>Solar</th><th>In advised hours</th><th>Could save</th></tr></thead><tbody>' +
           (l.daily.length ? l.daily.map(function (x) { return '<tr><td>' + esc(dayLabel(x.day)) + '</td><td>' + nf(x.kwh, 1) + '</td><td>' + eur(x.cost) + '</td><td>' + eur(x.eurPerKwh, 3) + '</td><td>' + (x.solarShare == null ? '—' : x.solarShare + '%') + '</td><td>' + (x.advisedShare == null ? '<span class="hint">not logged yet</span>' : x.advisedShare + '%') + '</td><td style="color:' + (x.potential > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(x.potential) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No measurements yet.</td></tr>') + '</tbody></table></div>';
       }
+      h += patternsHtml(l);
       h += '<p class="hint" style="margin:0.6rem 0 0; font-size:0.8rem;">Later, to let LoxSuite drive it: ' + l.signals.map(function (s) { return 'virtual input <code>' + esc(s.vi) + '</code> (' + esc(s.unit) + ') &rarr; ' + esc(s.hint); }).join('; ') + '.</p>';
       return h + '</div>';
     }).join('');

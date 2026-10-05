@@ -28,7 +28,8 @@
     <div><label>Typical power (kW)</label><input type="text" name="s_kw" value="<%= s.kw ?? kinds.appliance.defaults.kw %>"></div>
     <div><label>Look for a better start up to (h later)</label><input type="text" name="s_flex_h" value="<%= s.flex_h ?? 8 %>"></div>
   </div>
-  <p class="hint" style="margin:0.5rem 0 0.2rem;">The kW is learned from the meter after a few days (tick to keep your own value): <label style="display:inline-flex; gap:0.3rem; font-weight:normal;"><input type="checkbox" name="s_kw_fixed" value="1" <%= s.kw_fixed ? 'checked' : '' %>> keep my kW</label></p>
+  <p class="hint" style="margin:0.5rem 0 0.2rem;"><input type="hidden" name="s_use_patterns_sent" value="1"><label style="display:inline-flex; gap:0.3rem; font-weight:normal;"><input type="checkbox" name="s_use_patterns" value="1" <%= s.use_patterns !== false ? 'checked' : '' %>> Use learned patterns</label> (tap water hot before its usual use; an appliance's usual run gets a best start)</p>
+  <p class="hint" style="margin:0.2rem 0 0.2rem;">The kW is learned from the meter after a few days (tick to keep your own value): <label style="display:inline-flex; gap:0.3rem; font-weight:normal;"><input type="checkbox" name="s_kw_fixed" value="1" <%= s.kw_fixed ? 'checked' : '' %>> keep my kW</label></p>
   <details style="margin-top:0.3rem;"><summary class="hint" style="cursor:pointer;">Virtual input names (for later)</summary>
     <div class="form-grid" style="margin-top:0.4rem;">
       <% Object.keys(kinds).forEach(k => { kinds[k].signals.forEach(sig => { %>

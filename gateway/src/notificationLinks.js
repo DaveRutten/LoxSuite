@@ -6,8 +6,8 @@ function notificationSourceLink(eventType, sourceId, canView, sourceRef) {
   // tied to any one row — hence no sourceId to key off, unlike every other case below. Still worth
   // a link back to where that model actually gets managed.
   if (eventType === 'ai_ollama_pull' && canView('ai_chat')) return '/admin/ai';
-  if (eventType === 'energy_meter_status' && canView('miniservers')) return '/energy';
-  if ((eventType === 'car_reminder' || eventType === 'charging_plan') && canView('miniservers')) return '/planner';
+  if (eventType === 'energy_meter_status' && canView('energy')) return '/energy';
+  if ((eventType === 'car_reminder' || eventType === 'charging_plan') && canView('charging')) return '/planner';
   if (!sourceId) return null;
   if ((eventType === 'monitor_threshold' || eventType === 'threshold_ladder') && canView('monitor')) {
     // ?open=settings auto-expands that monitor's own Chart settings drawer (see monitor-detail.ejs)
@@ -24,7 +24,7 @@ function notificationSourceLink(eventType, sourceId, canView, sourceRef) {
     const base = `/hardware?miniserver_id=${sourceId}`;
     return sourceRef ? `${base}&device=${encodeURIComponent(sourceRef)}` : base;
   }
-  if (eventType === 'vehicle_source_status' && canView('miniservers')) return `/vehicles/${sourceId}`;
+  if (eventType === 'vehicle_source_status' && canView('vehicles')) return `/vehicles/${sourceId}`;
   return null;
 }
 

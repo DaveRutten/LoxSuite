@@ -6,10 +6,11 @@ const { formatDateTime } = require('./dateFormat');
 
 // The five trigger types selectable when creating a rule — kept here since routes/notifications.js
 // and this file are the only two places that need the list.
+// `module`: only selectable (and only fires) while that module is on — see triggerTypesFor().
 const TRIGGER_TYPES = [
-  { key: 'monitor_threshold', label: 'Monitor threshold breached' },
+  { key: 'monitor_threshold', label: 'Monitor threshold breached', module: 'monitor' },
   { key: 'miniserver_status', label: 'Miniserver online/offline' },
-  { key: 'mqtt_client_status', label: 'MQTT client online/offline' },
+  { key: 'mqtt_client_status', label: 'MQTT client online/offline', module: 'mqtt' },
   { key: 'backup_failed', label: 'Backup failed' },
   { key: 'backup_succeeded', label: 'Backup succeeded' },
   { key: 'firmware_changed', label: 'Miniserver firmware changed' },
@@ -18,10 +19,10 @@ const TRIGGER_TYPES = [
   { key: 'battery_weak', label: 'Loxone device battery weak' },
   { key: 'device_firmware_changed', label: 'Loxone device firmware changed' },
   { key: 'device_offline', label: 'Loxone device online/offline' },
-  { key: 'vehicle_source_status', label: 'Vehicle data source failing/recovered' },
-  { key: 'energy_meter_status', label: 'Energy meter (grid/PV/Wallbox) failing/recovered' },
-  { key: 'car_reminder', label: 'Car: plug in / swap reminders' },
-  { key: 'charging_plan', label: 'Car: charging plan warnings (won\'t be ready, trip longer than the battery)' },
+  { key: 'vehicle_source_status', label: 'Vehicle data source failing/recovered', module: 'vehicles' },
+  { key: 'energy_meter_status', label: 'Energy meter (grid/PV/Wallbox) failing/recovered', module: 'energy' },
+  { key: 'car_reminder', label: 'Car: plug in / swap reminders', module: 'charging' },
+  { key: 'charging_plan', label: 'Car: charging plan warnings (won\'t be ready, trip longer than the battery)', module: 'charging' },
 ];
 
 // Sending goes through Apprise (https://github.com/caronc/apprise, installed as a CLI in the
@@ -410,7 +411,17 @@ async function fireRule(rule, rawEvent) {
   }
 }
 
+// For the rule forms: every type (existing rules still need their label), with `off` set for the
+// types of modules that are switched off so the dropdowns leave them out.
+function triggerTypesFor() {
+  const { isOn } = require('./modules');
+  return TRIGGER_TYPES.map((t) => ({ ...t, off: !!(t.module && !isOn(t.module)) }));
+}
+
 async function getRulesByTrigger(triggerType) {
+  // A rule whose module is switched off (Administration > Modules) doesn't fire; it stays stored.
+  const t = TRIGGER_TYPES.find((x) => x.key === triggerType);
+  if (t?.module && !require('./modules').isOn(t.module)) return [];
   return db.prepare('SELECT * FROM notification_rules WHERE trigger_type = ? AND enabled = 1').all(triggerType);
 }
 
@@ -896,6 +907,7 @@ async function fireCarEvent(triggerType, key, event) {
 
 module.exports = {
   TRIGGER_TYPES,
+  triggerTypesFor,
   retryDelayMs,
   sendTestMessage,
   sendTemplateTestMessage,

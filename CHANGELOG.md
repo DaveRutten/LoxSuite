@@ -2,6 +2,47 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.29.0-alpha.1] - 2026-10-05
+
+### Added
+- **OCPP costs & reimbursement** per bridge: what the charged kWh cost you and what you get back, with the balance.
+  - Reimbursement tariffs per kWh with the date they take effect (a new row per change). Blank by default — no
+    reimbursement is shown until you add one.
+  - Cost from the real hourly price plus the solar share (grid part at that hour's all-in price, solar at the price of
+    that hour, a fixed feed-in value or free), else the average price during the session, or a fixed rate.
+  - VAT: tariff entered incl. or excl. VAT, amounts shown incl. or excl. VAT.
+  - Only reported sessions count (cars set to "report" under Vehicles).
+  - Tiles for this month, quarter and year; the balance per month under the monthly chart; a quarterly export "with
+    cost, reimbursement & balance" next to the unchanged Laadloon layout; MQTT topics for cost, reimbursement and
+    balance (month/quarter/year).
+- **Languages and translating.** English is the base language; Dutch is the first translation.
+  - Each user chooses a language in their profile; the installation default is set under Administration → Languages.
+  - Administration → Languages: switch languages on/off, choose the default, add a language, export/import JSON.
+  - New Translations page: progress per module, search, "not translated only", translate in place. Permission area
+    **Translate** (view = look, edit = translate). Texts not translated yet show in English.
+  - Translated so far: the menu, the tab bar, the administration tabs, Modules, Languages, Translations and the
+    language choice; the other pages follow step by step.
+- **Modules: status, getting started, export and wipe.** Per module a checklist of what still has to be done, the rows
+  per table, an export of its data (zip with JSON + CSV per table, secrets removed) and wiping its data (only while the
+  module is off, after typing its key).
+- **Energy manager: learned patterns.** From the last 8 weeks per consumer: when it usually runs, how long and how
+  much — every day (tap water ~19:00), on one weekday, or appliance runs at about the same time (washer Saturday
+  ~10:00, 2 h, 1.1 kWh) — and which appliance usually follows another (dryer ~40 min after the washer). Shown per
+  consumer with the expected use for the next 24 hours. In the (shadow) plan: tap water is hot before its usual use,
+  and an appliance's usual run gets a best start from its usual time up to "flex" hours later. Can be switched off per
+  consumer ("Use learned patterns").
+
+### Changed
+- **Switching the MQTT bridge off now really stops it**: the MQTT client, the Loxone UDP listener, Mosquitto log
+  tailing and the Loxone → MQTT HTTP endpoint stop, and in Docker the Mosquitto broker itself stops within seconds
+  (and starts again when switched on). The entrypoint now also restarts Mosquitto if it exits unexpectedly instead of
+  restarting the whole container.
+- **Access roles per module**: Energy, Vehicles & driving, Smart charging, Energy manager and OCPP & charging costs are
+  their own permission areas instead of "Miniservers". Each role gets the rights it had on Miniservers, so nothing
+  changes with the update. Areas of modules that are off are hidden in Access Roles (their rights are kept).
+- Notification rules of a module that is off can't be chosen and don't fire (existing rules are kept).
+- Monitor polling and Loxone log polling pause while their module is off.
+
 ## [0.28.0-alpha.1] - 2026-10-05
 
 ### Added

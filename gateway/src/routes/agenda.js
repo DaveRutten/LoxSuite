@@ -43,7 +43,7 @@ router.get('/items.json', asyncHandler(async (req, res) => {
   res.json({ items, learned, plan: plan ? plan.slots : [], sessions });
 }));
 
-router.post('/calendars', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/calendars', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   try {
     const id = await agenda.addCalendar({ name: req.body.name, url: req.body.url, color: req.body.color, vehicle_id: req.body.vehicle_id ? Number(req.body.vehicle_id) : null });
     const cal = await db.prepare('SELECT * FROM calendars WHERE id = ?').get(id);
@@ -55,24 +55,24 @@ router.post('/calendars', requirePermission('miniservers', 'edit'), asyncHandler
   }
 }));
 
-router.post('/calendars/:id/delete', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/calendars/:id/delete', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('DELETE FROM calendar_events WHERE calendar_id = ?').run(req.params.id);
   await db.prepare('DELETE FROM event_overrides WHERE calendar_id = ?').run(req.params.id);
   await db.prepare('DELETE FROM calendars WHERE id = ?').run(req.params.id);
   res.redirect('/agenda');
 }));
 
-router.post('/calendars/:id/update', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/calendars/:id/update', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('UPDATE calendars SET name = ?, color = ?, vehicle_id = ?, enabled = ? WHERE id = ?')
     .run(String(req.body.name || 'Calendar').slice(0, 80), req.body.color || '#3b82c4', req.body.vehicle_id ? Number(req.body.vehicle_id) : null, req.body.enabled ? 1 : 0, req.params.id);
   res.redirect('/agenda?saved=1');
 }));
 
-router.post('/sync.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/sync.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   res.json({ ok: true, results: await agenda.syncAll() });
 }));
 
-router.post('/settings', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const tags = String(req.body.tags || '').split(/[\s,]+/).map((t) => t.trim()).filter(Boolean).slice(0, 12);
   await settings.patch('agenda', {
     tags: tags.length ? tags : agenda.DEFAULTS.tags,
@@ -83,7 +83,7 @@ router.post('/settings', requirePermission('miniservers', 'edit'), asyncHandler(
   res.redirect('/agenda?saved=1#settings');
 }));
 
-router.post('/override.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/override.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const b = req.body || {};
   if (!b.calendar_id || !b.uid || !b.start_at) return res.json({ ok: false, message: 'Missing event.' });
   await agenda.setOverride(b);
@@ -91,12 +91,12 @@ router.post('/override.json', requirePermission('miniservers', 'edit'), asyncHan
   res.json({ ok: true });
 }));
 
-router.post('/distance.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/distance.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const r = await agenda.distanceFromHome(req.body?.location);
   res.json({ ok: !!r && !r.error, ...(r || {}) });
 }));
 
-router.post('/trips', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/trips', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const b = req.body;
   const depart = Date.parse(b.depart_at);
   if (!b.title || !Number.isFinite(depart)) return res.redirect(`/agenda?error=${encodeURIComponent('A trip needs a name and a departure time.')}`);
@@ -108,7 +108,7 @@ router.post('/trips', requirePermission('miniservers', 'edit'), asyncHandler(asy
   res.redirect('/agenda?saved=1');
 }));
 
-router.post('/trips/:id/delete', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/trips/:id/delete', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('DELETE FROM trips WHERE id = ?').run(req.params.id);
   res.redirect('/agenda');
 }));

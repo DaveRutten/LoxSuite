@@ -28,7 +28,7 @@
 </div>
 <% } %>
 
-<% if (canEdit('miniservers')) { %>
+<% if (canEdit('vehicles')) { %>
 <div class="card">
   <form method="post" action="/vehicles/<%= v.id %>/update">
     <%- include('partials/vehicle-fields', { v, fields, presets }) %>

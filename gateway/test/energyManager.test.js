@@ -100,3 +100,33 @@ test('hour cost: grid share at the price, solar share at its value', () => {
   assert.equal(em.hourCost(1, { gridImport: 0.5, houseKwh: 2, price: 0.3, solarValue: 0.05 }), 0.25 * 0.3 + 0.75 * 0.05);
   assert.equal(em.hourCost(1, { price: null }), null);
 });
+
+test('learned pattern: tap water hot before its usual use (shower ~07:00 → night block, not the solar block)', () => {
+  const patterns = [{ type: 'daily', from: 7, to: 8, probability: 0.9, kwh: 2 }];
+  const plan = em.planLoads({
+    hours, nowMs: T0, localOf, feedIn: 'fixed', feedInEur: 0.05,
+    loads: [{ id: 1, kind: 'dhw', name: 'Tapwater', priority: 1, patterns, settings: { ...em.KINDS.dhw.defaults, kw: 2.5, duration_h: 1, earliest: 0, latest: 24 } }],
+  });
+  const on = plan.loads[0].hours.filter((h) => h.values.now === 1);
+  assert.equal(on.length, 1);
+  assert.ok(new Date(on[0].ms).getUTCHours() < 7);
+  assert.match(on[0].reason, /usual use ~07:00/);
+  // Switched off in the settings: back to the solar block.
+  const off = em.planLoads({ hours, nowMs: T0, localOf, feedIn: 'fixed', feedInEur: 0.05,
+    loads: [{ id: 1, kind: 'dhw', name: 'Tapwater', priority: 1, patterns, settings: { ...em.KINDS.dhw.defaults, kw: 2.5, earliest: 0, latest: 24, use_patterns: false } }] });
+  assert.ok(new Date(off.loads[0].hours.find((h) => h.values.now === 1).ms).getUTCHours() >= 11);
+});
+
+test('learned pattern: an appliance\'s usual run (09:00) gets the best start from then on (solar at 11)', () => {
+  const lo = (ms) => ({ ...localOf(ms), minute: new Date(ms).getUTCMinutes(), weekday: (new Date(ms).getUTCDay() + 6) % 7 });
+  const plan = em.planLoads({
+    hours, nowMs: T0, localOf: lo, feedIn: 'fixed', feedInEur: 0.05,
+    loads: [{ id: 3, kind: 'appliance', name: 'Wasmachine', priority: 2, settings: { ...em.KINDS.appliance.defaults, flex_h: 8 },
+      patterns: [{ type: 'run', weekday: null, hour: 9, minute: 0, durationH: 2, kwh: 1.2, count: 5, of: 7 }] }],
+  });
+  const q = plan.loads[0].requests[0];
+  assert.equal(q.expected, true);
+  assert.equal(new Date(q.usualStart).getUTCHours(), 9);
+  assert.equal(new Date(q.plannedStart).getUTCHours(), 11);
+  assert.match(plan.loads[0].hours.find((h) => h.values.start === 1).reason, /usual run/);
+});

@@ -193,7 +193,7 @@
 
 <script>
 (function () {
-  var canEdit = <%- JSON.stringify(canEdit('miniservers')) %>;
+  var canEdit = <%- JSON.stringify(canEdit('charging')) %>;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
   function eur(v, d) { return v == null ? '—' : '€ ' + nf(v, d == null ? 2 : d); }

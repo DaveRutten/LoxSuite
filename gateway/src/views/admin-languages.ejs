@@ -1,0 +1,96 @@
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+
+<div class="tabs">
+  <a href="/admin/general"><%= t('General') %></a>
+  <a href="/admin/users"><%= t('Users') %></a>
+  <a href="/admin/roles"><%= t('Access Roles') %></a>
+  <a href="/admin/backup"><%= t('Backups') %></a>
+  <a href="/admin/notifications"><%= t('Notifications') %></a>
+  <a href="/admin/security"><%= t('Security') %></a>
+  <a href="/admin/modules"><%= t('Modules') %></a>
+  <a class="active" href="/admin/languages"><%= t('Languages') %></a>
+  <% if (moduleOn('ai')) { %><a href="/admin/ai"><%= t('AI Assistant') %></a><% } %>
+</div>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);"><%= saved === '1' ? t('Saved') : saved %>.</p><% } %>
+
+<p class="hint"><%= t('The languages users can choose in their profile, and the default for everyone who did not choose one. English is the base language; other languages show English where a text is not translated yet. Translating is done on the Translations page, by anyone whose role may translate (Access Roles → Translate).') %></p>
+
+<div class="card">
+  <table class="table">
+    <thead><tr><th><%= t('Language') %></th><th><%= t('Code') %></th><th><%= t('Translated') %></th><th><%= t('Status') %></th><th></th></tr></thead>
+    <tbody>
+      <% langs.forEach(l => { %>
+        <tr>
+          <td><strong><%= l.name %></strong><% if (l.isDefault) { %> <span class="badge"><%= t('default') %></span><% } %></td>
+          <td><code><%= l.code %></code></td>
+          <td>
+            <% if (l.progress) { %>
+              <div style="display:flex; align-items:center; gap:0.5rem;">
+                <div style="flex:1; min-width:80px; height:8px; border-radius:4px; background:var(--surface-alt, #eee); overflow:hidden;"><div style="width:<%= l.progress.pct %>%; height:100%; background:var(--accent, #5CA83F);"></div></div>
+                <span class="hint" style="margin:0; white-space:nowrap;"><%= l.progress.pct %>% (<%= l.progress.done %>/<%= l.progress.total %>)</span>
+              </div>
+            <% } else { %><span class="hint" style="margin:0;"><%= t('base language') %></span><% } %>
+          </td>
+          <td><%= l.enabled ? t('on') : t('off') %></td>
+          <td>
+            <div class="btn-row" style="gap:0.3rem; flex-wrap:wrap; justify-content:flex-end;">
+              <% if (!l.isDefault) { %>
+                <form method="post" action="/admin/languages/<%= l.code %>/enabled" style="margin:0;"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="enabled" value="<%= l.enabled ? '0' : '1' %>"><button type="submit" class="btn-soft"><%= l.enabled ? t('Switch off') : t('Switch on') %></button></form>
+                <form method="post" action="/admin/languages/<%= l.code %>/default" style="margin:0;"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn-soft"><%= t('Make default') %></button></form>
+              <% } %>
+              <% if (l.progress) { %>
+                <a class="btn-soft" href="/translations?lang=<%= l.code %>"><%= t('Translate') %></a>
+                <a class="btn-soft" href="/admin/languages/<%= l.code %>/export"><%- icon('download') %> JSON</a>
+                <% if (!l.isDefault) { %>
+                <form method="post" action="/admin/languages/<%= l.code %>/delete" style="margin:0;" onsubmit="return confirm(<%= JSON.stringify(t('Remove {language} and its own translations?', { language: l.name })) %>);"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form>
+                <% } %>
+              <% } %>
+            </div>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr)); gap:1rem;">
+  <div class="card" style="margin:0;">
+    <h2 style="margin-top:0;"><%= t('Add a language') %></h2>
+    <form method="post" action="/admin/languages/add">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-grid">
+        <div><label><%= t('Code') %></label><input type="text" name="code" placeholder="de" maxlength="16" required></div>
+        <div><label><%= t('Name') %></label><input type="text" name="name" placeholder="Deutsch" required></div>
+      </div>
+      <div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit"><%- icon('plus') %> <%= t('Add') %></button></div>
+    </form>
+  </div>
+  <div class="card" style="margin:0;">
+    <h2 style="margin-top:0;"><%= t('Import translations') %></h2>
+    <p class="hint"><%= t('A JSON file like the export: { "English text": "translation" }. Existing translations with the same English text are replaced.') %></p>
+    <form method="post" id="lang-import" action="">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-grid">
+        <div><label><%= t('Language') %></label><select id="lang-import-code"><% langs.filter(l => l.progress).forEach(l => { %><option value="<%= l.code %>"><%= l.name %></option><% }) %></select></div>
+        <div><label><%= t('File') %></label><input type="file" id="lang-import-file" accept=".json,application/json"></div>
+      </div>
+      <textarea name="json" id="lang-import-json" rows="4" style="width:100%; margin-top:0.5rem; font-family:monospace;" placeholder='{ "Smart charging": "Slim laden" }'></textarea>
+      <div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit"><%= t('Import') %></button></div>
+    </form>
+  </div>
+</div>
+<script>
+(function () {
+  var form = document.getElementById('lang-import');
+  var file = document.getElementById('lang-import-file');
+  file.addEventListener('change', function () {
+    var f = file.files[0]; if (!f) return;
+    var r = new FileReader(); r.onload = function () { document.getElementById('lang-import-json').value = r.result; }; r.readAsText(f);
+  });
+  form.addEventListener('submit', function () { form.action = '/admin/languages/' + encodeURIComponent(document.getElementById('lang-import-code').value) + '/import'; });
+})();
+</script>
+
+<%- include('partials/foot') %>

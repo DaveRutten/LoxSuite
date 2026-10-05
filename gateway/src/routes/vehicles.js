@@ -131,7 +131,7 @@ router.get('/', asyncHandler(async (req, res) => {
   });
 }));
 
-router.post('/', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/', requirePermission('vehicles', 'edit'), asyncHandler(async (req, res) => {
   const { values, error } = parseForm(req.body);
   if (error) return res.redirect(`/vehicles?error=${encodeURIComponent(error)}`);
   const now = new Date().toISOString();
@@ -151,7 +151,7 @@ router.post('/', requirePermission('miniservers', 'edit'), asyncHandler(async (r
 
 // Every MQTT topic the broker has carried (latest value), for the topic pickers. LoxSuite's own
 // published vehicle topics are left out — mapping a vehicle onto its own output would loop.
-router.get('/topics.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.get('/topics.json', requirePermission('vehicles', 'edit'), asyncHandler(async (req, res) => {
   const topics = mqttClient.getTopicOverview()
     .filter((t) => !t.topic.startsWith('loxsuite/vehicles/') && !t.topic.startsWith('$'))
     .slice(0, 3000)
@@ -161,7 +161,7 @@ router.get('/topics.json', requirePermission('miniservers', 'edit'), asyncHandle
 
 // Homey devices / Home Assistant entities for the pickers. JSON POSTs (CSRF-exempt like the other
 // JSON endpoints); a blank key/token falls back to the one saved on the vehicle being edited.
-router.post('/homey-devices.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/homey-devices.json', requirePermission('vehicles', 'edit'), asyncHandler(async (req, res) => {
   let key = String(req.body?.key || '');
   if (!key && req.body?.vehicle_id) {
     const v = await loadVehicle(req.body.vehicle_id);
@@ -175,7 +175,7 @@ router.post('/homey-devices.json', requirePermission('miniservers', 'edit'), asy
   }
 }));
 
-router.post('/ha-entities.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/ha-entities.json', requirePermission('vehicles', 'edit'), asyncHandler(async (req, res) => {
   let token = String(req.body?.token || '');
   if (!token && req.body?.vehicle_id) {
     const v = await loadVehicle(req.body.vehicle_id);
@@ -191,7 +191,7 @@ router.post('/ha-entities.json', requirePermission('miniservers', 'edit'), async
 
 // Reads the source once with the settings as they are in the form right now (not yet saved) and
 // returns the raw values next to the normalised reading.
-router.post('/test', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/test', requirePermission('vehicles', 'edit'), asyncHandler(async (req, res) => {
   const { values, error } = parseForm(req.body || {});
   if (error) return res.json({ ok: false, message: error });
   if (values.source_type === 'none') return res.json({ ok: false, message: 'Choose a data source first.' });
@@ -237,7 +237,7 @@ router.post('/:id/monitor', requirePermission('monitor', 'edit'), asyncHandler(a
   return res.json({ ok: true, created, skipped });
 }));
 
-router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/:id/update', requirePermission('vehicles', 'edit'), asyncHandler(async (req, res) => {
   const existing = await loadVehicle(req.params.id);
   if (!existing) return res.redirect('/vehicles');
   const { values, error } = parseForm(req.body);
@@ -256,7 +256,7 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandle
   return res.redirect(`/vehicles/${existing.id}?saved=1`);
 }));
 
-router.post('/:id/delete', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/:id/delete', requirePermission('vehicles', 'edit'), asyncHandler(async (req, res) => {
   const existing = await loadVehicle(req.params.id);
   await db.prepare('DELETE FROM vehicle_readings WHERE vehicle_id = ?').run(req.params.id);
   await db.prepare('DELETE FROM vehicles WHERE id = ?').run(req.params.id);

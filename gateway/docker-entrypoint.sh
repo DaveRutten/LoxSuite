@@ -116,8 +116,32 @@ if [ ! -f "$TLS_CERT" ] || [ ! -f "$TLS_KEY" ]; then
   chmod 600 "$TLS_KEY"
 fi
 
-mosquitto -c "$MOSQUITTO_CONF" &
-MOSQ_PID=$!
+# (`|| true` on kill/wait: `set -e` would otherwise end this script on their non-zero exit codes.)
+# Mosquitto runs only while the MQTT bridge module is on (Administration > Modules). The gateway
+# writes $BROKER_OFF_FLAG when the module is switched off and removes it when it's switched on; the
+# loop below follows that within a few seconds — no container restart needed.
+DB_DIR=$(dirname "${DB_PATH:-/data/gateway.db}")
+BROKER_OFF_FLAG="${MODULES_FLAG_DIR:-$DB_DIR/modules}/mqtt.off"
+MOSQ_PID=""
+
+start_mosquitto() {
+  mosquitto -c "$MOSQUITTO_CONF" &
+  MOSQ_PID=$!
+  echo "Mosquitto started (pid $MOSQ_PID)."
+}
+stop_mosquitto() {
+  if [ -n "$MOSQ_PID" ]; then
+    kill -TERM "$MOSQ_PID" 2>/dev/null || true
+    wait "$MOSQ_PID" 2>/dev/null || true
+    MOSQ_PID=""
+  fi
+}
+
+if [ -f "$BROKER_OFF_FLAG" ]; then
+  echo "MQTT bridge module is switched off - Mosquitto is not started."
+else
+  start_mosquitto
+fi
 
 node src/server.js &
 NODE_PID=$!
@@ -125,21 +149,34 @@ NODE_PID=$!
 stopping=0
 shutdown() {
   stopping=1
-  kill -TERM "$NODE_PID" 2>/dev/null
-  kill -TERM "$MOSQ_PID" 2>/dev/null
-  wait "$NODE_PID" 2>/dev/null
-  wait "$MOSQ_PID" 2>/dev/null
+  kill -TERM "$NODE_PID" 2>/dev/null || true
+  wait "$NODE_PID" 2>/dev/null || true
+  stop_mosquitto
 }
 trap 'shutdown; exit 0' TERM INT
 
-# No `wait -n` (bash-only) — poll instead. Either process dying takes the whole container down;
-# the compose restart policy brings both back up together.
-while kill -0 "$MOSQ_PID" 2>/dev/null && kill -0 "$NODE_PID" 2>/dev/null; do
+# No `wait -n` (bash-only) — poll instead. The gateway dying takes the whole container down (the
+# compose restart policy brings it back); Mosquitto is started, stopped or restarted to match the flag.
+while kill -0 "$NODE_PID" 2>/dev/null; do
+  if [ -f "$BROKER_OFF_FLAG" ]; then
+    if [ -n "$MOSQ_PID" ]; then
+      echo "MQTT bridge module switched off - stopping Mosquitto."
+      stop_mosquitto
+    fi
+  elif [ -z "$MOSQ_PID" ]; then
+    start_mosquitto
+  elif ! kill -0 "$MOSQ_PID" 2>/dev/null; then
+    echo "Mosquitto exited unexpectedly - restarting it."
+    wait "$MOSQ_PID" 2>/dev/null || true
+    MOSQ_PID=""
+    sleep 1
+    start_mosquitto
+  fi
   sleep 2
 done
 
 if [ "$stopping" = "0" ]; then
-  echo "One of the two processes exited unexpectedly — stopping the container so the restart policy can recover it."
+  echo "The gateway exited unexpectedly - stopping the container so the restart policy can recover it."
   shutdown
   exit 1
 fi

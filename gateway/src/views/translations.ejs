@@ -1,0 +1,87 @@
+<%- include('partials/head', { pageTitle: 'Translations', active: 'translations' }) %>
+
+<% if (!lang) { %>
+  <div class="card"><p style="margin:0;"><%= t('There is no language to translate into yet.') %><% if (currentUser.isAdmin) { %> <a href="/admin/languages"><%= t('Add a language') %></a><% } %></p></div>
+<% } else { %>
+  <div class="card">
+    <div style="display:flex; flex-wrap:wrap; gap:0.8rem; align-items:flex-end;">
+      <form method="get" action="/translations" style="margin:0;">
+        <label><%= t('Language') %></label>
+        <select name="lang" onchange="this.form.submit()"><% langs.forEach(l => { %><option value="<%= l.code %>" <%= l.code === lang ? 'selected' : '' %>><%= l.name %><%= l.enabled ? '' : ' (' + t('off') + ')' %></option><% }) %></select>
+      </form>
+      <div style="flex:1; min-width:180px;"><label><%= t('Search') %></label><input type="search" id="tr-search" placeholder="<%= t('English or translation') %>"></div>
+      <div><label><%= t('Module') %></label><select id="tr-module"><option value=""><%= t('All') %></option><% progress.modules.forEach(p => { %><option value="<%= p.module %>"><%= p.label %></option><% }) %></select></div>
+      <label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal; margin-bottom:0.45rem;"><input type="checkbox" id="tr-missing"> <%= t('Not translated only') %></label>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:0.5rem 1rem; margin-top:1rem;">
+      <% progress.modules.forEach(p => { const pct = p.total ? Math.round(p.done / p.total * 100) : 100; %>
+        <button type="button" class="tr-mod" data-module="<%= p.module %>" style="all:unset; cursor:pointer; display:block;">
+          <div style="display:flex; justify-content:space-between; font-size:0.85rem;"><span><%= p.label %><%= p.on ? '' : ' · ' + t('off') %></span><span class="hint" style="margin:0;"><span data-done="<%= p.module %>"><%= p.done %></span>/<%= p.total %></span></div>
+          <div style="height:6px; border-radius:3px; background:var(--surface-alt, #eee); overflow:hidden; margin-top:0.2rem;"><div data-bar="<%= p.module %>" data-total="<%= p.total %>" style="width:<%= pct %>%; height:100%; background:var(--accent, #5CA83F);"></div></div>
+        </button>
+      <% }) %>
+    </div>
+    <p class="hint" style="margin:0.8rem 0 0;"><%= t('{done} of {total} texts translated ({pct}%). Keep {placeholders} as they are; they are filled in by LoxSuite.', { done: progress.done, total: progress.total, pct: progress.pct, placeholders: '{…}' }) %>
+      <% if (!canEdit('translations')) { %><strong><%= t('You can look but not translate (Access Roles → Translate → Edit).') %></strong><% } %></p>
+  </div>
+
+  <div class="card">
+    <table class="table" id="tr-table">
+      <thead><tr><th style="width:45%;">English</th><th><%= (langs.find(l => l.code === lang) || {}).name %></th></tr></thead>
+      <tbody>
+        <% entries.forEach(e => { %>
+          <tr data-module="<%= e.module %>" data-key="<%= e.key %>" data-done="<%= e.text ? 1 : 0 %>">
+            <td style="vertical-align:top;"><div><%= e.key %></div><div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;"><%= e.where.slice(0, 3).join(', ') %><%= e.where.length > 3 ? ' …' : '' %></div></td>
+            <td style="vertical-align:top;">
+              <% if (canEdit('translations')) { %>
+                <textarea rows="<%= e.key.length > 70 ? 3 : 1 %>" style="width:100%;" data-orig="<%= e.text %>"><%= e.text %></textarea>
+                <div class="hint tr-meta" style="margin:0.15rem 0 0; font-size:0.75rem;"><%= e.custom ? t('by {user}', { user: e.by || '?' }) : (e.shipped ? t('shipped with LoxSuite') : '') %></div>
+              <% } else { %><%= e.text || '—' %><% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <script>
+  (function () {
+    var lang = <%- JSON.stringify(lang) %>;
+    var T = <%- JSON.stringify({ saving: t('Saving…'), saved: t('Saved'), by: t('by {user}', { user: currentUser.username }), shipped: t('shipped with LoxSuite') }) %>;
+    var rows = Array.prototype.slice.call(document.querySelectorAll('#tr-table tbody tr'));
+    var search = document.getElementById('tr-search'), mod = document.getElementById('tr-module'), missing = document.getElementById('tr-missing');
+    function filter() {
+      var q = search.value.trim().toLowerCase(), m = mod.value, only = missing.checked;
+      rows.forEach(function (r) {
+        var ta = r.querySelector('textarea');
+        var text = (r.getAttribute('data-key') + ' ' + (ta ? ta.value : r.textContent)).toLowerCase();
+        r.hidden = (m && r.getAttribute('data-module') !== m) || (only && r.getAttribute('data-done') === '1') || (q && text.indexOf(q) === -1);
+      });
+    }
+    [search, mod, missing].forEach(function (el) { el.addEventListener('input', filter); el.addEventListener('change', filter); });
+    Array.prototype.forEach.call(document.querySelectorAll('.tr-mod'), function (b) { b.addEventListener('click', function () { mod.value = b.getAttribute('data-module'); filter(); }); });
+    function counts(module, delta) {
+      var d = document.querySelector('[data-done="' + module + '"]'); if (!d) return;
+      var n = Number(d.textContent) + delta; d.textContent = n;
+      var bar = document.querySelector('[data-bar="' + module + '"]'); bar.style.width = Math.round(n / Number(bar.getAttribute('data-total')) * 100) + '%';
+    }
+    rows.forEach(function (r) {
+      var ta = r.querySelector('textarea'); if (!ta) return;
+      var meta = r.querySelector('.tr-meta');
+      ta.addEventListener('change', function () {
+        meta.textContent = T.saving;
+        fetch('/translations/save.json', { method: 'POST', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ lang: lang, key: r.getAttribute('data-key'), text: ta.value }) })
+          .then(function (res) { return res.json(); })
+          .then(function (d) {
+            if (!d.ok) { meta.textContent = d.error || 'Error'; return; }
+            var was = r.getAttribute('data-done') === '1', now = !!(d.effective && d.effective !== r.getAttribute('data-key')) || !!ta.value.trim();
+            if (was !== now) { r.setAttribute('data-done', now ? '1' : '0'); counts(r.getAttribute('data-module'), now ? 1 : -1); }
+            if (!ta.value.trim() && d.effective && d.effective !== r.getAttribute('data-key')) { ta.value = d.effective; meta.textContent = T.shipped; } else meta.textContent = T.saved + ' · ' + T.by;
+          })
+          .catch(function (e) { meta.textContent = e.message; });
+      });
+    });
+  })();
+  </script>
+<% } %>
+
+<%- include('partials/foot') %>

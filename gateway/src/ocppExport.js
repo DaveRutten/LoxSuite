@@ -180,6 +180,34 @@ function buildCsv({ rows, timeZone }) {
   return lines.join('\r\n') + '\r\n';
 }
 
+// The same sessions with cost, reimbursement and balance (ocppFinance.costSessions rows).
+const SOURCE_LABEL = { uur: 'uurprijs', vast: 'vast tarief', gem: 'gem. prijs' };
+const FIN_HEADER = ['sessie', 'starttijd', 'eindtijd', 'verbruik_kWh', 'tarief_eur_kWh', 'vergoeding_eur', 'kosten_eur', 'saldo_eur', 'zon_pct', 'kostenbron'];
+function financeLine(r, i, timeZone) {
+  return [i + 1, formatLocal(r.start, timeZone), formatLocal(r.end, timeZone), r.energy, r.tariff, r.reimbursement, r.cost, r.saldo, r.solarShare, SOURCE_LABEL[r.costSource] || ''];
+}
+function buildFinanceSheetCells({ title, rows, quarterName, timeZone, incomplete }) {
+  const cells = [[{ v: `${title} – kosten en vergoeding`, bold: true }], [], FIN_HEADER.map((v) => ({ v, bold: true }))];
+  rows.forEach((r, i) => cells.push(financeLine(r, i, timeZone)));
+  const sum = (k) => { const xs = rows.map((r) => r[k]).filter((v) => v !== null && v !== undefined); return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) * 100) / 100 : null; };
+  const total = round3(rows.reduce((s, r) => s + r.energy, 0));
+  cells.push([{ v: 'Totaal', bold: true }, null, null, { v: total, bold: true }, null, { v: sum('reimbursement'), bold: true }, { v: sum('cost'), bold: true }, { v: sum('saldo'), bold: true }]);
+  cells.push([]);
+  cells.push([`Periode ${quarterName}; sessies op starttijd (${timeZone}). Kosten: uurprijs = netdeel tegen de all-in uurprijs plus zonnedeel tegen de ingestelde waarde; gem. prijs = gemiddelde prijs tijdens de sessie (geen uurmeting).`]);
+  if (incomplete) cells.push(['LET OP: het sessielog gaat niet ver genoeg terug om dit kwartaal volledig te dekken; vroege sessies kunnen ontbreken.']);
+  return { cells, total };
+}
+function buildFinanceCsv({ rows, timeZone }) {
+  const f = (v, d) => (v === null || v === undefined ? '' : Number(v).toFixed(d));
+  const lines = [FIN_HEADER.join(';')];
+  rows.forEach((r, i) => {
+    const l = financeLine(r, i, timeZone);
+    lines.push([l[0], l[1], l[2], f(r.energy, 3), f(r.tariff, 4), f(r.reimbursement, 2), f(r.cost, 2), f(r.saldo, 2), r.solarShare ?? '', l[9]].join(';'));
+  });
+  return lines.join('\r\n') + '\r\n';
+}
+
 module.exports = {
+  buildFinanceSheetCells, buildFinanceCsv,
   parseTrackerEntries, quarterRange, recentQuarters, buildQuarterRows, buildXlsx, buildSheetCells, buildCsv, formatLocal, zonedMidnight,
 };

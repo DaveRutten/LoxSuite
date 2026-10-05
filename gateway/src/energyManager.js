@@ -121,8 +121,11 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
     if (load.kind === 'dhw') {
       const dur = Math.max(1, Math.round(Number(s.duration_h) || 1));
       const days = [...new Set(H.map((h) => localOf(h.ms).day))];
+      // Learned pattern: hot before its usual use (the first daily use after the earliest start).
+      const usual = s.use_patterns === false ? null : (load.patterns || []).filter((p) => p.type === 'daily' && p.from >= (s.earliest ?? 0) + dur).sort((x, y) => x.from - y.from)[0];
+      const latest = usual ? Math.min(s.latest ?? 24, usual.from) : (s.latest ?? 24);
       for (const day of days) {
-        const win = H.filter((h) => { const l = localOf(h.ms); return l.day === day && l.hour >= (s.earliest ?? 0) && l.hour < (s.latest ?? 24); });
+        const win = H.filter((h) => { const l = localOf(h.ms); return l.day === day && l.hour >= (s.earliest ?? 0) && l.hour < latest; });
         if (load.doneToday && day === localOf(nowMs).day) continue;
         let best = null;
         for (let i = 0; i + dur <= win.length; i++) {
@@ -137,7 +140,7 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
           const r = at.get(h.ms);
           r.values.now = 1;
           r.values.setpoint = solar || (p25 !== null && h.price <= p25) ? s.buffer_setpoint : s.normal_setpoint;
-          r.reason = solar ? 'solar surplus' : 'cheapest block of the day';
+          r.reason = (solar ? 'solar surplus' : 'cheapest block of the day') + (usual && latest === usual.from ? ` (hot before the usual use ~${String(usual.from).padStart(2, '0')}:00)` : '');
           consume(h.ms, kw);
         }
       }
@@ -180,11 +183,27 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
       }
     } else if (load.kind === 'appliance') {
       for (const r of rows) { r.values.start = 0; r.values.pause = 0; }
+      // No run asked for: expect its usual run(s) (learned pattern) and plan the best start from
+      // the usual time up to flex_h later.
+      if (!(load.requests || []).length && s.use_patterns !== false && localOf(nowMs).weekday !== undefined) {
+        const ep = require('./energyPatterns');
+        const end = H.length ? H[H.length - 1].ms + HOUR : nowMs;
+        for (const p of (load.patterns || []).filter((x) => x.type === 'run')) {
+          const occ = ep.nextOccurrence(p, nowMs, end, localOf);
+          if (occ === null) continue;
+          const dur = Math.max(1, Math.ceil(p.durationH || 2));
+          load.requests = [...(load.requests || []), {
+            id: null, expected: true, label: `usual run (${ep.describe(p)})`, notBefore: Math.floor(occ / HOUR) * HOUR,
+            readyBy: Math.floor(occ / HOUR) * HOUR + ((Number(s.flex_h) || 8) + dur) * HOUR, kwh: p.kwh || kw * dur, durationH: dur, usualStart: occ,
+          }];
+        }
+      }
       for (const q of load.requests || []) {
         const dur = Math.max(1, Math.ceil(Number(q.durationH) || 2));
         const kwh = Number(q.kwh) || kw * dur;
         let best = null;
         for (let i = 0; i < H.length; i++) {
+          if (q.notBefore && H[i].ms < q.notBefore) continue;
           const block = H.slice(i, i + dur);
           if (block.length < dur || block[block.length - 1].ms + HOUR > q.readyBy + 1) break;
           const cost = block.reduce((a, h) => a + effCost(h, kwh / dur, left.get(h.ms), opts), 0);
@@ -193,7 +212,7 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
         if (!best) continue;
         const r = at.get(best.block[0].ms);
         r.values.start = 1;
-        r.reason = `start for "${q.label || 'run'}" (ready by ${new Date(q.readyBy).toISOString()})`;
+        r.reason = q.expected ? `best start for the ${q.label}` : `start for "${q.label || 'run'}" (ready by ${new Date(q.readyBy).toISOString()})`;
         q.plannedStart = best.block[0].ms;
         q.plannedCost = r2(best.cost);
         for (const h of best.block) consume(h.ms, kwh / dur);
@@ -373,11 +392,29 @@ async function learned(load) {
   return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay: days ? r2(rows.reduce((a, r) => a + r.kwh, 0) / days) : null, hours: rows.length };
 }
 
+// Learned patterns of one load (energyPatterns.js) from the last 8 weeks.
+async function loadPatterns(load, nowMs, localOf) {
+  const ep = require('./energyPatterns');
+  const from = new Date(nowMs - 56 * 86400000).toISOString();
+  const hourly = await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ?').all(load.id, from).catch(() => []);
+  const runs = load.kind === 'appliance' ? await db.prepare("SELECT start_at, end_at, kwh FROM load_runs WHERE load_id = ? AND kind = 'run' AND start_at >= ?").all(load.id, from).catch(() => []) : [];
+  const r = ep.findPatterns({ kind: load.kind, hourly, runs, localOf, nowMs });
+  return { patterns: r.patterns, profile: r.profile };
+}
+async function followsFor(loads) {
+  const apps = loads.filter((l) => l.kind === 'appliance');
+  if (apps.length < 2) return [];
+  const from = new Date(Date.now() - 56 * 86400000).toISOString();
+  const byLoad = {};
+  for (const l of apps) byLoad[l.id] = await db.prepare("SELECT start_at, end_at FROM load_runs WHERE load_id = ? AND kind = 'run' AND start_at >= ?").all(l.id, from).catch(() => []);
+  return require('./energyPatterns').followPatterns(byLoad);
+}
+
 async function recalc(nowMs = Date.now()) {
   const planner = require('./planner');
   const { localParts, displayTz } = require('./localTime');
   const tz = displayTz();
-  const localOf = (ms) => { const p = localParts(ms, tz); return { day: `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`, hour: p.hour }; };
+  const localOf = (ms) => { const p = localParts(ms, tz); return { day: `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`, hour: p.hour, minute: p.minute, weekday: p.weekday }; };
   const cfg = await getConfig();
   const pcfg = await planner.getConfig();
   const slots = await planner.buildSlots(nowMs, nowMs + 36 * HOUR);
@@ -399,10 +436,13 @@ async function recalc(nowMs = Date.now()) {
       l.doneToday = (row?.k || 0) >= Math.max(0.5, (l.settings.kw || 2) * (l.settings.duration_h || 1) * 0.7);
     }
     l.learned = lr;
+    Object.assign(l, await loadPatterns(l, nowMs, localOf));
   }
+  rt.follows = await followsFor(loads);
   const plan = planLoads({ hours, loads, carKwh, carPriority: cfg.car_priority, nowMs, localOf, feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, solarBonus: cfg.solar_bonus_eur });
   rt.plan = { ...plan, hours, carKwh, at: new Date(nowMs).toISOString(), today };
   rt.loads = loads;
+  rt.localOf = localOf;
   rt.planAt = nowMs;
   return rt.plan;
 }
@@ -502,7 +542,7 @@ async function importHistory(days = 30, { callTool } = {}) {
   return report;
 }
 
-function getRuntime() { return { plan: rt.plan, signals: rt.signals, status: rt.status, samples: Object.fromEntries(rt.samples), runs: Object.fromEntries(rt.runs) }; }
+function getRuntime() { return { loads: rt.loads || [], follows: rt.follows || [], localOf: rt.localOf || null, plan: rt.plan, signals: rt.signals, status: rt.status, samples: Object.fromEntries(rt.samples), runs: Object.fromEntries(rt.runs) }; }
 
 function startEnergyManager() {
   if (rt.timer) return;

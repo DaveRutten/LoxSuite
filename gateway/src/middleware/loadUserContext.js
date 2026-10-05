@@ -106,6 +106,12 @@ module.exports = asyncHandler(async function loadUserContext(req, res, next) {
   };
   res.locals.currentUser = req.user;
   Object.assign(res.locals, makeHelpers(req.user));
+  // The user's own language (Profile), else the installation default (Administration > Languages).
+  const i18n = require('../i18n');
+  req.user.language = user.language || null;
+  req.lang = i18n.resolveLanguage(user.language);
+  res.locals.lang = req.lang;
+  res.locals.t = i18n.translator(req.lang);
   // Only queried for a user who could even see the widget at all (canView('ai_chat')) — the global
   // Administration > AI Assistant toggle is the SECOND, independent off switch (see the AI
   // Assistant feature's own "two independent switches" design): the widget must stay invisible for

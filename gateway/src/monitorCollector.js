@@ -287,6 +287,7 @@ async function maybeAutoReconnect(miniserver, monitor) {
 }
 
 async function pollLoxoneMonitors() {
+  if (!require('./modules').isOn('monitor')) return; // Monitor module off: no polling
   const monitors = await db.prepare("SELECT * FROM monitors WHERE source_type = 'loxone' AND enabled = 1").all();
   const now = Date.now();
 

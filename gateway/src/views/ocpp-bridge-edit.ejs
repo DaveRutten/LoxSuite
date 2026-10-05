@@ -7,7 +7,7 @@
 <div class="card">
   <h2 style="margin-top:0;">Status</h2>
   <div id="ocpp-status"><p class="hint" style="margin:0;"><%= bridge.enabled ? 'Loading…' : 'Disabled.' %></p></div>
-  <% if (canEdit('miniservers')) { %>
+  <% if (canEdit('ocpp')) { %>
   <div class="btn-row" style="margin-top:0.8rem;">
     <button type="button" id="ocpp-test-btn" class="btn-test"><%- icon('refresh') %> Test connection</button>
   </div>
@@ -40,6 +40,50 @@
   <% } %>
 </div>
 
+<div class="card" id="finance">
+  <h2 style="margin-top:0;">Costs &amp; reimbursement</h2>
+  <p class="hint">
+    What the charged kWh cost you and what you get back for them, per session, month, quarter and year. Only sessions
+    that are reported (cars set to "report" under Vehicles) count. The reimbursement stays empty until you add a tariff.
+  </p>
+  <% const curTariff = tariffs.find(t => t.valid_from <= new Date().toISOString().slice(0, 10)); %>
+  <div class="form-grid" style="margin-bottom:0.6rem;">
+    <div><label>Reimbursement now</label><div><strong><%= curTariff ? '€ ' + Number(curTariff.eur_per_kwh).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' / kWh' : 'not set' %></strong><% if (curTariff) { %> <span class="hint">(<%= finance.tariff_vat === 'excl' ? 'excl.' : 'incl.' %> VAT, since <%= curTariff.valid_from %>)</span><% } %></div></div>
+    <div><label>Cost</label><div><strong><%= finance.cost_mode === 'fixed' ? (finance.fixed_eur_kwh !== null ? '€ ' + Number(finance.fixed_eur_kwh).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' / kWh (fixed)' : 'fixed, no rate yet') : 'real hourly price + solar' %></strong></div></div>
+  </div>
+  <% if (canEdit('ocpp')) { %>
+  <details <%= !financeSaved ? 'open' : '' %>>
+    <summary><strong>Settings</strong></summary>
+    <form method="post" action="/ocpp/<%= bridge.id %>/finance" style="margin-top:0.6rem;">
+      <div class="form-grid">
+        <div><label>Cost per kWh</label><select name="cost_mode"><option value="hourly" <%= finance.cost_mode !== 'fixed' ? 'selected' : '' %>>Real hourly price + solar share (Energy)</option><option value="fixed" <%= finance.cost_mode === 'fixed' ? 'selected' : '' %>>Fixed rate</option></select></div>
+        <div><label>Fixed rate (€/kWh)</label><input type="text" name="fixed_eur_kwh" value="<%= finance.fixed_eur_kwh ?? '' %>" placeholder="e.g. 0,28"></div>
+        <div><label>Value of solar kWh</label><select name="solar_value"><% [['saldering','The price of that hour (net metering)'],['fixed','A fixed feed-in value'],['free','Free (€ 0)']].forEach(([v,t]) => { %><option value="<%= v %>" <%= finance.solar_value === v ? 'selected' : '' %>><%= t %></option><% }) %></select></div>
+        <div><label>Feed-in value (€/kWh)</label><input type="text" name="solar_eur_kwh" value="<%= finance.solar_eur_kwh ?? '' %>"></div>
+        <div><label>Tariff is entered</label><select name="tariff_vat"><option value="incl" <%= finance.tariff_vat !== 'excl' ? 'selected' : '' %>>incl. VAT</option><option value="excl" <%= finance.tariff_vat === 'excl' ? 'selected' : '' %>>excl. VAT</option></select></div>
+        <div><label>Show amounts</label><select name="show_vat"><option value="incl" <%= finance.show_vat !== 'excl' ? 'selected' : '' %>>incl. VAT</option><option value="excl" <%= finance.show_vat === 'excl' ? 'selected' : '' %>>excl. VAT</option></select></div>
+        <div><label>VAT (%)</label><input type="text" name="vat_pct" value="<%= finance.vat_pct %>"></div>
+      </div>
+      <div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit">Save</button></div>
+    </form>
+  </details>
+  <% } %>
+  <h3 style="margin:1rem 0 0.4rem; font-size:1rem;">Reimbursement tariffs</h3>
+  <% if (!tariffs.length) { %><p class="hint" style="margin:0;">No tariff yet &mdash; add the rate you get per kWh (and a new row when it changes, e.g. per 1 January).</p><% } else { %>
+  <table class="table"><thead><tr><th>From</th><th>€ / kWh</th><th>Note</th><th></th></tr></thead><tbody>
+    <% tariffs.forEach(t => { %><tr><td><%= t.valid_from %></td><td>€ <%= Number(t.eur_per_kwh).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) %></td><td><%= t.note || '' %></td>
+      <td><% if (canEdit('ocpp')) { %><form method="post" action="/ocpp/<%= bridge.id %>/tariffs/<%= t.id %>/delete" style="margin:0;" onsubmit="return confirm('Delete this tariff?');"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form><% } %></td></tr><% }) %>
+  </tbody></table><% } %>
+  <% if (canEdit('ocpp')) { %>
+  <form method="post" action="/ocpp/<%= bridge.id %>/tariffs" class="btn-row" style="align-items:flex-end; gap:0.6rem; margin-top:0.6rem;">
+    <div><label>From</label><input type="date" name="valid_from" value="<%= new Date().toISOString().slice(0, 10) %>"></div>
+    <div><label>€ / kWh</label><input type="text" name="eur_per_kwh" placeholder="e.g. 0,23" style="width:7rem;"></div>
+    <div><label>Note</label><input type="text" name="note" placeholder="optional"></div>
+    <button type="submit" class="btn-soft"><%- icon('plus') %> Add tariff</button>
+  </form>
+  <% } %>
+</div>
+
 <div class="card">
   <h2 style="margin-top:0;">Quarterly export</h2>
   <p class="hint">
@@ -57,11 +101,15 @@
       <label>Format</label>
       <select name="format"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV</option></select>
     </div>
+    <div>
+      <label>Content</label>
+      <select name="finance"><option value="0">Sessions (Laadloon layout)</option><option value="1">With cost, reimbursement &amp; balance</option></select>
+    </div>
     <button type="submit" class="btn-soft"><%- icon('download') %> Download</button>
   </form>
 </div>
 
-<% if (canEdit('miniservers')) { %>
+<% if (canEdit('ocpp')) { %>
 <div class="card">
   <form method="post" action="/ocpp/<%= bridge.id %>/update">
     <%- include('partials/ocpp-bridge-fields', { b: bridge, wallboxes, isNew: false }) %>
@@ -168,11 +216,26 @@
       tile('This quarter', st.quarter.kwh, qSub(st.quarter)) +
       tile('Previous quarter', st.prevQuarter.kwh, qSub(st.prevQuarter) + ' · <a href="' + exportLink + '">export</a>') +
       tile('This year', st.year) + '</div>';
+    if (st.finance) {
+      var f = st.finance;
+      var eur = function (v) { return v == null ? '—' : '€ ' + nf(v, 2); };
+      var ftile = function (label, o) {
+        var sal = o.saldo;
+        return '<div style="border:1px solid var(--border, #e3e6ea); border-radius:10px; padding:0.8rem 0.9rem; background:var(--surface-2, rgba(0,0,0,0.02));">' +
+          '<div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em;">' + label + '</div>' +
+          '<div style="font-size:1.4rem; font-weight:700; margin-top:0.2rem; color:' + (sal == null ? 'inherit' : sal >= 0 ? 'var(--ok, #2e7d32)' : 'var(--danger, #c62828)') + ';">' + (sal == null ? eur(o.cost) : (sal >= 0 ? '+' : '') + eur(sal)) + '</div>' +
+          '<div class="hint" style="margin:0.15rem 0 0; font-size:0.75rem;">' + (sal == null ? 'cost' : 'balance') + ' · cost ' + eur(o.cost) + (o.reimbursement != null ? ' · back ' + eur(o.reimbursement) : '') + (o.eurPerKwh != null ? ' · ' + eur(o.eurPerKwh) + '/kWh' : '') + '</div></div>';
+      };
+      html += '<div class="hint" style="margin:1rem 0 0.3rem; font-size:0.8rem;">Costs &amp; reimbursement' + (f.showVat === 'excl' ? ' (excl. VAT)' : '') + (f.hasTariff ? '' : ' &mdash; no reimbursement tariff yet, <a href="#finance">add one</a>') + '</div>' +
+        '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:0.75rem;">' +
+        ftile('This month', f.month) + ftile('This quarter', f.quarter) + ftile('This year', f.year) + '</div>';
+    }
     var ms = (st.months || []).slice();
     while (ms.length > 6 && ms[0].incomplete && !ms[0].kwh) ms.shift(); // hide empty months before the session log starts
     var max = Math.max.apply(null, ms.map(function (m) { return m.incomplete && !m.kwh ? 0 : m.kwh; }).concat([1]));
     var width = lsChartW(el, 600), H = 120, slot = (width - 20) / Math.max(1, ms.length), w = Math.max(14, Math.min(70, slot - 14));
-    var svg = '<svg viewBox="0 0 ' + width + ' 165" width="100%" style="display:block;">';
+    var svgH = st.finance ? 182 : 165;
+    var svg = '<svg viewBox="0 0 ' + width + ' ' + svgH + '" width="100%" style="display:block;">';
     ms.forEach(function (m, i) {
       var x = 10 + i * slot + (slot - w) / 2;
       if (m.incomplete && !m.kwh) {
@@ -183,6 +246,10 @@
           '<text x="' + (x + w / 2) + '" y="' + (134 - h) + '" text-anchor="middle" font-size="10" fill="currentColor">' + nf(m.kwh, 1) + '</text>';
       }
       svg += '<text x="' + (x + w / 2) + '" y="158" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">' + esc(m.label) + '</text>';
+      if (st.finance && (m.saldo != null || m.cost != null)) {
+        var sv = m.saldo != null ? m.saldo : -m.cost;
+        svg += '<text x="' + (x + w / 2) + '" y="176" text-anchor="middle" font-size="10" fill="' + (sv >= 0 ? 'var(--ok, #2e7d32)' : 'var(--danger, #c62828)') + '"><title>' + (m.saldo != null ? 'balance' : 'cost') + '</title>' + (sv >= 0 ? '+' : '−') + '€' + nf(Math.abs(sv), 0) + '</text>';
+      }
     });
     svg += '<line x1="5" y1="140" x2="' + (width - 5) + '" y2="140" stroke="currentColor" opacity="0.2"/></svg>';
     html += '<div style="margin-top:1rem;"><div class="hint" style="margin:0 0 0.3rem; font-size:0.8rem;">Per month</div>' + svg + '</div>';

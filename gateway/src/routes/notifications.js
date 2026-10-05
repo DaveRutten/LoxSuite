@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const {
-  TRIGGER_TYPES, sendTestMessage, sendTemplateTestMessage, getNotificationTemplates, saveNotificationTemplates, TEMPLATE_PREVIEW_SAMPLES,
+  TRIGGER_TYPES, triggerTypesFor, sendTestMessage, sendTemplateTestMessage, getNotificationTemplates, saveNotificationTemplates, TEMPLATE_PREVIEW_SAMPLES,
 } = require('../notifications');
 const { logSystemEvent } = require('../auditLog');
 const asyncHandler = require('../middleware/asyncHandler');
@@ -34,7 +34,7 @@ async function renderPage(res, extra = {}) {
   res.render('admin-notifications', {
     channels: await listChannels(),
     rules: await listRules(),
-    triggerTypes: TRIGGER_TYPES,
+    triggerTypes: triggerTypesFor(),
     monitors: await db.prepare('SELECT id, label FROM monitors ORDER BY label').all(),
     miniservers: await db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all(),
     templates: await getNotificationTemplates(),

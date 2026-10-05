@@ -44,7 +44,7 @@ router.get('/series.json', asyncHandler(async (req, res) => {
   res.json(await energy.hourlySeries(new Date(from).toISOString(), new Date(to).toISOString()));
 }));
 
-router.post('/meters', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/meters', requirePermission('energy', 'edit'), asyncHandler(async (req, res) => {
   const now = new Date().toISOString();
   for (const role of energy.ROLE_KEYS) {
     const val = String(req.body[`meter_${role}`] || '');
@@ -64,7 +64,7 @@ router.post('/meters', requirePermission('miniservers', 'edit'), asyncHandler(as
 }));
 
 // JSON (CSRF-exempt like the other JSON endpoints).
-router.post('/import.json', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+router.post('/import.json', requirePermission('energy', 'edit'), asyncHandler(async (req, res) => {
   const days = Math.max(1, Math.min(400, Number(req.body?.days) || 60));
   try {
     const report = await energy.importHistory(days);
