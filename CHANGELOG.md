@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.36.4-alpha.1] - 2026-10-05
+
+### Added
+- **Regression tests** for everything changed in 0.34–0.36, so it stays right:
+  - `regressionsEnergyUi.test.js`: the split around a trip (trip + reserve before leaving, never charging while
+    away, your own departure time as the same trip), trips whose battery drop came before the odometer (and
+    ordinary trips / charging before leaving unchanged), agenda text colour and overlapping lanes, address
+    candidates, "&amp;" in names, the ready margin of 0, picking the newest tag, the Administration tabs per
+    role, no Translations/Settings in the side menu, Charge log under Logs, Sync left of the views.
+  - `regressionsEnergyDb.test.js` (in-memory database): repeating appointments and "car needed" for the series
+    vs one day, calendar names with "&", Smart charging starting now when prices are missing, and the Loxone
+    price source giving every hour a price.
+  - `httpEnergy.test.js` (the real server, energy modules on): every energy page renders, the Administration
+    tabs, the agenda layout script, and saving a ready margin of 0 shows 0.
+
+### Changed
+- The split and the agenda layout are now small pure functions (`planner.planSplit`, `planner.sameTrip`,
+  `public/agenda-layout.js`) so the tests can check them directly.
+
 ## [0.36.3-alpha.1] - 2026-10-05
 
 ### Fixed

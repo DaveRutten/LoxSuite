@@ -431,7 +431,7 @@ async function computeTarget(nowMs, wb) {
   let split = null;
   // The appointment the deadline belongs to: the one that set it, or one within 3 hours of it (your own
   // or the learned departure time for the same trip, a few minutes earlier).
-  const near = agendaTrip && readyAtMs && Math.abs(agendaTrip.readyAt - readyAtMs) <= 3 * 3600000 ? agendaTrip : null;
+  const near = sameTrip(agendaTrip, readyAtMs) ? agendaTrip : null;
   const trip0 = tripItem || near;
   const it = trip0?.item;
   let tripPart = null; // { kwh, backAtMs, leaveMs, title }
@@ -448,12 +448,9 @@ async function computeTarget(nowMs, wb) {
     }
   }
   if (!away && tripPart && vehicle?.battery_kwh && reading) {
-    const energyNow = vehicle.battery_kwh * reading.soc / 100;
-    const reserveKwh = vehicle.battery_kwh * (Number(vehicle.reserve_pct ?? 15) || 0) / 100;
-    const must = Math.max(0, Math.min(needKwh, tripPart.kwh + reserveKwh - energyNow));
-    const backAtMs = tripPart.backAtMs;
-    if (needKwh - must > 1 && backAtMs > readyAtMs) {
-      split = { mustKwh: round3(must), restKwh: round3(needKwh - must), backAtMs, tripKwh: round3(tripPart.kwh), reserveKwh: round3(reserveKwh), title: tripPart.title, away: [[tripPart.leaveMs, backAtMs]], later: [] };
+    split = planSplit({ needKwh, batteryKwh: vehicle.battery_kwh, soc: reading.soc, reservePct: vehicle.reserve_pct ?? 15, readyAtMs, trip: tripPart });
+    const backAtMs = split?.backAtMs;
+    if (split) {
       // the car's next trips in the agenda (within a day of being back): it is away then, and each
       // needs its own energy in the battery before it leaves
       try {
@@ -518,6 +515,27 @@ async function expectedArrival(nowMs, target, untilMs) {
     return notBefore({ at, source: pick.source, label: `learned: usually home around ${pick.time} on ${WEEKDAY_NAMES[wd]}`, confidence: pick.confidence });
   }
   return null;
+}
+
+// Pure: does this agenda trip belong to the deadline? The trip that set it, or one within 3 hours of
+// it (your own or the learned departure time for the same trip).
+function sameTrip(trip, readyAtMs) {
+  return !!(trip && readyAtMs && Number.isFinite(trip.readyAt) && Math.abs(trip.readyAt - readyAtMs) <= 3 * 3600000);
+}
+
+// Pure: what has to be in before leaving (the trip + the reserve, minus what is in the battery) and
+// what may come after the car is back. Null when there is nothing worth splitting (less than 1 kWh
+// left over, or the car isn't back after the deadline).
+function planSplit({ needKwh, batteryKwh, soc, reservePct = 15, readyAtMs, trip }) {
+  if (!trip || !(batteryKwh > 0) || soc === null || soc === undefined || !(needKwh > 0)) return null;
+  const energyNow = batteryKwh * soc / 100;
+  const reserveKwh = batteryKwh * (Number(reservePct) || 0) / 100;
+  const must = Math.max(0, Math.min(needKwh, trip.kwh + reserveKwh - energyNow));
+  if (!(needKwh - must > 1) || !(trip.backAtMs > readyAtMs)) return null;
+  return {
+    mustKwh: round3(must), restKwh: round3(needKwh - must), backAtMs: trip.backAtMs, tripKwh: round3(trip.kwh), reserveKwh: round3(reserveKwh),
+    title: trip.title, away: [[trip.leaveMs ?? readyAtMs, trip.backAtMs]], later: [],
+  };
 }
 
 // Pure: the plan for what must be in before the appointment + the rest. The rest is picked from the
@@ -843,6 +861,6 @@ function stopPlanner() {
 }
 
 module.exports = {
-  MODES, DEFAULTS, makePlan, withRest, fuelBreakEven, activeSlot, controlStep,
+  MODES, DEFAULTS, makePlan, withRest, planSplit, sameTrip, fuelBreakEven, activeSlot, controlStep,
   getConfig, saveConfig, recalc, tick, outputMiniserver, sessionFull, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, stopPlanner, buildSlots, computeTarget, wallboxLive,
 };

@@ -21,9 +21,7 @@ router.get('/', asyncHandler(async (req, res) => {
   const vehiclesMod = require('../vehicles');
   const vehicles = await db.prepare('SELECT id, name, source_type, source_config FROM vehicles ORDER BY name').all();
   res.render('settings-energy', {
-    // planner wins for the shared default_kwh_per_km; the agenda for its own ready_margin_min (the
-    // planner's unused default of 15 used to show here, so 0 seemed impossible to save)
-    cfg: (() => { const a = agendaCfg; return { ...a, ...plannerCfg, ready_margin_min: a.ready_margin_min }; })(),
+    cfg: energyCfg(agendaCfg, plannerCfg),
     priceCfg: { ...pcfg, entsoe_token: undefined, hasEntsoeToken: !!pcfg.entsoe_token },
     solarCfg: await solar.getConfig(), site: await solar.getSite(),
     priceStatus: await settings.get('prices_status', null), solarStatus: await settings.get('solar_status', null),
@@ -36,3 +34,11 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 module.exports = router;
+
+// Pure: the settings shown on the page. Smart charging wins for the shared default_kwh_per_km; the
+// agenda for its own ready_margin_min (Smart charging's unused default of 15 used to show here, so a
+// saved 0 looked as if it couldn't be saved).
+function energyCfg(agendaCfg = {}, plannerCfg = {}) {
+  return { ...agendaCfg, ...plannerCfg, ready_margin_min: agendaCfg.ready_margin_min };
+}
+router.energyCfg = energyCfg;
