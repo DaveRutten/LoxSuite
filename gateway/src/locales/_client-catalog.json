@@ -1472,7 +1472,7 @@
   ]
  },
  {
-  "key": "☀ {0} / {1} kWh",
+  "key": "☀️ {0} / {1} kWh",
   "module": "charging",
   "where": [
    "planner (script)"

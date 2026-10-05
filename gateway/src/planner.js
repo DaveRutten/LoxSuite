@@ -96,7 +96,17 @@ function makePlan({
       return { slot: s, kw: Math.min(maxKw, Math.max(minKw, pv)), h: (s.e - s.s) / 3600000, cost: s.price, source: pv >= minKw ? 'pv' : pv > 0.3 ? 'mixed' : 'grid', pvKw: pv };
     });
   } else if (mode === 'plan') {
-    const sorted = [...chunks].sort((a, b) => a.cost - b.cost || a.slot.s - b.slot.s);
+    // An extra part on top of an interval's base can only run together with that base (the Wallbox
+    // can't charge below its minimum): a top-up that sorts before its base waits until the base is in.
+    const byCost = [...chunks].sort((a, b) => a.cost - b.cost || a.slot.s - b.slot.s || (a.topUp ? 1 : 0) - (b.topUp ? 1 : 0));
+    const sorted = [];
+    const baseIn = new Set();
+    const waiting = new Map();
+    for (const c of byCost) {
+      if (c.topUp && !baseIn.has(c.slot.s) && byCost.some((x) => !x.topUp && x.slot === c.slot)) { waiting.set(c.slot.s, c); continue; }
+      sorted.push(c);
+      if (!c.topUp) { baseIn.add(c.slot.s); if (waiting.has(c.slot.s)) { sorted.push(waiting.get(c.slot.s)); waiting.delete(c.slot.s); } }
+    }
     const under = sorted.filter((c) => priceCap === null || c.cost <= priceCap);
     const over = sorted.filter((c) => priceCap !== null && c.cost > priceCap);
     picked = [...under];
@@ -122,7 +132,7 @@ function makePlan({
       start: new Date(c.slot.s).toISOString(), end: new Date(c.slot.s + (c.slot.e - c.slot.s) * frac).toISOString(),
       kw: round2(kwUse), kwh: round3(take), source: c.source, price: c.slot.price ?? null, cost: round3(take * c.cost), topUp: !!c.topUp,
       // the expected solar part of it (the rest comes from the grid)
-      pvKwh: round3(Math.min(take, (c.pvKw || 0) * c.h * frac)),
+      pvAvailKw: Math.max(0, (c.slot.pvKw || 0) * trust),
     });
     remaining -= take;
     if (sequential && mode === 'pv' && remaining <= 0) break;
@@ -133,11 +143,20 @@ function makePlan({
     const k = r.start;
     const prev = bySlot.get(k);
     if (prev) {
-      prev.kw = round2(prev.kw + r.kw); prev.kwh = round3(prev.kwh + r.kwh); prev.cost = round3(prev.cost + r.cost); prev.pvKwh = round3((prev.pvKwh || 0) + (r.pvKwh || 0));
+      prev.kw = round2(prev.kw + r.kw); prev.kwh = round3(prev.kwh + r.kwh); prev.cost = round3(prev.cost + r.cost);
       prev.source = prev.source === 'grid' && r.source === 'grid' ? 'grid' : 'mixed'; if (r.end > prev.end) prev.end = r.end;
     } else bySlot.set(k, { ...r });
   }
   const planSlots = [...bySlot.values()].sort((a, b) => a.start.localeCompare(b.start));
+  // The solar part, as it physically goes: while the car charges, the expected surplus of that
+  // interval goes into it first, whatever the price ordering picked.
+  for (const r of planSlots) {
+    const h = (Date.parse(r.end) - Date.parse(r.start)) / 3600000;
+    r.pvKwh = round3(Math.min(r.kwh, (r.pvAvailKw || 0) * h));
+    if (r.pvKwh > 0.05 && r.source === 'grid') r.source = 'mixed';
+    if (r.pvKwh >= r.kwh - 0.05 && r.kwh > 0) r.source = 'pv';
+    delete r.pvAvailKw;
+  }
   const kwh = round3(planSlots.reduce((s, r) => s + r.kwh, 0));
   const cost = round3(planSlots.reduce((s, r) => s + r.cost, 0));
   const pvKwh = round3(planSlots.reduce((s, r) => s + (r.pvKwh || 0), 0));

@@ -358,3 +358,15 @@ test('pickPrice: what you tank, plus a surcharge; stale or missing -> manual', (
   assert.equal(fuel.pickPrice({ fuel_auto: false, fuel_eur_l: 2.3 }, auto, now).eur_l, 2.3);
   assert.equal(fuel.pickPrice({ fuel_auto: true }, { date: '2026-10-01', eur_l: 2.4 }, now).eur_l, 2.4); // old stored format
 });
+
+test('makePlan: a top-up never runs without its base, and solar counts in every interval the car charges', () => {
+  const now = Date.parse('2026-10-06T11:00:00Z');
+  // saldering: solar is worth the price of the hour, so base and top-up of an hour cost the same
+  const slots = hourlySlots('2026-10-06T11:00:00Z', [0.30, 0.15, 0.16, 0.30], [0, 3, 2, 0]);
+  const plan = planner.makePlan({ nowMs: now, needKwh: 14.3, slots, solarTrust: 'expected', minKw: 4.16, maxKw: 11 });
+  assert.deepEqual(plan.slots.map((s) => s.start.slice(11, 16)), ['12:00', '13:00']);
+  const second = plan.slots[1];
+  assert.ok(second.kw >= 4.16, `never below the minimum (${second.kw} kW)`);
+  assert.ok(second.pvKwh > 1, `solar counted in the second hour too (${second.pvKwh})`);
+  assert.equal(second.source, 'mixed');
+});

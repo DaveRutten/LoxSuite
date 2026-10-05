@@ -216,7 +216,7 @@
   }
   function slotText(x) {
     var pv = x.pvKwh || 0, grid = Math.max(0, x.kwh - pv);
-    var mix = pv > 0.05 && grid > 0.05 ? ' (' + nf(pv, 1) + ' ☀ + ' + nf(grid, 1) + ' ⚡)' : pv > 0.05 ? ' ☀' : ' ⚡';
+    var mix = pv > 0.05 && grid > 0.05 ? ' (' + nf(pv, 1) + ' ☀️ + ' + nf(grid, 1) + ' ⚡)' : pv > 0.05 ? ' ☀️' : ' ⚡';
     return dtm(x.start) + '–' + tm(x.end) + ' ' + nf(x.kwh, 1) + ' kWh' + mix;
   }
   var MODE_LABEL = { off: 'Off', now: 'Now', pv: 'Solar', minpv: 'Min + Solar', plan: 'Smart plan' };
@@ -300,7 +300,7 @@
       // solar part of a planned interval: the lower part of the bar in yellow
       var ps = isPlan ? p.slots.filter(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); }) : [];
       var pk = ps.reduce(function (a, q) { return a + (q.pvKwh || 0); }, 0), tk = ps.reduce(function (a, q) { return a + q.kwh; }, 0);
-      if (pk > 0.05 && tk > 0) { var sh = h * Math.min(1, pk / tk); svg += '<rect x="' + x + '" y="' + (10 + H - sh) + '" width="' + w + '" height="' + sh + '" fill="#d4a017" opacity="0.9"><title>☀ ' + nf(pk, 1) + ' / ' + nf(tk, 1) + ' kWh</title></rect>'; }
+      if (pk > 0.05 && tk > 0) { var sh = h * Math.min(1, pk / tk); svg += '<rect x="' + x + '" y="' + (10 + H - sh) + '" width="' + w + '" height="' + sh + '" fill="#d4a017" opacity="0.9"><title>☀️ ' + nf(pk, 1) + ' / ' + nf(tk, 1) + ' kWh</title></rect>'; }
       // what it would do if the car came home now: outlined
       if (p.ifNow && !isPlan && p.ifNow.slots.some(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); })) svg += '<rect x="' + (x + 0.75) + '" y="' + (10 + H - h + 0.75) + '" width="' + Math.max(0, w - 1.5) + '" height="' + Math.max(0, h - 1.5) + '" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3 2"/>';
     });

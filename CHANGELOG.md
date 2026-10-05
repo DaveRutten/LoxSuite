@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.32.2-alpha.1] - 2026-10-05
+
+### Fixed
+- **Solar missing in a planned hour** ("14:00–15:00 3,3 kWh ⚡" while there was surplus): with saldering an hour's
+  extra (top-up) part costs the same as its base, so it could be picked on its own — without solar and below the
+  Wallbox minimum. A top-up now only runs together with its base, and the solar part of every planned interval
+  is counted as it physically goes: while the car charges, that interval's expected surplus goes in first.
+- The sun shows as an emoji (☀️) like the lightning bolt.
+
 ## [0.32.1-alpha.1] - 2026-10-05
 
 ### Fixed
