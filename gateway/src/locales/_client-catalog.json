@@ -1067,6 +1067,20 @@
   ]
  },
  {
+  "key": "{0} kWh of it for {1} (ready {2})",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "{0} kWh of the rest finds no free hour below the price cap — it is left for later.",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
   "key": "{0} kWh solar, {1} kWh grid",
   "module": "charging",
   "where": [
@@ -1978,6 +1992,13 @@
   ]
  },
  {
+  "key": "After it is back:",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "afternoon",
   "module": "charging",
   "where": [
@@ -2456,6 +2477,13 @@
   ]
  },
  {
+  "key": "back ~{0}",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Back home",
   "module": "charging",
   "where": [
@@ -2691,6 +2719,13 @@
   "module": "mqtt",
   "where": [
    "public/mapping-translations-tabulator.js"
+  ]
+ },
+ {
+  "key": "Before leaving:",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -7631,6 +7666,13 @@
   ]
  },
  {
+  "key": "Needs before leaving",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "network error",
   "module": "charging",
   "where": [
@@ -7931,6 +7973,13 @@
   "module": "vehicles",
   "where": [
    "src/vehicles.js"
+  ]
+ },
+ {
+  "key": "no hour below the price cap",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -11936,6 +11985,13 @@
    "src/carClimate.js",
    "src/notifications.js",
    "src/reminders.js"
+  ]
+ },
+ {
+  "key": "trip {0} kWh + reserve {1} kWh; the other {2} kWh after it is back ({3})",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {

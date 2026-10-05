@@ -179,7 +179,9 @@
     var th = '';
     if (tg) {
       th = '<div class="form-grid" style="align-items:end;">' +
-        '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Needs</div><div style="font-size:1.15rem; font-weight:700;">' + nf(p.needKwh, 1) + ' kWh</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.needSource) + '</div></div>' +
+        (p.split
+          ? '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Needs before leaving</div><div style="font-size:1.15rem; font-weight:700;">' + nf(p.split.mustKwh, 1) + ' kWh</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(T('trip {0} kWh + reserve {1} kWh; the other {2} kWh after it is back ({3})', nf(p.split.tripKwh, 1), nf(p.split.reserveKwh, 1), nf(p.split.restKwh, 1), dtm(p.split.backAt))) + '</div></div>'
+          : '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Needs</div><div style="font-size:1.15rem; font-weight:700;">' + nf(p.needKwh, 1) + ' kWh</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.needSource) + '</div></div>') +
         '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Ready by</div><div style="font-size:1.15rem; font-weight:700;">' + dtm(p.readyAt) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.readySource || 'no departure known — within 24 h') + '</div></div>' +
         (p.arrival ? '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Expected home</div><div style="font-size:1.15rem; font-weight:700; color:#3b82f6;">' + dtm(p.arrival.at) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(p.arrival.label) + '</div></div>' : '') +
         (canEdit ? '<div><label>' + esc(T(s.connected ? 'Ready by (this session)' : 'Ready by (when it is back, one time)')) + '</label><input type="datetime-local" id="pl-ready">' +
@@ -217,7 +219,11 @@
           ' (' + (pvK > 0.05 ? esc(T('{0} kWh solar, {1} kWh grid', nf(pvK, 1), nf(gridK, 1))) : esc(T('all from the grid'))) + ')' +
           ' · ' + esc(T('average')) + ' <strong>' + eur(p.avgPrice, 3) + '</strong>/kWh · ' + esc(T('costs about')) + ' <strong>' + eur(p.cost) + '</strong>' +
           (p.compare && p.compare.saving > 0.05 ? '<span class="hint" style="margin:0;"> ' + esc(T('(charging straight away: {0} average — saves {1})', eur(p.compare.avgPrice, 3), eur(p.compare.saving))) + '</span>' : '') +
-          '<div class="hint" style="margin:0.3rem 0 0;">' + mergeSlots(p.slots).map(slotText).join(' · ') + '</div>' +
+          (p.split
+            ? '<div class="hint" style="margin:0.3rem 0 0;">' + esc(T('Before leaving:')) + ' ' + (p.split.mustSlots.length ? mergeSlots(p.split.mustSlots).map(slotText).join(' · ') : esc(T('nothing to charge'))) + '</div>' +
+              '<div class="hint" style="margin:0.15rem 0 0;">' + esc(T('After it is back:')) + ' ' + (p.split.restSlots.length ? mergeSlots(p.split.restSlots).map(slotText).join(' · ') : esc(T('no hour below the price cap'))) +
+                (p.split.later || []).map(function (l) { return ' · ' + esc(T('{0} kWh of it for {1} (ready {2})', nf(l.kwh, 1), l.title, dtm(l.readyAt))); }).join('') + '</div>'
+            : '<div class="hint" style="margin:0.3rem 0 0;">' + mergeSlots(p.slots).map(slotText).join(' · ') + '</div>') +
           (p.ifNow ? '<div class="hint" style="margin:0.45rem 0 0; padding-top:0.4rem; border-top:1px dashed var(--border);">' + esc(T('If it came home now (or another car were plugged in):')) + ' ' +
             (p.ifNow.slots.length ? mergeSlots(p.ifNow.slots).map(slotText).join(' · ') + ' · ' + eur(p.ifNow.cost) : esc(T('nothing to charge'))) + '</div>' : '') +
           '</div>';
@@ -265,6 +271,10 @@
     if (p.arrival) {
       var ax = X(Date.parse(p.arrival.at)), nx0 = left;
       if (ax > left && ax < W) svg += '<rect x="' + nx0 + '" y="10" width="' + Math.max(0, ax - nx0) + '" height="' + H + '" fill="#3b82f6" opacity="0.06"/><line x1="' + ax + '" y1="4" x2="' + ax + '" y2="' + (10 + H) + '" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (ax + 3) + '" y="9" font-size="10" fill="#3b82f6">' + esc(T('home ~{0}', tm(p.arrival.at))) + '</text>';
+    }
+    if (p.split) {
+      var bx = X(Date.parse(p.split.backAt));
+      if (bx > left && bx < W) svg += '<line x1="' + bx + '" y1="4" x2="' + bx + '" y2="' + (10 + H) + '" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (bx + 3) + '" y="9" font-size="10" fill="#3b82f6">' + esc(T('back ~{0}', tm(p.split.backAt))) + '</text>';
     }
     if (p.readyAt) { var rx = X(Date.parse(p.readyAt)); if (rx > left && rx < W) svg += '<line x1="' + rx + '" y1="4" x2="' + rx + '" y2="' + (10 + H) + '" stroke="#e5534b" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (rx > W - 90 ? rx - 3 : rx + 3) + '" y="9" font-size="10" text-anchor="' + (rx > W - 90 ? 'end' : 'start') + '" fill="#e5534b">' + esc(T('ready {0}', tm(p.readyAt))) + '</text>'; }
     var lastLabel = -1;

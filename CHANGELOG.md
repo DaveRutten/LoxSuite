@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.36.0-alpha.1] - 2026-10-05
+
+### Changed
+- **Smart charging splits the need around an appointment**: plugged in before a trip in the agenda, only what
+  that trip needs plus the car's reserve has to be in before leaving. The rest is planned in the cheapest free
+  hours — before leaving, or within a day after the car is back (so with solar when there is sun) — never while
+  the car is away for a later trip, and a later trip's own energy comes first, before that trip leaves. The page
+  shows "Needs before leaving", what comes after it is back, and a "back ~" line in the chart.
+- Agenda: the details stay beside the calendar in every view (as before 0.35.3).
+
 ## [0.35.3-alpha.1] - 2026-10-05
 
 ### Changed

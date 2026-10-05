@@ -3898,5 +3898,13 @@
   "Repeating appointment — for:": "Terugkerende afspraak — voor:",
   "Set for the whole series.": "Ingesteld voor de hele reeks.",
   "the whole series": "de hele reeks",
-  "Colour = kWh charged that day · red dot = car needed": "Kleur = kWh geladen die dag · rode stip = auto nodig"
+  "Colour = kWh charged that day · red dot = car needed": "Kleur = kWh geladen die dag · rode stip = auto nodig",
+  "{0} kWh of it for {1} (ready {2})": "{0} kWh daarvan voor {1} (klaar om {2})",
+  "{0} kWh of the rest finds no free hour below the price cap — it is left for later.": "{0} kWh van de rest vindt geen vrij uur onder de prijsgrens — dat blijft voor later.",
+  "After it is back:": "Als hij terug is:",
+  "back ~{0}": "terug ~{0}",
+  "Before leaving:": "Voor vertrek:",
+  "Needs before leaving": "Nodig voor vertrek",
+  "no hour below the price cap": "geen uur onder de prijsgrens",
+  "trip {0} kWh + reserve {1} kWh; the other {2} kWh after it is back ({3})": "rit {0} kWh + reserve {1} kWh; de andere {2} kWh als hij terug is ({3})"
 }
