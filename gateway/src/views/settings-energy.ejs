@@ -145,7 +145,7 @@
     <div class="form-grid">
       <div><label><%= t('Car markers in the title') %></label><input type="text" name="tags" value="<%= cfg.tags.join(' ') %>"></div>
       <div><label><%= t('Margin on distance (km)') %></label><input type="text" name="margin_km" value="<%= cfg.margin_km %>"></div>
-      <div><label><%= t('Ready this long before leaving (min)') %></label><input type="text" name="ready_margin_min" value="<%= cfg.ready_margin_min %>"></div>
+      <div><label><%= t('Ready this long before leaving (min)') %></label><input type="number" min="0" max="180" step="1" name="ready_margin_min" value="<%= cfg.ready_margin_min ?? 15 %>"></div>
       <div><label><%= t('Calculate distances (OpenStreetMap)') %></label><%- toggleSwitch('geo', !!cfg.geo) %></div>
     </div>
     <h3 style="margin:1.1rem 0 0.4rem;">🌡️ <%= t('Climate at departure') %></h3>

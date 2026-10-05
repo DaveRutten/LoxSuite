@@ -85,15 +85,35 @@ function analyze(readings, { capacityKwh = null, type = 'bev', kwhPerKm = 0.2, m
     const b = pts[i];
     const km = b.odo - a.odo;
     if (!(km >= 0) || km > MAX_STEP_KM) continue;
-    const socKnown = a.soc !== null && b.soc !== null;
-    const rise = socKnown ? b.soc - a.soc : 0;
-    const charged = b.chargedBefore || a.charging || rise > 2;
-    const drop = socKnown && !charged ? Math.max(0, a.soc - b.soc) : null;
+    let from = a.t;
+    let socFrom = a.soc;
+    let socTo = b.soc;
+    let lagged = false;
+    // The car's cloud often updates the battery before the odometer: while the odometer still shows
+    // the old value, the SoC already went down — that drop belongs to this drive. Then the drive starts
+    // at the last reading before the drop, and it ends at the lowest SoC (it may charge right after).
+    if (km >= 0.5 && a.soc !== null) {
+      let j = i - 1;
+      while (j - 1 >= 0 && pts[j - 1].odo === a.odo && pts[j - 1].soc !== null && pts[j - 1].soc >= pts[j].soc) j--;
+      if (j < i - 1 && pts[j].soc - a.soc > 3) {
+        // start: after the last reading at the old level, but not earlier than the drive could take
+        let k = j;
+        while (k + 1 < i && pts[k + 1].soc === pts[j].soc) k++;
+        from = Math.max(pts[k].t, a.t - (km / 50) * 3600000);
+        socFrom = pts[j].soc;
+        socTo = b.soc === null ? a.soc : Math.min(a.soc, b.soc);
+        lagged = true;
+      }
+    }
+    const socKnown = socFrom !== null && socTo !== null;
+    const rise = socKnown ? socTo - socFrom : 0;
+    const charged = lagged ? false : (b.chargedBefore || a.charging || rise > 2);
+    const drop = socKnown && !charged ? Math.max(0, socFrom - socTo) : null;
     segs.push({
-      from: a.t, to: b.t, km, moving: km >= 0.5, socFrom: a.soc, socTo: b.soc, charged,
+      from, to: b.t, km, moving: km >= 0.5, socFrom, socTo, charged,
       kwh: drop !== null && cap ? (drop / 100) * cap : null,
       // Whole stretch on electricity when the battery still had charge at its end.
-      allElectric: type !== 'phev' || (b.soc !== null && b.soc > empty + 3),
+      allElectric: type !== 'phev' || (socTo !== null && socTo > empty + 3),
     });
   }
 

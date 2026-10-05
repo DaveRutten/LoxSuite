@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.36.3-alpha.1] - 2026-10-05
+
+### Fixed
+- **Driving: a trip whose battery drop came in before the odometer** (the car's cloud often updates the SoC
+  first) showed as a few minutes with no electric/fuel split ("1% → 4%"). The drop while the odometer still
+  showed the old value now belongs to the drive: it starts at the last reading before the drop (not earlier
+  than the drive could take), ends at the lowest SoC (charging right after arriving doesn't count), and the
+  electric/fuel km follow. Works for past trips too.
+- **"Ready this long before leaving" couldn't be set to 0**: it was saved, but the page showed an unused
+  default of 15 from Smart charging. It now shows the agenda's own value (and is a number field).
+
 ## [0.36.2-alpha.1] - 2026-10-05
 
 ### Fixed

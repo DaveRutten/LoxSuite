@@ -16,10 +16,14 @@ const router = express.Router();
 
 router.get('/', asyncHandler(async (req, res) => {
   const pcfg = await prices.getConfig();
+  const agendaCfg = await agenda.getConfig();
+  const plannerCfg = await planner.getConfig();
   const vehiclesMod = require('../vehicles');
   const vehicles = await db.prepare('SELECT id, name, source_type, source_config FROM vehicles ORDER BY name').all();
   res.render('settings-energy', {
-    cfg: { ...(await agenda.getConfig()), ...(await planner.getConfig()) }, // planner wins for the shared default_kwh_per_km
+    // planner wins for the shared default_kwh_per_km; the agenda for its own ready_margin_min (the
+    // planner's unused default of 15 used to show here, so 0 seemed impossible to save)
+    cfg: (() => { const a = agendaCfg; return { ...a, ...plannerCfg, ready_margin_min: a.ready_margin_min }; })(),
     priceCfg: { ...pcfg, entsoe_token: undefined, hasEntsoeToken: !!pcfg.entsoe_token },
     solarCfg: await solar.getConfig(), site: await solar.getSite(),
     priceStatus: await settings.get('prices_status', null), solarStatus: await settings.get('solar_status', null),
