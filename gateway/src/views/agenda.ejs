@@ -11,12 +11,14 @@
       <button type="button" class="btn-soft" id="ag-next">&rsaquo;</button>
       <strong id="ag-title" style="margin-left:0.4rem;"></strong>
     </div>
+    <div style="display:inline-flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+    <% if (canEdit('charging')) { %><button type="button" class="btn-soft" id="ag-sync-now" title="<%= t('Fetch the calendars again now') %>"><%- icon('refresh') %> <%= t('Sync') %></button><% } %>
     <div id="ag-views" style="display:inline-flex; border:1px solid var(--border); border-radius:10px; overflow:hidden;">
       <% [['day', t('Day')], ['week', t('Week')], ['month', t('Month')], ['year', t('Year')]].forEach(([k, l]) => { %>
         <button type="button" data-view="<%= k %>" style="border:0; padding:0.4rem 0.85rem; font-weight:600; cursor:pointer;"><%= l %></button>
       <% }) %>
     </div>
-    <% if (canEdit('charging')) { %><button type="button" class="btn-soft" id="ag-sync-now" title="<%= t('Fetch the calendars again now') %>"><%- icon('refresh') %> <%= t('Sync') %></button><% } %>
+    </div>
   </div>
   <div id="ag-legend" class="hint" style="margin:0.6rem 0 0.6rem; font-size:0.8rem;"></div>
   <div style="display:flex; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
@@ -124,15 +126,46 @@
     '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; background:var(--accent); border-radius:2px;"></span> planned charging</span><span><span style="display:inline-block; width:10px; height:10px; background:#9aa4b2; opacity:0.6; border-radius:2px;"></span> charged</span>';
 
   function itemColor(i) { return i.color || '#3b82c4'; }
+  // black or white text, whichever reads best on this colour
+  function textOn(hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '')); if (!m) return '#fff';
+    var n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    var lum = function (c) { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    var L = 0.2126 * lum(r) + 0.7152 * lum(g) + 0.0722 * lum(b);
+    return L > 0.35 ? '#111' : '#fff';
+  }
+  // side-by-side lanes for appointments that overlap: [{ item, lane, lanes }]
+  function lanes(list) {
+    var sorted = list.slice().sort(function (a, b) { return new Date(a.start) - new Date(b.start) || new Date(b.end) - new Date(a.end); });
+    var out = [], group = [], groupEnd = 0, ends = [];
+    var flush = function () { var n = ends.length || 1; group.forEach(function (g) { g.lanes = n; }); group = []; ends = []; };
+    sorted.forEach(function (it) {
+      var a = new Date(it.start).getTime(), b = Math.max(new Date(it.end).getTime(), a + 30 * 60000);
+      if (group.length && a >= groupEnd) flush();
+      var lane = ends.findIndex(function (e) { return e <= a; });
+      if (lane < 0) { lane = ends.length; ends.push(b); } else ends[lane] = b;
+      var rec = { item: it, lane: lane, lanes: 1 };
+      group.push(rec); out.push(rec);
+      groupEnd = Math.max(groupEnd, b);
+    });
+    flush();
+    return out;
+  }
   // The car marker only once: not again in front of a title that already has one.
   function lastTemp() { try { return Number(localStorage.getItem('ag-climate-last')) || 20; } catch (e) { return 20; } }
   function carMark(i) { return (i.needsCar && !/[\u{1F697}\u{1F699}\u{1F698}]/u.test(i.title || '') ? '🚗 ' : '') + (i.needsCar && i.climateC != null && !i.climateOff ? '🌡️ ' : ''); }
   // month view: the car in a fixed-width slot (empty without a car), so the times line up
-  function carSlot(i) { var m = carMark(i); return '<span style="display:inline-block; min-width:1.4em;">' + m.replace(/ /g, '') + '</span>'; }
+  function carSlot(i) { return '<span style="display:inline-block; min-width:1.4em;">' + (i.needsCar ? '🚗' : '') + '</span>'; }
+  function titleNoCar(i) { return String(i.title || '').replace(/[\u{1F697}\u{1F698}\u{1F699}]\uFE0F?\s*/gu, '').trim(); }
   function itemsOnDay(day) { var e = addDays(day, 1); return (data.items || []).filter(function (i) { return new Date(i.start) < e && new Date(i.end) > day; }); }
 
   function render() {
     if (!data) return;
+    // week and month use the full width (the details go underneath); day and year keep them beside
+    var wide = view === 'week' || view === 'month';
+    var av = document.getElementById('ag-view').style, ad = document.getElementById('ag-detail').style;
+    av.flexBasis = wide ? '100%' : 640 + 'px';
+    ad.flexGrow = wide ? 1 : 0; ad.flexBasis = wide ? '100%' : 300 + 'px';
     if (view === 'week' || view === 'day') renderGrid(view === 'week' ? 7 : 1);
     else if (view === 'month') renderMonth();
     else renderYear();
@@ -141,24 +174,24 @@
 
   function renderGrid(ndays) {
     var r = range();
-    var H0 = 0, H1 = 24, PX = 26;
-    var colW = ndays === 7 ? 'minmax(96px,1fr)' : '1fr';
-    var html = '<div style="display:grid; grid-template-columns:44px repeat(' + ndays + ',' + colW + '); min-width:' + (ndays === 7 ? 720 : 300) + 'px;">';
-    html += '<div></div>';
+    var H0 = 0, H1 = 24, PX = 44;
+    var colW = ndays === 7 ? 'minmax(110px,1fr)' : '1fr';
+    var html = '<div style="display:grid; grid-template-columns:44px repeat(' + ndays + ',' + colW + '); min-width:' + (ndays === 7 ? 820 : 300) + 'px;">';
+    html += '<div style="position:sticky; top:0; z-index:4; background:var(--surface, #fff);"></div>';
     for (var d = 0; d < ndays; d++) {
       var day = addDays(r[0], d);
       var allDay = itemsOnDay(day).filter(function (i) { return i.allDay; });
-      html += '<div style="padding:0 4px 4px; font-size:12px; font-weight:600; border-left:1px solid var(--border);' + (sameDay(day, new Date()) ? ' color:var(--accent);' : '') + '">' + DAYN[(day.getDay() + 6) % 7] + ' ' + day.getDate() +
-        allDay.map(function (i) { return '<div data-key="' + esc(key(i)) + '" style="margin-top:2px; font-weight:500; font-size:11px; padding:1px 4px; border-radius:4px; cursor:pointer; background:color-mix(in srgb, ' + itemColor(i) + ' 18%, transparent);">' + carMark(i) + esc(i.title) + '</div>'; }).join('') + '</div>';
+      html += '<div style="position:sticky; top:0; z-index:4; background:var(--surface, #fff); padding:0 4px 4px; font-size:12px; font-weight:600; border-left:1px solid var(--border); border-bottom:1px solid var(--border);' + (sameDay(day, new Date()) ? ' color:var(--accent);' : '') + '">' + DAYN[(day.getDay() + 6) % 7] + ' ' + day.getDate() +
+        allDay.map(function (i) { return '<div data-key="' + esc(key(i)) + '" title="' + esc(i.title) + '" style="margin-top:2px; font-weight:500; font-size:11px; padding:1px 4px; border-radius:4px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:color-mix(in srgb, ' + itemColor(i) + ' 18%, transparent);">' + carMark(i) + esc(i.title) + '</div>'; }).join('') + '</div>';
     }
     html += '<div style="position:relative; height:' + ((H1 - H0) * PX) + 'px;">';
-    for (var h = H0; h < H1; h += 2) html += '<div style="position:absolute; right:4px; top:' + ((h - H0) * PX - 6) + 'px; font-size:10px; opacity:0.55;">' + String(h).padStart(2, '0') + ':00</div>';
+    for (var h = H0 + 1; h < H1; h += 1) html += '<div style="position:absolute; right:4px; top:' + ((h - H0) * PX - 6) + 'px; font-size:10px; opacity:0.55;">' + String(h).padStart(2, '0') + ':00</div>';
     html += '</div>';
     for (var c = 0; c < ndays; c++) {
       var day2 = addDays(r[0], c);
       var dayEnd = addDays(day2, 1);
       var col = '<div style="position:relative; height:' + ((H1 - H0) * PX) + 'px; border-left:1px solid var(--border);' + ((day2.getDay() + 6) % 7 >= 5 ? ' background:color-mix(in srgb, currentColor 3%, transparent);' : '') + '">';
-      for (var hh = H0; hh < H1; hh += 2) col += '<div style="position:absolute; left:0; right:0; top:' + ((hh - H0) * PX) + 'px; border-top:1px solid var(--border);"></div>';
+      for (var hh = H0 + 1; hh < H1; hh += 1) col += '<div style="position:absolute; left:0; right:0; top:' + ((hh - H0) * PX) + 'px; border-top:1px ' + (hh % 2 ? 'dotted' : 'solid') + ' var(--border);"></div>';
       var y = function (t) { var dd = new Date(t); return Math.max(0, Math.min(H1 - H0, (dd - day2) / 3600000 - H0)) * PX; };
       (data.sessions || []).forEach(function (s) {
         var a = new Date(s.connect_at), b = s.disconnect_at ? new Date(s.disconnect_at) : new Date();
@@ -170,32 +203,44 @@
         if (b <= day2 || a >= dayEnd) return;
         col += '<div title="planned ' + nf(s.kw, 1) + ' kW" style="position:absolute; right:1px; width:7px; top:' + y(a) + 'px; height:' + Math.max(3, y(b) - y(a)) + 'px; background:' + (s.source === 'pv' ? '#d4a017' : 'var(--accent)') + '; border-radius:2px;"></div>';
       });
+      lanes(itemsOnDay(day2).filter(function (i) { return !i.allDay; })).forEach(function (L) {
+        var i = L.item, a = new Date(i.start), b = new Date(i.end);
+        var col2 = itemColor(i);
+        var sel = selected && key(i) === selected;
+        var h = Math.max(20, y(b) - y(a) - 2);
+        var style = i.needsCar ? 'background:' + col2 + '; color:' + textOn(col2) + ';' : 'background:color-mix(in srgb, ' + col2 + ' 18%, var(--surface, #fff)); color:var(--text); border-left:3px solid ' + col2 + ';';
+        // overlapping: each later one shifted right and on top (like a paper calendar), so every
+        // title keeps a readable width instead of thin side-by-side strips
+        var shift = L.lanes > 1 ? Math.min(35, 60 / (L.lanes - 1)) : 0;
+        var leftPos = 'calc(6px + (100% - 16px) * ' + (shift * L.lane / 100) + ')';
+        var width = 'calc((100% - 16px) * ' + ((100 - shift * (L.lanes - 1)) / 100) + ')';
+        var one = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+        var body = h < 34
+          ? '<div style="' + one + '"><strong>' + carMark(i) + esc(i.title) + '</strong> <span style="opacity:0.85;">' + tm(a) + '</span></div>'
+          : '<div style="' + (h >= 60 ? 'display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;' : one) + '"><strong>' + carMark(i) + esc(i.title) + '</strong></div><div style="' + one + ' opacity:0.85;">' + tm(a) + '–' + tm(b) + (i.location ? ' · ' + esc(i.location) : '') + '</div>' +
+            (h >= 50 && i.needsCar && i.needKwh != null ? '<div style="' + one + ' opacity:0.9;">' + nf(i.needKwh, 1) + ' kWh</div>' : '') +
+            (h >= 50 && i.askCar && canEdit ? '<div style="margin-top:2px; display:inline-block; border:1px solid ' + col2 + '; border-radius:8px; padding:0 5px; font-size:10px;">🚗 car needed?</div>' : '');
+        col += '<div data-key="' + esc(key(i)) + '" title="' + esc(i.title + ' · ' + tm(a) + '–' + tm(b) + (i.location ? ' · ' + i.location : '')) + '" style="position:absolute; left:' + leftPos + '; width:' + width + '; top:' + (y(a) + 1) + 'px; height:' + h + 'px; box-sizing:border-box; border-radius:6px; padding:2px 5px; font-size:11px; line-height:1.3; overflow:hidden; cursor:pointer; z-index:' + (1 + L.lane) + '; ' + (L.lane ? 'box-shadow:0 0 0 1px var(--surface, #fff); ' : '') + style + (sel ? ' box-shadow:0 0 0 2px ' + col2 + ';' : '') + '">' + body + '</div>';
+      });
+      // learned "ready" moments on top, as a line with a small label that stays readable
       (data.learned || []).forEach(function (l) {
         var a = new Date(l.at);
         if (a < day2 || a >= dayEnd) return;
-        col += '<div style="position:absolute; left:8px; right:10px; top:' + y(a) + 'px; border-top:2px dashed #9aa4b2; font-size:10px; opacity:0.85; padding-left:2px;">ready ' + tm(a) + '</div>';
+        col += '<div style="position:absolute; left:0; right:0; top:' + y(a) + 'px; border-top:2px dashed #9aa4b2; z-index:2; pointer-events:none;"><span style="position:absolute; right:10px; top:-9px; font-size:10px; line-height:1; padding:2px 5px; border-radius:6px; background:var(--surface, #fff); color:var(--text); border:1px solid #9aa4b2; white-space:nowrap;">ready ' + tm(a) + '</span></div>';
       });
-      itemsOnDay(day2).filter(function (i) { return !i.allDay; }).forEach(function (i) {
-        var a = new Date(i.start), b = new Date(i.end);
-        var col2 = itemColor(i);
-        var sel = selected && key(i) === selected;
-        var style = i.needsCar ? 'background:' + col2 + '; color:#fff;' : 'background:color-mix(in srgb, ' + col2 + ' 15%, var(--surface, #fff)); border-left:3px solid ' + col2 + ';';
-        col += '<div data-key="' + esc(key(i)) + '" style="position:absolute; left:8px; right:10px; top:' + (y(a) + 1) + 'px; height:' + Math.max(16, y(b) - y(a) - 2) + 'px; border-radius:6px; padding:2px 5px; font-size:11px; line-height:1.25; overflow:hidden; cursor:pointer; ' + style + (sel ? ' box-shadow:0 0 0 2px ' + col2 + ';' : '') + '">' +
-          '<strong>' + carMark(i) + esc(i.title) + '</strong><div style="opacity:0.85;">' + tm(a) + (i.location ? ' · ' + esc(i.location) : '') + '</div>' +
-          (i.askCar && canEdit ? '<div style="margin-top:2px; display:inline-block; border:1px solid ' + col2 + '; border-radius:8px; padding:0 5px; font-size:10px;">🚗 car needed?</div>' : '') +
-          (i.needsCar && i.needKwh != null ? '<div style="opacity:0.9;">' + nf(i.needKwh, 1) + ' kWh</div>' : '') + '</div>';
-      });
-      if (sameDay(day2, new Date())) col += '<div style="position:absolute; left:0; right:0; top:' + y(new Date()) + 'px; border-top:2px solid #e5534b;"></div>';
+      if (sameDay(day2, new Date())) col += '<div style="position:absolute; left:0; right:0; top:' + y(new Date()) + 'px; border-top:2px solid #e5534b; z-index:3; pointer-events:none;"></div>';
       html += col + '</div>';
     }
     html += '</div>';
     var el = document.getElementById('ag-view');
+    el.style.maxHeight = '72vh'; el.style.overflowY = 'auto';
     el.innerHTML = html;
-    el.scrollTop = 6 * PX;
+    el.scrollTop = 7 * PX;
     bindClicks(el);
   }
 
   function renderMonth() {
+    document.getElementById('ag-view').style.maxHeight = ''; document.getElementById('ag-view').style.overflowY = '';
     var r = range();
     var month = cursor.getMonth();
     var html = '<div style="display:grid; grid-template-columns:repeat(7, minmax(90px,1fr)); border-top:1px solid var(--border); border-left:1px solid var(--border); min-width:640px;">';
@@ -206,7 +251,7 @@
       var kwh = (data.sessions || []).filter(function (s) { return sameDay(new Date(s.connect_at), day); }).reduce(function (a, s) { return a + (s.kwh || 0); }, 0);
       var cell = '<div style="min-height:92px; padding:4px 5px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); font-size:11px;' + (day.getMonth() !== month ? ' opacity:0.45;' : '') + '">' +
         '<div style="display:flex; justify-content:space-between;"><span style="font-weight:600;' + (sameDay(day, new Date()) ? ' color:var(--accent);' : '') + '">' + day.getDate() + '</span>' + (kwh ? '<span class="hint" style="margin:0;">⚡' + nf(kwh, 1) + '</span>' : '') + '</div>';
-      list.slice(0, 3).forEach(function (it) { cell += '<div data-key="' + esc(key(it)) + '" style="margin-top:2px; padding:1px 4px; border-radius:4px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ' + (it.needsCar ? 'background:' + itemColor(it) + '; color:#fff;' : 'background:color-mix(in srgb, ' + itemColor(it) + ' 15%, transparent);') + '">' + carSlot(it) + (it.allDay ? '' : tm(it.start) + ' ') + esc(it.title) + '</div>'; });
+      list.slice(0, 3).forEach(function (it) { cell += '<div data-key="' + esc(key(it)) + '" style="margin-top:2px; padding:1px 4px; border-radius:4px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ' + (it.needsCar ? 'background:' + itemColor(it) + '; color:' + textOn(itemColor(it)) + ';' : 'background:color-mix(in srgb, ' + itemColor(it) + ' 15%, transparent);') + '">' + carSlot(it) + (it.allDay ? '' : tm(it.start) + ' ') + (it.needsCar && it.climateC != null && !it.climateOff ? '🌡️' : '') + esc(titleNoCar(it)) + '</div>'; });
       if (list.length > 3) cell += '<div class="hint" style="margin:2px 0 0;">+' + (list.length - 3) + ' more</div>';
       html += cell + '</div>';
     }
@@ -216,6 +261,7 @@
   }
 
   function renderYear() {
+    document.getElementById('ag-view').style.maxHeight = ''; document.getElementById('ag-view').style.overflowY = '';
     var year = cursor.getFullYear();
     var kwhByDay = {};
     (data.sessions || []).forEach(function (s) { var k = startOfDay(new Date(s.connect_at)).toDateString(); kwhByDay[k] = (kwhByDay[k] || 0) + (s.kwh || 0); });
@@ -231,13 +277,13 @@
         if (d.getMonth() !== m) { mh += '<div></div>'; continue; }
         var k = kwhByDay[d.toDateString()] || 0;
         var a = Math.min(1, k / 20);
-        mh += '<div title="' + d.toLocaleDateString() + (k ? ': ' + nf(k, 1) + ' kWh' : '') + '" style="aspect-ratio:1; border-radius:3px; font-size:9px; display:flex; align-items:center; justify-content:center; position:relative; background:' + (k ? 'color-mix(in srgb, var(--accent) ' + Math.round(15 + a * 70) + '%, transparent)' : 'color-mix(in srgb, currentColor 5%, transparent)') + ';' + (sameDay(d, new Date()) ? ' outline:2px solid #e5534b;' : '') + '">' + d.getDate() +
-          (carDays[d.toDateString()] ? '<span style="position:absolute; right:1px; top:-1px; font-size:7px;">🚗</span>' : '') + '</div>';
+        mh += '<div title="' + d.toLocaleDateString() + (k ? ': ' + nf(k, 1) + ' kWh' : '') + '" style="aspect-ratio:1; border-radius:3px; font-size:10px; display:flex; align-items:center; justify-content:center; position:relative; background:' + (k ? 'color-mix(in srgb, var(--accent) ' + Math.round(15 + a * 70) + '%, transparent)' : 'color-mix(in srgb, currentColor 5%, transparent)') + ';' + (sameDay(d, new Date()) ? ' outline:2px solid #e5534b;' : '') + '">' + d.getDate() +
+          (carDays[d.toDateString()] ? '<span style="position:absolute; left:50%; bottom:2px; width:4px; height:4px; margin-left:-2px; border-radius:50%; background:#e5534b;"></span>' : '') + '</div>';
       }
       html += mh + '</div></div>';
     }
     var el = document.getElementById('ag-view');
-    el.innerHTML = html + '</div><p class="hint" style="margin:0.6rem 0 0;">Colour = kWh charged that day · 🚗 = car needed</p>';
+    el.innerHTML = html + '</div><p class="hint" style="margin:0.6rem 0 0;">Colour = kWh charged that day · red dot = car needed</p>';
     el.querySelectorAll('[data-month]').forEach(function (x) { x.onclick = function () { cursor = new Date(year, Number(x.dataset.month), 1); view = 'month'; load(); }; });
   }
 
@@ -250,7 +296,7 @@
     if (!it) {
       var up = (data.items || []).filter(function (i) { return i.needsCar && new Date(i.start) > new Date(); }).slice(0, 4);
       el.innerHTML = '<div style="border:1px solid var(--border); border-radius:12px; padding:0.9rem 1rem;"><strong>Coming up with the car</strong>' +
-        (up.length ? up.map(function (i) { return '<div data-key="' + esc(key(i)) + '" style="margin-top:0.5rem; cursor:pointer;">🚗 <strong>' + esc(i.title) + '</strong><div class="hint" style="margin:0;">' + new Date(i.start).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + (i.needKwh != null ? ' · ' + nf(i.needKwh, 1) + ' kWh' : '') + '</div></div>'; }).join('') : '<p class="hint" style="margin:0.4rem 0 0;">Nothing in this period. Click an appointment for details.</p>') + '</div>';
+        (up.length ? up.map(function (i) { return '<div data-key="' + esc(key(i)) + '" style="margin-top:0.5rem; cursor:pointer;">' + carMark(i) + '<strong>' + esc(i.title) + '</strong><div class="hint" style="margin:0;">' + new Date(i.start).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + (i.needKwh != null ? ' · ' + nf(i.needKwh, 1) + ' kWh' : '') + '</div></div>'; }).join('') : '<p class="hint" style="margin:0.4rem 0 0;">Nothing in this period. Click an appointment for details.</p>') + '</div>';
       bindClicks(el);
       return;
     }

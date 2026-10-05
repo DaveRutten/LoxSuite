@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.35.3-alpha.1] - 2026-10-05
+
+### Changed
+- **Agenda Day / Week / Month / Year tidied up**: an hour is taller, so text no longer falls away; titles and
+  times stay on their own line with "…" when they don't fit (the full text on hover); overlapping appointments
+  are staggered instead of thin strips; text is black or white depending on the calendar colour; the hour
+  lines are every hour; the day header stays visible while scrolling. Week and Month use the full width (the
+  details go underneath). The learned "ready" line sits on top with a readable label. Year: a red dot for a day
+  with the car instead of a tiny car.
+- **Sync** sits left of Day / Week / Month / Year.
+- Month view: the car always in its own space in front of the time; "Coming up with the car" no longer shows
+  the car twice.
+
 ## [0.35.2-alpha.1] - 2026-10-05
 
 ### Added

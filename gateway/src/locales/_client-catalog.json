@@ -2393,10 +2393,10 @@
   "module": "charging",
   "where": [
    "admin-notifications (script)",
+   "agenda (script)",
    "learned (script)",
    "ocpp-bridge-edit (script)",
-   "partials/ocpp-bridge-fields (script)",
-   "public/monitor-chart.js"
+   "partials/ocpp-bridge-fields (script)"
   ]
  },
  {
@@ -3355,7 +3355,7 @@
   ]
  },
  {
-  "key": "Colour = kWh charged that day · 🚗 = car needed",
+  "key": "Colour = kWh charged that day · red dot = car needed",
   "module": "charging",
   "where": [
    "agenda (script)"
