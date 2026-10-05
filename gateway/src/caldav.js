@@ -9,6 +9,16 @@ const ICLOUD = 'https://caldav.icloud.com/';
 const TIMEOUT_MS = 20000;
 
 const parser = new XMLParser({ removeNSPrefix: true, ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false, trimValues: true });
+// Pure: "Naam &amp; Naam" -> "Naam & Naam" (also double-escaped, as some servers send it).
+function decodeEntities(text) {
+  let s = String(text ?? '');
+  for (let i = 0; i < 2 && /&(#\d+|#x[0-9a-f]+|amp|lt|gt|quot|apos);/i.test(s); i++) {
+    s = s.replace(/&#x([0-9a-f]+);/gi, (m, h) => String.fromCodePoint(parseInt(h, 16)))
+      .replace(/&#(\d+);/g, (m, d) => String.fromCodePoint(Number(d)))
+      .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&apos;/gi, "'").replace(/&amp;/gi, '&');
+  }
+  return s;
+}
 const arr = (x) => (x === undefined || x === null ? [] : Array.isArray(x) ? x : [x]);
 
 async function request(method, url, { username, password, depth = null, body = null, fetchFn = fetch } = {}) {
@@ -99,7 +109,7 @@ function calendarsFrom(xml, baseUrl) {
     const cc = props['calendar-color'];
     const color = String(cc && typeof cc === 'object' ? cc['#text'] ?? '' : cc || '').slice(0, 7);
     const text = (v) => (v && typeof v === 'object' ? String(v['#text'] ?? '') : String(v ?? ''));
-    out.push({ url: new URL(href, baseUrl).toString(), name: text(props.displayname) || href.split('/').filter(Boolean).pop() || 'Calendar', color: /^#[0-9a-f]{6}$/i.test(color) ? color : null });
+    out.push({ url: new URL(href, baseUrl).toString(), name: decodeEntities(text(props.displayname)) || decodeURIComponent(href.split('/').filter(Boolean).pop() || '') || 'Calendar', color: /^#[0-9a-f]{6}$/i.test(color) ? color : null });
   }
   return out;
 }
@@ -129,4 +139,4 @@ function joinIcs(list) {
   return `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//LoxSuite//CalDAV//EN\n${[...tz.values()].join('')}${parts.join('')}END:VCALENDAR\n`;
 }
 
-module.exports = { ICLOUD, discover, fetchRange, parseMultistatus, calendarsFrom, joinIcs, icalTime, request };
+module.exports = { decodeEntities, ICLOUD, discover, fetchRange, parseMultistatus, calendarsFrom, joinIcs, icalTime, request };

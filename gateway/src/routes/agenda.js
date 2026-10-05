@@ -158,7 +158,7 @@ router.post('/override.json', requirePermission('charging', 'edit'), asyncHandle
 }));
 
 router.post('/distance.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
-  const r = await agenda.distanceFromHome(req.body?.location);
+  const r = await agenda.distanceFromHome(req.body?.location, { force: !!req.body?.force });
   res.json({ ok: !!r && !r.error, ...(r || {}) });
 }));
 

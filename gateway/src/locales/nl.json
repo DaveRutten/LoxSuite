@@ -3890,5 +3890,12 @@
   "Administration → Energy & charging": "Beheer → Energie & laden",
   "{0} intervals, until {1}": "{0} intervallen, tot {1}",
   "estimate from {0} Spot Price Optimizer values": "schatting uit {0} waarden van de Spot Price Optimizer",
-  "No Loxone prices yet: LoxSuite samples the Spot Price Optimizer every 15 minutes (or authorize its MCP server under Miniservers for its history).": "Nog geen Loxone-prijzen: LoxSuite leest de Spot Price Optimizer elke 15 minuten uit (of autoriseer zijn MCP-server onder Miniservers voor de geschiedenis)."
+  "No Loxone prices yet: LoxSuite samples the Spot Price Optimizer every 15 minutes (or authorize its MCP server under Miniservers for its history).": "Nog geen Loxone-prijzen: LoxSuite leest de Spot Price Optimizer elke 15 minuten uit (of autoriseer zijn MCP-server onder Miniservers voor de geschiedenis).",
+  "Try again": "Opnieuw proberen",
+  "Sync": "Synchroniseren",
+  "Fetch the calendars again now": "Haal de agenda's nu opnieuw op",
+  "only this day": "alleen deze dag",
+  "Repeating appointment — for:": "Terugkerende afspraak — voor:",
+  "Set for the whole series.": "Ingesteld voor de hele reeks.",
+  "the whole series": "de hele reeks"
 }

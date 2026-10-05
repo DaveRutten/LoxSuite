@@ -78,7 +78,7 @@ function expandEvents(data, fromMs, toMs) {
       if (end.getTime() <= fromMs || s.getTime() >= toMs) return;
       out.push({
         uid: String(e.uid || ''), start: s.toISOString(), end: end.toISOString(), allDay,
-        title: String(ev.summary?.val ?? ev.summary ?? ''), location: String(ev.location?.val ?? ev.location ?? ''),
+        title: require('./caldav').decodeEntities(ev.summary?.val ?? ev.summary ?? ''), location: require('./caldav').decodeEntities(ev.location?.val ?? ev.location ?? ''),
         description: String(ev.description?.val ?? ev.description ?? '').slice(0, 2000),
       });
     };
@@ -105,7 +105,8 @@ async function getConfig() { return settings.get('agenda', DEFAULTS); }
 
 async function listCalendars() {
   const rows = await db.prepare('SELECT * FROM calendars ORDER BY name').all();
-  return rows.map((c) => ({ ...c, url: undefined, secret: undefined, kind: c.kind || 'ics', urlHost: hostOf(c.url) }));
+  const { decodeEntities } = require('./caldav');
+  return rows.map((c) => ({ ...c, name: decodeEntities(c.name), url: undefined, secret: undefined, kind: c.kind || 'ics', urlHost: hostOf(c.url) }));
 }
 
 function hostOf(enc) {
@@ -119,14 +120,14 @@ async function addCalendar({ name, url, color, vehicle_id, kind = 'ics', usernam
     if (!username || !password) throw new Error('User name and (app-specific) password are needed.');
     return db.insertReturningId(
       'INSERT INTO calendars (name, url, color, vehicle_id, enabled, created_at, kind, username, secret) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)',
-      [String(name || 'Calendar').trim().slice(0, 80), encrypt(String(url)), color || '#3b82c4', vehicle_id || null, new Date().toISOString(), 'caldav', String(username).slice(0, 200), encrypt(String(password))]
+      [require('./caldav').decodeEntities(String(name || 'Calendar')).trim().slice(0, 80), encrypt(String(url)), color || '#3b82c4', vehicle_id || null, new Date().toISOString(), 'caldav', String(username).slice(0, 200), encrypt(String(password))]
     );
   }
   const u = icsUrl(url);
   if (!/^https?:\/\/.+/i.test(u)) throw new Error('The calendar address must start with https://, http:// or webcal://.');
   const id = await db.insertReturningId(
     'INSERT INTO calendars (name, url, color, vehicle_id, enabled, created_at) VALUES (?, ?, ?, ?, 1, ?)',
-    [String(name || 'Calendar').trim().slice(0, 80), encrypt(u), color || '#3b82c4', vehicle_id || null, new Date().toISOString()]
+    [require('./caldav').decodeEntities(String(name || 'Calendar')).trim().slice(0, 80), encrypt(u), color || '#3b82c4', vehicle_id || null, new Date().toISOString()]
   );
   return id;
 }
@@ -134,7 +135,7 @@ async function addCalendar({ name, url, color, vehicle_id, kind = 'ics', usernam
 // Pure: the calendar's own name from an ICS text (X-WR-CALNAME), or null.
 function icsName(text) {
   const m = /^X-WR-CALNAME:(.+)$/m.exec(String(text || '').replace(/\r/g, ''));
-  return m ? m[1].trim().replace(/\\,/g, ',').slice(0, 80) : null;
+  return m ? require('./caldav').decodeEntities(m[1].trim().replace(/\\,/g, ',')).slice(0, 80) : null;
 }
 
 async function fetchIcs(url) {
@@ -212,22 +213,55 @@ async function geoFetch(url) {
 }
 
 let lastGeoAt = 0;
-// Address -> { lat, lon, distance_km (one way, by road), duration_min } from home, cached.
-async function distanceFromHome(address, { get = geoFetch } = {}) {
+const GEO_RETRY_MS = 6 * 3600000;
+// Pure: what to ask the geocoder for an agenda location, best first. A calendar often puts a name in
+// front of the address ("Coöperatie VGZ Nieuwe Stationsstraat 12, 6811 KS Arnhem, Nederland"), which
+// OpenStreetMap doesn't find: then without the leading name / parts, and finally postcode + town.
+function addressCandidates(address) {
+  const q = String(address || '').trim().replace(/\s+/g, ' ');
+  if (!q) return [];
+  const out = [q];
+  const add = (x) => { const v = String(x || '').trim().replace(/^[,\s]+|[,\s]+$/g, ''); if (v && !out.includes(v)) out.push(v); };
+  const parts = q.split(/\s*,\s*/).filter(Boolean);
+  const country = /^(nederland|netherlands|the netherlands|nl|belgi[eë]|belgium|deutschland|germany)$/i;
+  const core = parts.filter((p) => !country.test(p));
+  // "<name> <street> <number>" in the first part: drop words in front of the street, one at a time
+  if (/\s\d+\s?[a-zA-Z]?(?:-\d+)?$/.test(core[0] || '')) {
+    const words = core[0].split(' ');
+    for (let i = 1; i <= words.length - 2; i++) add([words.slice(i).join(' '), ...core.slice(1)].join(', '));
+  }
+  // without the leading part(s) (a name or building on its own)
+  for (let i = 1; i < core.length; i++) add(core.slice(i).join(', '));
+  // postcode + town: at least the right neighbourhood
+  const pc = /\b(\d{4}\s?[A-Z]{2})\b/.exec(q);
+  if (pc) {
+    const after = q.slice(pc.index + pc[0].length).split(',')[0].trim();
+    add(after ? `${pc[1]} ${after}` : pc[1]);
+  }
+  return out.slice(0, 7);
+}
+
+// Address -> { lat, lon, distance_km (one way, by road), duration_min } from home, cached. A failed
+// lookup is tried again after 6 hours.
+async function distanceFromHome(address, { get = geoFetch, force = false } = {}) {
   const q = String(address || '').trim().replace(/\s+/g, ' ');
   if (!q) return null;
   const site = await settings.get('site', { lat: null, lon: null });
   if (site.lat === null || site.lon === null) return { error: 'Home location not set.' };
   const key = `${q.toLowerCase().slice(0, 230)}|${Number(site.lat).toFixed(4)},${Number(site.lon).toFixed(4)}`;
   const cached = await db.prepare('SELECT * FROM geo_cache WHERE query = ?').get(key);
-  if (cached && (!cached.error || Date.now() - Date.parse(cached.fetched_at) < 86400000)) return cached;
-  // Nominatim's usage policy: at most one request per second.
-  const wait = 1100 - (Date.now() - lastGeoAt);
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastGeoAt = Date.now();
+  if (cached && (!cached.error || (!force && Date.now() - Date.parse(cached.fetched_at) < GEO_RETRY_MS))) return cached;
   let row;
   try {
-    const found = await get(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=nl,be,de,lu,fr&q=${encodeURIComponent(q)}`);
+    let found = null;
+    for (const cand of addressCandidates(q)) {
+      // Nominatim's usage policy: at most one request per second.
+      const wait = 1100 - (Date.now() - lastGeoAt);
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      lastGeoAt = Date.now();
+      const res = await get(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=nl,be,de,lu,fr&q=${encodeURIComponent(cand)}`);
+      if (res?.length) { found = res; break; }
+    }
     if (!found?.length) throw new Error('Address not found.');
     const lat = Number(found[0].lat);
     const lon = Number(found[0].lon);
@@ -251,7 +285,23 @@ async function overridesMap() {
 
 // Only the fields that are given change; the others (car needed, own value, climate) are kept.
 async function setOverride(b) {
-  const { calendar_id, uid, start_at } = b;
+  const { calendar_id, uid } = b;
+  let start_at = b.start_at;
+  // "Car needed" for the whole series of a recurring appointment: one row with start_at '*'; the
+  // choices made per day for that series give way to it.
+  if (b.scope === 'series' && Object.prototype.hasOwnProperty.call(b, 'needs_car')) {
+    const ser = await db.prepare('SELECT * FROM event_overrides WHERE calendar_id = ? AND uid = ? AND start_at = ?').get(Number(calendar_id), String(uid), '*') || {};
+    const n = b.needs_car;
+    await db.upsert('event_overrides', {
+      calendar_id: Number(calendar_id), uid: String(uid), start_at: '*',
+      needs_car: n === null || n === undefined || n === '' ? null : (Number(n) ? 1 : 0),
+      own_value: ser.own_value ?? null, climate_c: ser.climate_c ?? null,
+    }, ['calendar_id', 'uid', 'start_at']);
+    await db.prepare("UPDATE event_overrides SET needs_car = NULL WHERE calendar_id = ? AND uid = ? AND start_at <> '*'").run(Number(calendar_id), String(uid));
+    b = { ...b };
+    delete b.needs_car;
+    if (!start_at) return;
+  }
   const cur = await db.prepare('SELECT * FROM event_overrides WHERE calendar_id = ? AND uid = ? AND start_at = ?').get(Number(calendar_id), String(uid), String(start_at)) || {};
   const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
   const needs = has('needs_car') ? b.needs_car : cur.needs_car;
@@ -282,17 +332,23 @@ async function items(fromIso, toIso, { withGeo = false } = {}) {
   const cals = new Map((await db.prepare('SELECT id, name, color, vehicle_id FROM calendars').all()).map((c) => [c.id, c]));
   const ov = await overridesMap();
   const events = await db.prepare('SELECT * FROM calendar_events WHERE end_at > ? AND start_at < ? ORDER BY start_at').all(fromIso, toIso);
+  const recurring = new Set((await db.prepare('SELECT calendar_id, uid FROM calendar_events GROUP BY calendar_id, uid HAVING COUNT(*) > 1').all()).map((r) => `${r.calendar_id}|${r.uid}`));
   const out = [];
   for (const e of events) {
     const cal = cals.get(e.calendar_id) || {};
-    const o = ov.get(`${e.calendar_id}|${e.uid}|${e.start_at}`);
-    const needsCar = o && o.needs_car !== null ? !!o.needs_car : !!e.car_tag;
+    if (cal.name) cal.name = require('./caldav').decodeEntities(cal.name);
+    const o0 = ov.get(`${e.calendar_id}|${e.uid}|${e.start_at}`);
+    const so = ov.get(`${e.calendar_id}|${e.uid}|*`);
+    // the day's own choice, else the series' choice; own value and climate per day
+    const o = o0 && o0.needs_car !== null ? o0 : so && so.needs_car !== null ? { ...(o0 || {}), needs_car: so.needs_car, series: true } : o0;
+    const needsCar = o && o.needs_car !== null && o.needs_car !== undefined ? !!o.needs_car : !!e.car_tag;
     const item = {
       kind: 'event', id: e.id, calendar_id: e.calendar_id, calendar: cal.name, color: cal.color, uid: e.uid,
       start: e.start_at, end: e.end_at, allDay: !!e.all_day, title: e.title, location: e.location,
-      carTag: !!e.car_tag, needsCar, carSource: o && o.needs_car !== null ? 'you' : e.car_tag ? 'tag' : null,
+      carTag: !!e.car_tag, needsCar, carSource: o && o.needs_car !== null && o.needs_car !== undefined ? (o.series ? 'series' : 'you') : e.car_tag ? 'tag' : null,
+      recurring: recurring.has(`${e.calendar_id}|${e.uid}`),
       own: o?.own_value || null, hint: e.car_hint ? JSON.parse(e.car_hint) : null, vehicle_id: o?.vehicle_id || cal.vehicle_id || null,
-      askCar: !needsCar && !!e.location && !(o && o.needs_car === 0),
+      askCar: !needsCar && !!e.location && !(o && Number(o.needs_car) === 0 && o.needs_car !== null),
       climateC: o?.climate_c ?? null,
     };
     if (needsCar) await enrichNeed(item, cfg, withGeo);
@@ -364,10 +420,23 @@ async function nextCarTrip(nowMs, vehicle = null) {
   return next ? { title: next.title, readyAt: Date.parse(next.readyAt), needKwh: next.needKwh, item: next } : null;
 }
 
-// Look up distances for upcoming car items in the background (Nominatim allows 1 request/s).
+// Look up distances in the background for every upcoming appointment with an address and no
+// distance yet — also ones not marked for the car, so marking one shows its distance at once — and
+// try failed ones again (distanceFromHome waits 6 h between tries). Nominatim allows 1 request/s.
 async function resolveUpcomingDistances(nowMs = Date.now()) {
+  const cfg = await getConfig();
+  if (!cfg.geo) return;
   const list = await items(new Date(nowMs).toISOString(), new Date(nowMs + 14 * 86400000).toISOString());
-  for (const i of list) if (i.needsCar && i.location && i.distanceKm === null && !i.geoError) await distanceFromHome(i.location).catch(() => {});
+  const seen = new Set();
+  for (const i of list) {
+    if (!i.location || i.distanceKm !== null && i.distanceKm !== undefined) continue;
+    const k = String(i.location).trim().toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const c = await cachedDistance(i.location).catch(() => null);
+    if (c && !c.error) continue;
+    await distanceFromHome(i.location).catch(() => {});
+  }
 }
 
 let timer = null;
@@ -391,5 +460,5 @@ function stopAgenda() {
 
 module.exports = {
   DEFAULTS, hasCarTag, parseCarHint, parseOwnValue, tripNeedKwh, icsUrl, expandEvents, tripOccurrences,
-  icsName, fetchIcs, getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
+  addressCandidates, icsName, fetchIcs, getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
 };

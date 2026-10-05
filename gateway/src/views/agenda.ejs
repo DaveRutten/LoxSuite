@@ -12,10 +12,11 @@
       <strong id="ag-title" style="margin-left:0.4rem;"></strong>
     </div>
     <div id="ag-views" style="display:inline-flex; border:1px solid var(--border); border-radius:10px; overflow:hidden;">
-      <% [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['year', 'Year']].forEach(([k, l]) => { %>
+      <% [['day', t('Day')], ['week', t('Week')], ['month', t('Month')], ['year', t('Year')]].forEach(([k, l]) => { %>
         <button type="button" data-view="<%= k %>" style="border:0; padding:0.4rem 0.85rem; font-weight:600; cursor:pointer;"><%= l %></button>
       <% }) %>
     </div>
+    <% if (canEdit('charging')) { %><button type="button" class="btn-soft" id="ag-sync-now" title="<%= t('Fetch the calendars again now') %>"><%- icon('refresh') %> <%= t('Sync') %></button><% } %>
   </div>
   <div id="ag-legend" class="hint" style="margin:0.6rem 0 0.6rem; font-size:0.8rem;"></div>
   <div style="display:flex; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
@@ -76,6 +77,16 @@
   function startOfWeek(d) { var x = startOfDay(d); var wd = (x.getDay() + 6) % 7; return addDays(x, -wd); }
   function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
   function weekNo(d) { var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); var day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day); var y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return Math.ceil(((t - y0) / 86400000 + 1) / 7); }
+  var distTried = {};
+  var syncNow = document.getElementById('ag-sync-now');
+  if (syncNow) syncNow.onclick = function () {
+    syncNow.disabled = true;
+    post('/agenda/sync.json', {}).then(function (d) {
+      var bad = (d.results || []).filter(function (r) { return !r.ok; });
+      syncNow.title = bad.length ? bad.map(function (r) { return r.message; }).join(' · ') : '';
+      load();
+    }).finally(function () { syncNow.disabled = false; });
+  };
   function post(url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }); }
 
   function range() {
@@ -116,6 +127,8 @@
   // The car marker only once: not again in front of a title that already has one.
   function lastTemp() { try { return Number(localStorage.getItem('ag-climate-last')) || 20; } catch (e) { return 20; } }
   function carMark(i) { return (i.needsCar && !/[\u{1F697}\u{1F699}\u{1F698}]/u.test(i.title || '') ? '🚗 ' : '') + (i.needsCar && i.climateC != null && !i.climateOff ? '🌡️ ' : ''); }
+  // month view: the car in a fixed-width slot (empty without a car), so the times line up
+  function carSlot(i) { var m = carMark(i); return '<span style="display:inline-block; min-width:1.4em;">' + m.replace(/ /g, '') + '</span>'; }
   function itemsOnDay(day) { var e = addDays(day, 1); return (data.items || []).filter(function (i) { return new Date(i.start) < e && new Date(i.end) > day; }); }
 
   function render() {
@@ -193,7 +206,7 @@
       var kwh = (data.sessions || []).filter(function (s) { return sameDay(new Date(s.connect_at), day); }).reduce(function (a, s) { return a + (s.kwh || 0); }, 0);
       var cell = '<div style="min-height:92px; padding:4px 5px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); font-size:11px;' + (day.getMonth() !== month ? ' opacity:0.45;' : '') + '">' +
         '<div style="display:flex; justify-content:space-between;"><span style="font-weight:600;' + (sameDay(day, new Date()) ? ' color:var(--accent);' : '') + '">' + day.getDate() + '</span>' + (kwh ? '<span class="hint" style="margin:0;">⚡' + nf(kwh, 1) + '</span>' : '') + '</div>';
-      list.slice(0, 3).forEach(function (it) { cell += '<div data-key="' + esc(key(it)) + '" style="margin-top:2px; padding:1px 4px; border-radius:4px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ' + (it.needsCar ? 'background:' + itemColor(it) + '; color:#fff;' : 'background:color-mix(in srgb, ' + itemColor(it) + ' 15%, transparent);') + '">' + carMark(it) + (it.allDay ? '' : tm(it.start) + ' ') + esc(it.title) + '</div>'; });
+      list.slice(0, 3).forEach(function (it) { cell += '<div data-key="' + esc(key(it)) + '" style="margin-top:2px; padding:1px 4px; border-radius:4px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ' + (it.needsCar ? 'background:' + itemColor(it) + '; color:#fff;' : 'background:color-mix(in srgb, ' + itemColor(it) + ' 15%, transparent);') + '">' + carSlot(it) + (it.allDay ? '' : tm(it.start) + ' ') + esc(it.title) + '</div>'; });
       if (list.length > 3) cell += '<div class="hint" style="margin:2px 0 0;">+' + (list.length - 3) + ' more</div>';
       html += cell + '</div>';
     }
@@ -248,7 +261,9 @@
       '<div class="hint" style="margin:0;">' + when + (it.location ? ' · 📍 ' + esc(it.location) : '') + '</div>';
     if (it.kind === 'event' && canEdit) {
       html += '<div style="display:flex; align-items:center; justify-content:space-between; margin:0.8rem 0 0.3rem; padding:0.5rem 0.7rem; border-radius:10px; background:var(--accent-soft, #EAF7E4);"><strong>Car needed</strong>' +
-        '<select id="ag-need"><option value="">auto' + (it.carTag ? ' (yes, marker)' : ' (no)') + '</option><option value="1"' + (it.carSource === 'you' && it.needsCar ? ' selected' : '') + '>yes</option><option value="0"' + (it.carSource === 'you' && !it.needsCar ? ' selected' : '') + '>no</option></select></div>' +
+        '<select id="ag-need"><option value="">auto' + (it.carTag ? ' (yes, marker)' : ' (no)') + '</option><option value="1"' + ((it.carSource === 'you' || it.carSource === 'series') && it.needsCar ? ' selected' : '') + '>yes</option><option value="0"' + ((it.carSource === 'you' || it.carSource === 'series') && !it.needsCar ? ' selected' : '') + '>no</option></select></div>' +
+        (it.recurring ? '<div id="ag-scope" hidden style="margin:0 0 0.4rem; padding:0.5rem 0.7rem; border:1px dashed var(--border); border-radius:10px;"><span class="hint" style="margin:0 0.5rem 0 0;">Repeating appointment — for:</span><button type="button" class="btn-soft" data-scope="day">only this day</button> <button type="button" class="btn-soft" data-scope="series">the whole series</button></div>' : '') +
+        (it.carSource === 'series' ? '<p class="hint" style="margin:0 0 0.3rem;">Set for the whole series.</p>' : '') +
         '<div class="hint" style="margin:0 0 0.4rem; font-size:0.75rem;">Stored in LoxSuite only; your calendar isn\'t changed.</div>';
     }
     if (it.needsCar) {
@@ -261,7 +276,7 @@
         '<tr><td>Ready by</td><td style="text-align:right;">' + tm(it.readyAt) + '</td></tr></table>';
       if (it.usableKwh && it.needKwh > it.usableKwh) html += '<p class="hint" style="margin:0.4rem 0 0; color:#b8860b;">More than the battery (' + nf(it.usableKwh, 1) + ' kWh): ' + (it.vehicleType === 'phev' ? 'it leaves full, the rest is fuel.' : 'plan a charging stop.') + '</p>';
       if (it.geoError) html += '<p class="hint" style="margin:0.4rem 0 0; color:var(--danger);">Distance: ' + esc(it.geoError) + '</p>';
-      if (it.location && it.distanceKm == null && !it.geoError && canEdit) html += '<button type="button" class="btn-soft" id="ag-dist" style="margin-top:0.5rem;">Look up distance</button>';
+      if (it.location && it.distanceKm == null && canEdit) html += '<button type="button" class="btn-soft" id="ag-dist" style="margin-top:0.5rem;">' + (it.geoError ? 'Try again' : 'Look up distance') + '</button>';
     }
     if (it.kind === 'event' && canEdit && it.needsCar) html += '<div style="margin-top:0.7rem;"><label>Own value (optional)</label><input type="text" id="ag-own" value="' + esc(it.own || '') + '" placeholder="150 km, 30 kWh or full"><button type="button" class="btn-soft" id="ag-own-save" style="margin-top:0.3rem;">Save</button></div>';
     if (it.needsCar && (canEdit || it.climateC != null)) {
@@ -313,11 +328,22 @@
       post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.start, needs_car: document.getElementById('ag-need') ? document.getElementById('ag-need').value : '', own_value: document.getElementById('ag-own') ? document.getElementById('ag-own').value : it.own }, patch || {})).then(load);
     };
     var need = document.getElementById('ag-need');
-    if (need) need.onchange = function () { save(); };
+    var scope = document.getElementById('ag-scope');
+    if (need) need.onchange = function () {
+      if (!scope) { save(); return; }
+      // a repeating appointment: ask whether this is for this day or the whole series
+      scope.hidden = false;
+      scope.querySelectorAll('button').forEach(function (b) {
+        b.onclick = function () { save(b.dataset.scope === 'series' ? { scope: 'series' } : {}); };
+      });
+    };
     var own = document.getElementById('ag-own-save');
     if (own) own.onclick = function () { save(); };
     var dist = document.getElementById('ag-dist');
-    if (dist) dist.onclick = function () { dist.disabled = true; dist.textContent = 'Looking up…'; post('/agenda/distance.json', { location: it.location }).then(load); };
+    var lookUp = function (force) { if (!dist) return; dist.disabled = true; dist.textContent = 'Looking up…'; post('/agenda/distance.json', { location: it.location, force: force }).then(load); };
+    if (dist) dist.onclick = function () { lookUp(true); };
+    // an address without a distance: look it up straight away (once per address on this page)
+    if (dist && !it.geoError && !distTried[it.location]) { distTried[it.location] = true; lookUp(false); }
     document.getElementById('ag-close').onclick = function (e) { e.preventDefault(); selected = null; render(); };
   }
 

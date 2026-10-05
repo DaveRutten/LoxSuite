@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.35.2-alpha.1] - 2026-10-05
+
+### Added
+- **Agenda: Sync button** next to Day / Week / Month / Year.
+- **Repeating appointments**: changing *Car needed* asks whether it is for this day only or for the whole
+  series. A day's own choice still wins over the series.
+
+### Fixed
+- **Distance "Address not found"** for a location with a name in front ("Coöperatie VGZ Nieuwe Stationsstraat
+  12, 6811 KS Arnhem, Nederland"): LoxSuite now also tries without the name, without leading parts and finally
+  postcode + town. Appointments with an address but no distance are looked up by themselves — on opening and
+  in the background, also ones not marked for the car — and failed ones are tried again after 6 hours (or
+  straight away with *Try again*).
+- **"&amp;" in calendar names** (iCloud): shown as "&", also for event titles and locations.
+- Month view: appointments without a car keep the car's space empty, so the times line up.
+- Day / Week / Month / Year are translated.
+
 ## [0.35.1-alpha.1] - 2026-10-05
 
 ### Fixed

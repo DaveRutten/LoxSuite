@@ -8839,6 +8839,13 @@
   ]
  },
  {
+  "key": "only this day",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "only visibly changes anything on a Chart panel:",
   "module": "core",
   "where": [
@@ -9734,6 +9741,13 @@
   ]
  },
  {
+  "key": "Repeating appointment — for:",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Replace with…",
   "module": "core",
   "where": [
@@ -10245,6 +10259,13 @@
   "module": "vehicles",
   "where": [
    "driving (script)"
+  ]
+ },
+ {
+  "key": "Set for the whole series.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -11408,6 +11429,13 @@
   ]
  },
  {
+  "key": "the whole series",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Then",
   "module": "energy_manager",
   "where": [
@@ -11916,6 +11944,13 @@
   "where": [
    "driving (script)",
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "Try again",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
