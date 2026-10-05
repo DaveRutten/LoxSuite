@@ -1939,13 +1939,6 @@
   ]
  },
  {
-  "key": "Added, but the first sync failed: {0}",
-  "module": "charging",
-  "where": [
-   "src/routes/agenda.js"
-  ]
- },
- {
   "key": "Adding {0}…",
   "module": "core",
   "where": [
@@ -5014,7 +5007,7 @@
   "key": "Fill in a name and the ICS address.",
   "module": "charging",
   "where": [
-   "agenda (script)"
+   "src/routes/agenda.js"
   ]
  },
  {
@@ -5088,6 +5081,13 @@
   "module": "vehicles",
   "where": [
    "src/routes/vehicles.js"
+  ]
+ },
+ {
+  "key": "Fill in the ICS address.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {

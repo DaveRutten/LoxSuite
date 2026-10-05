@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.33.1-alpha.1] - 2026-10-05
+
+### Added
+- **Several calendars at once.** Paste several ICS links (one per line) in Agenda → Add calendar; each becomes
+  its own calendar, named after the calendar's own name (X-WR-CALNAME) unless you give one. With iCloud/CalDAV
+  you tick as many calendars of the account as you like. The list of calendars has no limit.
+
 ## [0.33.0-alpha.1] - 2026-10-05
 
 ### Added

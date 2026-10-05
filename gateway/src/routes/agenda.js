@@ -61,16 +61,30 @@ router.get('/items.json', asyncHandler(async (req, res) => {
   res.json({ items, learned, plan: plan ? plan.slots : [], sessions, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
 }));
 
+// One or more ICS links (one per line). With several, or without a name, each calendar is named
+// after its own name in the ICS (X-WR-CALNAME), else after the host.
 router.post('/calendars', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
-  try {
-    const id = await agenda.addCalendar({ name: req.body.name, url: req.body.url, color: req.body.color, vehicle_id: req.body.vehicle_id ? Number(req.body.vehicle_id) : null });
-    const cal = await db.prepare('SELECT * FROM calendars WHERE id = ?').get(id);
-    const r = await agenda.syncCalendar(cal);
-    await logSystemEvent(`Agenda: calendar "${cal.name}" added by ${req.session?.username || 'unknown user'}`).catch(() => {});
-    return res.redirect(r.ok ? '/agenda?saved=1' : `/agenda?error=${encodeURIComponent(`Added, but the first sync failed: ${r.message}`)}`);
-  } catch (err) {
-    return res.redirect(`/agenda?error=${encodeURIComponent(err.message)}`);
+  const urls = String(req.body.url || '').split(/[\r\n]+|\s+(?=(?:https?|webcal):\/\/)/i).map((u) => u.trim()).filter(Boolean).slice(0, 10);
+  if (!urls.length) return res.redirect(`/agenda?error=${encodeURIComponent('Fill in a name and the ICS address.')}`);
+  const errors = [];
+  let added = 0;
+  for (const u of urls) {
+    try {
+      let name = urls.length === 1 ? String(req.body.name || '').trim() : '';
+      if (!name) {
+        const text = await agenda.fetchIcs(agenda.icsUrl(u)).catch(() => null);
+        name = agenda.icsName(text) || (() => { try { return new URL(agenda.icsUrl(u)).host; } catch { return 'Calendar'; } })();
+      }
+      const id = await agenda.addCalendar({ name, url: u, color: req.body.color, vehicle_id: req.body.vehicle_id ? Number(req.body.vehicle_id) : null });
+      const cal = await db.prepare('SELECT * FROM calendars WHERE id = ?').get(id);
+      const r = await agenda.syncCalendar(cal);
+      added++;
+      if (!r.ok) errors.push(`${cal.name}: ${r.message}`);
+      await logSystemEvent(`Agenda: calendar "${cal.name}" added by ${req.session?.username || 'unknown user'}`).catch(() => {});
+    } catch (err) { errors.push(err.message); }
   }
+  if (!errors.length) return res.redirect('/agenda?saved=1');
+  return res.redirect(`/agenda?error=${encodeURIComponent((added ? `Added ${added}; ` : '') + errors.join(' · '))}`);
 }));
 
 // CalDAV (iCloud & co.): find the calendars of an account; the password is only used, not stored here.

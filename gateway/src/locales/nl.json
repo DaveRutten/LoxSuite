@@ -3869,5 +3869,10 @@
   "Tick the calendars to add:": "Vink de agenda's aan die je wilt toevoegen:",
   "Too many redirects.": "Te veel doorverwijzingen.",
   "User name (Apple ID e-mail for iCloud)": "Gebruikersnaam (Apple ID-e-mail voor iCloud)",
-  "User name and (app-specific) password are needed.": "Gebruikersnaam en (app-specifiek) wachtwoord zijn nodig."
+  "User name and (app-specific) password are needed.": "Gebruikersnaam en (app-specifiek) wachtwoord zijn nodig.",
+  "— as many as you like: ICS links, iCloud or CalDAV": "— zoveel als je wilt: ICS-links, iCloud of CalDAV",
+  "Fill in the ICS address.": "Vul het ICS-adres in.",
+  "from the calendar itself": "uit de agenda zelf",
+  "ICS address(es) — one per line": "ICS-adres(sen) — één per regel",
+  "Name (optional)": "Naam (optioneel)"
 }

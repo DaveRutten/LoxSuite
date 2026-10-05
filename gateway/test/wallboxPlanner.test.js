@@ -385,3 +385,9 @@ test('prices: quarters averaged per hour; fixed contract with a low tariff', () 
   assert.equal(prices.fixedPrice(Date.parse('2026-10-10T14:00:00Z'), { ...cfg, fixed_low_weekend: false }, { localParts: lp }), 0.30);
   assert.equal(prices.fixedPrice(Date.parse('2026-10-05T23:30:00Z'), { fixed_eur_kwh: 0.28 }, { localParts: lp }), 0.28); // single tariff
 });
+
+test('agenda.icsName reads the calendar name', () => {
+  const agenda = require('../src/agenda');
+  assert.equal(agenda.icsName('BEGIN:VCALENDAR\r\nX-WR-CALNAME:Werk\\, team\r\nEND:VCALENDAR'), 'Werk, team');
+  assert.equal(agenda.icsName('BEGIN:VCALENDAR\nEND:VCALENDAR'), null);
+});

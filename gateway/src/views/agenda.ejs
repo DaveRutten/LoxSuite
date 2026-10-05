@@ -46,15 +46,15 @@
     <div class="btn-row" style="margin-top:0.5rem;"><button type="button" class="btn-soft" id="ag-sync"><%- icon('refresh') %> <%= t('Sync now') %></button><span class="hint" id="ag-sync-msg" style="margin:0;"></span></div>
   <% } %>
   <details style="margin-top:0.8rem;" <%= calendars.length ? '' : 'open' %>>
-    <summary><strong><%= t('Add calendar') %></strong></summary>
+    <summary><strong><%= t('Add calendar') %></strong> <span class="hint"><%= t('— as many as you like: ICS links, iCloud or CalDAV') %></span></summary>
     <form method="post" action="/agenda/calendars" style="margin-top:0.6rem;" id="ag-cal-form">
       <div class="form-grid">
         <div><label><%= t('Type') %></label><select name="kind" id="ag-kind">
           <option value="ics"><%= t('ICS link (Google, Outlook, Nextcloud)') %></option>
           <option value="icloud"><%= t('iCloud (Apple)') %></option>
           <option value="caldav"><%= t('Other CalDAV server') %></option></select></div>
-        <div data-show-if="kind=ics"><label><%= t('Name') %></label><input type="text" name="name" placeholder="<%= t('Private') %>"></div>
-        <div data-show-if="kind=ics" style="grid-column: span 2;"><label><%= t('ICS address (secret link)') %></label><input type="password" name="url" autocomplete="off" placeholder="https://… or webcal://…"></div>
+        <div data-show-if="kind=ics"><label><%= t('Name (optional)') %></label><input type="text" name="name" placeholder="<%= t('from the calendar itself') %>"></div>
+        <div data-show-if="kind=ics" style="grid-column: span 2;"><label><%= t('ICS address(es) — one per line') %></label><textarea name="url" rows="2" autocomplete="off" spellcheck="false" placeholder="https://… or webcal://…" style="width:100%; font-family:monospace; font-size:0.8rem;"></textarea></div>
         <div data-show-if="kind=caldav" style="grid-column: span 2;"><label><%= t('CalDAV server') %></label><input type="text" name="server" placeholder="https://cloud.example.nl/remote.php/dav"></div>
         <div data-show-if="kind=icloud|caldav"><label><%= t('User name (Apple ID e-mail for iCloud)') %></label><input type="text" name="username" autocomplete="off"></div>
         <div data-show-if="kind=icloud|caldav"><label><%= t('App-specific password') %></label><input type="password" name="password" autocomplete="new-password" placeholder="xxxx-xxxx-xxxx-xxxx"></div>
@@ -425,7 +425,7 @@
     };
     calForm.addEventListener('submit', function (e) {
       var kind = calForm.kind.value;
-      if (kind === 'ics') { if (!calForm.url.value || !calForm.name.value) { e.preventDefault(); alert(T2('Fill in a name and the ICS address.')); } return; }
+      if (kind === 'ics') { if (!calForm.url.value.trim()) { e.preventDefault(); alert(T2('Fill in the ICS address.')); } return; }
       e.preventDefault();
       var chosen = Array.prototype.slice.call(picks.querySelectorAll('input[name=cal]:checked')).map(function (c) { return calForm._cals[Number(c.value)]; });
       if (!chosen.length) { dmsg.textContent = T2('First find the calendars and tick one or more.'); return; }

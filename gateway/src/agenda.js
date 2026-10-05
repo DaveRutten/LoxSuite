@@ -131,6 +131,12 @@ async function addCalendar({ name, url, color, vehicle_id, kind = 'ics', usernam
   return id;
 }
 
+// Pure: the calendar's own name from an ICS text (X-WR-CALNAME), or null.
+function icsName(text) {
+  const m = /^X-WR-CALNAME:(.+)$/m.exec(String(text || '').replace(/\r/g, ''));
+  return m ? m[1].trim().replace(/\\,/g, ',').slice(0, 80) : null;
+}
+
 async function fetchIcs(url) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 20000);
@@ -385,5 +391,5 @@ function stopAgenda() {
 
 module.exports = {
   DEFAULTS, hasCarTag, parseCarHint, parseOwnValue, tripNeedKwh, icsUrl, expandEvents, tripOccurrences,
-  getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
+  icsName, fetchIcs, getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
 };
