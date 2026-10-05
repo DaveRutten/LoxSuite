@@ -113,7 +113,12 @@
   }
   function render(d) {
     last = d;
-    document.getElementById('em-status').textContent = d.planAt ? 'plan ' + hh(d.planAt) + (d.status && d.status.exportKw != null ? ' · feeding in now ' + nf(d.status.exportKw, 1) + ' kW' : '') : '';
+    var st = d.status || {};
+    var TL = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
+    document.getElementById('em-status').textContent = d.planAt ? TL('plan {0}').replace('{0}', hh(d.planAt)) +
+      (st.pvKw != null ? ' · ' + TL('solar now {0} kW (forecast {1} kW)').replace('{0}', nf(st.pvKw, 1)).replace('{1}', st.pvForecastKw != null ? nf(st.pvForecastKw, 1) : '—') : '') +
+      (st.exportKw != null ? ' · ' + TL('feeding in now {0} kW').replace('{0}', nf(st.exportKw, 1)) : '') +
+      (d.live && d.live.ratio != null && Math.abs(d.live.ratio - 1) > 0.15 ? ' · ' + TL('plan adjusted to the real values') : '') : '';
     if (!d.loads.length) { document.getElementById('em-now').innerHTML = '<p class="hint" style="margin:0;">No consumers yet &mdash; add one below.</p>'; }
     else document.getElementById('em-now').innerHTML = '<div style="overflow-x:auto;"><table><thead><tr><th>Consumer</th><th>Power now</th><th>Would send (virtual input = value)</th><th>Why</th></tr></thead><tbody>' + d.loads.map(function (l) {
       return '<tr><td><strong>' + esc(l.name) + '</strong><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(l.kindLabel) + ' · prio ' + l.priority + ' · ' + (l.output === 'live' ? 'live' : 'shadow') + '</div></td><td>' + (l.live && l.live.kw != null ? nf(l.live.kw, 2) + ' kW' : (l.live && l.live.found === false ? '<span class="hint">meter not found</span>' : '—')) + (l.running ? ' <span class="badge">running</span>' : '') + '</td><td>' +

@@ -370,3 +370,18 @@ test('makePlan: a top-up never runs without its base, and solar counts in every 
   assert.ok(second.pvKwh > 1, `solar counted in the second hour too (${second.pvKwh})`);
   assert.equal(second.source, 'mixed');
 });
+
+test('prices: quarters averaged per hour; fixed contract with a low tariff', () => {
+  const q = [0.10, 0.12, 0.14, 0.16, 0.20].map((m, i) => ({ start: new Date(Date.parse('2026-10-05T10:00:00Z') + i * 900000).toISOString(), end: '', market: m }));
+  const h = prices.toHourly(q);
+  assert.deepEqual(h.map((x) => [x.start.slice(11, 16), x.market]), [['10:00', 0.13], ['11:00', 0.2]]);
+  const lp = (ms) => { const d = new Date(ms); return { hour: d.getUTCHours(), minute: d.getUTCMinutes(), weekday: (d.getUTCDay() + 6) % 7 }; };
+  const cfg = { fixed_eur_kwh: 0.30, fixed_low_eur_kwh: 0.22, fixed_low_from: '23:00', fixed_low_until: '07:00', fixed_low_weekend: true };
+  assert.equal(prices.fixedPrice(Date.parse('2026-10-05T12:00:00Z'), cfg, { localParts: lp }), 0.30); // Monday noon
+  assert.equal(prices.fixedPrice(Date.parse('2026-10-05T23:30:00Z'), cfg, { localParts: lp }), 0.22); // Monday night
+  assert.equal(prices.fixedPrice(Date.parse('2026-10-06T06:45:00Z'), cfg, { localParts: lp }), 0.22);
+  assert.equal(prices.fixedPrice(Date.parse('2026-10-06T07:00:00Z'), cfg, { localParts: lp }), 0.30);
+  assert.equal(prices.fixedPrice(Date.parse('2026-10-10T14:00:00Z'), cfg, { localParts: lp }), 0.22); // Saturday
+  assert.equal(prices.fixedPrice(Date.parse('2026-10-10T14:00:00Z'), { ...cfg, fixed_low_weekend: false }, { localParts: lp }), 0.30);
+  assert.equal(prices.fixedPrice(Date.parse('2026-10-05T23:30:00Z'), { fixed_eur_kwh: 0.28 }, { localParts: lp }), 0.28); // single tariff
+});

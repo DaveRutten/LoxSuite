@@ -7,6 +7,7 @@
 <div class="card">
   <h2 style="margin-top:0;"><%= t('Now') %></h2>
   <div id="veh-status"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
+  <div id="veh-map" hidden style="margin-top:0.8rem;"></div>
 </div>
 
 <% if (v.source_type !== 'none' && canEdit('monitor')) { %>
@@ -83,7 +84,11 @@
     html += '<p class="hint" style="margin:0.6rem 0 0;">Data from the car: ' + esc(dt(s.sourceUpdatedAt)) + ' &middot; last read: ' + esc(dt(s.fetchedAt)) +
       ' &middot; alert after ' + s.staleAfterH + ' h without an update' + (s.staleAfterH === 0 ? ' (off)' : '') + '</p>';
     el.innerHTML = html;
+    // where the car is (only redrawn when it moved)
+    var pos = r.latitude != null && r.longitude != null ? Number(r.latitude).toFixed(5) + ',' + Number(r.longitude).toFixed(5) : '';
+    if (pos !== lastPos) { lastPos = pos; window.lsMiniMap(document.getElementById('veh-map'), pos ? [{ lat: Number(r.latitude), lon: Number(r.longitude), label: '' }] : [], { height: 220 }); }
   }
+  var lastPos = null;
   function tick() { fetch('/vehicles/<%= v.id %>/status.json').then(function (r) { return r.json(); }).then(render).catch(function () {}); }
   tick();
   setInterval(tick, 10000);

@@ -18,6 +18,15 @@ const DEFAULTS = {
   energy_tax_eur_kwh: 0.10,
   vat_pct: 21,
   fixed_eur_kwh: 0.30,
+  // Fixed contract with a low (dal) tariff: empty = single tariff. Dutch default: low on weekdays
+  // 23:00–07:00 and all weekend.
+  fixed_low_eur_kwh: null,
+  fixed_low_from: '23:00',
+  fixed_low_until: '07:00',
+  fixed_low_weekend: true,
+  // What your dynamic contract bills: 'hour' (average of the four quarters, most suppliers) or
+  // 'quarter' (each 15 minutes its own price; ENTSO-E gives quarters, EnergyZero only hours).
+  price_interval: 'hour',
   calibrate_loxone: true,
   loxone_miniserver_id: null,
   loxone_uuid: null,          // SpotPriceOptimizer control
@@ -95,6 +104,37 @@ function parseEntsoe(xml) {
     }
   }
   return out;
+}
+
+// Pure: quarter (or shorter) intervals -> one per hour with the average price. Hours with only part of
+// their quarters keep the average of what is there.
+function toHourly(intervals) {
+  const byHour = new Map();
+  for (const i of intervals) {
+    const s = Date.parse(i.start);
+    const h = Math.floor(s / 3600000) * 3600000;
+    const g = byHour.get(h) || { sum: 0, n: 0 };
+    if (i.market !== null && i.market !== undefined) { g.sum += Number(i.market); g.n++; }
+    byHour.set(h, g);
+  }
+  return [...byHour.entries()].sort((a, b) => a[0] - b[0]).filter(([, g]) => g.n)
+    .map(([h, g]) => ({ start: new Date(h).toISOString(), end: new Date(h + 3600000).toISOString(), market: round4(g.sum / g.n) }));
+}
+
+// Pure: price of a fixed contract at an instant (single, or normal/low by time of day and weekend).
+function fixedPrice(ms, cfg, { localParts } = {}) {
+  const normal = Number(cfg.fixed_eur_kwh) || 0;
+  const low = cfg.fixed_low_eur_kwh === null || cfg.fixed_low_eur_kwh === undefined || cfg.fixed_low_eur_kwh === '' ? null : Number(cfg.fixed_low_eur_kwh);
+  if (low === null || !Number.isFinite(low)) return normal;
+  const p = (localParts || require('./localTime').localParts)(ms);
+  if (cfg.fixed_low_weekend !== false && p.weekday >= 5) return low;
+  const toMin = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const from = toMin(cfg.fixed_low_from ?? '23:00');
+  const until = toMin(cfg.fixed_low_until ?? '07:00');
+  if (from === null || until === null || from === until) return normal;
+  const min = p.hour * 60 + p.minute;
+  const inLow = from < until ? (min >= from && min < until) : (min >= from || min < until);
+  return inLow ? low : normal;
 }
 
 function entsoeTime(ms) {
@@ -225,7 +265,8 @@ async function refreshPrices(nowMs = Date.now(), { fetchImpl } = {}) {
   const calib = cfg.calibrate_loxone ? await calibration() : null;
   let intervals = [];
   if (cfg.source === 'fixed') {
-    for (let t = from; t < to; t += 3600000) intervals.push({ start: new Date(t).toISOString(), end: new Date(t + 3600000).toISOString(), market: null, allin: Number(cfg.fixed_eur_kwh) });
+    // quarters, so a low tariff that starts at e.g. 22:45 is exact
+    for (let t = from; t < to; t += 900000) intervals.push({ start: new Date(t).toISOString(), end: new Date(t + 900000).toISOString(), market: null, allin: round4(fixedPrice(t, cfg)) });
   } else if (cfg.source === 'loxone') {
     const samples = (await settings.get('price_samples', [])) || [];
     const { localParts } = require('./localTime');
@@ -235,9 +276,14 @@ async function refreshPrices(nowMs = Date.now(), { fetchImpl } = {}) {
       if (p !== null) intervals.push({ start: new Date(t).toISOString(), end: new Date(t + 3600000).toISOString(), market: null, allin: p });
     }
   } else {
-    intervals = (await fetchMarket(cfg, from, to, fetchImpl)).map((i) => ({ ...i, allin: allinPrice(i.market, cfg, calib) }));
+    let market = await fetchMarket(cfg, from, to, fetchImpl);
+    if (cfg.price_interval !== 'quarter') market = toHourly(market);
+    intervals = market.map((i) => ({ ...i, allin: allinPrice(i.market, cfg, calib) }));
   }
   const now = new Date().toISOString();
+  // Replace what was stored for this stretch: switching between hours and quarters (or to a fixed
+  // contract) must not leave the other granularity's rows overlapping.
+  if (intervals.length) await db.prepare('DELETE FROM energy_prices WHERE start_at >= ? AND start_at < ?').run(intervals[0].start, intervals[intervals.length - 1].end);
   for (const i of intervals) {
     await db.upsert('energy_prices', { start_at: i.start, end_at: i.end, market_eur_kwh: i.market, allin_eur_kwh: i.allin, source: cfg.source, fetched_at: now }, ['start_at']);
   }
@@ -280,7 +326,7 @@ function stopPrices() {
 }
 
 module.exports = {
-  DEFAULTS, allinPrice, fitLinear, parseEnergyZero, parseEntsoe, entsoeTime, hourOfDayProfile, toIntervals,
+  DEFAULTS, allinPrice, fitLinear, parseEnergyZero, parseEntsoe, entsoeTime, hourOfDayProfile, toIntervals, toHourly, fixedPrice,
   getConfig, saveConfig, fetchMarket, refreshPrices, getPrices, currentPrice, calibration, sampleCalibration,
   loxoneCurrentPrice, findSpotOptimizer, startPrices, stopPrices,
 };

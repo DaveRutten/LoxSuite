@@ -73,6 +73,37 @@ router.post('/calendars', requirePermission('charging', 'edit'), asyncHandler(as
   }
 }));
 
+// CalDAV (iCloud & co.): find the calendars of an account; the password is only used, not stored here.
+router.post('/caldav/discover.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
+  const b = req.body || {};
+  try {
+    const calendars = await require('../caldav').discover({ server: b.server || undefined, username: String(b.username || '').trim(), password: String(b.password || '').replace(/\s+/g, '') });
+    res.json({ ok: true, calendars });
+  } catch (err) {
+    res.json({ ok: false, message: err.message });
+  }
+}));
+
+// Adds the ticked CalDAV calendars (password stored encrypted) and syncs them.
+router.post('/caldav/add.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
+  const b = req.body || {};
+  const username = String(b.username || '').trim();
+  const password = String(b.password || '').replace(/\s+/g, '');
+  const list = Array.isArray(b.calendars) ? b.calendars.slice(0, 20) : [];
+  if (!list.length) return res.json({ ok: false, message: 'Choose a calendar of the account.' });
+  const errors = [];
+  for (const c of list) {
+    try {
+      const id = await agenda.addCalendar({ kind: 'caldav', name: c.name, url: c.url, color: c.color || b.color, vehicle_id: b.vehicle_id ? Number(b.vehicle_id) : null, username, password });
+      const cal = await db.prepare('SELECT * FROM calendars WHERE id = ?').get(id);
+      const r = await agenda.syncCalendar(cal);
+      if (!r.ok) errors.push(`${c.name}: ${r.message}`);
+      await logSystemEvent(`Agenda: CalDAV calendar "${cal.name}" added by ${req.session?.username || 'unknown user'}`).catch(() => {});
+    } catch (err) { errors.push(`${c.name}: ${err.message}`); }
+  }
+  res.json({ ok: !errors.length || errors.length < list.length, message: errors.join(' · ') || null });
+}));
+
 router.post('/calendars/:id/delete', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('DELETE FROM calendar_events WHERE calendar_id = ?').run(req.params.id);
   await db.prepare('DELETE FROM event_overrides WHERE calendar_id = ?').run(req.params.id);

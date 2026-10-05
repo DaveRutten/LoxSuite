@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.33.0-alpha.1] - 2026-10-05
+
+### Added
+- **iCloud and other CalDAV calendars** (Agenda → Add calendar → Type). iCloud only offers a public ICS link;
+  LoxSuite now signs in with an **app-specific password** (appleid.apple.com → App-Specific Passwords), finds
+  the calendars of the account and lets you tick which to add. Also for Nextcloud, Fastmail and other CalDAV
+  servers. The password is stored encrypted and only used to read; your Apple ID password is never asked for.
+  Google keeps using its "secret address in iCal format", which is private (not public).
+- **"Ready by" for when the car is back, with the distance.** On Smart charging you can set a one-time ready
+  time while the car is out (e.g. tomorrow 07:30) plus how far ("120 km", "30 kWh" or "full"); it is kept when
+  the car is plugged in, survives an update/restart, shows as "set by you · 120 km (24 kWh)" and can be cleared.
+  For a fixed weekly change use your own time per weekday under Learned; for one appointment, the agenda.
+- **Electricity: quarter-hour or hour, and fixed contracts with a low tariff.** Choose whether your dynamic
+  contract bills per hour (average of the quarters, most suppliers) or per quarter (ENTSO-E delivers quarters).
+  A fixed contract can have a normal and a low (dal) price, with low hours (default weekdays 23:00–07:00) and
+  the whole weekend.
+- **Energy manager uses the real values, not only the forecast.** The current hour is planned with the solar
+  and house power the meters show now; the next three hours are corrected for how far the solar forecast is off
+  (70/45/20 %). While the forecast is far off it re-plans every 5 minutes, and an hour planned on solar that
+  isn't there waits instead of running on the grid. The status line shows solar now vs. forecast.
+- **A small map of where the car is** on the vehicles overview (all cars) and the vehicle page — OpenStreetMap,
+  street map, click to open it larger.
+- **Settings only show what applies** (show-if): ENTSO-E token only for ENTSO-E, fixed prices only for a fixed
+  contract, the manual fuel price only when not automatic, solar details only with the forecast on, reminder
+  times only with reminders on, climate options only when climate is not off, CalDAV fields only for CalDAV.
+
 ## [0.32.4-alpha.1] - 2026-10-05
 
 ### Changed

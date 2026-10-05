@@ -383,7 +383,22 @@ async function computeTarget(nowMs, wb) {
   // Deadline: a manual "ready by" for this session, the agenda, the learned weekday pattern.
   let readyAtMs = null;
   let readySource = '';
-  if (rt.readyOverride && rt.readyOverride > nowMs) { readyAtMs = rt.readyOverride; readySource = 'set for this session'; }
+  if (rt.readyOverride && rt.readyOverride > nowMs) {
+    readyAtMs = rt.readyOverride; readySource = 'set by you';
+    // with a distance or amount: make sure that much is in the battery (like a trip in the agenda)
+    if (rt.readyOverrideOwn && usable) {
+      const agenda = require('./agenda');
+      const acfg = await agenda.getConfig().catch(() => agenda.DEFAULTS);
+      const kpk = require('./driving').effectiveKwhPerKm(vehicle, cfg.default_kwh_per_km);
+      const tn = agenda.tripNeedKwh({ own: agenda.parseOwnValue(rt.readyOverrideOwn), marginKm: Number(acfg.margin_km) || 0, kwhPerKm: kpk, usableKwh: usable });
+      if (tn.kwh) {
+        const energyNow = reading && vehicle?.battery_kwh ? vehicle.battery_kwh * reading.soc / 100 : (usable - needKwh);
+        const want = Math.max(0, Math.min(usable, tn.kwh) - energyNow);
+        if (want > needKwh) needKwh = want;
+        readySource += ` · ${rt.readyOverrideOwn} (${tn.kwh.toFixed(1)} kWh)`;
+      }
+    }
+  }
   try {
     const agenda = require('./agenda');
     const trip = await agenda.nextCarTrip(nowMs, vehicle);
@@ -569,6 +584,11 @@ function sessionFull({ sessionKey, fullKey = null, done = false, reading = null,
 
 async function tick(nowMs = Date.now()) {
   const cfg = await getConfig();
+  if (rt.readyLoaded !== true) {
+    rt.readyLoaded = true;
+    const saved = await settings.get('planner_ready_override', null).catch(() => null);
+    if (saved?.at > nowMs) { rt.readyOverride = saved.at; rt.readyOverrideAway = !!saved.away; rt.readyOverrideOwn = saved.own || null; }
+  }
   const wb = await wallboxLive();
   const energy = require('./energyMeters');
   const live = await energy.live().catch(() => ({ roles: {}, house_kw: null }));
@@ -577,7 +597,14 @@ async function tick(nowMs = Date.now()) {
   const key = connected ? String(wb.connectAt || 'c') : 'none';
   if (rt.session !== key) {
     try { require('./vehicles').notifyWallbox(connected); } catch { /* vehicles not loaded */ }
-    rt.session = key; rt.override = null; rt.readyOverride = null; rt.doneSince = null; rt.lowDrawSince = null; rt.ctrl.state = {}; rt.sessionVehicle = null; rt.onSince = null; rt.offSince = null; rt.socBase = null;
+    // A "ready by" set while the car was out is meant for when it comes back: kept for that session.
+    // (Right after a start of LoxSuite the stored one is kept as it was.)
+    const first = rt.session === null;
+    const keepReady = !!rt.readyOverride && rt.readyOverride > nowMs && (first || rt.readyOverrideAway);
+    rt.session = key; rt.override = null; rt.readyOverride = keepReady ? rt.readyOverride : null;
+    rt.readyOverrideAway = keepReady && !connected;
+    if (!keepReady) rt.readyOverrideOwn = null;
+    if (!first) settings.set('planner_ready_override', keepReady ? { at: rt.readyOverride, away: rt.readyOverrideAway, own: rt.readyOverrideOwn } : null).catch(() => {}); rt.doneSince = null; rt.lowDrawSince = null; rt.ctrl.state = {}; rt.sessionVehicle = null; rt.onSince = null; rt.offSince = null; rt.socBase = null;
     rt.planAt = 0;
   }
   if (!rt.plan || nowMs - rt.planAt > 15 * 60 * 1000) await recalc(nowMs).catch((err) => { rt.status = { error: err.message }; });
@@ -654,9 +681,18 @@ function setOverride(mode) {
   rt.override = MODES.includes(mode) ? mode : null;
   rt.planAt = 0;
 }
-function setReadyOverride(ms) { rt.readyOverride = ms || null; rt.planAt = 0; }
+// "Ready by" set by hand: for this session, or — set while the car is out — for when it comes back.
+// Stored, so an update or restart of LoxSuite doesn't forget it.
+// own: how far / how much ("120 km", "30 kWh", "full"), optional.
+function setReadyOverride(ms, own = null) {
+  rt.readyOverride = ms || null;
+  rt.readyOverrideOwn = ms && own ? String(own).slice(0, 60) : null;
+  rt.readyOverrideAway = !!ms && (!rt.session || rt.session === 'none');
+  rt.planAt = 0;
+  settings.set('planner_ready_override', ms ? { at: ms, away: rt.readyOverrideAway, own: rt.readyOverrideOwn } : null).catch(() => {});
+}
 function setSessionVehicle(id) { rt.sessionVehicle = Number(id) || null; rt.planAt = 0; }
-function getRuntime() { return { plan: rt.plan, status: rt.status, override: rt.override, readyOverride: rt.readyOverride }; }
+function getRuntime() { return { plan: rt.plan, status: rt.status, override: rt.override, readyOverride: rt.readyOverride, readyOverrideAway: !!rt.readyOverrideAway, readyOverrideOwn: rt.readyOverrideOwn || null }; }
 
 let timer = null;
 function startPlanner() {

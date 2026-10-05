@@ -111,16 +111,27 @@
           <option value="entsoe" <%= priceCfg.source === 'entsoe' ? 'selected' : '' %>><%= t('ENTSO-E (day-ahead, API key)') %></option>
           <option value="loxone" <%= priceCfg.source === 'loxone' ? 'selected' : '' %>><%= t('Loxone Spot Price Optimizer (estimate from recent prices)') %></option>
           <option value="fixed" <%= priceCfg.source === 'fixed' ? 'selected' : '' %>><%= t('Fixed price') %></option></select></div>
-        <div><label><%= t('ENTSO-E token') %></label><input type="password" name="entsoe_token" autocomplete="new-password" placeholder="<%= priceCfg.hasEntsoeToken ? 'Leave blank to keep' : '' %>"></div>
-        <div><label><%= t('Fixed price (€/kWh)') %></label><input type="text" name="fixed_eur_kwh" value="<%= priceCfg.fixed_eur_kwh %>"></div>
+        <div data-show-if="source=entsoe"><label><%= t('ENTSO-E token') %></label><input type="password" name="entsoe_token" autocomplete="new-password" placeholder="<%= priceCfg.hasEntsoeToken ? 'Leave blank to keep' : '' %>"></div>
+        <div data-show-if="source=energyzero|entsoe"><label><%= t('Your contract bills per') %></label><select name="price_interval">
+          <option value="hour" <%= priceCfg.price_interval !== 'quarter' ? 'selected' : '' %>><%= t('hour (average of the quarters)') %></option>
+          <option value="quarter" <%= priceCfg.price_interval === 'quarter' ? 'selected' : '' %>><%= t('quarter of an hour') %></option></select></div>
       </div>
-      <div class="form-grid" style="margin-top:0.8rem;">
+      <div class="form-grid" style="margin-top:0.8rem;" data-show-if="source=fixed">
+        <div><label><%= t('Price (€/kWh, all-in)') %></label><input type="text" name="fixed_eur_kwh" value="<%= priceCfg.fixed_eur_kwh %>"></div>
+        <div><label><%= t('Low tariff (€/kWh, empty = single tariff)') %></label><input type="text" name="fixed_low_eur_kwh" value="<%= priceCfg.fixed_low_eur_kwh ?? '' %>" placeholder="0.22"></div>
+        <div data-show-if="fixed_low_eur_kwh"><label><%= t('Low from') %></label><input type="text" name="fixed_low_from" value="<%= priceCfg.fixed_low_from || '23:00' %>" placeholder="23:00"></div>
+        <div data-show-if="fixed_low_eur_kwh"><label><%= t('Low until') %></label><input type="text" name="fixed_low_until" value="<%= priceCfg.fixed_low_until || '07:00' %>" placeholder="07:00"></div>
+        <div data-show-if="fixed_low_eur_kwh"><label><%= t('Whole weekend low') %></label><%- toggleSwitch('fixed_low_weekend', priceCfg.fixed_low_weekend !== false) %></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;" data-show-if="source=energyzero|entsoe">
         <div><label><%= t('Supplier markup (€/kWh, excl. VAT)') %></label><input type="text" name="markup_eur_kwh" value="<%= priceCfg.markup_eur_kwh %>"></div>
         <div><label><%= t('Energy tax (€/kWh, incl. VAT)') %></label><input type="text" name="energy_tax_eur_kwh" value="<%= priceCfg.energy_tax_eur_kwh %>"></div>
         <div><label><%= t('VAT (%)') %></label><input type="text" name="vat_pct" value="<%= priceCfg.vat_pct %>"></div>
         <div><label><%= t('Calibrate to Loxone') %><%= spo ? ` (${spo.name})` : '' %></label><%- toggleSwitch('calibrate_loxone', !!priceCfg.calibrate_loxone) %></div>
       </div>
-      <p class="hint" style="margin:0.5rem 0 0;">
+      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=fixed"><%= t('A fixed contract: one price, or a normal and a low (dal) tariff — in the Netherlands usually low on weekdays from 23:00 to 07:00 and all weekend. The plan then charges in the low hours where it can.') %></p>
+      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=energyzero|entsoe"><%= t('Since October 2025 the day-ahead market has a price per quarter of an hour; most dynamic contracts still bill the average per hour. ENTSO-E delivers the quarters, EnergyZero only hours.') %></p>
+      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=energyzero|entsoe|loxone">
         <%= t('All-in price = (market + markup) × VAT + energy tax. With') %> <em><%= t('Calibrate') %></em> <%= t('LoxSuite instead learns the formula from the price your Spot Price Optimizer shows (sampled every 15 minutes, fitted over two weeks)') %><%= priceStatus && priceStatus.calib ? ` — now: all-in = ${priceStatus.calib.a} × market + ${priceStatus.calib.b} (${priceStatus.calib.n} samples)` : spo ? ' — needs a day of samples first' : ' — no Spot Price Optimizer found' %>.
       </p>
       <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-recalc="prices"><%= t('Fetch prices now') %></button></div>
@@ -137,10 +148,10 @@
         <div><label><%= t('Forecast on') %></label><%- toggleSwitch('enabled', !!solarCfg.enabled) %></div>
       </div>
       <div class="form-grid" style="margin-top:0.8rem;">
-        <div><label><%= t('Installed power (kWp)') %></label><input type="text" name="kwp" value="<%= solarCfg.kwp ?? '' %>" placeholder="11.8"></div>
-        <div><label><%= t('Tilt (°)') %></label><input type="text" name="tilt" value="<%= solarCfg.tilt %>"></div>
-        <div><label><%= t('Azimuth (° , 0 = south, -90 = east, 90 = west)') %></label><input type="text" name="azimuth" value="<%= solarCfg.azimuth %>"></div>
-        <div><label><%= t('System efficiency') %></label><input type="text" name="efficiency" value="<%= solarCfg.efficiency %>"></div>
+        <div data-show-if="enabled"><label><%= t('Installed power (kWp)') %></label><input type="text" name="kwp" value="<%= solarCfg.kwp ?? '' %>" placeholder="11.8"></div>
+        <div data-show-if="enabled"><label><%= t('Tilt (°)') %></label><input type="text" name="tilt" value="<%= solarCfg.tilt %>"></div>
+        <div data-show-if="enabled"><label><%= t('Azimuth (° , 0 = south, -90 = east, 90 = west)') %></label><input type="text" name="azimuth" value="<%= solarCfg.azimuth %>"></div>
+        <div data-show-if="enabled"><label><%= t('System efficiency') %></label><input type="text" name="efficiency" value="<%= solarCfg.efficiency %>"></div>
       </div>
       <p class="hint" style="margin:0.5rem 0 0;"><%= t('Weather forecast from Open-Meteo (irradiance on your panels), corrected per hour of the day with what the PV meter really produced. The home location is also used for distances in the agenda.') %></p>
       <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-recalc="solar"><%= t('Fetch forecast now') %></button></div>
@@ -154,8 +165,8 @@
       <div class="form-grid">
         <div><label><%= t('What do you tank?') %></label><select name="fuel_type"><% Object.entries(fuelTypes).forEach(([k, v]) => { %><option value="<%= k %>" <%= (cfg.fuel_type || 'euro95') === k ? 'selected' : '' %>><%= v.label %></option><% }) %></select></div>
         <div><label><%= t('Automatic (CBS national average)') %></label><%- toggleSwitch('fuel_auto', !!cfg.fuel_auto) %></div>
-        <div><label><%= t('Surcharge on the CBS price (€/l)') %></label><input type="text" name="fuel_markup_eur_l" value="<%= cfg.fuel_markup_eur_l || 0 %>" placeholder="0.12"></div>
-        <div><label><%= t('Fuel price when not automatic (€/l)') %></label><input type="text" name="fuel_eur_l" value="<%= cfg.fuel_eur_l %>"></div>
+        <div data-show-if="fuel_auto"><label><%= t('Surcharge on the CBS price (€/l)') %></label><input type="text" name="fuel_markup_eur_l" value="<%= cfg.fuel_markup_eur_l || 0 %>" placeholder="0.12"></div>
+        <div data-show-if="!fuel_auto"><label><%= t('Fuel price (€/l)') %></label><input type="text" name="fuel_eur_l" value="<%= cfg.fuel_eur_l %>"></div>
         <div><label><%= t('Default consumption (kWh/km)') %></label><input type="text" name="default_kwh_per_km" value="<%= cfg.default_kwh_per_km %>"></div>
       </div>
       <p class="hint" style="margin:0.5rem 0 0;"><%= t('For a plug-in hybrid LoxSuite compares the cost per km on electricity with fuel (using the car\'s l/100 km), and doesn\'t charge in intervals where fuel is cheaper.') %> <%= t('The CBS price is the average pump price in the Netherlands of the day, including VAT and excise duty; Euro95 at Dutch pumps is E10. For Super 98 / E5, or a station that is dearer or cheaper than average, add a surcharge (e.g. 0.12). A CBS price older than 14 days is not used; then the manual price applies.') %></p>
@@ -169,13 +180,13 @@
       <input type="hidden" name="section" value="reminders">
       <div class="form-grid">
         <div><label><%= t('"Plug in" reminders') %></label><%- toggleSwitch('enabled', !!remCfg.enabled) %></div>
-        <div><label><%= t('Only when it saves at least (€)') %></label><input type="text" name="threshold_eur" value="<%= remCfg.threshold_eur %>"></div>
-        <div><label><%= t('Evening starts at') %></label><input type="text" name="evening_from" value="<%= remCfg.evening_from %>"></div>
+        <div data-show-if="enabled"><label><%= t('Only when it saves at least (€)') %></label><input type="text" name="threshold_eur" value="<%= remCfg.threshold_eur %>"></div>
+        <div data-show-if="enabled"><label><%= t('Evening starts at') %></label><input type="text" name="evening_from" value="<%= remCfg.evening_from %>"></div>
       </div>
       <div class="form-grid" style="margin-top:0.8rem;">
-        <div><label><%= t('Quiet from') %></label><input type="text" name="quiet_from" value="<%= remCfg.quiet_from %>"></div>
-        <div><label><%= t('Quiet until') %></label><input type="text" name="quiet_until" value="<%= remCfg.quiet_until %>"></div>
-        <div><label><%= t('"Remind me later" at') %></label><input type="text" name="snooze_to" value="<%= remCfg.snooze_to %>"></div>
+        <div data-show-if="enabled"><label><%= t('Quiet from') %></label><input type="text" name="quiet_from" value="<%= remCfg.quiet_from %>"></div>
+        <div data-show-if="enabled"><label><%= t('Quiet until') %></label><input type="text" name="quiet_until" value="<%= remCfg.quiet_until %>"></div>
+        <div data-show-if="enabled"><label><%= t('"Remind me later" at') %></label><input type="text" name="snooze_to" value="<%= remCfg.snooze_to %>"></div>
       </div>
       <p class="hint" style="margin:0.5rem 0 0;"><%= t('Reminders go through notification rules of type') %> <a href="/admin/notifications?trigger_type=car_reminder"><%= t('Car: plug in / swap reminders') %></a> and <a href="/admin/notifications?trigger_type=charging_plan"><%= t('Car: charging plan warnings') %></a> <%= t('— with the') %> <a href="/app"><%= t('LoxSuite app') %></a> <%= t('channel they arrive as push messages with buttons.') %></p>
       <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
@@ -242,12 +253,27 @@
         '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Needs</div><div style="font-size:1.15rem; font-weight:700;">' + nf(p.needKwh, 1) + ' kWh</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.needSource) + '</div></div>' +
         '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Ready by</div><div style="font-size:1.15rem; font-weight:700;">' + dtm(p.readyAt) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.readySource || 'no departure known — within 24 h') + '</div></div>' +
         (p.arrival ? '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Expected home</div><div style="font-size:1.15rem; font-weight:700; color:#3b82f6;">' + dtm(p.arrival.at) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(p.arrival.label) + '</div></div>' : '') +
-        (canEdit ? '<div><label>Ready by (this session)</label><input type="datetime-local" id="pl-ready"> <button type="button" class="btn-soft" id="pl-ready-btn" style="margin-top:0.3rem;">Set</button></div>' : '') +
+        (canEdit ? '<div><label>' + esc(T(s.connected ? 'Ready by (this session)' : 'Ready by (when it is back, one time)')) + '</label><input type="datetime-local" id="pl-ready">' +
+          '<input type="text" id="pl-ready-own" placeholder="' + esc(T('how far: 120 km, 30 kWh or full')) + '" style="margin-top:0.3rem;" value="' + esc(d.readyOverrideOwn || '') + '">' +
+          '<div class="btn-row" style="margin-top:0.3rem;"><button type="button" class="btn-soft" id="pl-ready-btn">' + esc(T('Set')) + '</button>' +
+          (d.readyOverride ? '<button type="button" class="btn-soft" id="pl-ready-clear">' + esc(T('Clear')) + '</button>' : '') + '</div>' +
+          (d.readyOverride ? '<div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;">' + esc(T('Set by you: {0}', dtm(new Date(d.readyOverride).toISOString()) + (d.readyOverrideOwn ? ' · ' + d.readyOverrideOwn : ''))) + '</div>' : '') +
+          '</div>' : '') +
         '</div>';
     }
-    document.getElementById('pl-target').innerHTML = th;
-    var rb = document.getElementById('pl-ready-btn');
-    if (rb) rb.addEventListener('click', function () { var v = document.getElementById('pl-ready').value; post('/planner/ready.json', { at: v ? new Date(v).toISOString() : null }).then(load); });
+    // don't wipe what is being typed in the "ready by" fields on the 30 s refresh
+    var tgEl = document.getElementById('pl-target');
+    var keep = { at: (document.getElementById('pl-ready') || {}).value, own: (document.getElementById('pl-ready-own') || {}).value };
+    var typing = tgEl.contains(document.activeElement) && /INPUT/.test(document.activeElement.tagName);
+    if (!typing) {
+      tgEl.innerHTML = th;
+      if (keep.at && document.getElementById('pl-ready')) document.getElementById('pl-ready').value = keep.at;
+      if (keep.own && document.getElementById('pl-ready-own')) document.getElementById('pl-ready-own').value = keep.own;
+      var rb = document.getElementById('pl-ready-btn');
+      if (rb) rb.addEventListener('click', function () { var v = document.getElementById('pl-ready').value; post('/planner/ready.json', { at: v ? new Date(v).toISOString() : null, own: document.getElementById('pl-ready-own').value }).then(load); });
+      var rc = document.getElementById('pl-ready-clear');
+      if (rc) rc.addEventListener('click', function () { post('/planner/ready.json', { at: null }).then(load); });
+    }
 
     var ph = '';
     if (p) {

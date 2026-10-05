@@ -105,14 +105,23 @@ async function getConfig() { return settings.get('agenda', DEFAULTS); }
 
 async function listCalendars() {
   const rows = await db.prepare('SELECT * FROM calendars ORDER BY name').all();
-  return rows.map((c) => ({ ...c, url: undefined, urlHost: hostOf(c.url) }));
+  return rows.map((c) => ({ ...c, url: undefined, secret: undefined, kind: c.kind || 'ics', urlHost: hostOf(c.url) }));
 }
 
 function hostOf(enc) {
   try { return new URL(icsUrl(decrypt(enc))).host; } catch { return ''; }
 }
 
-async function addCalendar({ name, url, color, vehicle_id }) {
+// kind 'caldav': url = the calendar collection (from caldav.discover), username + password to sign in.
+async function addCalendar({ name, url, color, vehicle_id, kind = 'ics', username = null, password = null }) {
+  if (kind === 'caldav') {
+    if (!/^https:\/\/.+/i.test(String(url || ''))) throw new Error('Choose a calendar of the account.');
+    if (!username || !password) throw new Error('User name and (app-specific) password are needed.');
+    return db.insertReturningId(
+      'INSERT INTO calendars (name, url, color, vehicle_id, enabled, created_at, kind, username, secret) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)',
+      [String(name || 'Calendar').trim().slice(0, 80), encrypt(String(url)), color || '#3b82c4', vehicle_id || null, new Date().toISOString(), 'caldav', String(username).slice(0, 200), encrypt(String(password))]
+    );
+  }
   const u = icsUrl(url);
   if (!/^https?:\/\/.+/i.test(u)) throw new Error('The calendar address must start with https://, http:// or webcal://.');
   const id = await db.insertReturningId(
@@ -146,7 +155,9 @@ async function syncCalendar(cal, { nowMs = Date.now(), fetchText = fetchIcs } = 
   const from = nowMs - cfg.window_days_back * 86400000;
   const to = nowMs + cfg.window_days_ahead * 86400000;
   try {
-    const text = await fetchText(icsUrl(decrypt(cal.url)));
+    const text = cal.kind === 'caldav'
+      ? await require('./caldav').fetchRange({ url: decrypt(cal.url), username: cal.username, password: decrypt(cal.secret), fromMs: from, toMs: to })
+      : await fetchText(icsUrl(decrypt(cal.url)));
     const occ = expandEvents(ical.sync.parseICS(text), from, to);
     const seen = new Set();
     for (const o of occ) {

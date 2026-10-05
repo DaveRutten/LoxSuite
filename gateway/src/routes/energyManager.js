@@ -44,7 +44,7 @@ router.get('/data.json', asyncHandler(async (req, res) => {
       runs: runs.filter((r) => r.kind === 'run').slice(0, 15),
     });
   }
-  res.json({ loads: out, hours: rt.plan?.hours || [], carKwh: rt.plan?.carKwh || {}, status: rt.status, planAt: rt.plan?.at || null, cfg: await em.getConfig() });
+  res.json({ loads: out, hours: rt.plan?.hours || [], carKwh: rt.plan?.carKwh || {}, status: rt.status, live: rt.plan?.live || null, planAt: rt.plan?.at || null, cfg: await em.getConfig() });
 }));
 
 function readLoadForm(b) {

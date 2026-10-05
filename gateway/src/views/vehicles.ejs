@@ -35,6 +35,11 @@
         <% }) %>
       </tbody>
     </table>
+    <% const pins = vehicles.filter(x => x.enabled && x.status.reading && x.status.reading.latitude != null && x.status.reading.longitude != null).map(x => ({ lat: Number(x.status.reading.latitude), lon: Number(x.status.reading.longitude), label: x.name })); %>
+    <% if (pins.length) { %>
+      <div id="veh-map" style="margin-top:0.9rem;"></div>
+      <script>window.lsMiniMap(document.getElementById('veh-map'), <%- JSON.stringify(pins) %>, { height: 220 });</script>
+    <% } %>
   <% } %>
 </div>
 

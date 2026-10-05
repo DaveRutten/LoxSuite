@@ -37,7 +37,7 @@ router.get('/status.json', asyncHandler(async (req, res) => {
   if (!rt.status) await planner.tick().catch(() => {});
   const r = planner.getRuntime();
   const plan = r.plan ? { ...r.plan } : null;
-  res.json({ status: r.status, plan, override: r.override, readyOverride: r.readyOverride, cfg: await planner.getConfig() });
+  res.json({ status: r.status, plan, override: r.override, readyOverride: r.readyOverride, readyOverrideOwn: r.readyOverrideOwn, readyOverrideAway: r.readyOverrideAway, cfg: await planner.getConfig() });
 }));
 
 // JSON actions from the page (CSRF-exempt like the other JSON endpoints).
@@ -62,7 +62,9 @@ router.post('/override.json', requirePermission('charging', 'edit'), asyncHandle
 
 router.post('/ready.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const t = req.body?.at ? Date.parse(req.body.at) : null;
-  planner.setReadyOverride(Number.isFinite(t) ? t : null);
+  let own = String(req.body?.own || '').trim();
+  if (/^\d+([.,]\d+)?$/.test(own)) own += ' km'; // a plain number = km
+  planner.setReadyOverride(Number.isFinite(t) ? t : null, own || null);
   await planner.recalc().catch(() => {});
   res.json({ ok: true });
 }));
@@ -143,6 +145,11 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
       source: ['energyzero', 'entsoe', 'loxone', 'fixed'].includes(b.source) ? b.source : 'energyzero',
       entsoe_token: String(b.entsoe_token || ''), markup_eur_kwh: num(b.markup_eur_kwh, 0), energy_tax_eur_kwh: num(b.energy_tax_eur_kwh, 0),
       vat_pct: num(b.vat_pct, 21), fixed_eur_kwh: num(b.fixed_eur_kwh, 0.3), calibrate_loxone: !!b.calibrate_loxone,
+      fixed_low_eur_kwh: num(b.fixed_low_eur_kwh, null),
+      fixed_low_from: /^\d{1,2}:\d{2}$/.test(String(b.fixed_low_from || '').trim()) ? String(b.fixed_low_from).trim() : '23:00',
+      fixed_low_until: /^\d{1,2}:\d{2}$/.test(String(b.fixed_low_until || '').trim()) ? String(b.fixed_low_until).trim() : '07:00',
+      fixed_low_weekend: !!b.fixed_low_weekend,
+      price_interval: b.price_interval === 'quarter' ? 'quarter' : 'hour',
     });
     prices.refreshPrices().catch(() => {});
   } else if (section === 'solar') {

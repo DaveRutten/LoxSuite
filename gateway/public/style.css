@@ -4751,3 +4751,17 @@ details > summary + p.hint { margin-top: 0.5rem; }
 .pick-topic { font-size: 0.68rem; color: var(--text-muted); background: none; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick-link { font-size: 0.75rem; }
 .pick.pick-on { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 7%, transparent); cursor: default; }
+
+/* Small street map (mini-map.js) */
+.mini-map { position: relative; overflow: hidden; border-radius: 10px; border: 1px solid var(--border); background: #e8e6e1; user-select: none; }
+.mini-map img { max-width: none; pointer-events: none; }
+.mini-map-open { position: absolute; inset: 0; z-index: 3; }
+.mini-map-pin {
+  position: absolute; z-index: 2; width: 16px; height: 16px; margin: -16px 0 0 -8px; border-radius: 50% 50% 50% 0;
+  background: var(--accent, #5CA83F); border: 2px solid #fff; transform: rotate(-45deg); box-shadow: 0 1px 4px rgba(0,0,0,.35);
+}
+.mini-map-label { position: absolute; z-index: 2; transform: translateX(-50%); font-size: 0.72rem; font-weight: 600; color: #222; background: rgba(255,255,255,.85); padding: 0 0.3rem; border-radius: 4px; white-space: nowrap; }
+.mini-map-attr { position: absolute; right: 0; bottom: 0; z-index: 4; font-size: 0.62rem; color: #333; background: rgba(255,255,255,.8); padding: 0 0.3rem; border-top-left-radius: 4px; text-decoration: none; }
+
+/* show-if.js: a field that doesn't apply to the current choice is hidden, whatever its own display. */
+[data-show-if][hidden] { display: none !important; }

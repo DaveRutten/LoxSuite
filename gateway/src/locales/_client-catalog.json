@@ -302,13 +302,6 @@
   ]
  },
  {
-  "key": "· feeding in now {0} kW",
-  "module": "energy_manager",
-  "where": [
-   "energy-manager (script)"
-  ]
- },
- {
   "key": "· incomplete",
   "module": "ocpp",
   "where": [
@@ -1367,6 +1360,13 @@
   "module": "mqtt",
   "where": [
    "mappings-commands (script)"
+  ]
+ },
+ {
+  "key": "© OpenStreetMap",
+  "module": "core",
+  "where": [
+   "public/mini-map.js"
   ]
  },
  {
@@ -2796,6 +2796,7 @@
   "module": "charging",
   "where": [
    "src/agenda.js",
+   "src/caldav.js",
    "src/routes/agenda.js"
   ]
  },
@@ -2826,6 +2827,7 @@
   "module": "charging",
   "where": [
    "src/agenda.js",
+   "src/caldav.js",
    "src/prices.js",
    "src/solarForecast.js",
    "src/vehicles.js"
@@ -3204,6 +3206,14 @@
   ]
  },
  {
+  "key": "Choose a calendar of the account.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js",
+   "src/routes/agenda.js"
+  ]
+ },
+ {
   "key": "Choose a channel to send the test to.",
   "module": "core",
   "where": [
@@ -3222,6 +3232,13 @@
   "module": "core",
   "where": [
    "partials/panel-grid (script)"
+  ]
+ },
+ {
+  "key": "Clear",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -4676,13 +4693,13 @@
  },
  {
   "key": "Error",
-  "module": "monitor",
+  "module": "charging",
   "where": [
+   "agenda (script)",
    "app (script)",
    "public/monitor-picks.js",
    "src/format.js",
-   "src/routes/miniservers.js",
-   "translations (script)"
+   "src/routes/miniservers.js"
   ]
  },
  {
@@ -4969,6 +4986,13 @@
   ]
  },
  {
+  "key": "feeding in now {0} kW",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "fetch failed",
   "module": "charging",
   "where": [
@@ -4984,6 +5008,13 @@
   "module": "monitor",
   "where": [
    "monitor (script)"
+  ]
+ },
+ {
+  "key": "Fill in a name and the ICS address.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -5107,6 +5138,13 @@
   "module": "core",
   "where": [
    "public/miniservers-tabulator.js"
+  ]
+ },
+ {
+  "key": "First find the calendars and tick one or more.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -5657,6 +5695,13 @@
   "module": "core",
   "where": [
    "src/modules.js"
+  ]
+ },
+ {
+  "key": "how far: 120 km, 30 kWh or full",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -6391,7 +6436,8 @@
   "key": "loading",
   "module": "core",
   "where": [
-   "public/card-collapse.js"
+   "public/card-collapse.js",
+   "public/show-if.js"
   ]
  },
  {
@@ -7678,6 +7724,7 @@
   "key": "No answer within {0} s.",
   "module": "vehicles",
   "where": [
+   "src/caldav.js",
    "src/vehicles.js"
   ]
  },
@@ -7701,6 +7748,13 @@
   "module": "core",
   "where": [
    "public/admin-backup-tabulator.js"
+  ]
+ },
+ {
+  "key": "No calendars found.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -8656,7 +8710,8 @@
   "where": [
    "admin-notifications (script)",
    "mappings-commands (script)",
-   "public/mappings-loxone-to-mqtt-tabulator.js"
+   "public/mappings-loxone-to-mqtt-tabulator.js",
+   "public/show-if.js"
   ]
  },
  {
@@ -9057,6 +9112,13 @@
   ]
  },
  {
+  "key": "plan adjusted to the real values",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Plan other big consumers (tap water, heat pump, washer, dryer) together with the car — shadow mode first.",
   "module": "core",
   "where": [
@@ -9082,6 +9144,13 @@
   "module": "charging",
   "where": [
    "src/planner.js"
+  ]
+ },
+ {
+  "key": "planned on solar, but no surplus now (importing {0} kW) — waits",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
   ]
  },
  {
@@ -9457,6 +9526,13 @@
   ]
  },
  {
+  "key": "Ready by (when it is back, one time)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "real hourly price + solar",
   "module": "ocpp",
   "where": [
@@ -9468,6 +9544,13 @@
   "module": "core",
   "where": [
    "public/admin-backup-tabulator.js"
+  ]
+ },
+ {
+  "key": "Redirect without an address (HTTP {0}).",
+  "module": "core",
+  "where": [
+   "src/caldav.js"
   ]
  },
  {
@@ -9971,6 +10054,13 @@
   ]
  },
  {
+  "key": "Searching…",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "season off: no influence",
   "module": "energy_manager",
   "where": [
@@ -10086,17 +10176,24 @@
   ]
  },
  {
+  "key": "set by you",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
+  "key": "Set by you: {0}",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "set for {0} — needed to turn battery % into kWh.",
   "module": "vehicles",
   "where": [
    "driving (script)"
-  ]
- },
- {
-  "key": "set for this session",
-  "module": "charging",
-  "where": [
-   "src/planner.js"
   ]
  },
  {
@@ -10212,6 +10309,13 @@
   "module": "core",
   "where": [
    "src/chartFieldHelpers.js"
+  ]
+ },
+ {
+  "key": "Sign-in refused — check the user name and the (app-specific) password.",
+  "module": "core",
+  "where": [
+   "src/caldav.js"
   ]
  },
  {
@@ -10408,6 +10512,13 @@
   "module": "core",
   "where": [
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "solar now {0} kW (forecast {1} kW)",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -11009,6 +11120,13 @@
   ]
  },
  {
+  "key": "The CalDAV server answered HTTP {0}.",
+  "module": "core",
+  "where": [
+   "src/caldav.js"
+  ]
+ },
+ {
   "key": "The car is not accepting requests right now (e.g. deep sleep or no connection).",
   "module": "vehicles",
   "where": [
@@ -11160,6 +11278,20 @@
   "module": "vehicles",
   "where": [
    "src/vehicles.js"
+  ]
+ },
+ {
+  "key": "The server did not give a calendar home (calendar-home-set).",
+  "module": "core",
+  "where": [
+   "src/caldav.js"
+  ]
+ },
+ {
+  "key": "The server did not say which account this is (no current-user-principal).",
+  "module": "core",
+  "where": [
+   "src/caldav.js"
   ]
  },
  {
@@ -11417,6 +11549,13 @@
   ]
  },
  {
+  "key": "Tick the calendars to add:",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Time",
   "module": "charging",
   "where": [
@@ -11543,6 +11682,13 @@
   "module": "core",
   "where": [
    "src/routes/auth.js"
+  ]
+ },
+ {
+  "key": "Too many redirects.",
+  "module": "core",
+  "where": [
+   "src/caldav.js"
   ]
  },
  {
@@ -12107,6 +12253,14 @@
   "where": [
    "public/dashboard-miniservers-tabulator.js",
    "public/miniservers-tabulator.js"
+  ]
+ },
+ {
+  "key": "User name and (app-specific) password are needed.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js",
+   "src/caldav.js"
   ]
  },
  {

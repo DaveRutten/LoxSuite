@@ -130,3 +130,33 @@ test('learned pattern: an appliance\'s usual run (09:00) gets the best start fro
   assert.equal(new Date(q.plannedStart).getUTCHours(), 11);
   assert.match(plan.loads[0].hours.find((h) => h.values.start === 1).reason, /usual run/);
 });
+
+test('applyLive: current hour from the meters, next hours scaled towards the real solar', () => {
+  const em = require('../src/energyManager');
+  const H = 3600000;
+  const t0 = Date.parse('2026-10-05T10:00:00Z');
+  const hours = [0, 1, 2, 3, 4].map((i) => ({ ms: t0 + i * H, hour: new Date(t0 + i * H).toISOString(), surplusKwh: 4, price: 0.2 }));
+  const pvF = {}; const houseF = {};
+  hours.forEach((h) => { pvF[h.ms] = 5; houseF[h.ms] = 1; });
+  // half way the hour, only 2 kW solar (forecast 5), house 1 kW
+  const r = em.applyLive(hours, { pvF, houseF, pvKw: 2, houseKw: 1, nowMs: t0 + 0.5 * H });
+  assert.equal(r.live.ratio, 0.4);
+  assert.equal(r.hours[0].surplusKwh, 0.5); // 1 kW for the half hour left
+  assert.equal(r.hours[1].surplusKwh, 1.9); // 5 × (1 − 0.6 × 0.7) − 1
+  assert.ok(r.hours[2].surplusKwh > r.hours[1].surplusKwh && r.hours[3].surplusKwh > r.hours[2].surplusKwh);
+  assert.equal(r.hours[4].surplusKwh, 4); // beyond 3 h: forecast as it was
+  assert.equal(em.applyLive(hours, { pvF, houseF, pvKw: null, nowMs: t0 }).live, null);
+});
+
+test('currentSignals: a solar-planned hour waits when there is no surplus right now', () => {
+  const em = require('../src/energyManager');
+  const H = 3600000;
+  const now = Date.parse('2026-10-05T10:20:00Z');
+  const hourMs = Math.floor(now / H) * H;
+  const plan = { loads: [{ id: 1, kind: 'heatpump', hours: [{ ms: hourMs, values: { release: 1 }, reason: 'solar surplus: pre-heat' }] }, { id: 2, kind: 'dhw', hours: [{ ms: hourMs, values: { now: 1 }, reason: 'cheapest block of the day' }] }] };
+  const loadsById = { 1: { settings: { kw: 2 } }, 2: { settings: { kw: 2 } } };
+  const out = em.currentSignals(plan, now, { exportKw: 0, importKw: 1.5, loadsById });
+  assert.equal(out[0].values.release, 0);
+  assert.match(out[0].reason, /no surplus now/);
+  assert.equal(out[1].values.now, 1, 'a cheapest-block plan stays');
+});

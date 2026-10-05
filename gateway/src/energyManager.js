@@ -89,6 +89,30 @@ function toHours(slots) {
   }));
 }
 
+// The forecast, corrected with what the meters say right now. The current hour gets the real surplus
+// (solar now minus the house now) for the part of the hour that is left; the next three hours get the
+// solar forecast scaled towards how far off it is now (70 %, 45 %, 20 % of the deviation — a cloudy
+// spell usually lasts a while, but not all day). pvF/houseF: forecast kWh per hour start.
+function applyLive(hours, { pvF = {}, houseF = {}, pvKw = null, houseKw = null, nowMs }) {
+  if (pvKw === null || pvKw === undefined || !Number.isFinite(Number(pvKw))) return { hours, live: null };
+  const cur = Math.floor(nowMs / HOUR) * HOUR;
+  const house = houseKw !== null && houseKw !== undefined && Number.isFinite(Number(houseKw)) ? Number(houseKw) : (houseF[cur] ?? 0.4);
+  const surplusKw = Math.max(0, Number(pvKw) - house);
+  const fPv = pvF[cur];
+  const ratio = fPv > 0.3 ? Math.min(2, Math.max(0, Number(pvKw) / fPv)) : null;
+  const weights = [0.7, 0.45, 0.2];
+  const out = hours.map((h) => {
+    if (h.ms === cur) return { ...h, surplusKwh: r3(surplusKw * Math.max(0, (cur + HOUR - nowMs) / HOUR)), live: true };
+    const k = Math.round((h.ms - cur) / HOUR) - 1;
+    if (ratio !== null && k >= 0 && k < weights.length && pvF[h.ms] !== undefined) {
+      const pv = pvF[h.ms] * (1 + (ratio - 1) * weights[k]);
+      return { ...h, surplusKwh: r3(Math.max(0, pv - (houseF[h.ms] ?? 0.4))), corrected: true };
+    }
+    return h;
+  });
+  return { hours: out, live: { pvKw: r2(Number(pvKw)), houseKw: r2(house), surplusKw: r2(surplusKw), pvForecastKw: fPv !== undefined ? r2(fPv) : null, ratio: ratio !== null ? r2(ratio) : null } };
+}
+
 // Cost of using `kwh` in an hour with `surplus` kWh of solar left: solar at its value, the rest at the price.
 function effCost(h, kwh, surplus, opts) {
   const fromSolar = Math.min(kwh, Math.max(0, surplus));
@@ -228,7 +252,7 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
 }
 
 // Shadow signals right now: the plan of the current hour, with a live solar override (surplus now).
-function currentSignals(plan, nowMs, { exportKw = 0, loadsById = {} } = {}) {
+function currentSignals(plan, nowMs, { exportKw = 0, importKw = 0, loadsById = {} } = {}) {
   const hourMs = Math.floor(nowMs / HOUR) * HOUR;
   const out = [];
   let spare = Math.max(0, exportKw);
@@ -238,6 +262,13 @@ function currentSignals(plan, nowMs, { exportKw = 0, loadsById = {} } = {}) {
     const kw = Number(load.settings?.kw) || 1;
     const values = { ...row.values };
     let reason = row.reason;
+    // Planned on solar that isn't there right now (importing, no export): wait for the next re-plan
+    // instead of heating on the grid at a price the plan never chose. A cheapest-block plan stays.
+    const solarPlanned = /^solar surplus(?! now)/.test(String(row.reason || ''));
+    if (solarPlanned && spare < kw * 0.3 && importKw > 0.3) {
+      if (p.kind === 'dhw' && values.now === 1) { values.now = 0; reason = `planned on solar, but no surplus now (importing ${importKw.toFixed(1)} kW) — waits`; }
+      if (p.kind === 'heatpump' && values.release === 1) { values.release = 0; reason = `planned on solar, but no surplus now (importing ${importKw.toFixed(1)} kW) — waits`; }
+    }
     if (p.kind === 'dhw' && values.now !== 1 && !load.doneToday && spare >= kw) { values.now = 1; values.setpoint = load.settings?.buffer_setpoint ?? values.setpoint; reason = `solar surplus now (${spare.toFixed(1)} kW)`; spare -= kw; }
     if (p.kind === 'heatpump' && values.release !== 1 && spare >= kw * 0.5) { values.release = 1; reason = `solar surplus now (${spare.toFixed(1)} kW)`; spare -= kw; }
     out.push({ id: p.id, values, reason });
@@ -421,7 +452,16 @@ async function recalc(nowMs = Date.now()) {
   const cfg = await getConfig();
   const pcfg = await planner.getConfig();
   const slots = await planner.buildSlots(nowMs, nowMs + 36 * HOUR);
-  const hours = toHours(slots);
+  // forecast solar and house per hour, then corrected with the live meters
+  const pvF = {};
+  const houseF = {};
+  for (const sl of slots) {
+    const ms = Math.floor(Date.parse(sl.start) / HOUR) * HOUR;
+    if (pvF[ms] === undefined) { pvF[ms] = Number(sl.pvKwh) || 0; houseF[ms] = Number(sl.houseKwh) || 0; }
+  }
+  const meters = await require('./energyMeters').live().catch(() => null);
+  const corrected = applyLive(toHours(slots), { pvF, houseF, pvKw: meters?.roles?.pv?.power_kw ?? null, houseKw: meters?.house_kw ?? null, nowMs });
+  const hours = corrected.hours;
   const carKwh = {};
   for (const s of planner.getRuntime().plan?.slots || []) {
     const ms = Math.floor(Date.parse(s.start) / HOUR) * HOUR;
@@ -443,7 +483,7 @@ async function recalc(nowMs = Date.now()) {
   }
   rt.follows = await followsFor(loads);
   const plan = planLoads({ hours, loads, carKwh, carPriority: cfg.car_priority, nowMs, localOf, feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, solarBonus: cfg.solar_bonus_eur });
-  rt.plan = { ...plan, hours, carKwh, at: new Date(nowMs).toISOString(), today };
+  rt.plan = { ...plan, hours, carKwh, at: new Date(nowMs).toISOString(), today, live: corrected.live, pvF };
   rt.loads = loads;
   rt.localOf = localOf;
   rt.planAt = nowMs;
@@ -452,14 +492,18 @@ async function recalc(nowMs = Date.now()) {
 
 async function tick(nowMs = Date.now()) {
   await sample(nowMs).catch((e) => console.error(`[energy manager] sample: ${e.message}`));
-  if (!rt.plan || nowMs - rt.planAt > 15 * 60000) await recalc(nowMs).catch((e) => { rt.status = { error: e.message }; });
-  if (!rt.plan) return;
   const live = await require('./energyMeters').live().catch(() => ({ roles: {} }));
+  // Re-plan every 15 min — every 5 min while the solar forecast is far off from what the meters say.
+  const pvNow = live.roles?.pv?.power_kw;
+  const fNow = rt.plan?.pvF?.[Math.floor(nowMs / HOUR) * HOUR];
+  const off = Number.isFinite(pvNow) && fNow > 0.3 && Math.abs(pvNow / fNow - 1) > 0.35;
+  if (!rt.plan || nowMs - rt.planAt > (off ? 5 : 15) * 60000) await recalc(nowMs).catch((e) => { rt.status = { error: e.message }; });
+  if (!rt.plan) return;
   const gridKw = live.roles?.grid?.power_kw;
   const exportKw = gridKw !== null && gridKw !== undefined ? Math.max(0, -gridKw) : 0;
   const loadsById = Object.fromEntries((rt.loads || []).map((l) => [l.id, l]));
-  rt.signals = currentSignals(rt.plan, nowMs, { exportKw, loadsById });
-  rt.status = { at: new Date(nowMs).toISOString(), exportKw: r2(exportKw) };
+  rt.signals = currentSignals(rt.plan, nowMs, { exportKw, importKw: gridKw > 0 ? gridKw : 0, loadsById });
+  rt.status = { at: new Date(nowMs).toISOString(), exportKw: r2(exportKw), pvKw: Number.isFinite(pvNow) ? r2(pvNow) : null, pvForecastKw: fNow !== undefined ? r2(fNow) : null };
   for (const s of rt.signals) {
     const load = loadsById[s.id];
     for (const [key, value] of Object.entries(s.values)) {
@@ -561,6 +605,7 @@ function stopEnergyManager() {
 function invalidate() { rt.planAt = 0; }
 
 module.exports = {
+  applyLive,
   KINDS, parseSettings, viName, toHours, effCost, planLoads, currentSignals, runStep, hourCost, quantile,
   listLoads, readLoad, sample, recalc, tick, getConfig, saveConfig, dailyReport, importHistory, learned, getRuntime, startEnergyManager, stopEnergyManager, invalidate,
 };
