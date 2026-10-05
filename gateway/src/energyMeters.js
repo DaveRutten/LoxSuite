@@ -417,6 +417,13 @@ function startEnergyMeters() {
   pruneTimer.unref?.();
 }
 
+function stopEnergyMeters() {
+  if (timer) clearInterval(timer);
+  if (pruneTimer) clearInterval(pruneTimer);
+  timer = null;
+  pruneTimer = null;
+}
+
 async function pruneSamples() {
   const cutoff = new Date(Date.now() - 14 * 86400000).toISOString();
   await db.prepare('DELETE FROM energy_samples WHERE ts < ?').run(cutoff);
@@ -431,5 +438,5 @@ module.exports = {
   ROLES, ROLE_KEYS, meterStateUuids, totalStatGroup, meterCandidates, readingFromValues, housePower, houseHourKwh,
   safeDelta, hourStart, parseStatisticsResult, roleHealth,
   candidateMeters, loadMeters, live, sample, importHistory, hourlySeries, todayTotals, energyTopics,
-  startEnergyMeters, resetRuntime, deriveHouse,
+  startEnergyMeters, stopEnergyMeters, resetRuntime, deriveHouse,
 };

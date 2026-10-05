@@ -274,8 +274,13 @@ function startPrices() {
   timers = [t1, t2];
 }
 
+function stopPrices() {
+  timers.forEach(clearInterval);
+  timers = [];
+}
+
 module.exports = {
   DEFAULTS, allinPrice, fitLinear, parseEnergyZero, parseEntsoe, entsoeTime, hourOfDayProfile, toIntervals,
   getConfig, saveConfig, fetchMarket, refreshPrices, getPrices, currentPrice, calibration, sampleCalibration,
-  loxoneCurrentPrice, findSpotOptimizer, startPrices,
+  loxoneCurrentPrice, findSpotOptimizer, startPrices, stopPrices,
 };

@@ -1,0 +1,14 @@
+<%- include('partials/head', { pageTitle: module.label, active: '' }) %>
+
+<div class="card" style="max-width:640px;">
+  <h2 style="margin-top:0;"><%= module.label %> is switched off</h2>
+  <p><%= module.description %></p>
+  <p class="hint">Its data is kept; switching the module on brings everything back.</p>
+  <% if (isAdminUser) { %>
+    <a class="btn-edit" href="/admin/modules#mod-<%= module.key %>" style="text-decoration:none;">Go to Modules</a>
+  <% } else { %>
+    <p class="hint">Ask an administrator to switch it on under Administration &gt; Modules.</p>
+  <% } %>
+</div>
+
+<%- include('partials/foot') %>

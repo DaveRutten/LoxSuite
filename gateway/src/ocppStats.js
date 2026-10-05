@@ -153,11 +153,14 @@ async function publishAllStats() {
   }
 }
 
+let statsTimer = null;
 function startStatsPublisher() {
-  const timer = setInterval(() => { publishAllStats().catch(() => {}); }, PUBLISH_MS);
-  timer.unref?.();
+  if (statsTimer) return;
+  statsTimer = setInterval(() => { publishAllStats().catch(() => {}); }, PUBLISH_MS);
+  statsTimer.unref?.();
   setTimeout(() => { publishAllStats().catch(() => {}); }, 15000).unref?.();
 }
 
 module.exports.publishAllStats = publishAllStats;
 module.exports.startStatsPublisher = startStatsPublisher;
+module.exports.stopStatsPublisher = () => { if (statsTimer) clearInterval(statsTimer); statsTimer = null; };

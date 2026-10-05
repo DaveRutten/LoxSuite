@@ -21,6 +21,7 @@ const ON_KW = 1.0;   // the Wallbox counts as charging above this
 const OFF_KW = 0.3;  // ... and as not charging below this
 
 let timer = null;
+let pruneTimer = null;
 let last = null;           // last stored sample (for change detection)
 let lastStoredAt = 0;
 let lastEventAt = 0;
@@ -106,8 +107,16 @@ function startChargeLog() {
   if (timer) return;
   timer = setInterval(() => { sample().catch(() => {}); }, SAMPLE_MS);
   timer.unref?.();
-  const p = setInterval(() => { prune().catch(() => {}); }, 6 * 3600 * 1000);
-  p.unref?.();
+  pruneTimer = setInterval(() => { prune().catch(() => {}); }, 6 * 3600 * 1000);
+  pruneTimer.unref?.();
+}
+
+function stopChargeLog() {
+  if (timer) clearInterval(timer);
+  if (pruneTimer) clearInterval(pruneTimer);
+  timer = null;
+  pruneTimer = null;
+  session = null;
 }
 
 // --------------------------------------------------------------------------- analysis (pure)
@@ -265,4 +274,4 @@ async function idleEvents(limit = 50) {
   return parseRows(await db.prepare("SELECT ts, event, data FROM charge_log WHERE session_key = 'idle' AND event IS NOT NULL ORDER BY ts DESC").all()).slice(0, limit);
 }
 
-module.exports = { recordSent, sample, snapshot, startChargeLog, analyzeSession, summaryText, sessions, sessionDetail, idleEvents, prune };
+module.exports = { recordSent, sample, snapshot, startChargeLog, stopChargeLog, analyzeSession, summaryText, sessions, sessionDetail, idleEvents, prune };

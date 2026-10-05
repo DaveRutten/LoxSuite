@@ -63,4 +63,9 @@ function startFuelPrice() {
   setTimeout(run, 70000).unref?.();
 }
 
-module.exports = { parseCbs, refreshFuelPrice, currentFuelPrice, startFuelPrice, CBS_URL };
+function stopFuelPrice() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
+module.exports = { parseCbs, refreshFuelPrice, currentFuelPrice, startFuelPrice, stopFuelPrice, CBS_URL };

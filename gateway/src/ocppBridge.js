@@ -612,10 +612,19 @@ async function syncRunners() {
   }
 }
 
+let rescanTimer = null;
 function startOcppBridges() {
+  if (rescanTimer) return;
   syncRunners().catch((err) => console.error('[ocppBridge] initial sync failed:', err.message));
-  const timer = setInterval(() => { syncRunners().catch(() => {}); }, RESCAN_MS);
-  timer.unref?.();
+  rescanTimer = setInterval(() => { syncRunners().catch(() => {}); }, RESCAN_MS);
+  rescanTimer.unref?.();
+}
+
+// Module switched off: stop rescanning and close every bridge cleanly (same as a container stop).
+async function stopOcppBridges() {
+  if (rescanTimer) clearInterval(rescanTimer);
+  rescanTimer = null;
+  await shutdownOcppBridges(2000).catch(() => {});
 }
 
 // "Test connection": opens a short-lived OCPP websocket with the bridge's saved settings and
@@ -676,6 +685,6 @@ function getBridgeLog(id) {
 }
 
 module.exports = {
-  startOcppBridges, syncRunners, shutdownOcppBridges, getBridgeStatus, getBridgeLog, testBackendConnection, unplugTimeDuringDowntime,
+  startOcppBridges, stopOcppBridges, syncRunners, shutdownOcppBridges, getBridgeStatus, getBridgeLog, testBackendConnection, unplugTimeDuringDowntime,
   wallboxStatus, getConfigurationReply, restoreState, normalizeNfcTag, parseUserTagMap, resolveIdTag,
 };

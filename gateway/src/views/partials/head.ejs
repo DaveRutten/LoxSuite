@@ -90,8 +90,10 @@
       const isCollapsed = (key, forceExpanded) => !forceExpanded && collapsedSections.includes(key);
     %>
     <nav>
+      <% const mod = typeof moduleOn === 'function' ? moduleOn : () => true; %>
       <% if (canView('dashboard')) { %><a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>">Dashboard</a><% } %>
 
+      <% if (mod('monitor')) { %>
       <% const monitorExpanded = active === 'monitor' || active === 'dashboards'; %>
       <button type="button" class="nav-section-label" data-nav-section="monitor" aria-expanded="<%= isCollapsed('monitor', monitorExpanded) ? 'false' : 'true' %>">
         <span>Monitor</span><%- icon('chevron') %>
@@ -121,6 +123,7 @@
           </div>
         <% } %>
       </div>
+      <% } %>
 
       <% if (loxoneSectionVisible) { %>
         <% const loxoneExpanded = active === 'miniservers' || active === 'live-data' || active === 'hardware' || mappingsActive; %>
@@ -131,29 +134,34 @@
           <% if (canView('miniservers')) { %><a href="/miniservers" class="<%= active === 'miniservers' ? 'active' : '' %>">Miniservers</a><% } %>
           <% if (canView('live_data')) { %><a href="/live-data" class="<%= active === 'live-data' ? 'active' : '' %>">Live Data</a><% } %>
           <% if (canView('hardware')) { %><a href="/hardware" class="<%= active === 'hardware' ? 'active' : '' %>">Hardware</a><% } %>
-          <% if (mappingsHref) { %><a href="<%= mappingsHref %>" class="<%= mappingsActive ? 'active' : '' %>">Mappings</a><% } %>
+          <% if (mappingsHref && mod('mqtt')) { %><a href="<%= mappingsHref %>" class="<%= mappingsActive ? 'active' : '' %>">Mappings</a><% } %>
         </div>
       <% } %>
 
-      <% if (canView('miniservers')) { %>
+      <% const energyAny = mod('charging') || mod('vehicles') || mod('energy') || mod('energy_manager') || mod('ocpp'); %>
+      <% if (canView('miniservers') && energyAny) { %>
         <% const wallboxExpanded = ['planner', 'chargelog', 'energymanager', 'agenda', 'vehicles', 'driving', 'energy', 'learned', 'ocpp'].includes(active); %>
         <button type="button" class="nav-section-label" data-nav-section="wallbox" aria-expanded="<%= isCollapsed('wallbox', wallboxExpanded) ? 'false' : 'true' %>">
-          <span>Wallbox</span><%- icon('chevron') %>
+          <span>Energy &amp; charging</span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('wallbox', wallboxExpanded) ? 'hidden' : '' %>>
-          <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>">Smart charging</a>
-          <a href="/planner/log" class="<%= active === 'chargelog' ? 'active' : '' %>">Charge log</a>
-          <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>">Agenda</a>
-          <a href="/vehicles" class="<%= active === 'vehicles' ? 'active' : '' %>">Vehicles</a>
-          <a href="/driving" class="<%= active === 'driving' ? 'active' : '' %>">Driving &amp; costs</a>
-          <a href="/energy" class="<%= active === 'energy' ? 'active' : '' %>">Meters</a>
-          <a href="/energy-manager" class="<%= active === 'energymanager' ? 'active' : '' %>">Energy manager</a>
-          <a href="/learned" class="<%= active === 'learned' ? 'active' : '' %>">Learned</a>
-          <a href="/ocpp" class="<%= active === 'ocpp' ? 'active' : '' %>">OCPP (charging costs)</a>
+          <% if (mod('charging')) { %>
+            <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>">Smart charging</a>
+            <a href="/planner/log" class="<%= active === 'chargelog' ? 'active' : '' %>">Charge log</a>
+            <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>">Agenda</a>
+            <a href="/learned" class="<%= active === 'learned' ? 'active' : '' %>">Learned</a>
+          <% } %>
+          <% if (mod('vehicles')) { %>
+            <a href="/vehicles" class="<%= active === 'vehicles' ? 'active' : '' %>">Vehicles</a>
+            <a href="/driving" class="<%= active === 'driving' ? 'active' : '' %>">Driving &amp; costs</a>
+          <% } %>
+          <% if (mod('energy')) { %><a href="/energy" class="<%= active === 'energy' ? 'active' : '' %>">Meters</a><% } %>
+          <% if (mod('energy_manager')) { %><a href="/energy-manager" class="<%= active === 'energymanager' ? 'active' : '' %>">Energy manager</a><% } %>
+          <% if (mod('ocpp')) { %><a href="/ocpp" class="<%= active === 'ocpp' ? 'active' : '' %>">OCPP (charging costs)</a><% } %>
         </div>
       <% } %>
 
-      <% if (mqttSectionVisible) { %>
+      <% if (mqttSectionVisible && mod('mqtt')) { %>
         <% const brokerExpanded = active === 'incoming' || active === 'incoming-clients' || brokerActive; %>
         <button type="button" class="nav-section-label" data-nav-section="mqtt-broker" aria-expanded="<%= isCollapsed('mqtt-broker', brokerExpanded) ? 'false' : 'true' %>">
           <span>MQTT</span><%- icon('chevron') %>
@@ -177,9 +185,9 @@
         <div class="nav-group" <%= isCollapsed('logs', logsExpanded) ? 'hidden' : '' %>>
           <% if (canView('logs_system')) { %><a href="/logs/system" class="<%= active === 'logs-system' ? 'active' : '' %>">System</a><% } %>
           <% if (canView('logs_notifications')) { %><a href="/logs/notifications" class="<%= active === 'logs-notifications' ? 'active' : '' %>">Notifications</a><% } %>
-          <% if (canView('logs_loxone')) { %><a href="/logs/loxone" class="<%= active === 'logs-loxone' ? 'active' : '' %>">Loxone Miniservers</a><% } %>
-          <% if (canView('logs_loxone_commands')) { %><a href="/logs/loxone-commands" class="<%= active === 'logs-loxone-commands' ? 'active' : '' %>">Loxone Commands</a><% } %>
-          <% if (canView('logs_mqtt')) { %><a href="/logs/mqtt" class="<%= active === 'logs-mqtt' ? 'active' : '' %>">MQTT Broker</a><% } %>
+          <% if (canView('logs_loxone') && mod('loxone_logs')) { %><a href="/logs/loxone" class="<%= active === 'logs-loxone' ? 'active' : '' %>">Loxone Miniservers</a><% } %>
+          <% if (canView('logs_loxone_commands') && mod('mqtt')) { %><a href="/logs/loxone-commands" class="<%= active === 'logs-loxone-commands' ? 'active' : '' %>">Loxone Commands</a><% } %>
+          <% if (canView('logs_mqtt') && mod('mqtt')) { %><a href="/logs/mqtt" class="<%= active === 'logs-mqtt' ? 'active' : '' %>">MQTT Broker</a><% } %>
         </div>
       <% } %>
     </nav>

@@ -112,7 +112,7 @@ module.exports = asyncHandler(async function loadUserContext(req, res, next) {
   // everyone, not just error out when clicked, while the feature itself is off.
   if (req.user.isAdmin || permissions.ai_chat?.view) {
     const aiSettings = await db.prepare('SELECT enabled FROM ai_settings WHERE id = 1').get();
-    res.locals.aiChatEnabled = !!(aiSettings && aiSettings.enabled);
+    res.locals.aiChatEnabled = !!(aiSettings && aiSettings.enabled) && require('../modules').isOn('ai');
   }
   res.locals.collapsedSections = (await db.prepare('SELECT section_key FROM user_nav_prefs WHERE user_id = ? AND collapsed = 1')
     .all(user.id)).map((r) => r.section_key);

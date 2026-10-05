@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.28.0-alpha.1] - 2026-10-05
+
+### Added
+- **Modules** (Administration → Modules): LoxSuite is now a fixed core plus nine modules you switch on or off per
+  installation — MQTT bridge, Monitor & dashboards, Loxone logs, AI assistant, Energy, Vehicles, Smart charging,
+  OCPP & charging costs and Energy manager.
+  - A module that is off disappears from the menu, its pages answer "this module is switched off", and its background
+    work stops (energy meters, prices, solar forecast, vehicles, planner, charge log, agenda, reminders, OCPP bridges,
+    energy manager) — no restart needed. Its data is kept.
+  - A module that needs another switches it on along with it (Smart charging → Energy + Vehicles, Energy manager →
+    Energy, Monitor → MQTT bridge); switching one off also switches off what depends on it, after a confirmation.
+  - **Existing installations keep everything they use**: on the first start after the update, every module that is in
+    use is switched on. A new installation starts with the core, MQTT bridge, Monitor and Loxone logs.
+- The Wallbox menu is now **Energy & charging**, with only the items of the modules that are on.
+
+### Notes
+- The MQTT bridge module hides its pages for now; stopping Mosquitto and the MQTT client when it is off follows in a
+  next version, as do separate access-role areas per module.
+
 ## [0.27.2-alpha.1] - 2026-10-04
 
 ### Changed

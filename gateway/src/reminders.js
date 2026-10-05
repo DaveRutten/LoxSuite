@@ -206,4 +206,9 @@ function startReminders() {
   setTimeout(run, 90000).unref?.();
 }
 
-module.exports = { DEFAULTS, plugDecision, inQuiet, getConfig, check, handleAction, startReminders };
+function stopReminders() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
+module.exports = { DEFAULTS, plugDecision, inQuiet, getConfig, check, handleAction, startReminders, stopReminders };

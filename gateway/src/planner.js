@@ -571,7 +571,12 @@ function startPlanner() {
   setTimeout(run, 50000).unref?.();
 }
 
+function stopPlanner() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
 module.exports = {
   MODES, DEFAULTS, makePlan, fuelBreakEven, activeSlot, controlStep,
-  getConfig, saveConfig, recalc, tick, outputMiniserver, sessionFull, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, buildSlots, computeTarget, wallboxLive,
+  getConfig, saveConfig, recalc, tick, outputMiniserver, sessionFull, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, stopPlanner, buildSlots, computeTarget, wallboxLive,
 };

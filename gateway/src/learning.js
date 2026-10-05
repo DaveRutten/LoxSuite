@@ -266,8 +266,13 @@ function startLearning() {
   setTimeout(run, 60000).unref?.();
 }
 
+function stopLearning() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
 module.exports = {
   median, quantile, fmtMin, toMin, departureStats, nextReadyTime, tripStats, expectedTripKwh, houseProfile, expectedHouseKwh,
   slotOf, durationClass, syncSessions, loadSessions, getOverrides, setOverrides, learnedDepartures, learnedTrips, learnedHouse,
-  startLearning, wallboxControl,
+  startLearning, stopLearning, wallboxControl,
 };

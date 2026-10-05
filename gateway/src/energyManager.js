@@ -510,9 +510,14 @@ function startEnergyManager() {
   rt.timer.unref?.();
   setTimeout(() => { tick().catch(() => {}); }, 70000).unref?.();
 }
+
+function stopEnergyManager() {
+  if (rt.timer) clearInterval(rt.timer);
+  rt.timer = null;
+}
 function invalidate() { rt.planAt = 0; }
 
 module.exports = {
   KINDS, parseSettings, viName, toHours, effCost, planLoads, currentSignals, runStep, hourCost, quantile,
-  listLoads, readLoad, sample, recalc, tick, getConfig, saveConfig, dailyReport, importHistory, learned, getRuntime, startEnergyManager, invalidate,
+  listLoads, readLoad, sample, recalc, tick, getConfig, saveConfig, dailyReport, importHistory, learned, getRuntime, startEnergyManager, stopEnergyManager, invalidate,
 };

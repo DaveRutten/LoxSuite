@@ -57,20 +57,7 @@ const { startHeartbeat } = require('./heartbeat');
 const { geoBlockMiddleware, startGeoBlockUpdater } = require('./geoBlock');
 const { startHardwarePolling } = require('./loxoneHardware');
 const { startLiveConnections } = require('./loxoneWebSocket');
-const { startOcppBridges, shutdownOcppBridges } = require('./ocppBridge');
-const { startStatsPublisher } = require('./ocppStats');
-const { startVehicles } = require('./vehicles');
-const { startEnergyMeters } = require('./energyMeters');
-const { startPrices } = require('./prices');
-const { startSolarForecast } = require('./solarForecast');
-const { startLearning } = require('./learning');
-const { startDriving } = require('./driving');
-const { startChargeLog } = require('./chargeLog');
-const { startEnergyManager } = require('./energyManager');
-const { startPlanner } = require('./planner');
-const { startAgenda } = require('./agenda');
-const { startReminders } = require('./reminders');
-const { startFuelPrice } = require('./fuelPrice');
+const { shutdownOcppBridges } = require('./ocppBridge');
 const mcpClient = require('./mcpClient');
 const requireAuth = require('./middleware/requireAuth');
 const loadUserContext = require('./middleware/loadUserContext');
@@ -99,6 +86,8 @@ const plannerRoutes = require('./routes/planner');
 const learnedRoutes = require('./routes/learned');
 const drivingRoutes = require('./routes/driving');
 const energyManagerRoutes = require('./routes/energyManager');
+const modulesRoutes = require('./routes/modules');
+const modules = require('./modules');
 const agendaRoutes = require('./routes/agenda');
 const appRoutes = require('./routes/app');
 const logsRoutes = require('./routes/logs');
@@ -137,6 +126,8 @@ const { notificationSourceLink } = require('./notificationLinks');
 // one place in the whole app ever did — see mosquittoLog.js's own comment on lastPersistedAt).
 async function main() {
   await db.init();
+  // Which modules are on (Administration > Modules); seeded on the first start after the update.
+  await modules.init().catch((err) => console.error('Modules init failed:', err.message));
   // Eagerly, once — getDisplayTimezone() (formatDateTime, res.locals.displayTimezone below) is
   // called synchronously all over template rendering and can't itself await a DB read. See
   // dateFormat.js's own comment on loadTimezoneCache/getDisplayTimezone for the full reasoning.
@@ -245,6 +236,8 @@ async function main() {
   app.use(loadUserContext);
   
   app.use(authRoutes);
+  // Modules that are off: hidden from the menu (res.locals.moduleOn) and their pages answer "switched off".
+  app.use(modules.middleware());
   
   app.get('/', requireAuth, requirePermission('dashboard', 'view'), asyncHandler(async (req, res) => {
     const miniserverRows = await db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
@@ -328,6 +321,7 @@ async function main() {
   app.use('/api/nav-prefs', requireAuth, navPrefsRoutes);
   // Mounted before the general '/admin' router below so their routes take precedence without
   // relying on that router falling through for a path it doesn't recognize.
+  app.use('/admin/modules', requireAuth, requireAdmin, modulesRoutes);
   app.use('/admin/backup', requireAuth, requireAdmin, backupRoutes);
   app.use('/admin/notifications', requireAuth, requireAdmin, notificationsRoutes);
   app.use('/admin', requireAuth, requireAdmin, adminRoutes);
@@ -378,20 +372,9 @@ async function main() {
   startLogCollector().catch((err) => console.error('Failed to start log collector:', err.message));
   startHardwarePolling();
   startLiveConnections().catch((err) => console.error('Failed to start live Loxone connections:', err.message));
-  startOcppBridges();
-  startStatsPublisher();
-  startVehicles();
-  startEnergyMeters();
-  startPrices();
-  startSolarForecast();
-  startLearning();
-  startDriving();
-  startChargeLog();
-  startEnergyManager();
-  startAgenda();
-  startFuelPrice();
-  startPlanner();
-  startReminders();
+  // Energy, vehicles, smart charging, OCPP and the energy manager run only when their module is on
+  // (modules.js starts and stops their workers; switching a module needs no restart).
+  modules.startEnabledWorkers();
   mcpClient.startMcpClients().catch((err) => console.error('Failed to start MCP clients:', err.message));
   // A restart mid-turn (deploy, crash) abandons any AI Assistant reply still marked 'streaming' —
   // nothing will ever finalize that row otherwise, since the code path that would (routes/aiChat.js's

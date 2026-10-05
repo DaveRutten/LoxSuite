@@ -174,7 +174,12 @@ function startSolarForecast() {
   setTimeout(run, 40000).unref?.();
 }
 
+function stopSolarForecast() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
 module.exports = {
   DEFAULTS, parseOpenMeteo, correctionFactors, factorFor, dailyErrorBand, openMeteoUrl,
-  getConfig, getSite, refreshForecast, learnFactors, dailyHistory, forecastForDay, forecastBetween, startSolarForecast,
+  getConfig, getSite, refreshForecast, learnFactors, dailyHistory, forecastForDay, forecastBetween, startSolarForecast, stopSolarForecast,
 };

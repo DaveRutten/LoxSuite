@@ -1,0 +1,59 @@
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+
+<div class="tabs">
+  <a href="/admin/general">General</a>
+  <a href="/admin/users">Users</a>
+  <a href="/admin/roles">Access Roles</a>
+  <a href="/admin/backup">Backups</a>
+  <a href="/admin/notifications">Notifications</a>
+  <a href="/admin/security">Security</a>
+  <a class="active" href="/admin/modules">Modules</a>
+  <% if (moduleOn('ai')) { %><a href="/admin/ai">AI Assistant</a><% } %>
+</div>
+
+<% const labelOf = {}; groups.forEach(g => g.modules.forEach(m => { labelOf[m.key] = m.label; })); %>
+<% if (changed.length) { %>
+  <p class="hint" style="color: var(--success);">Saved: <%= changed.map(c => { const [k, v] = c.split(':'); return (labelOf[k] || k) + (v === '1' ? ' on' : ' off'); }).join(', ') %>.</p>
+<% } %>
+
+<p class="hint">
+  Switch parts of LoxSuite on or off for this installation. A module that is off disappears from the menu and its background
+  work stops; its data is kept, so switching it on again brings everything back. A module that needs another one switches that
+  one on too; switching a module off also switches off what depends on it.
+</p>
+
+<div class="card">
+  <h2 style="margin-top:0;">Core <span class="hint" style="font-size:0.8rem; font-weight:400;">always on</span></h2>
+  <p class="hint" style="margin:0;">Dashboard, Miniservers, Live Data (Loxone), Hardware, users and roles, settings, system log, notification centre and channels, backup and restore, App &amp; push, Help.</p>
+</div>
+
+<% groups.forEach(g => { %>
+  <h2 style="margin:1.4rem 0 0.6rem;"><%= g.label %></h2>
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr)); gap:1rem;">
+    <% g.modules.forEach(m => { %>
+      <div class="card" id="mod-<%= m.key %>" style="margin:0; <%= m.enabled ? 'border-color: var(--accent);' : '' %>">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.6rem;">
+          <h3 style="margin:0;"><%= m.label %></h3>
+          <form method="post" action="/admin/modules/<%= m.key %>" style="margin:0;">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="enabled" value="<%= m.enabled ? '0' : '1' %>">
+            <button type="submit" class="<%= m.enabled ? 'btn-soft' : 'btn-edit' %>"
+              <% if (m.enabled && m.neededBy.length) { %>onclick="return confirm('Switching off <%= m.label %> also switches off: <%= m.neededBy.join(', ') %>. Continue?');"<% } %>><%= m.enabled ? 'Switch off' : 'Switch on' %></button>
+          </form>
+        </div>
+        <p class="hint" style="margin:0.4rem 0;"><span class="badge"><%= m.enabled ? 'on' : 'off' %></span> <%= m.description %></p>
+        <ul class="hint" style="margin:0.3rem 0 0; padding-left:1.1rem; font-size:0.85rem;">
+          <% m.parts.forEach(p => { %><li><%= p %></li><% }) %>
+        </ul>
+        <% if (m.requires.length || m.neededBy.length) { %>
+          <p class="hint" style="margin:0.5rem 0 0; font-size:0.8rem;">
+            <% if (m.requires.length) { %>Needs: <%= m.requires.join(', ') %>. <% } %>
+            <% if (m.neededBy.length) { %>Used by: <%= m.neededBy.join(', ') %>.<% } %>
+          </p>
+        <% } %>
+      </div>
+    <% }) %>
+  </div>
+<% }) %>
+
+<%- include('partials/foot') %>

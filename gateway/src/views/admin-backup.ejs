@@ -7,7 +7,8 @@
   <a class="active" href="/admin/backup">Backups</a>
   <a href="/admin/notifications">Notifications</a>
   <a href="/admin/security">Security</a>
-  <a href="/admin/ai">AI Assistant</a>
+  <a href="/admin/modules">Modules</a>
+  <% if (typeof moduleOn !== 'function' || moduleOn('ai')) { %><a href="/admin/ai">AI Assistant</a><% } %>
 </div>
 
 <% if (error) { %>

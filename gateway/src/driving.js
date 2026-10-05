@@ -332,4 +332,9 @@ function startDriving() {
   setTimeout(run, 90 * 1000).unref?.();
 }
 
-module.exports = { analyze, emptyLevel, chargingCost, costPerKm, effectiveKwhPerKm, loadReadings, loadChargeHours, report, learnAll, startDriving };
+function stopDriving() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
+module.exports = { analyze, emptyLevel, chargingCost, costPerKm, effectiveKwhPerKm, loadReadings, loadChargeHours, report, learnAll, startDriving, stopDriving };

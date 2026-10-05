@@ -662,6 +662,11 @@ function startVehicles() {
   setTimeout(() => { tick().catch(() => {}); }, 5000).unref?.();
 }
 
+function stopVehicles() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
 module.exports = {
   identifyVehicle,
   identifyVehicleCached,
@@ -696,6 +701,6 @@ module.exports = {
   getVehicleStatus,
   refreshVehicle,
   notifyWallbox,
-  startVehicles,
+  startVehicles, stopVehicles,
   tick,
 };

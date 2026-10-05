@@ -345,7 +345,12 @@ function startAgenda() {
   setTimeout(run, 55000).unref?.();
 }
 
+function stopAgenda() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
 module.exports = {
   DEFAULTS, hasCarTag, parseCarHint, parseOwnValue, tripNeedKwh, icsUrl, expandEvents, tripOccurrences,
-  getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, nextCarTrip, startAgenda, resolveUpcomingDistances,
+  getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
 };
