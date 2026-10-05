@@ -1,15 +1,13 @@
 // Checks GitHub's public tags API for this project once at boot and then once a day — no auth
 // token, so this only ever works for a public repo, and fails silently (falls back to "no update
 // info", not an error shown anywhere) for a private one, a network hiccup, or a repo with no tags
-// yet. Deliberately a plain string inequality against the newest tag rather than a real semver
-// comparison: this project's own version is still pre-1.0 alpha, where "which one is newer" is
-// far less useful to know than simply "the tag you're running doesn't match the latest one
-// upstream — go take a look" (a manual downgrade/rollback is a perfectly normal thing to have
-// running here, not a mistake to warn about as if it were behind).
+// yet. The newest tag is picked by version number, not by GitHub's list order: several tags pushed
+// at once (v0.33.0, v0.33.1, v0.34.0) otherwise could report an older one as "available" while a
+// newer one runs. An update only shows when the newest tag is really newer than this version.
 const { checkLoxSuiteUpdate } = require('./notifications');
 
 const REPO = 'DaveRutten/LoxSuite';
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 let currentVersion = '0.0.0';
 try {
@@ -31,6 +29,44 @@ const state = {
 
 function normalize(tag) {
   return String(tag || '').replace(/^v/i, '').trim();
+}
+
+// [major, minor, patch, pre] of "0.34.0-alpha.1"; pre = null for a release (newer than any alpha).
+function parseVersion(v) {
+  const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(normalize(v));
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3]), m[4] || null] : null;
+}
+
+// > 0 when a is newer than b. Pre-release parts compare per dot-part, numbers as numbers.
+function compareVersions(a, b) {
+  const x = parseVersion(a);
+  const y = parseVersion(b);
+  if (!x || !y) return x ? 1 : y ? -1 : 0;
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  if (x[3] === y[3]) return 0;
+  if (x[3] === null) return 1;
+  if (y[3] === null) return -1;
+  const p = x[3].split('.');
+  const q = y[3].split('.');
+  for (let i = 0; i < Math.max(p.length, q.length); i++) {
+    if (p[i] === undefined) return -1;
+    if (q[i] === undefined) return 1;
+    const n = /^\d+$/.test(p[i]) && /^\d+$/.test(q[i]);
+    const d = n ? Number(p[i]) - Number(q[i]) : p[i].localeCompare(q[i]);
+    if (d) return d;
+  }
+  return 0;
+}
+
+// The newest tag name by version number (tags that aren't versions are ignored).
+function newestTag(tags) {
+  let best = null;
+  for (const t of Array.isArray(tags) ? tags : []) {
+    const name = t && t.name;
+    if (!name || !parseVersion(name)) continue;
+    if (!best || compareVersions(name, best) > 0) best = name;
+  }
+  return best;
 }
 
 function escapeHtml(text) {
@@ -95,18 +131,18 @@ async function fetchChangelogSection(tagName, version) {
 
 async function checkForUpdate() {
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/tags`, {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/tags?per_page=100`, {
       headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LoxSuite' },
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) { state.lastCheckReached = false; return; } // private repo (404), rate-limited (403), etc.
     state.lastCheckReached = true;
     const tags = await res.json();
-    const rawTagName = Array.isArray(tags) && tags.length > 0 ? tags[0].name : null;
+    const rawTagName = newestTag(tags);
     const latest = rawTagName ? normalize(rawTagName) : null;
     if (latest) {
       state.latestVersion = latest;
-      state.updateAvailable = latest !== normalize(state.currentVersion);
+      state.updateAvailable = compareVersions(latest, state.currentVersion) > 0;
       // Notification Center + Apprise (see notifications.js) — separate from the sidebar badge
       // above, opt-in via an admin-created "LoxSuite update available" rule, same as every other
       // trigger type. Safe to call on every check regardless of whether this is a genuinely new
@@ -142,4 +178,4 @@ function startVersionCheck() {
   setInterval(checkForUpdate, CHECK_INTERVAL_MS);
 }
 
-module.exports = { getVersionStatus, startVersionCheck, checkForUpdate };
+module.exports = { getVersionStatus, startVersionCheck, checkForUpdate, compareVersions, newestTag };

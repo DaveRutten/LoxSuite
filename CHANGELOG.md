@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.34.1-alpha.1] - 2026-10-05
+
+### Fixed
+- **Update notice** picks the newest tag by version number instead of GitHub's list order, and only shows when
+  that tag is really newer than the running version. Pushing several tags at once (v0.33.0, v0.33.1, v0.34.0)
+  could show an older one as "available". Checks every 6 hours instead of once a day.
+
 ## [0.34.0-alpha.1] - 2026-10-05
 
 ### Changed
