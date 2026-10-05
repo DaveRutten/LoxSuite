@@ -13,7 +13,9 @@ const router = express.Router();
 router.get('/', asyncHandler(async (req, res) => {
   res.render('agenda', {
     calendars: await agenda.listCalendars(), cfg: await agenda.getConfig(),
-    vehicles: await db.prepare('SELECT id, name FROM vehicles ORDER BY name').all(),
+    vehicles: await db.prepare('SELECT id, name, source_type, source_config FROM vehicles ORDER BY name').all(),
+    climateRuns: await require('../carClimate').recent(8),
+    skodaCars: (await db.prepare('SELECT id, source_type, source_config FROM vehicles').all()).some((v) => require('../vehicles').sourceKind(v) === 'skoda'),
     trips: await db.prepare('SELECT * FROM trips ORDER BY depart_at DESC').all(),
     site: await settings.get('site', { lat: null, lon: null }),
     error: req.query.error || null, saved: !!req.query.saved,
@@ -40,7 +42,22 @@ router.get('/items.json', asyncHandler(async (req, res) => {
   }
   const plan = require('../planner').getRuntime().plan;
   const sessions = await db.prepare('SELECT connect_at, disconnect_at, kwh FROM charging_sessions WHERE connect_at < ? AND (disconnect_at IS NULL OR disconnect_at > ?) ORDER BY connect_at').all(toIso, fromIso);
-  res.json({ items, learned, plan: plan ? plan.slots : [], sessions });
+  // Climate at departure: which cars can (Škoda API) and what happened per departure.
+  const vehiclesMod = require('../vehicles');
+  const carClimate = require('../carClimate');
+  const cars = await db.prepare('SELECT id, source_type, source_config, enabled FROM vehicles ORDER BY id').all();
+  const skoda = new Set(cars.filter((v) => vehiclesMod.sourceKind(v) === 'skoda').map((v) => v.id));
+  const firstCar = cars.find((v) => v.enabled !== 0);
+  const runs = await db.prepare('SELECT item_key, status, message, updated_at FROM climate_runs WHERE depart_at >= ? AND depart_at < ?').all(new Date(from - 86400000).toISOString(), toIso);
+  const runOf = new Map(runs.map((r) => [r.item_key, r]));
+  for (const it of items) {
+    const vid = it.vehicle_id || firstCar?.id;
+    it.climateOk = !!vid && skoda.has(vid);
+    const r = runOf.get(carClimate.itemKey(it));
+    if (r) it.climateRun = { status: r.status, message: r.message, at: r.updated_at };
+  }
+  const acfg = await agenda.getConfig();
+  res.json({ items, learned, plan: plan ? plan.slots : [], sessions, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
 }));
 
 router.post('/calendars', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
@@ -79,6 +96,9 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
     margin_km: Math.max(0, Math.min(500, Number(req.body.margin_km) || 0)),
     geo: !!req.body.geo,
     ready_margin_min: Math.max(0, Math.min(180, Number(req.body.ready_margin_min) || 0)),
+    climate_mode: ['off', 'log', 'on'].includes(req.body.climate_mode) ? req.body.climate_mode : 'log',
+    climate_lead_min: require('../carClimate').clampLead(req.body.climate_lead_min),
+    climate_on_battery: !!req.body.climate_on_battery,
   }, agenda.DEFAULTS);
   res.redirect('/agenda?saved=1#settings');
 }));
@@ -101,11 +121,16 @@ router.post('/trips', requirePermission('charging', 'edit'), asyncHandler(async 
   const depart = Date.parse(b.depart_at);
   if (!b.title || !Number.isFinite(depart)) return res.redirect(`/agenda?error=${encodeURIComponent('A trip needs a name and a departure time.')}`);
   const back = b.return_at ? Date.parse(b.return_at) : null;
-  await db.prepare('INSERT INTO trips (vehicle_id, title, depart_at, return_at, location, own_value, weekly, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+  await db.prepare('INSERT INTO trips (vehicle_id, title, depart_at, return_at, location, own_value, weekly, climate_c, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(b.vehicle_id ? Number(b.vehicle_id) : null, String(b.title).slice(0, 120), new Date(depart).toISOString(), Number.isFinite(back) ? new Date(back).toISOString() : null,
-      String(b.location || '').slice(0, 300) || null, String(b.own_value || '').slice(0, 60) || null, b.weekly ? 1 : 0, new Date().toISOString());
+      String(b.location || '').slice(0, 300) || null, String(b.own_value || '').slice(0, 60) || null, b.weekly ? 1 : 0, agenda.parseClimate(b.climate_c), new Date().toISOString());
   require('../planner').recalc().catch(() => {});
   res.redirect('/agenda?saved=1');
+}));
+
+router.post('/trips/:id/climate.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
+  await db.prepare('UPDATE trips SET climate_c = ? WHERE id = ?').run(agenda.parseClimate(req.body?.climate_c), req.params.id);
+  res.json({ ok: true });
 }));
 
 router.post('/trips/:id/delete', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {

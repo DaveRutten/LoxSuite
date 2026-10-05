@@ -57,6 +57,7 @@ const DATA = {
     { table: 'calendar_events', label: 'Calendar events' },
     { table: 'event_overrides', label: 'Event choices' },
     { table: 'trips', label: 'Trips' },
+    { table: 'climate_runs', label: 'Climate at departure' },
     { table: 'geo_cache', label: 'Address lookups' },
     { table: 'wallbox_settings', label: 'Settings (planner, prices, ...)', wipe: false },
   ],

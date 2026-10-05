@@ -23,6 +23,7 @@ const decode = (s) => s.replace(/&(#?[a-z0-9]+);/gi, (m, n) => (ENT[n] !== undef
 function prose(k) {
   const lit = k.replace(/\{\d+\}/g, ' ').trim();
   if (!/[A-Za-z]{2,}/.test(lit)) return false;
+  if (UI_WORDS.has(lit)) return true; // known one-word UI texts (yes, no, unknown, ...)
   if (/@@|prefers-/.test(k)) return false; // markers, media queries
   if (/^(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|WITH|PRAGMA)\b/.test(lit)) return false; // SQL
   // '=' only as prose (" = "), not code (a=b)
@@ -38,7 +39,7 @@ function prose(k) {
   if (/^[a-z]+$/.test(lit) && !UI_WORDS.has(lit)) return false;
   return true;
 }
-const UI_WORDS = new Set(['on', 'off', 'yes', 'no', 'today', 'tomorrow', 'yesterday', 'now', 'never', 'none', 'running', 'remove', 'export', 'incomplete', 'balance', 'cost', 'back', 'live', 'shadow', 'dry', 'error', 'ok', 'waiting', 'full', 'sessions', 'session', 'charging', 'plugged', 'unplugged', 'solar', 'grid', 'expected', 'loading', 'saved', 'edit', 'delete', 'save', 'cancel', 'close', 'open', 'show', 'hide', 'all', 'more', 'less', 'free', 'fixed', 'auto', 'manual', 'online', 'offline', 'unknown', 'connected', 'disconnected', 'enabled', 'disabled', 'active', 'inactive', 'idle', 'done', 'failed', 'pending', 'paused', 'stopped', 'started', 'finished', 'weekly', 'daily', 'monthly', 'hourly', 'min', 'max', 'average', 'total', 'trips', 'trip', 'days', 'hours', 'minutes', 'from', 'until', 'to', 'at', 'by', 'and', 'or', 'of', 'in', 'kept']);
+const UI_WORDS = new Set(['on', 'off', 'yes', 'no', 'charging', 'unknown', 'driving', 'home', 'away', 'working', 'failing', 'ok', 'week', 'month', 'year', 'day', 'today', 'tomorrow', 'yesterday', 'now', 'never', 'none', 'running', 'remove', 'export', 'incomplete', 'balance', 'cost', 'back', 'live', 'shadow', 'dry', 'error', 'ok', 'waiting', 'full', 'sessions', 'session', 'charging', 'plugged', 'unplugged', 'solar', 'grid', 'expected', 'loading', 'saved', 'edit', 'delete', 'save', 'cancel', 'close', 'open', 'show', 'hide', 'all', 'more', 'less', 'free', 'fixed', 'auto', 'manual', 'online', 'offline', 'unknown', 'connected', 'disconnected', 'enabled', 'disabled', 'active', 'inactive', 'idle', 'done', 'failed', 'pending', 'paused', 'stopped', 'started', 'finished', 'weekly', 'daily', 'monthly', 'hourly', 'min', 'max', 'average', 'total', 'trips', 'trip', 'days', 'hours', 'minutes', 'from', 'until', 'to', 'at', 'by', 'and', 'or', 'of', 'in', 'kept']);
 
 // Text pieces of a built string: split on HTML tags, decode entities, collapse spaces.
 function segments(str) {

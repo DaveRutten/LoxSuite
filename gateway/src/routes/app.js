@@ -10,10 +10,10 @@ const router = express.Router();
 
 router.get('/', asyncHandler(async (req, res) => {
   const channel = await db.prepare("SELECT id, name FROM notification_channels WHERE LOWER(url) LIKE LOWER('loxsuite-push://%') ORDER BY id LIMIT 1").get();
-  const me = await db.prepare('SELECT notify_url FROM users WHERE id = ?').get(req.user?.id || req.session?.userId);
+  const me = await db.prepare('SELECT notify_url, push_on FROM users WHERE id = ?').get(req.user?.id || req.session?.userId);
   res.locals.isAdminUser = !!req.user?.isAdmin;
   res.render('app', {
-    devices: await webPush.listDevices(), channel, myPush: (me?.notify_url || '').startsWith('loxsuite-push://'),
+    devices: await webPush.listDevices(), channel, myPush: !!me?.push_on || (me?.notify_url || '').startsWith('loxsuite-push://'),
     userId: req.user?.id || req.session?.userId, saved: req.query.saved || null,
     pushSubject: (await webPush.keys().catch(() => null))?.subject || null,
   });
@@ -74,7 +74,9 @@ router.post('/channel', asyncHandler(async (req, res) => {
 
 router.post('/me', asyncHandler(async (req, res) => {
   const id = req.user?.id || req.session?.userId;
-  await db.prepare('UPDATE users SET notify_url = ? WHERE id = ?').run(`loxsuite-push://user/${id}`, id);
+  // next to the user's own channel (Telegram etc.), not instead of it; per subscription the user
+  // chooses channel, push or both (Profile > Notifications)
+  await db.prepare('UPDATE users SET push_on = 1 WHERE id = ?').run(id);
   res.redirect('/app?saved=me');
 }));
 

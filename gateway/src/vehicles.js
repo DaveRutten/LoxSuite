@@ -458,6 +458,8 @@ function parseSkoda(body) {
     chargeState: st.state || null, chargePowerKw: st.chargePowerInKw ?? null, minutesToFull: st.remainingTimeToFullyChargedInMinutes ?? null,
     fuelPct: combustion?.currentFuelLevelInPercent ?? null, climate: v.airConditioning?.state || null, name: v.name || null, plate: v.licensePlate || null,
     errors: (body?.errors || []).map((e) => e.description || e.type).filter(Boolean),
+    // what this car + key may do (e.g. startAirConditioning); empty = not told
+    operations: [...(body?.operations || []), ...(v.operations || [])].map((o) => (typeof o === 'string' ? o : o?.id || o?.name || o?.operation)).filter(Boolean),
   };
   return { raw, updatedAt: stamps.length ? stamps[stamps.length - 1] : null, extra };
 }
@@ -508,6 +510,38 @@ async function readSkoda(cfg, apiKey, { fetchFn = fetch } = {}) {
   if (!body?.vehicle) throw new Error('Unexpected answer from the Škoda API.');
   const parsed = parseSkoda(body);
   return { raw: parsed.raw, updatedAt: parsed.updatedAt || new Date().toISOString(), extra: parsed.extra, meta, body };
+}
+
+// A command to the car (POST/PUT), e.g. 'air-conditioning/start'. Counts toward the same 20/h
+// limit as reading. Only called for things the user switched on (agenda: climate at departure).
+async function skodaCommand(cfg, apiKey, path, body, { method = 'POST', fetchFn = fetch } = {}) {
+  const vin = String(cfg.vin || '').trim().toUpperCase();
+  if (!VIN_RE.test(vin)) throw new Error('Fill in the 17-character VIN of the car.');
+  if (!apiKey) throw new Error('No Škoda API key set.');
+  if (!/^[a-z-]+(\/[a-z-]+)*$/.test(path)) throw new Error('Unknown command.');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetchFn(`${SKODA_API}/api/v1/vehicles/${encodeURIComponent(vin)}/${path}`, {
+      method, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+      body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error(`No answer within ${HTTP_TIMEOUT_MS / 1000} s.`);
+    throw new Error(`Cannot reach ${new URL(SKODA_API).host} (${err.cause?.code || err.message}).`);
+  } finally { clearTimeout(timer); }
+  const header = (n) => (res.headers && res.headers.get ? res.headers.get(n) : null);
+  const text = await res.text().catch(() => '');
+  let parsed = null;
+  try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
+  if (!res.ok) {
+    const err = new Error(skodaProblem(res.status, parsed));
+    err.status = res.status;
+    err.retryAfterS = header('Retry-After') !== null ? Number(header('Retry-After')) || null : (res.status === 429 ? 900 : null);
+    throw err;
+  }
+  return { status: res.status, body: parsed };
 }
 
 // One read of a vehicle's source, normalised. Never throws: errors come back as { error }.
@@ -800,6 +834,8 @@ module.exports = {
   sourceKind,
   parseSkoda,
   readSkoda,
+  skodaCommand,
+  secretOf,
   skodaProblem,
   VIN_RE,
   guessHomeyFields,

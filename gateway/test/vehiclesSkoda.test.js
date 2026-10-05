@@ -56,3 +56,22 @@ test('Škoda: stored as http + provider, polled within the 20/h limit', () => {
   assert.equal(v.pollIntervalS({ ...car, source_config: JSON.stringify({ provider: 'skoda', interval_s: 60 }) }), 600);
   assert.equal(v.sourceKind({ source_type: 'http', source_config: '{}' }), 'http');
 });
+
+test('skodaCommand posts the body with the key and turns problems into sentences', async () => {
+  const calls = [];
+  const ok = async (url, opts) => { calls.push({ url, opts }); return { ok: true, status: 202, headers: { get: () => null }, text: async () => '' }; };
+  const r = await v.skodaCommand({ vin: 'tmbjb9ny5rf999999' }, 'key1', 'air-conditioning/start', { targetTemperature: { value: 20, unit: 'CELSIUS' } }, { fetchFn: ok });
+  assert.equal(r.status, 202);
+  assert.equal(calls[0].url, 'https://public.api.connect.skoda-auto.cz/api/v1/vehicles/TMBJB9NY5RF999999/air-conditioning/start');
+  assert.equal(calls[0].opts.method, 'POST');
+  assert.equal(calls[0].opts.headers['X-API-Key'], 'key1');
+  assert.deepEqual(JSON.parse(calls[0].opts.body), { targetTemperature: { value: 20, unit: 'CELSIUS' } });
+  const busy = async () => ({ ok: false, status: 429, headers: { get: (n) => (n === 'Retry-After' ? '600' : null) }, text: async () => JSON.stringify({ type: 'https://x/rate-limit-exceeded' }) });
+  await assert.rejects(v.skodaCommand({ vin: 'TMBJB9NY5RF999999' }, 'k', 'air-conditioning/start', {}, { fetchFn: busy }), (e) => e.retryAfterS === 600 && /rate limit/.test(e.message));
+  await assert.rejects(v.skodaCommand({ vin: 'TMBJB9NY5RF999999' }, 'k', '../x', {}, { fetchFn: ok }), /Unknown command/);
+});
+
+test('parseSkoda keeps the operations the car allows', () => {
+  const { extra } = v.parseSkoda({ ...SAMPLE, operations: [{ id: 'startAirConditioning' }, 'stopAirConditioning'] });
+  assert.deepEqual(extra.operations, ['startAirConditioning', 'stopAirConditioning']);
+});

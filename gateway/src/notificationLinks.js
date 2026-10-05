@@ -8,6 +8,7 @@ function notificationSourceLink(eventType, sourceId, canView, sourceRef) {
   if (eventType === 'ai_ollama_pull' && canView('ai_chat')) return '/admin/ai';
   if (eventType === 'energy_meter_status' && canView('energy')) return '/energy';
   if ((eventType === 'car_reminder' || eventType === 'charging_plan') && canView('charging')) return '/planner';
+  if (eventType === 'car_climate' && canView('charging')) return '/agenda';
   if (!sourceId) return null;
   if ((eventType === 'monitor_threshold' || eventType === 'threshold_ladder') && canView('monitor')) {
     // ?open=settings auto-expands that monitor's own Chart settings drawer (see monitor-detail.ejs)

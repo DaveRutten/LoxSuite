@@ -23,6 +23,7 @@ const TRIGGER_TYPES = [
   { key: 'energy_meter_status', label: 'Energy meter (grid/PV/Wallbox) failing/recovered', module: 'energy' },
   { key: 'car_reminder', label: 'Car: plug in / swap reminders', module: 'charging' },
   { key: 'charging_plan', label: 'Car: charging plan warnings (won\'t be ready, trip longer than the battery)', module: 'charging' },
+  { key: 'car_climate', label: 'Car: climate at departure (started, failed)', module: 'charging' },
 ];
 
 // Sending goes through Apprise (https://github.com/caronc/apprise, installed as a CLI in the
@@ -120,6 +121,12 @@ const TEMPLATE_PREVIEW_SAMPLES = {
     message: 'Saturday 08:55 birthday, Utrecht needs about 38.8 kWh; the battery holds 26 kWh. It will be full before you leave; the rest is driven on fuel.',
     severity: 'warning',
     fields: [{ label: 'Vehicle', value: 'Skoda' }, { label: 'Trip', value: 'Utrecht' }],
+  },
+  car_climate: {
+    title: 'Skoda: Climate started',
+    message: 'Air conditioning started at 20 °C for "Work" (leave 07:40).',
+    severity: 'info',
+    fields: [{ label: 'Vehicle', value: 'Skoda' }, { label: 'Trip', value: 'Work' }, { label: 'Temperature', value: '20 °C' }],
   },
   energy_meter_status: {
     title: 'Solar (PV) meter: failing',
@@ -321,11 +328,27 @@ async function getChannelsForRule(ruleId) {
 // skipped here rather than surfaced as a failure (there's nothing to retry or fix on this end;
 // the user just hasn't filled in their channel yet).
 async function getSubscriberChannelsForRule(ruleId) {
-  return db.prepare(`
-    SELECT users.id, users.username, users.notify_url AS url FROM notification_rule_subscribers nrs
+  // Per subscription the user chooses where it goes (Profile > Notifications): their own channel,
+  // push to their devices (the app), or both. NULL = both.
+  const rows = await db.prepare(`
+    SELECT users.id, users.username, users.notify_url AS url, users.push_on, nrs.via FROM notification_rule_subscribers nrs
     JOIN users ON users.id = nrs.user_id
-    WHERE nrs.rule_id = ? AND users.notify_url IS NOT NULL AND users.notify_url != ''
+    WHERE nrs.rule_id = ?
   `).all(ruleId);
+  return subscriberTargets(rows);
+}
+
+// Pure: subscriber rows -> delivery targets ({ id, username, url, kind }).
+function subscriberTargets(rows) {
+  const out = [];
+  for (const r of rows) {
+    const via = r.via === 'channel' || r.via === 'push' ? r.via : 'both';
+    const url = String(r.url || '').trim();
+    const urlIsPush = /^loxsuite-push:\/\//i.test(url);
+    if (url && via !== (urlIsPush ? 'channel' : 'push')) out.push({ id: r.id, username: r.username, url, kind: urlIsPush ? 'push' : 'channel' });
+    if (Number(r.push_on) === 1 && via !== 'channel' && !urlIsPush) out.push({ id: r.id, username: r.username, url: `loxsuite-push://user/${r.id}`, kind: 'push' });
+  }
+  return out;
 }
 
 // One row per logical event (not per channel/subscriber delivery below — a rule with 3 channels
@@ -399,7 +422,7 @@ async function fireRule(rule, rawEvent) {
     targets.push({ name: channel.name, url: channel.url });
   }
   for (const subscriber of await getSubscriberChannelsForRule(rule.id)) {
-    targets.push({ name: `${subscriber.username}'s notifications`, url: subscriber.url });
+    targets.push({ name: subscriber.kind === 'push' ? `${subscriber.username}'s devices (push)` : `${subscriber.username}'s notifications`, url: subscriber.url });
   }
 
   // Detached on purpose — a slow or retrying send to one target must not hold up the others or the
@@ -924,6 +947,7 @@ module.exports = {
   checkVehicleSourceStatus,
   checkEnergyMeterStatus,
   fireCarEvent,
+  subscriberTargets,
   notifyBackupFailed,
   notifyBackupSucceeded,
   // Not a formal rule-driven trigger type (no notification_rules.trigger_type CHECK entry, no

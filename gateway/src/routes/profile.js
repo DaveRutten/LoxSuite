@@ -8,7 +8,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const router = express.Router();
 
 async function loadProfile(userId) {
-  return db.prepare('SELECT id, username, email, display_name, avatar_url, auth_provider, role_id, notify_url, table_page_size FROM users WHERE id = ?').get(userId);
+  return db.prepare('SELECT id, username, email, display_name, avatar_url, auth_provider, role_id, notify_url, push_on, table_page_size FROM users WHERE id = ?').get(userId);
 }
 
 // Every enabled ADMIN-WIDE rule (owner_user_id IS NULL — see admin-notifications.ejs and
@@ -19,13 +19,14 @@ async function loadProfile(userId) {
 // nothing meaningful to subscribe to there and it's left out entirely rather than shown greyed out.
 async function loadNotifyRules(userId) {
   const rules = await db.prepare('SELECT id, trigger_type, name FROM notification_rules WHERE enabled = 1 AND owner_user_id IS NULL ORDER BY name').all();
-  const subscribed = new Set(
-    (await db.prepare('SELECT rule_id FROM notification_rule_subscribers WHERE user_id = ?').all(userId)).map((r) => r.rule_id)
-  );
+  const subs = await db.prepare('SELECT rule_id, via FROM notification_rule_subscribers WHERE user_id = ?').all(userId);
+  const subscribed = new Set(subs.map((r) => r.rule_id));
+  const viaOf = new Map(subs.map((r) => [r.rule_id, r.via || 'both']));
   return rules.map((rule) => ({
     ...rule,
     triggerLabel: (TRIGGER_TYPES.find((t) => t.key === rule.trigger_type) || {}).label || rule.trigger_type,
     subscribed: subscribed.has(rule.id),
+    via: viaOf.get(rule.id) || 'both',
   }));
 }
 
@@ -129,6 +130,12 @@ router.post('/notifications/channel', asyncHandler(async (req, res) => {
   await renderPage(res, req.user.id, { tab: 'notifications', saved: true });
 }));
 
+// Push to this user's own devices (the LoxSuite app), next to or instead of their channel.
+router.post('/notifications/push', asyncHandler(async (req, res) => {
+  await db.prepare('UPDATE users SET push_on = ? WHERE id = ?').run(req.body.push_on ? 1 : 0, req.user.id);
+  await renderPage(res, req.user.id, { tab: 'notifications', saved: true });
+}));
+
 router.post('/notifications/channel/test', asyncHandler(async (req, res) => {
   const profile = await loadProfile(req.user.id);
   if (!profile.notify_url) {
@@ -150,7 +157,8 @@ router.post('/notifications/subscriptions', asyncHandler(async (req, res) => {
     // below), which this checklist never lists or lets them touch in the first place.
     await tx.prepare('DELETE FROM notification_rule_subscribers WHERE user_id = ? AND rule_id IN (SELECT id FROM notification_rules WHERE owner_user_id IS NULL)').run(req.user.id);
     for (const ruleId of ruleIds) {
-      await tx.insertIgnore('notification_rule_subscribers', { rule_id: ruleId, user_id: req.user.id }, ['rule_id', 'user_id']);
+      const via = ['channel', 'push'].includes(req.body[`via_${ruleId}`]) ? req.body[`via_${ruleId}`] : null;
+      await tx.insertIgnore('notification_rule_subscribers', { rule_id: ruleId, user_id: req.user.id, via }, ['rule_id', 'user_id']);
     }
   });
   await renderPage(res, req.user.id, { tab: 'notifications', saved: true });

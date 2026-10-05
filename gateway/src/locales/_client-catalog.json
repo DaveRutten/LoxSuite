@@ -126,6 +126,13 @@
   ]
  },
  {
+  "key": "— trying again at {0}.",
+  "module": "core",
+  "where": [
+   "src/carClimate.js"
+  ]
+ },
+ {
   "key": "— unknown ChargePoint ID?",
   "module": "ocpp",
   "where": [
@@ -332,13 +339,6 @@
   ]
  },
  {
-  "key": "\" exists",
-  "module": "core",
-  "where": [
-   "app"
-  ]
- },
- {
   "key": "\" message a Virtual UDP Output should send",
   "module": "mqtt",
   "where": [
@@ -470,6 +470,20 @@
   "module": "core",
   "where": [
    "src/notifications.js"
+  ]
+ },
+ {
+  "key": "\"{0}\": climate needs a car with the Škoda API as data source.",
+  "module": "core",
+  "where": [
+   "src/carClimate.js"
+  ]
+ },
+ {
+  "key": "\"{0}\": this car or API key does not allow starting the air conditioning.",
+  "module": "core",
+  "where": [
+   "src/carClimate.js"
   ]
  },
  {
@@ -1097,6 +1111,21 @@
   ]
  },
  {
+  "key": "{0} min",
+  "module": "vehicles",
+  "where": [
+   "driving (script)",
+   "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "{0} min{1}{2}",
+  "module": "charging",
+  "where": [
+   "planner-log (script)"
+  ]
+ },
+ {
   "key": "{0} must not contain line breaks.",
   "module": "core",
   "where": [
@@ -1308,6 +1337,13 @@
   ]
  },
  {
+  "key": "{0}'s devices (push)",
+  "module": "core",
+  "where": [
+   "src/notifications.js"
+  ]
+ },
+ {
   "key": "{0}{1} (kWh per hour)",
   "module": "energy",
   "where": [
@@ -1440,6 +1476,13 @@
   "module": "core",
   "where": [
    "live-data (script)"
+  ]
+ },
+ {
+  "key": "🌡️ Climate at departure",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -2010,6 +2053,20 @@
   ]
  },
  {
+  "key": "Air conditioning started at {0} °C for \"{1}\" (leave {2}).",
+  "module": "core",
+  "where": [
+   "src/carClimate.js"
+  ]
+ },
+ {
+  "key": "Air conditioning started at 20 °C for \"Work\" (leave 07:40).",
+  "module": "core",
+  "where": [
+   "src/notifications.js"
+  ]
+ },
+ {
   "key": "Air device",
   "module": "core",
   "where": [
@@ -2029,6 +2086,13 @@
   "where": [
    "partials/panel-grid",
    "src/routes/dashboards.js"
+  ]
+ },
+ {
+  "key": "all",
+  "module": "core",
+  "where": [
+   "live-data (script)"
   ]
  },
  {
@@ -2301,10 +2365,28 @@
   ]
  },
  {
+  "key": "auto",
+  "module": "charging",
+  "where": [
+   "admin-notifications (script)",
+   "learned (script)",
+   "ocpp-bridge-edit (script)",
+   "partials/ocpp-bridge-fields (script)",
+   "public/monitor-chart.js"
+  ]
+ },
+ {
   "key": "Auto-refresh interval",
   "module": "core",
   "where": [
    "partials/foot (script)"
+  ]
+ },
+ {
+  "key": "auto{0}",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -2433,6 +2515,13 @@
   "module": "charging",
   "where": [
    "src/routes/agenda.js"
+  ]
+ },
+ {
+  "key": "balance",
+  "module": "ocpp",
+  "where": [
+   "ocpp-bridge-edit (script)"
   ]
  },
  {
@@ -2710,6 +2799,7 @@
   "where": [
    "planner (script)",
    "planner-log (script)",
+   "src/carClimate.js",
    "src/reminders.js"
   ]
  },
@@ -2798,6 +2888,13 @@
   ]
  },
  {
+  "key": "Car: climate at departure (started, failed)",
+  "module": "core",
+  "where": [
+   "src/notifications.js"
+  ]
+ },
+ {
   "key": "Car: plug in / swap reminders",
   "module": "core",
   "where": [
@@ -2826,10 +2923,10 @@
   ]
  },
  {
-  "key": "Channel \"",
+  "key": "Channel and push",
   "module": "core",
   "where": [
-   "app"
+   "profile"
   ]
  },
  {
@@ -2908,6 +3005,13 @@
   "module": "charging",
   "where": [
    "learned (script)"
+  ]
+ },
+ {
+  "key": "charging",
+  "module": "vehicles",
+  "where": [
+   "vehicle-edit (script)"
   ]
  },
  {
@@ -3112,6 +3216,48 @@
   ]
  },
  {
+  "key": "Climate (log only)",
+  "module": "core",
+  "where": [
+   "src/carClimate.js"
+  ]
+ },
+ {
+  "key": "Climate at departure",
+  "module": "core",
+  "where": [
+   "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "Climate at departure is off in the agenda settings.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "Climate could not be started",
+  "module": "core",
+  "where": [
+   "src/carClimate.js"
+  ]
+ },
+ {
+  "key": "Climate skipped",
+  "module": "core",
+  "where": [
+   "src/carClimate.js"
+  ]
+ },
+ {
+  "key": "Climate started",
+  "module": "core",
+  "where": [
+   "src/carClimate.js"
+  ]
+ },
+ {
   "key": "Close",
   "module": "charging",
   "where": [
@@ -3193,6 +3339,13 @@
   "module": "charging",
   "where": [
    "learned (script)"
+  ]
+ },
+ {
+  "key": "connected",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -3400,6 +3553,13 @@
   ]
  },
  {
+  "key": "cost",
+  "module": "ocpp",
+  "where": [
+   "ocpp-bridge-edit (script)"
+  ]
+ },
+ {
   "key": "Cost",
   "module": "energy_manager",
   "where": [
@@ -3598,13 +3758,6 @@
   ]
  },
  {
-  "key": "Create channel for all devices",
-  "module": "core",
-  "where": [
-   "app"
-  ]
- },
- {
   "key": "create failed",
   "module": "core",
   "where": [
@@ -3781,6 +3934,13 @@
   "module": "vehicles",
   "where": [
    "driving (script)"
+  ]
+ },
+ {
+  "key": "day",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -3971,6 +4131,15 @@
    "monitor",
    "public/mappings-loxone-to-mqtt-tabulator.js",
    "public/mappings-mqtt-to-loxone-tabulator.js"
+  ]
+ },
+ {
+  "key": "disabled",
+  "module": "charging",
+  "where": [
+   "agenda (script)",
+   "learned (script)",
+   "public/miniservers-tabulator.js"
   ]
  },
  {
@@ -4214,6 +4383,15 @@
   ]
  },
  {
+  "key": "enabled",
+  "module": "mqtt",
+  "where": [
+   "public/mappings-loxone-to-mqtt-tabulator.js",
+   "public/mappings-mqtt-to-loxone-tabulator.js",
+   "public/transformations-tabulator.js"
+  ]
+ },
+ {
   "key": "Enabled",
   "module": "core",
   "where": [
@@ -4409,6 +4587,13 @@
   ]
  },
  {
+  "key": "error",
+  "module": "ai",
+  "where": [
+   "public/ai-chat-widget.js"
+  ]
+ },
+ {
   "key": "Error",
   "module": "core",
   "where": [
@@ -4514,6 +4699,13 @@
   ]
  },
  {
+  "key": "expected",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Expected solar covers {0} of {1} kWh before the deadline.",
   "module": "charging",
   "where": [
@@ -4539,6 +4731,14 @@
   "module": "energy_manager",
   "where": [
    "src/energyManager.js"
+  ]
+ },
+ {
+  "key": "export",
+  "module": "energy",
+  "where": [
+   "energy (script)",
+   "ocpp-bridge-edit (script)"
   ]
  },
  {
@@ -4604,6 +4804,17 @@
   ]
  },
  {
+  "key": "failed",
+  "module": "charging",
+  "where": [
+   "agenda (script)",
+   "live-data (script)",
+   "miniserver-edit (script)",
+   "miniservers (script)",
+   "public/miniservers-tabulator.js"
+  ]
+ },
+ {
   "key": "Failed to fetch structure",
   "module": "monitor",
   "where": [
@@ -4630,6 +4841,14 @@
   "where": [
    "incoming-schedules (script)",
    "public/mappings-loxone-to-mqtt-tabulator.js"
+  ]
+ },
+ {
+  "key": "failing",
+  "module": "energy",
+  "where": [
+   "energy (script)",
+   "vehicle-edit (script)"
   ]
  },
  {
@@ -4781,6 +5000,17 @@
   ]
  },
  {
+  "key": "fixed",
+  "module": "monitor",
+  "where": [
+   "admin-notifications (script)",
+   "monitor-detail (script)",
+   "partials/foot (script)",
+   "partials/panel-grid (script)",
+   "public/tables.js"
+  ]
+ },
+ {
   "key": "Fixed",
   "module": "ocpp",
   "where": [
@@ -4836,6 +5066,13 @@
   "where": [
    "learned (script)",
    "src/energyPatterns.js"
+  ]
+ },
+ {
+  "key": "from",
+  "module": "core",
+  "where": [
+   "admin-notifications (script)"
   ]
  },
  {
@@ -5001,6 +5238,13 @@
   "module": "energy_manager",
   "where": [
    "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "grid",
+  "module": "energy",
+  "where": [
+   "energy (script)"
   ]
  },
  {
@@ -5880,6 +6124,16 @@
   ]
  },
  {
+  "key": "live",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)",
+   "ocpp-bridge-edit (script)",
+   "planner (script)",
+   "planner-log (script)"
+  ]
+ },
+ {
   "key": "Live",
   "module": "ocpp",
   "where": [
@@ -6061,6 +6315,20 @@
   "module": "core",
   "where": [
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "Log only (send nothing)",
+  "module": "charging",
+  "where": [
+   "agenda"
+  ]
+ },
+ {
+  "key": "Log only: nothing is sent to the car yet (agenda settings).",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -6889,6 +7157,13 @@
   ]
  },
  {
+  "key": "month",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Month",
   "module": "charging",
   "where": [
@@ -7068,13 +7343,6 @@
   ]
  },
  {
-  "key": "My notifications go to push",
-  "module": "core",
-  "where": [
-   "app"
-  ]
- },
- {
   "key": "Name",
   "module": "monitor",
   "where": [
@@ -7122,6 +7390,14 @@
  },
  {
   "key": "Needs",
+  "module": "charging",
+  "where": [
+   "agenda (script)",
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "Needs a car with the Škoda API as data source.",
   "module": "charging",
   "where": [
    "agenda (script)"
@@ -7194,6 +7470,17 @@
   "module": "energy_manager",
   "where": [
    "src/energyManager.js"
+  ]
+ },
+ {
+  "key": "no",
+  "module": "charging",
+  "where": [
+   "agenda (script)",
+   "partials/vehicle-fields (script)",
+   "public/dashboard-miniservers-tabulator.js",
+   "public/mappings-loxone-to-mqtt-tabulator.js",
+   "public/miniservers-tabulator.js"
   ]
  },
  {
@@ -7743,6 +8030,17 @@
   ]
  },
  {
+  "key": "none",
+  "module": "ai",
+  "where": [
+   "admin-ai (script)",
+   "admin-backup (script)",
+   "admin-security (script)",
+   "driving (script)",
+   "hardware (script)"
+  ]
+ },
+ {
   "key": "Normal",
   "module": "monitor",
   "where": [
@@ -8091,14 +8389,25 @@
   ]
  },
  {
-  "key": "Off",
-  "module": "monitor",
+  "key": "off",
+  "module": "charging",
   "where": [
+   "admin-security (script)",
+   "agenda (script)",
+   "mappings-commands (script)",
+   "monitor-detail (script)",
+   "partials/panel-grid (script)"
+  ]
+ },
+ {
+  "key": "Off",
+  "module": "charging",
+  "where": [
+   "agenda",
    "monitor",
    "planner",
    "planner (script)",
-   "public/mappings-loxone-to-mqtt-tabulator.js",
-   "public/mappings-mqtt-to-loxone-tabulator.js"
+   "public/mappings-loxone-to-mqtt-tabulator.js"
   ]
  },
  {
@@ -8106,6 +8415,14 @@
   "module": "energy_manager",
   "where": [
    "partials/energy-load-form"
+  ]
+ },
+ {
+  "key": "offline",
+  "module": "monitor",
+  "where": [
+   "public/dashboard-miniservers-tabulator.js",
+   "public/miniservers-tabulator.js"
   ]
  },
  {
@@ -8129,6 +8446,23 @@
   "module": "core",
   "where": [
    "src/backup.js"
+  ]
+ },
+ {
+  "key": "ok",
+  "module": "energy",
+  "where": [
+   "energy (script)",
+   "vehicle-edit (script)"
+  ]
+ },
+ {
+  "key": "on",
+  "module": "mqtt",
+  "where": [
+   "admin-notifications (script)",
+   "mappings-commands (script)",
+   "public/mappings-loxone-to-mqtt-tabulator.js"
   ]
  },
  {
@@ -8160,10 +8494,25 @@
   ]
  },
  {
+  "key": "On: start the air conditioning",
+  "module": "charging",
+  "where": [
+   "agenda"
+  ]
+ },
+ {
   "key": "one of them",
   "module": "loxone_logs",
   "where": [
    "logs-loxone"
+  ]
+ },
+ {
+  "key": "online",
+  "module": "monitor",
+  "where": [
+   "public/dashboard-miniservers-tabulator.js",
+   "public/miniservers-tabulator.js"
   ]
  },
  {
@@ -8183,6 +8532,20 @@
   ]
  },
  {
+  "key": "Only my channel",
+  "module": "core",
+  "where": [
+   "profile"
+  ]
+ },
+ {
+  "key": "Only push",
+  "module": "core",
+  "where": [
+   "profile"
+  ]
+ },
+ {
   "key": "Only requests from a checked country are allowed; every other country is refused.",
   "module": "core",
   "where": [
@@ -8194,6 +8557,16 @@
   "module": "core",
   "where": [
    "src/chartFieldHelpers.js"
+  ]
+ },
+ {
+  "key": "open",
+  "module": "monitor",
+  "where": [
+   "live-data (script)",
+   "miniservers (script)",
+   "monitor-detail (script)",
+   "public/monitor-chart.js"
   ]
  },
  {
@@ -8345,6 +8718,13 @@
   "module": "energy_manager",
   "where": [
    "src/energyManager.js"
+  ]
+ },
+ {
+  "key": "pending",
+  "module": "ocpp",
+  "where": [
+   "ocpp-bridge-edit (script)"
   ]
  },
  {
@@ -8849,14 +9229,8 @@
    "agenda (script)",
    "energy-manager (script)",
    "learned (script)",
+   "planner (script)",
    "src/reminders.js"
-  ]
- },
- {
-  "key": "READY BY",
-  "module": "charging",
-  "where": [
-   "planner (script)"
   ]
  },
  {
@@ -8970,6 +9344,13 @@
   "module": "core",
   "where": [
    "src/backup.js"
+  ]
+ },
+ {
+  "key": "remove",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -9204,6 +9585,14 @@
   ]
  },
  {
+  "key": "running",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)",
+   "ocpp-bridge-edit (script)"
+  ]
+ },
+ {
   "key": "Running",
   "module": "core",
   "where": [
@@ -9259,6 +9648,13 @@
   "module": "core",
   "where": [
    "src/notifications.js"
+  ]
+ },
+ {
+  "key": "save",
+  "module": "core",
+  "where": [
+   "partials/panel-grid (script)"
   ]
  },
  {
@@ -9384,13 +9780,6 @@
   "module": "core",
   "where": [
    "live-data (script)"
-  ]
- },
- {
-  "key": "Send my personal notifications as push",
-  "module": "core",
-  "where": [
-   "app"
   ]
  },
  {
@@ -9561,6 +9950,13 @@
   ]
  },
  {
+  "key": "shadow",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Shadow plan and signals",
   "module": "core",
   "where": [
@@ -9680,6 +10076,13 @@
   ]
  },
  {
+  "key": "Skoda: Climate started",
+  "module": "core",
+  "where": [
+   "src/notifications.js"
+  ]
+ },
+ {
   "key": "Skoda: data source failing",
   "module": "core",
   "where": [
@@ -9735,6 +10138,13 @@
   "module": "core",
   "where": [
    "admin-notifications (script)"
+  ]
+ },
+ {
+  "key": "solar",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -9992,6 +10402,13 @@
   ]
  },
  {
+  "key": "Starts {0} min before you leave{1}.{2}",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Starts with orange",
   "module": "core",
   "where": [
@@ -10216,6 +10633,14 @@
   "module": "core",
   "where": [
    "admin-tech-report"
+  ]
+ },
+ {
+  "key": "Temperature",
+  "module": "core",
+  "where": [
+   "src/carClimate.js",
+   "src/notifications.js"
   ]
  },
  {
@@ -10790,6 +11215,13 @@
   ]
  },
  {
+  "key": "to",
+  "module": "core",
+  "where": [
+   "admin-notifications (script)"
+  ]
+ },
+ {
   "key": "To",
   "module": "core",
   "where": [
@@ -11008,10 +11440,18 @@
   ]
  },
  {
+  "key": "trip",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Trip",
   "module": "charging",
   "where": [
    "learned (script)",
+   "src/carClimate.js",
    "src/notifications.js",
    "src/reminders.js"
   ]
@@ -11142,6 +11582,16 @@
   ]
  },
  {
+  "key": "unknown",
+  "module": "vehicles",
+  "where": [
+   "miniservers (script)",
+   "partials/vehicle-fields (script)",
+   "public/miniservers-tabulator.js",
+   "vehicle-edit (script)"
+  ]
+ },
+ {
   "key": "Unknown",
   "module": "core",
   "where": [
@@ -11167,7 +11617,8 @@
   "key": "Unknown command.",
   "module": "mqtt",
   "where": [
-   "src/routes/incoming.js"
+   "src/routes/incoming.js",
+   "src/vehicles.js"
   ]
  },
  {
@@ -11510,6 +11961,7 @@
   "key": "Vehicle",
   "module": "charging",
   "where": [
+   "src/carClimate.js",
    "src/notifications.js",
    "src/reminders.js"
   ]
@@ -11685,6 +12137,13 @@
   ]
  },
  {
+  "key": "week",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Week",
   "module": "charging",
   "where": [
@@ -11696,6 +12155,13 @@
   "module": "charging",
   "where": [
    "learned (script)"
+  ]
+ },
+ {
+  "key": "weekly",
+  "module": "mqtt",
+  "where": [
+   "incoming-schedules (script)"
   ]
  },
  {
@@ -11763,6 +12229,20 @@
   ]
  },
  {
+  "key": "Work",
+  "module": "core",
+  "where": [
+   "src/notifications.js"
+  ]
+ },
+ {
+  "key": "working",
+  "module": "vehicles",
+  "where": [
+   "vehicle-edit (script)"
+  ]
+ },
+ {
   "key": "working again",
   "module": "core",
   "where": [
@@ -11777,10 +12257,28 @@
   ]
  },
  {
+  "key": "Would start the air conditioning at {0} °C for \"{1}\" (leave {2}). Switch \"Climate at departure\" on in the agenda settings to send it.",
+  "module": "core",
+  "where": [
+   "src/carClimate.js"
+  ]
+ },
+ {
   "key": "Year",
   "module": "charging",
   "where": [
    "agenda"
+  ]
+ },
+ {
+  "key": "yes",
+  "module": "charging",
+  "where": [
+   "agenda (script)",
+   "partials/vehicle-fields (script)",
+   "public/dashboard-miniservers-tabulator.js",
+   "public/mappings-loxone-to-mqtt-tabulator.js",
+   "public/miniservers-tabulator.js"
   ]
  },
  {

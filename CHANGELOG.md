@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.31.0-alpha.1] - 2026-10-05
+
+### Added
+- **Climate at departure** (Wallbox → Agenda). Choose a cabin temperature (16–26 °C) per appointment or trip — click
+  it in the agenda, or pick it when planning a trip. At a set time before you have to leave (default 20 min),
+  LoxSuite asks the car to start its air conditioning through the official Škoda API, once per departure; a failed
+  start is retried at most twice while there is time. Global switch in the agenda settings: off, **log only
+  (default: nothing is sent, LoxSuite only writes down what it would send)**, or on; plus "also when not plugged in
+  (uses the battery)". What happened per departure is shown in the agenda and in the settings, and notification
+  trigger *Car: climate at departure* reports started/failed. Only for cars with the Škoda API as data source.
+- **Choose where notifications go: your channel, push, or both.** Profile → Notifications has "Push to my devices"
+  and, per subscribed alert, *Channel and push* / *Only my channel* / *Only push*. "Send my personal notifications
+  as push" on the App page no longer replaces your own channel (Telegram etc.); users whose channel had been
+  replaced by push get push switched on and an empty channel. Alerts an administrator sends to the
+  *LoxSuite app (all devices)* channel are still set per rule under Administration → Notifications.
+
+### Fixed
+- Leftover English in Dutch: "NEEDS"/"READY BY" on the planner, "no"/"yes" and other one-word values (e.g.
+  "Ingestoken: NO"). Labels in capitals are now translated too.
+
 ## [0.30.0-alpha.1] - 2026-10-05
 
 ### Added

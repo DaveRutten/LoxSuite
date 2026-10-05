@@ -225,8 +225,8 @@
     var th = '';
     if (tg) {
       th = '<div class="form-grid" style="align-items:end;">' +
-        '<div><div class="hint" style="margin:0; font-size:0.75rem;">NEEDS</div><div style="font-size:1.15rem; font-weight:700;">' + nf(p.needKwh, 1) + ' kWh</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.needSource) + '</div></div>' +
-        '<div><div class="hint" style="margin:0; font-size:0.75rem;">READY BY</div><div style="font-size:1.15rem; font-weight:700;">' + dtm(p.readyAt) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.readySource || 'no departure known — within 24 h') + '</div></div>' +
+        '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Needs</div><div style="font-size:1.15rem; font-weight:700;">' + nf(p.needKwh, 1) + ' kWh</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.needSource) + '</div></div>' +
+        '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Ready by</div><div style="font-size:1.15rem; font-weight:700;">' + dtm(p.readyAt) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.readySource || 'no departure known — within 24 h') + '</div></div>' +
         (canEdit ? '<div><label>Ready by (this session)</label><input type="datetime-local" id="pl-ready"> <button type="button" class="btn-soft" id="pl-ready-btn" style="margin-top:0.3rem;">Set</button></div>' : '') +
         '</div>';
     }

@@ -52,6 +52,12 @@
     if (!core || !/[A-Za-z]{2}/.test(core)) return null;
     var norm = core.replace(/\s+/g, ' ');
     if (exact[norm] !== undefined) return m[1] + exact[norm] + m[3];
+    // ALL CAPS label ("NEEDS", "NO"): look up as "Needs"/"needs" and keep it in capitals
+    if (norm.length > 1 && norm === norm.toUpperCase() && /[A-Z]{2}/.test(norm)) {
+      var low = norm.toLowerCase(), cap = low.charAt(0).toUpperCase() + low.slice(1);
+      var hit = exact[cap] !== undefined ? exact[cap] : exact[low];
+      if (hit !== undefined) return m[1] + hit.toUpperCase() + m[3];
+    }
     var words = keyWords(norm);
     if (!words.length) return null;
     // candidates from every word of the text, longest literal text first (most specific)

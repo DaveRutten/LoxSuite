@@ -19,6 +19,10 @@ const DEFAULTS = {
   sync_minutes: 15,
   window_days_back: 35,
   window_days_ahead: 120,
+  // Climate at departure (Škoda cars): 'off', 'log' (only write down what would be sent) or 'on'.
+  climate_mode: 'log',
+  climate_lead_min: 20,
+  climate_on_battery: true,
 };
 
 // ------------------------------------------------------------------ pure helpers
@@ -228,12 +232,26 @@ async function overridesMap() {
   return new Map(rows.map((r) => [`${r.calendar_id}|${r.uid}|${r.start_at}`, r]));
 }
 
-async function setOverride({ calendar_id, uid, start_at, needs_car, own_value }) {
+// Only the fields that are given change; the others (car needed, own value, climate) are kept.
+async function setOverride(b) {
+  const { calendar_id, uid, start_at } = b;
+  const cur = await db.prepare('SELECT * FROM event_overrides WHERE calendar_id = ? AND uid = ? AND start_at = ?').get(Number(calendar_id), String(uid), String(start_at)) || {};
+  const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
+  const needs = has('needs_car') ? b.needs_car : cur.needs_car;
   await db.upsert('event_overrides', {
     calendar_id: Number(calendar_id), uid: String(uid), start_at: String(start_at),
-    needs_car: needs_car === null || needs_car === undefined || needs_car === '' ? null : (needs_car ? 1 : 0),
-    own_value: own_value ? String(own_value).slice(0, 60) : null,
+    needs_car: needs === null || needs === undefined || needs === '' ? null : (Number(needs) ? 1 : 0),
+    own_value: has('own_value') ? (b.own_value ? String(b.own_value).slice(0, 60) : null) : (cur.own_value ?? null),
+    climate_c: has('climate_c') ? parseClimate(b.climate_c) : (cur.climate_c ?? null),
   }, ['calendar_id', 'uid', 'start_at']);
+}
+
+// '' / 'off' -> null; otherwise a temperature the Škoda API accepts (16–29.5 °C, half degrees).
+function parseClimate(v) {
+  if (v === null || v === undefined || v === '' || v === 'off') return null;
+  const n = Number(String(v).replace(',', '.'));
+  if (!Number.isFinite(n)) return null;
+  return Math.min(29.5, Math.max(16, Math.round(n * 2) / 2));
 }
 
 async function vehicleFor(vehicleId) {
@@ -258,6 +276,7 @@ async function items(fromIso, toIso, { withGeo = false } = {}) {
       carTag: !!e.car_tag, needsCar, carSource: o && o.needs_car !== null ? 'you' : e.car_tag ? 'tag' : null,
       own: o?.own_value || null, hint: e.car_hint ? JSON.parse(e.car_hint) : null, vehicle_id: o?.vehicle_id || cal.vehicle_id || null,
       askCar: !needsCar && !!e.location && !(o && o.needs_car === 0),
+      climateC: o?.climate_c ?? null,
     };
     if (needsCar) await enrichNeed(item, cfg, withGeo);
     out.push(item);
@@ -270,6 +289,7 @@ async function items(fromIso, toIso, { withGeo = false } = {}) {
       const item = {
         kind: 'trip', id: t.id, title: t.title, start: new Date(start).toISOString(), end: new Date(start + dur).toISOString(), allDay: false,
         location: t.location, needsCar: true, carSource: 'trip', own: t.own_value, hint: null, vehicle_id: t.vehicle_id, weekly: !!t.weekly, color: '#5CA83F',
+        climateC: t.climate_c ?? null,
       };
       await enrichNeed(item, cfg, withGeo);
       out.push(item);
@@ -342,15 +362,17 @@ function startAgenda() {
   };
   timer = setInterval(run, 15 * 60 * 1000);
   timer.unref?.();
+  require('./carClimate').start();
   setTimeout(run, 55000).unref?.();
 }
 
 function stopAgenda() {
   if (timer) clearInterval(timer);
   timer = null;
+  require('./carClimate').stop();
 }
 
 module.exports = {
   DEFAULTS, hasCarTag, parseCarHint, parseOwnValue, tripNeedKwh, icsUrl, expandEvents, tripOccurrences,
-  getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
+  getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
 };

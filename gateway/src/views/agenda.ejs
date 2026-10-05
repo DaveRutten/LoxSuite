@@ -66,7 +66,7 @@
   <h2 style="margin-top:0;"><%= t('Trips planned in LoxSuite') %></h2>
   <% if (trips.length) { %>
     <table><thead><tr><th><%= t('Trip') %></th><th><%= t('Leaves') %></th><th><%= t('Back') %></th><th><%= t('Where / how much') %></th><th></th></tr></thead><tbody>
-      <% trips.forEach(tt => { %><tr><td><%= tt.title %><%= tt.weekly ? ' (weekly)' : '' %></td><td><%= formatDateTime(tt.depart_at) %></td><td><%= tt.return_at ? formatDateTime(tt.return_at) : '—' %></td><td><%= tt.location || '' %> <%= tt.own_value || '' %></td>
+      <% trips.forEach(tt => { %><tr><td><%= tt.title %><%= tt.weekly ? ' (' + t('weekly') + ')' : '' %></td><td><%= formatDateTime(tt.depart_at) %></td><td><%= tt.return_at ? formatDateTime(tt.return_at) : '—' %></td><td><%= tt.location || '' %> <%= tt.own_value || '' %><%= tt.climate_c != null ? ' · 🌡️ ' + tt.climate_c + ' °C' : '' %></td>
         <td><form method="post" action="/agenda/trips/<%= tt.id %>/delete" style="margin:0;"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form></td></tr><% }) %>
     </tbody></table>
   <% } %>
@@ -83,6 +83,7 @@
         <div><label><%= t('Or: how much') %></label><input type="text" name="own_value" placeholder="<%= t('150 km, 30 kWh or full') %>"></div>
         <div><label><%= t('Car') %></label><select name="vehicle_id"><option value=""><%= t('— default —') %></option><% vehicles.forEach(v => { %><option value="<%= v.id %>"><%= v.name %></option><% }) %></select></div>
         <div><label><%= t('Every week') %></label><%- toggleSwitch('weekly', false) %></div>
+        <% if (skodaCars) { %><div><label><%= t('Climate at departure') %></label><select name="climate_c"><option value=""><%= t('off') %></option><% for (let c = 16; c <= 26; c++) { %><option value="<%= c %>"><%= c %> °C</option><% } %></select></div><% } %>
       </div>
       <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="primary"><%- icon('plus') %> <%= t('Add trip') %></button></div>
     </form>
@@ -98,6 +99,20 @@
       <div><label><%= t('Ready this long before leaving (min)') %></label><input type="text" name="ready_margin_min" value="<%= cfg.ready_margin_min %>"></div>
       <div><label><%= t('Calculate distances (OpenStreetMap)') %></label><%- toggleSwitch('geo', !!cfg.geo) %></div>
     </div>
+    <h3 style="margin:1.1rem 0 0.4rem;">🌡️ <%= t('Climate at departure') %></h3>
+    <div class="form-grid">
+      <div><label><%= t('Climate at departure') %></label><select name="climate_mode">
+        <% [['off', 'Off'], ['log', 'Log only (send nothing)'], ['on', 'On: start the air conditioning']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= (cfg.climate_mode || 'log') === v ? 'selected' : '' %>><%= t(lbl) %></option><% }) %>
+      </select></div>
+      <div><label><%= t('Start this long before leaving (min)') %></label><input type="text" name="climate_lead_min" value="<%= cfg.climate_lead_min || 20 %>"></div>
+      <div><label><%= t('Also when not plugged in (uses the battery)') %></label><%- toggleSwitch('climate_on_battery', cfg.climate_on_battery !== false) %></div>
+    </div>
+    <p class="hint" style="margin:0.5rem 0 0;"><%= t('Choose a temperature per appointment or trip (click it in the agenda). At the set time before you leave, LoxSuite asks the car to start its air conditioning through the Škoda API, once per departure. Only for cars with the Škoda API as data source; each start uses one of the 20 API requests per hour. With "Log only" LoxSuite just writes down what it would have sent.') %><% if (!skodaCars) { %> <strong><%= t('No car uses the Škoda API yet.') %></strong><% } %></p>
+    <% if (climateRuns.length) { %>
+      <table class="table" style="margin-top:0.6rem; font-size:0.85rem;"><thead><tr><th><%= t('Leaves') %></th><th><%= t('Trip') %></th><th><%= t('Status') %></th><th><%= t('Detail') %></th></tr></thead><tbody>
+        <% climateRuns.forEach(r => { %><tr><td><%= formatDateTime(r.depart_at) %></td><td><%= r.title %> · <%= r.target_c %> °C</td><td><%= ({ sent: t('sent'), logged: t('logged'), failed: t('failed'), skipped: t('skipped'), retry: t('trying again') })[r.status] || r.status %></td><td><%= r.message %></td></tr><% }) %>
+      </tbody></table>
+    <% } %>
     <p class="hint" style="margin:0.5rem 0 0;">
       <%= t('An appointment needs the car when its title or description contains one of the markers, e.g.') %> <code>🚗 Birthday</code> or <code>Visit #auto</code><%= t('. Add a hint like') %> <code>🚗 120 km</code>, <code>🚗 30 kWh</code> or <code>🚗 full</code> <%= t('to skip the distance lookup. For car appointments with an address, the driving distance from home is looked up (only those addresses are sent, results are kept), doubled for the way back plus the margin, and turned into kWh with the car\'s consumption.') %>
     </p>
@@ -311,8 +326,30 @@
       if (it.location && it.distanceKm == null && !it.geoError && canEdit) html += '<button type="button" class="btn-soft" id="ag-dist" style="margin-top:0.5rem;">Look up distance</button>';
     }
     if (it.kind === 'event' && canEdit && it.needsCar) html += '<div style="margin-top:0.7rem;"><label>Own value (optional)</label><input type="text" id="ag-own" value="' + esc(it.own || '') + '" placeholder="150 km, 30 kWh or full"><button type="button" class="btn-soft" id="ag-own-save" style="margin-top:0.3rem;">Save</button></div>';
+    if (it.needsCar && (canEdit || it.climateC != null)) {
+      var cm = (data.climate || {}).mode || 'log';
+      var opts = '<option value="">off</option>';
+      for (var tc = 16; tc <= 26; tc++) opts += '<option value="' + tc + '"' + (Number(it.climateC) === tc ? ' selected' : '') + '>' + tc + ' °C</option>';
+      if (it.climateC != null && (it.climateC % 1 || it.climateC < 16 || it.climateC > 26)) opts += '<option value="' + it.climateC + '" selected>' + nf(it.climateC, 1) + ' °C</option>';
+      html += '<div style="margin-top:0.7rem; padding:0.5rem 0.7rem; border-radius:10px; background:var(--surface-alt, #f4f6f8);">' +
+        '<div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;"><strong>🌡️ Climate at departure</strong>' +
+        (canEdit ? '<select id="ag-climate" style="width:auto;"' + (it.climateOk ? '' : ' disabled') + '>' + opts + '</select>' : '<span>' + nf(it.climateC, 1) + ' °C</span>') + '</div>' +
+        '<div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;">' +
+        (!it.climateOk ? 'Needs a car with the Škoda API as data source.'
+          : cm === 'off' ? 'Climate at departure is off in the agenda settings.'
+          : 'Starts ' + ((data.climate || {}).leadMin || 20) + ' min before you leave' + (it.leaveAt ? ' (' + tm(new Date(Date.parse(it.leaveAt) - ((data.climate || {}).leadMin || 20) * 60000).toISOString()) + ')' : '') + '.' + (cm === 'log' ? ' Log only: nothing is sent to the car yet (agenda settings).' : '')) +
+        '</div>' +
+        (it.climateRun ? '<div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;' + (it.climateRun.status === 'failed' ? ' color:var(--danger);' : '') + '">' + esc(it.climateRun.message || it.climateRun.status) + '</div>' : '') +
+        '</div>';
+    }
     html += '<p style="margin:0.6rem 0 0;"><a href="#" id="ag-close">Close</a></p></div>';
     el.innerHTML = html;
+    var clim = document.getElementById('ag-climate');
+    if (clim) clim.onchange = function () {
+      var v = clim.value;
+      if (it.kind === 'trip') post('/agenda/trips/' + it.id + '/climate.json', { climate_c: v }).then(load);
+      else post('/agenda/override.json', { calendar_id: it.calendar_id, uid: it.uid, start_at: it.start, climate_c: v }).then(load);
+    };
     var save = function (patch) {
       post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.start, needs_car: document.getElementById('ag-need') ? document.getElementById('ag-need').value : '', own_value: document.getElementById('ag-own') ? document.getElementById('ag-own').value : it.own }, patch || {})).then(load);
     };

@@ -54,3 +54,17 @@ test('extractAppriseError returns null for empty output', () => {
   assert.equal(extractAppriseError(''), null);
   assert.equal(extractAppriseError(null), null);
 });
+
+test('subscriberTargets: per subscription channel, push or both', () => {
+  const { subscriberTargets } = require('../src/notifications');
+  const base = { id: 7, username: 'dave', url: 'tgram://bot/123', push_on: 1 };
+  const urls = (rows) => subscriberTargets(rows).map((t) => t.url);
+  assert.deepEqual(urls([{ ...base, via: null }]), ['tgram://bot/123', 'loxsuite-push://user/7']);
+  assert.deepEqual(urls([{ ...base, via: 'channel' }]), ['tgram://bot/123']);
+  assert.deepEqual(urls([{ ...base, via: 'push' }]), ['loxsuite-push://user/7']);
+  assert.deepEqual(urls([{ ...base, push_on: 0, via: 'push' }]), []);
+  assert.deepEqual(urls([{ ...base, url: '', via: null }]), ['loxsuite-push://user/7']);
+  // an old-style push URL as "my channel" counts as push, and isn't sent twice
+  assert.deepEqual(urls([{ ...base, url: 'loxsuite-push://user/7', via: null }]), ['loxsuite-push://user/7']);
+  assert.deepEqual(urls([{ ...base, url: 'loxsuite-push://user/7', via: 'channel' }]), []);
+});

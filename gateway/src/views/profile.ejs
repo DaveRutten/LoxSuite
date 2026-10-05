@@ -117,6 +117,16 @@
   </div>
 
   <div class="card">
+    <h2><%= t('Push to my devices') %></h2>
+    <p class="hint"><%= t('Notifications you subscribe to can also go to the LoxSuite app on your phone or computer (as push). Choose per subscription below where it goes: your channel, push, or both. Devices are added on the App & push page.') %></p>
+    <form method="post" action="/profile/notifications/push" style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
+      <label class="toggle-row" style="margin:0;"><input type="checkbox" name="push_on" value="1" <%= profile.push_on ? 'checked' : '' %>> <span><strong><%= t('Also send as push') %></strong></span></label>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
+      <a href="/app" class="hint" style="margin:0;"><%= t('App & push') %></a>
+    </form>
+  </div>
+
+  <div class="card">
     <h2><%= t('My rules') %></h2>
     <p class="hint">
       <%= t('Your own trigger conditions, entirely independent of what an administrator has set up — no admin involvement needed. Always delivered to') %> <strong><%= t('My channel') %></strong> <%= t('above; there\'s no separate on/off switch to miss the way an admin-wide rule below has, since nobody else could already have subscribed one of these for you.') %>
@@ -293,7 +303,7 @@
 
   <div class="card">
     <h2><%= t('Subscriptions') %></h2>
-    <p class="hint"><%= t('Get pinged on your own channel above whenever one of these admin-configured alerts fires — on top of whatever channel(s) an administrator already sends it to.') %></p>
+    <p class="hint"><%= t('Get pinged on your own channel above whenever one of these admin-configured alerts fires — on top of whatever channel(s) an administrator already sends it to.') %> <%= t('Per alert you choose: channel, push, or both.') %></p>
     <% if (notifyRules.length === 0) { %>
       <p class="hint"><%= t('No admin-wide notification rules exist yet') %><% if (currentUser.isAdmin) { %> &mdash; <a href="/admin/notifications"><%= t('create one') %></a> <%= t('first') %><% } %><%= t(', then come back here to subscribe. (Your own rules above don\'t need this step.)') %></p>
     <% } else { %>
@@ -306,6 +316,9 @@
                 <strong><%= rule.name %></strong>
                 <span class="hint" style="margin:0; display:block;"><%= rule.triggerLabel %></span>
               </span>
+              <select name="via_<%= rule.id %>" style="margin-left:auto; width:auto;" title="<%= t('Where it goes') %>" onclick="event.stopPropagation();">
+                <% [['both', 'Channel and push'], ['channel', 'Only my channel'], ['push', 'Only push']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= rule.via === v ? 'selected' : '' %>><%= t(lbl) %></option><% }) %>
+              </select>
             </label>
           <% }) %>
         </div>

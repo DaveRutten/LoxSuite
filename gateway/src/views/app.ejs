@@ -31,10 +31,10 @@
   <p class="hint"><%= t('Push is a notification channel like Telegram or e-mail. Use it for the car reminders (') %><em><%= t('Car: plug in / swap reminders') %></em>, <em><%= t('Car: charging plan warnings') %></em><%= t(') and for anything else.') %></p>
   <div class="btn-row" style="flex-wrap:wrap;">
     <% if (isAdminUser) { %>
-      <form method="post" action="/app/channel" style="margin:0;"><button type="submit" class="btn-soft" <%= channel ? 'disabled' : '' %>><%= channel ? 'Channel "' + channel.name + '" exists' : 'Create channel for all devices' %></button></form>
+      <form method="post" action="/app/channel" style="margin:0;"><button type="submit" class="btn-soft" <%= channel ? 'disabled' : '' %>><%= channel ? t('Channel "{name}" exists', { name: channel.name }) : t('Create channel for all devices') %></button></form>
       <a class="btn-soft" href="/admin/notifications?trigger_type=car_reminder" style="text-decoration:none;"><%= t('Add a car reminder rule') %></a>
     <% } %>
-    <form method="post" action="/app/me" style="margin:0;"><button type="submit" class="btn-soft" <%= myPush ? 'disabled' : '' %>><%= myPush ? 'My notifications go to push' : 'Send my personal notifications as push' %></button></form>
+    <form method="post" action="/app/me" style="margin:0;"><button type="submit" class="btn-soft" <%= myPush ? 'disabled' : '' %>><%= myPush ? t('My notifications also go to push') : t('Send my personal notifications as push') %></button></form> <a href="/profile?tab=notifications" class="hint" style="margin:0;"><%= t('Choose per notification') %></a>
   </div>
 </div>
 

@@ -319,3 +319,13 @@ test('without enough solar: the car is filled in the cheapest intervals (full po
   const n = planner.makePlan({ nowMs: now, needKwh: 5, slots, mode: 'now', minKw: 4.16, maxKw: 11 });
   assert.equal(n.slots[0].kw, 11);
 });
+
+test('agenda.parseClimate: off/empty -> null, else 16–29.5 °C in half degrees', () => {
+  const agenda = require('../src/agenda');
+  assert.equal(agenda.parseClimate(''), null);
+  assert.equal(agenda.parseClimate('off'), null);
+  assert.equal(agenda.parseClimate('20'), 20);
+  assert.equal(agenda.parseClimate('21,3'), 21.5);
+  assert.equal(agenda.parseClimate(12), 16);
+  assert.equal(agenda.parseClimate(40), 29.5);
+});
