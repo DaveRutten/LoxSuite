@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.35.0-alpha.1] - 2026-10-05
+
+### Changed
+- **Administration** is the one place for settings: General, Settings, Energy & charging, Users, Access Roles,
+  Backups, Notifications, Security, Modules, Languages and **Translations** are tabs there (same addresses as
+  before). The separate Settings item in the account menu and Translations in the side menu are gone. Someone
+  without admin rights still sees the tabs they may use (Settings, Energy & charging, Translations).
+
+### Added
+- **Expected home from the car itself**: while the car drives (Škoda: in motion), home = the moment it set off
+  from where it was parked + the drive from there (OpenStreetMap routing, +10%); while it is parked away, home
+  is not before the drive from there. The plan is redone as soon as the car sets off or parks. The learned
+  pattern and the agenda remain the fallback.
+
+### Fixed
+- **Smart charging started at midnight** when today's electricity prices were missing: hours without a price
+  now get a place in the chart and the plan (so it starts now and shows "expected home"), LoxSuite fetches the
+  prices again (at most every 30 minutes) and the page says from when prices are missing.
+
 ## [0.34.1-alpha.1] - 2026-10-05
 
 ### Fixed

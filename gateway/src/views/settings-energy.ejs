@@ -1,5 +1,5 @@
-<%- include('partials/head', { pageTitle: 'Settings', active: 'settings' }) %>
-<%- include('partials/tabs-settings', { active: 'energy' }) %>
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+<%- include('partials/tabs-admin', { active: 'energy' }) %>
 
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>

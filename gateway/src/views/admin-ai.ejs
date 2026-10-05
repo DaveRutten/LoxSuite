@@ -1,16 +1,6 @@
 <%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
 
-<div class="tabs">
-  <a href="/admin/general"><%= t('General') %></a>
-  <a href="/admin/users"><%= t('Users') %></a>
-  <a href="/admin/roles"><%= t('Access Roles') %></a>
-  <a href="/admin/backup"><%= t('Backups') %></a>
-  <a href="/admin/notifications"><%= t('Notifications') %></a>
-  <a href="/admin/security"><%= t('Security') %></a>
-  <a href="/admin/modules"><%= t('Modules') %></a>
-  <a href="/admin/languages"><%= t('Languages') %></a>
-  <% if (typeof moduleOn !== 'function' || moduleOn('ai')) { %><a class="active" href="/admin/ai"><%= t('AI Assistant') %></a><% } %>
-</div>
+<%- include('partials/tabs-admin', { active: 'ai' }) %>
 
 <% if (error) { %>
   <p class="error"><%= error %></p>

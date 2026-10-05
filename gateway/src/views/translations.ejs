@@ -1,4 +1,5 @@
-<%- include('partials/head', { pageTitle: 'Translations', active: 'translations' }) %>
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+<%- include('partials/tabs-admin', { active: 'translations' }) %>
 
 <% if (!lang) { %>
   <div class="card"><p style="margin:0;"><%= t('There is no language to translate into yet.') %><% if (currentUser.isAdmin) { %> <a href="/admin/languages"><%= t('Add a language') %></a><% } %></p></div>

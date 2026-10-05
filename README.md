@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.34.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.35.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -180,11 +180,11 @@ It provides:
 </td>
 <td width="50%">
 
-**Settings → Energy & charging** — electricity price, solar forecast, fuel, calendars and climate at departure in one place.
+**Administration → Energy & charging** — electricity price, solar forecast, fuel, calendars and climate at departure in one place.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/settings-energy-dark.png">
-  <img src="docs/screenshots/settings-energy-light.png" alt="Settings, Energy and charging tab: prices, solar and fuel, the linked calendars and the agenda and climate settings">
+  <img src="docs/screenshots/settings-energy-light.png" alt="Administration, Energy and charging tab: prices, solar and fuel, the linked calendars and the agenda and climate settings">
 </picture>
 
 </td>
@@ -229,7 +229,7 @@ It provides:
 </td>
 <td width="50%">
 
-**Translations** — translate texts in the app, per module, with progress.
+**Translations** (Administration) — translate texts in the app, per module, with progress.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/translations-dark.png">
@@ -708,7 +708,7 @@ would do); set *Output* to *Live* to let it control the Wallbox through a Loxone
   Euro95 (E10), diesel or LPG — with an optional surcharge per litre (Super 98, a dearer station).
 
 Electricity price, home & solar forecast, fuel, the calendars and the agenda settings live under
-**Settings → Energy & charging**, since the other energy pages use them too. The **Charge log** (every
+**Administration → Energy & charging**, since the other energy pages use them too. The **Charge log** (every
 Wallbox session with automatic checks of the output to Loxone) is under **Logs**.
 
 ### Meters
@@ -1058,9 +1058,9 @@ data stays. Per module: a status with a setup checklist, an export (zip) and *Re
 ### Languages & display
 
 The whole interface is translatable; **Dutch** ships with LoxSuite. Administration → Languages adds languages and
-picks the default; each user can choose their own (Profile). The **Translations** page (its own access right)
+picks the default; each user can choose their own (Profile). The **Translations** tab under Administration (its own access right)
 translates every text in the app, per module, with progress; translations are kept in the database and can be
-exported/imported. Language, **24-hour or 12-hour clock** and **time zone** are set under Settings → General →
+exported/imported. Language, **24-hour or 12-hour clock** and **time zone** are set under Administration → Settings →
 Display; dates and numbers follow the chosen language.
 
 ### Settings

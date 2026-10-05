@@ -6688,6 +6688,13 @@
   ]
  },
  {
+  "key": "LoxSuite (self-hosted home automation)",
+  "module": "core",
+  "where": [
+   "src/carEta.js"
+  ]
+ },
+ {
   "key": "LoxSuite can't tell which car is connected; tap the right one so the plan is made for it.",
   "module": "charging",
   "where": [
@@ -7871,6 +7878,13 @@
   ]
  },
  {
+  "key": "No electricity prices known from {0} — LoxSuite fetches them again every 30 minutes; until then those hours are left out of the plan.",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "No events.",
   "module": "charging",
   "where": [
@@ -8135,7 +8149,8 @@
   "key": "No route found.",
   "module": "charging",
   "where": [
-   "src/agenda.js"
+   "src/agenda.js",
+   "src/carEta.js"
   ]
  },
  {
@@ -8744,6 +8759,20 @@
   ]
  },
  {
+  "key": "on the way from {0} ({1} km, ~{2} min drive)",
+  "module": "core",
+  "where": [
+   "src/carEta.js"
+  ]
+ },
+ {
+  "key": "on the way home ({0} km, ~{1} min drive)",
+  "module": "core",
+  "where": [
+   "src/carEta.js"
+  ]
+ },
+ {
   "key": "On: start the air conditioning",
   "module": "core",
   "where": [
@@ -8903,6 +8932,20 @@
   "module": "core",
   "where": [
    "live-data (script)"
+  ]
+ },
+ {
+  "key": "parked {0} km away at {1}",
+  "module": "core",
+  "where": [
+   "src/carEta.js"
+  ]
+ },
+ {
+  "key": "parked {0} km from home",
+  "module": "core",
+  "where": [
+   "src/carEta.js"
   ]
  },
  {
@@ -10237,8 +10280,6 @@
   "module": "core",
   "where": [
    "settings",
-   "settings-energy",
-   "settings-general",
    "src/moduleInfo.js",
    "src/permissionAreas.js"
   ]
@@ -11802,8 +11843,7 @@
   "where": [
    "loxone-mapping-translations",
    "mapping-translations",
-   "public/transformations-tabulator.js",
-   "translations"
+   "public/transformations-tabulator.js"
   ]
  },
  {

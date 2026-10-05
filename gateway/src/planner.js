@@ -440,13 +440,20 @@ async function expectedArrival(nowMs, target, untilMs) {
   if (!target.away) return null;
   const { displayTz, localParts, localMidnight, localTimeOn } = require('./localTime');
   const tz = displayTz();
+  // What the car reports now: driving -> set off + the drive home; parked away -> not before the drive.
+  const live = await require('./carEta').liveArrival(target.vehicle, nowMs).catch(() => null);
+  if (live?.at) return live.at < untilMs ? live : null;
+  const notBefore = (r) => {
+    if (!r || !live?.minAt || r.at >= live.minAt) return r;
+    return live.minAt >= untilMs ? null : { ...r, at: live.minAt, label: live.label };
+  };
   try {
     const list = await require('./agenda').items(new Date(nowMs - 12 * 3600000).toISOString(), new Date(nowMs + 3600000).toISOString());
     const cur = list.find((i) => i.needsCar && Date.parse(i.start) <= nowMs && Date.parse(i.end) > nowMs && !i.allDay
       && (!target.vehicle || !i.vehicle_id || i.vehicle_id === target.vehicle.id));
     if (cur) {
       const at = Date.parse(cur.end) + (cur.travelMin || 0) * 60000;
-      if (at > nowMs && at < untilMs) return { at, source: 'agenda', label: `agenda: ${cur.title}`, confidence: 'set' };
+      if (at > nowMs && at < untilMs) return notBefore({ at, source: 'agenda', label: `agenda: ${cur.title}`, confidence: 'set' });
     }
   } catch { /* no agenda */ }
   const sessionsStats = await require('./learning').learnedDepartures(target.vehicle?.id || null).catch(() => []);
@@ -462,7 +469,7 @@ async function expectedArrival(nowMs, target, untilMs) {
     const at = localTimeOn(dayMs, pick.time, tz);
     if (at <= nowMs) continue;
     if (at >= untilMs) return null;
-    return { at, source: pick.source, label: `learned: usually home around ${pick.time} on ${WEEKDAY_NAMES[wd]}`, confidence: pick.confidence };
+    return notBefore({ at, source: pick.source, label: `learned: usually home around ${pick.time} on ${WEEKDAY_NAMES[wd]}`, confidence: pick.confidence });
   }
   return null;
 }
@@ -493,8 +500,18 @@ async function buildSlots(nowMs, untilMs) {
     slots.push({ start: new Date(s).toISOString(), end: new Date(e).toISOString(), price, pvKw: round3(Math.max(0, pvKwh - houseKwh)), pvKwh, houseKwh });
   };
   for (const r of rows) pushSlot(Date.parse(r.start_at), Date.parse(r.end_at), r.allin_eur_kwh);
-  // Beyond the known prices (tomorrow's come out around 13:00): hourly slots without a price.
-  for (let t = Math.max(covered, Math.floor(nowMs / 3600000) * 3600000); t < untilMs; t += 3600000) pushSlot(t, t + 3600000, null);
+  // Hours without a price (beyond the known prices — tomorrow's come out around 13:00 — or a gap,
+  // e.g. today's missing): slots without a price, so the chart and the plan still start now.
+  const spans = rows.map((r) => [Date.parse(r.start_at), Date.parse(r.end_at)]);
+  let missing = null;
+  for (let t = Math.floor(nowMs / 3600000) * 3600000; t < untilMs; t += 3600000) {
+    const e = t + 3600000;
+    if (spans.some(([a, b]) => a < e && b > t)) continue;
+    pushSlot(t, e, null);
+    if (t < covered && missing === null) missing = t;
+  }
+  slots.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  slots.priceGapFrom = missing;
   return slots;
 }
 
@@ -503,7 +520,13 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   const wb = await wallboxLive();
   const target = await computeTarget(nowMs, wb);
   const until = target.readyAtMs || nowMs + 24 * 3600000;
-  const slots = await buildSlots(nowMs, Math.max(until, nowMs + 3600000));
+  let slots = await buildSlots(nowMs, Math.max(until, nowMs + 3600000));
+  if (slots.priceGapFrom !== null && slots.priceGapFrom !== undefined && nowMs - (rt.gapRefreshAt || 0) > 30 * 60000) {
+    rt.gapRefreshAt = nowMs;
+    const ok = await require('./prices').refreshPrices(nowMs).then(() => true).catch(() => false);
+    if (ok) slots = await buildSlots(nowMs, Math.max(until, nowMs + 3600000));
+  }
+  const priceGapFrom = slots.priceGapFrom ?? null;
   const vehicle = target.vehicle;
   let priceCap = cfg.max_price_eur_kwh ? Number(cfg.max_price_eur_kwh) : null;
   let fuel = null;
@@ -529,6 +552,7 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   plan.fuelBreakEven = fuel;
   plan.priceCap = priceCap;
   plan.slotsAll = slots;
+  plan.priceGapFrom = priceGapFrom === null ? null : new Date(priceGapFrom).toISOString();
   plan.madeAt = new Date(nowMs).toISOString();
   rt.plan = plan;
   rt.planAt = nowMs;
@@ -606,6 +630,15 @@ async function tick(nowMs = Date.now()) {
     if (!keepReady) rt.readyOverrideOwn = null;
     if (!first) settings.set('planner_ready_override', keepReady ? { at: rt.readyOverride, away: rt.readyOverrideAway, own: rt.readyOverrideOwn } : null).catch(() => {}); rt.doneSince = null; rt.lowDrawSince = null; rt.ctrl.state = {}; rt.sessionVehicle = null; rt.onSince = null; rt.offSince = null; rt.socBase = null;
     rt.planAt = 0;
+  }
+  // The car that is out set off or parked: re-plan now, so "expected home" follows the drive.
+  if (!connected && rt.plan?.target?.vehicle?.id) {
+    try {
+      const veh = await require('./db').prepare('SELECT * FROM vehicles WHERE id = ?').get(rt.plan.target.vehicle.id);
+      const st = veh ? require('./vehicles').getVehicleStatus(veh) : null;
+      const srcAt = st?.sourceUpdatedAt ? Date.parse(st.sourceUpdatedAt) : null;
+      if (st?.reading && require('./carEta').observe(veh.id, st.reading, nowMs, Number.isFinite(srcAt) ? srcAt : null)) rt.planAt = 0;
+    } catch { /* no vehicle data */ }
   }
   if (!rt.plan || nowMs - rt.planAt > 15 * 60 * 1000) await recalc(nowMs).catch((err) => { rt.status = { error: err.message }; });
   // "Done": we asked for power but the car took (almost) none for 5 minutes -> it is full.

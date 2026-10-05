@@ -1,0 +1,23 @@
+<%
+  // Administration: one place with tabs. Admins see everything; someone with only the Settings, Smart
+  // charging or Translations permission sees just those tabs. locals: active.
+  const isAdm = !!(typeof currentUser !== 'undefined' && currentUser && currentUser.isAdmin);
+  const tabOn = (k) => (typeof moduleOn !== 'function' || moduleOn(k));
+  const adminTabs = [
+    isAdm && ['general', '/admin/general', t('General')],
+    canEdit('settings') && ['settings', '/settings', t('Settings')],
+    tabOn('charging') && canView('charging') && ['energy', '/settings/energy', t('Energy & charging')],
+    isAdm && ['users', '/admin/users', t('Users')],
+    isAdm && ['roles', '/admin/roles', t('Access Roles')],
+    isAdm && ['backup', '/admin/backup', t('Backups')],
+    isAdm && ['notifications', '/admin/notifications', t('Notifications')],
+    isAdm && ['security', '/admin/security', t('Security')],
+    isAdm && ['modules', '/admin/modules', t('Modules')],
+    isAdm && ['languages', '/admin/languages', t('Languages')],
+    canView('translations') && typeof multiLang !== 'undefined' && multiLang && ['translations', '/translations', t('Translations')],
+    isAdm && tabOn('ai') && ['ai', '/admin/ai', t('AI Assistant')],
+  ].filter(Boolean);
+%>
+<div class="tabs">
+  <% adminTabs.forEach(([k, href, label]) => { %><a href="<%= href %>" class="<%= active === k ? 'active' : '' %>"><%= label %></a><% }) %>
+</div>

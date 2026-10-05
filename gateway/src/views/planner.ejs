@@ -101,7 +101,7 @@
     </form>
   </details>
 
-  <p class="hint" style="margin:0.6rem 0 0;" data-hint-keep><%= t('Electricity price, solar forecast and fuel are under') %> <a href="/settings/energy"><%= t('Settings → Energy & charging') %></a>.</p>
+  <p class="hint" style="margin:0.6rem 0 0;" data-hint-keep><%= t('Electricity price, solar forecast and fuel are under') %> <a href="/settings/energy"><%= t('Administration → Energy & charging') %></a>.</p>
 
   <details style="margin-top:0.6rem;" <%= saved === 'reminders' ? 'open' : '' %>>
     <summary><strong><%= t('Reminders') %></strong></summary>
@@ -212,6 +212,7 @@
         var pvK = p.pvKwh || 0, gridK = Math.max(0, p.kwh - pvK);
         ph = '<div style="padding:0.8rem 1rem; border-radius:10px; background:color-mix(in srgb, var(--accent) 10%, transparent); border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);">' +
           (p.arrival ? '<div class="hint" style="margin:0 0 0.25rem;">' + esc(T('The car is out: this is the plan from when it is expected home ({0}).', dtm(p.arrival.at))) + '</div>' : '') +
+          (p.priceGapFrom ? '<div class="hint" style="margin:0 0 0.25rem; color:var(--warning, #d4a017);">' + esc(T('No electricity prices known from {0} — LoxSuite fetches them again every 30 minutes; until then those hours are left out of the plan.', dtm(p.priceGapFrom))) + '</div>' : '') +
           '<strong>' + esc(T('Plan:')) + '</strong> ' + esc(T('{0} – {1}', dtm(first.start), dtm(last.end))) + ' &rarr; <strong>' + nf(p.kwh, 1) + ' kWh</strong>' +
           ' (' + (pvK > 0.05 ? esc(T('{0} kWh solar, {1} kWh grid', nf(pvK, 1), nf(gridK, 1))) : esc(T('all from the grid'))) + ')' +
           ' · ' + esc(T('average')) + ' <strong>' + eur(p.avgPrice, 3) + '</strong>/kWh · ' + esc(T('costs about')) + ' <strong>' + eur(p.cost) + '</strong>' +

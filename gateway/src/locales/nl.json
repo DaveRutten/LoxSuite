@@ -3880,5 +3880,12 @@
   "Electricity price, solar forecast and fuel are under": "Stroomprijs, zonnevoorspelling en brandstof staan onder",
   "Prices, solar & fuel": "Prijzen, zon & brandstof",
   "Settings → Energy & charging": "Instellingen → Energie & laden",
-  "Used by Smart charging, the energy manager, Driving & costs and OCPP costs.": "Gebruikt door Slim laden, de energiemanager, Rijden & kosten en de OCPP-kosten."
+  "Used by Smart charging, the energy manager, Driving & costs and OCPP costs.": "Gebruikt door Slim laden, de energiemanager, Rijden & kosten en de OCPP-kosten.",
+  "LoxSuite (self-hosted home automation)": "LoxSuite (self-hosted home automation)",
+  "No electricity prices known from {0} — LoxSuite fetches them again every 30 minutes; until then those hours are left out of the plan.": "Geen stroomprijzen bekend vanaf {0} — LoxSuite haalt ze elke 30 minuten opnieuw op; tot dan tellen die uren niet mee in het plan.",
+  "on the way from {0} ({1} km, ~{2} min drive)": "onderweg vanaf {0} ({1} km, ~{2} min rijden)",
+  "on the way home ({0} km, ~{1} min drive)": "onderweg naar huis ({0} km, ~{1} min rijden)",
+  "parked {0} km away at {1}": "geparkeerd op {0} km, bij {1}",
+  "parked {0} km from home": "geparkeerd op {0} km van huis",
+  "Administration → Energy & charging": "Beheer → Energie & laden"
 }
