@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.36.1-alpha.1] - 2026-10-05
+
+### Changed
+- Smart charging: "Needs" is now **Room in the battery** when it comes from the car's state of charge (it is what
+  still fits, not what has to go in), and **To charge (estimate)** otherwise. With an appointment: "Needs before
+  leaving", with the room in the battery underneath.
+
 ## [0.36.0-alpha.1] - 2026-10-05
 
 ### Changed

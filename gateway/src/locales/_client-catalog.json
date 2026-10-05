@@ -7654,8 +7654,7 @@
   "key": "Needs",
   "module": "charging",
   "where": [
-   "agenda (script)",
-   "planner (script)"
+   "agenda (script)"
   ]
  },
  {
@@ -9941,6 +9940,13 @@
   ]
  },
  {
+  "key": "Room in the battery",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Room not found",
   "module": "core",
   "where": [
@@ -11754,6 +11760,13 @@
   ]
  },
  {
+  "key": "To charge (estimate)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Today",
   "module": "energy",
   "where": [
@@ -11988,7 +12001,7 @@
   ]
  },
  {
-  "key": "trip {0} kWh + reserve {1} kWh; the other {2} kWh after it is back ({3})",
+  "key": "trip {0} kWh + reserve {1} kWh; room in the battery {2} kWh, the rest after it is back ({3})",
   "module": "charging",
   "where": [
    "planner (script)"
