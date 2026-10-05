@@ -65,7 +65,7 @@ router.get('/items.json', asyncHandler(async (req, res) => {
 // after its own name in the ICS (X-WR-CALNAME), else after the host.
 router.post('/calendars', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const urls = String(req.body.url || '').split(/[\r\n]+|\s+(?=(?:https?|webcal):\/\/)/i).map((u) => u.trim()).filter(Boolean).slice(0, 10);
-  if (!urls.length) return res.redirect(`/agenda?error=${encodeURIComponent('Fill in a name and the ICS address.')}`);
+  if (!urls.length) return res.redirect(`/settings/energy?error=${encodeURIComponent('Fill in a name and the ICS address.')}#calendars`);
   const errors = [];
   let added = 0;
   for (const u of urls) {
@@ -83,8 +83,8 @@ router.post('/calendars', requirePermission('charging', 'edit'), asyncHandler(as
       await logSystemEvent(`Agenda: calendar "${cal.name}" added by ${req.session?.username || 'unknown user'}`).catch(() => {});
     } catch (err) { errors.push(err.message); }
   }
-  if (!errors.length) return res.redirect('/agenda?saved=1');
-  return res.redirect(`/agenda?error=${encodeURIComponent((added ? `Added ${added}; ` : '') + errors.join(' · '))}`);
+  if (!errors.length) return res.redirect('/settings/energy?saved=1#calendars');
+  return res.redirect(`/settings/energy?error=${encodeURIComponent((added ? `Added ${added}; ` : '') + errors.join(' · '))}#calendars`);
 }));
 
 // CalDAV (iCloud & co.): find the calendars of an account; the password is only used, not stored here.
@@ -122,13 +122,13 @@ router.post('/calendars/:id/delete', requirePermission('charging', 'edit'), asyn
   await db.prepare('DELETE FROM calendar_events WHERE calendar_id = ?').run(req.params.id);
   await db.prepare('DELETE FROM event_overrides WHERE calendar_id = ?').run(req.params.id);
   await db.prepare('DELETE FROM calendars WHERE id = ?').run(req.params.id);
-  res.redirect('/agenda');
+  res.redirect('/settings/energy#calendars');
 }));
 
 router.post('/calendars/:id/update', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('UPDATE calendars SET name = ?, color = ?, vehicle_id = ?, enabled = ? WHERE id = ?')
     .run(String(req.body.name || 'Calendar').slice(0, 80), req.body.color || '#3b82c4', req.body.vehicle_id ? Number(req.body.vehicle_id) : null, req.body.enabled ? 1 : 0, req.params.id);
-  res.redirect('/agenda?saved=1');
+  res.redirect('/settings/energy?saved=1#calendars');
 }));
 
 router.post('/sync.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
@@ -146,7 +146,7 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
     climate_lead_min: require('../carClimate').clampLead(req.body.climate_lead_min),
     climate_on_battery: !!req.body.climate_on_battery,
   }, agenda.DEFAULTS);
-  res.redirect('/agenda?saved=1#settings');
+  res.redirect('/settings/energy?saved=1#agenda-settings');
 }));
 
 router.post('/override.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {

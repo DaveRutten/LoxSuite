@@ -250,8 +250,8 @@ test('push targets', () => {
 });
 
 test('identifyVehicle by tag, user, plugged state or the only car', () => {
-  const list = [{ id: 1, name: 'Skoda', id_tags: 'EC B0 2B 05 8D 41 4C 27 EC', loxone_users: 'Dave Rutten' }, { id: 2, name: 'Other', loxone_users: 'Anne' }];
-  assert.equal(vehicles.identifyVehicle(list, { idTag: 'B02B058D414C27' }).id, 1);
+  const list = [{ id: 1, name: 'Skoda', id_tags: 'EC 04 A1 B2 C3 D4 E5 F6 EC', loxone_users: 'Alex Example' }, { id: 2, name: 'Other', loxone_users: 'Anne' }];
+  assert.equal(vehicles.identifyVehicle(list, { idTag: '04A1B2C3D4E5F6' }).id, 1);
   assert.equal(vehicles.identifyVehicle(list, { loxoneUser: 'anne' }).id, 2);
   assert.equal(vehicles.identifyVehicle(list, { pluggedIds: [2] }).id, 2);
   assert.equal(vehicles.identifyVehicle(list, {}), null);

@@ -58,7 +58,7 @@ function getConfigurationReply(askedKeys, known) {
   };
 }
 
-// Loxone NFC tag text ("EC B0 2B 05 8D 41 4C 27 EC") -> OCPP idTag ("B02B058D414C27"): hex only,
+// Loxone NFC tag text ("EC 04 A1 B2 C3 D4 E5 F6 EC") -> OCPP idTag ("04A1B2C3D4E5F6"): hex only,
 // uppercase, without the "EC" specifier and trailing zero bytes — the same normalisation Loxone's
 // own OCPP connector documents for NFC IDs. Capped at OCPP 1.6's 20 characters.
 function normalizeNfcTag(raw) {
@@ -69,7 +69,7 @@ function normalizeNfcTag(raw) {
   return hex.slice(0, 20);
 }
 
-// "Dave Rutten = B02B058D414C27" lines -> Map(lowercased user -> tag). Also accepts ':'.
+// "Alex = 04A1B2C3D4E5F6" lines -> Map(lowercased user -> tag). Also accepts ':'.
 function parseUserTagMap(text) {
   const map = new Map();
   String(text || '').split(/\r?\n/).forEach((line) => {

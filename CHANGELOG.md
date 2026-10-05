@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.34.0-alpha.1] - 2026-10-05
+
+### Changed
+- **Settings → Energy & charging**: electricity price, home & solar forecast and fuel moved there from the Smart
+  charging page, and connecting calendars plus the agenda settings (car markers, margin, climate at departure)
+  from the Agenda page — the Agenda page itself keeps the calendar and the trips. Smart charging keeps its own
+  settings (charging & output to Loxone, reminders). Settings has tabs: *General* and *Energy & charging*.
+- **Charge log** moved from the Energy & charging menu to **Logs**.
+- **README and screenshots updated**: every screenshot redone (light and dark) now that cards fold, explanations
+  are compact and the interface is translatable, plus new ones of the whole energy side — Smart charging, Meters,
+  Agenda, Vehicles, Energy manager, OCPP & charging costs, Learned, Driving & costs — and of Modules,
+  Translations, folded cards and the interface in Dutch. The README describes the Energy manager, Driving &
+  costs, Modules, Languages & display, the Škoda source, iCloud/CalDAV, climate at departure, push per alert,
+  quarter-hour/fixed prices and fuel type.
+- The screenshot pipeline (`dev/screenshots/`) seeds the energy side too (`seed-energy-data.js`), answers outside
+  services with synthetic data (`offline-stubs.js`) and can run without Docker (`run-local.sh`).
+
+### Fixed
+- In English (the default) the "Use in Monitor" pickers, the car map and the fields that only show for a choice
+  did nothing: their scripts were only loaded when a translation was active.
+- The Translations page could run off the screen when a text had no spaces to break at.
+- Example values in forms no longer use a real name and NFC tag.
+
 ## [0.33.1-alpha.1] - 2026-10-05
 
 ### Added

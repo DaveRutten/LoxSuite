@@ -1,0 +1,8 @@
+<%
+  // Settings: the general page and, with Smart charging on, the energy & charging settings (prices,
+  // solar forecast, fuel, calendars and the agenda). locals: active.
+%>
+<div class="tabs">
+  <% if (canEdit('settings')) { %><a href="/settings" class="<%= active === 'general' ? 'active' : '' %>"><%= t('General') %></a><% } %>
+  <% if ((typeof moduleOn !== 'function' || moduleOn('charging')) && canView('charging')) { %><a href="/settings/energy" class="<%= active === 'energy' ? 'active' : '' %>"><%= t('Energy & charging') %></a><% } %>
+</div>

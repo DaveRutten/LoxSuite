@@ -33,6 +33,8 @@ const rooms = {
   [fakeUuid('room-living')]: { name: 'Living room', uuid: fakeUuid('room-living') },
   [fakeUuid('room-kitchen')]: { name: 'Kitchen', uuid: fakeUuid('room-kitchen') },
 };
+rooms[fakeUuid('room-utility')] = { name: 'Utility room', uuid: fakeUuid('room-utility') };
+const roomUtility = fakeUuid('room-utility');
 const roomLiving = fakeUuid('room-living');
 const roomKitchen = fakeUuid('room-kitchen');
 
@@ -41,6 +43,8 @@ const cats = {
   [fakeUuid('cat-temp')]: { name: 'Climate', type: 'indoortemperature' },
   [fakeUuid('cat-shading')]: { name: 'Shading', type: 'shading' },
 };
+cats[fakeUuid('cat-energy')] = { name: 'Energy', type: 'undefined' };
+const catEnergy = fakeUuid('cat-energy');
 const catLights = fakeUuid('cat-lights');
 const catTemp = fakeUuid('cat-temp');
 const catShading = fakeUuid('cat-shading');
@@ -53,18 +57,25 @@ const controlDefs = [
   ['Living room blinds', roomLiving, catShading, 'Jalousie', { position: 'living-blinds-pos' }],
   ['Counter light', roomKitchen, catLights, 'Switch', { active: 'kitchen-counter-active' }],
   ['Kitchen temperature', roomKitchen, catTemp, 'IRoomControllerV2', { tempActual: 'kitchen-temp-actual', tempTarget: 'kitchen-temp-target' }],
+  // Energy (Wallbox → Meters, Smart charging, Energy manager) — fixed plausible values, see FIXED below
+  ['Grid meter', roomUtility, catEnergy, 'Meter', { actual: 'grid-actual', total: 'grid-total', totalNeg: 'grid-totalneg' }, { type: 'bidirectional' }],
+  ['Solar inverter', roomUtility, catEnergy, 'Meter', { actual: 'pv-actual', total: 'pv-total' }],
+  ['Wallbox', roomUtility, catEnergy, 'Wallbox2', { actual: 'wb-actual', total: 'wb-total', connected: 'wb-connected', active: 'wb-active', mode: 'wb-mode', limit: 'wb-limit', enabled: 'wb-enabled' }],
+  ['Heat pump', roomUtility, catEnergy, 'Meter', { actual: 'hp-actual', total: 'hp-total' }],
+  ['Hot water boiler', roomUtility, catEnergy, 'Meter', { actual: 'dhw-actual', total: 'dhw-total' }],
+  ['Washing machine', roomUtility, catEnergy, 'Meter', { actual: 'wm-actual', total: 'wm-total' }],
 ];
 
 const controls = {};
 const stateSeeds = new Map(); // uuid -> { seed }
-controlDefs.forEach(([name, room, cat, type, stateMap], i) => {
+controlDefs.forEach(([name, room, cat, type, stateMap, details], i) => {
   const states = {};
   for (const [stateName, seed] of Object.entries(stateMap)) {
     const uuid = fakeUuid(seed);
     states[stateName] = uuid;
     stateSeeds.set(uuid, { seed });
   }
-  controls[fakeUuid(`control-${i}`)] = { name, room, cat, type, states };
+  controls[fakeUuid(`control-${i}`)] = { name, room, cat, type, states, ...(details ? { details } : {}) };
 });
 
 const structure = { rooms, cats, controls, mediaServer: {} };
@@ -72,9 +83,19 @@ const structure = { rooms, cats, controls, mediaServer: {} };
 // ---- Live value simulation --------------------------------------------------------------------
 // Deterministic-ish per-uuid base value + a small wiggle each push, purely so a temperature/dimmer
 // reads like a real, slightly-alive install rather than a static 0 across the whole page.
+// Energy values: a sunny midday with the car away — exporting, the heat pump idling.
+const FIXED = {
+  'grid-actual': () => -1.85 + Math.random() * 0.1, 'grid-total': () => 18412.6, 'grid-totalneg': () => 9873.4,
+  'pv-actual': () => 4.62 + Math.random() * 0.1, 'pv-total': () => 21307.9,
+  'wb-actual': () => 0, 'wb-total': () => 5650.2, 'wb-connected': () => 0, 'wb-active': () => 0, 'wb-mode': () => 1, 'wb-limit': () => 11, 'wb-enabled': () => 1,
+  'hp-actual': () => 0.42 + Math.random() * 0.05, 'hp-total': () => 4120.3,
+  'dhw-actual': () => 0, 'dhw-total': () => 1388.6,
+  'wm-actual': () => 0.002, 'wm-total': () => 412.3,
+};
 function currentValue(uuid) {
   const info = stateSeeds.get(uuid);
   const seed = info ? info.seed : uuid;
+  if (FIXED[seed]) return FIXED[seed]();
   const hash = crypto.createHash('md5').update(seed).digest();
   const base = hash.readUInt8(0);
   if (seed.includes('temp-actual')) return 20 + (base % 4) + Math.random() * 0.4;
@@ -123,6 +144,22 @@ function pkcs7unpad(buf) {
   return buf.subarray(0, buf.length - padLen);
 }
 
+// Appointments relative to today (local time of the container): a few with the car (🚗), some without.
+function demoCalendar() {
+  const pad = (n) => String(n).padStart(2, '0');
+  const at = (dayOffset, h, m) => { const d = new Date(); d.setDate(d.getDate() + dayOffset); d.setHours(h, m, 0, 0); return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`; };
+  const ev = (uid, d, h1, m1, h2, m2, title, loc) => ['BEGIN:VEVENT', `UID:${uid}@demo`, `DTSTART:${at(d, h1, m1)}`, `DTEND:${at(d, h2, m2)}`, `SUMMARY:${title}`, loc ? `LOCATION:${loc}` : null, 'END:VEVENT'].filter(Boolean).join('\r\n');
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//LoxSuite demo//EN', 'X-WR-CALNAME:Family',
+    ev('e1', 0, 9, 30, 10, 30, 'Team meeting', null),
+    ev('e2', 1, 14, 0, 16, 0, '🚗 Customer visit', 'Amersfoort'),
+    ev('e3', 2, 19, 0, 21, 0, 'Sports', 'Sports park'),
+    ev('e4', 3, 12, 0, 13, 0, 'Lunch', null),
+    ev('e5', 4, 15, 30, 16, 30, 'Dentist', 'High Street 3'),
+    ev('e6', 5, 10, 0, 18, 0, '🚗 Birthday party', 'Eindhoven'),
+    ['BEGIN:VEVENT', 'UID:e7@demo', `DTSTART:${at(0, 19, 0)}`, `DTEND:${at(0, 20, 0)}`, 'RRULE:FREQ=WEEKLY;COUNT=8', 'SUMMARY:Hockey training kids', 'LOCATION:Sports park', 'END:VEVENT'].join('\r\n'),
+    'END:VCALENDAR', ''].join('\r\n');
+}
+
 // ---- HTTP + WS server -------------------------------------------------------------------------
 const server = http.createServer((req, res) => {
   if (req.url === '/jdev/sys/getPublicKey') {
@@ -133,6 +170,18 @@ const server = http.createServer((req, res) => {
   if (req.url === '/data/LoxAPP3.json') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(structure));
+    return;
+  }
+  // A car's own data as JSON (vehicle source "HTTP / JSON URL"), for the vehicle pages.
+  if (req.url === '/car.json') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ battery: { soc: 64, range_km: 41 }, total_range_km: 612, plugged: false, charging: false, limit: 100, odometer: 23456.8, position: { lat: 52.0907, lon: 5.1214 }, place: 'Utrecht Centraal' }));
+    return;
+  }
+  // A calendar (ICS) with appointments around today, for the agenda.
+  if (req.url === '/calendar.ics') {
+    res.writeHead(200, { 'Content-Type': 'text/calendar' });
+    res.end(demoCalendar());
     return;
   }
   // /data/status deliberately not implemented — loxoneHardware.js's periodic poll fails closed

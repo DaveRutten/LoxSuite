@@ -8,8 +8,13 @@ or device data is ever involved — everything on screen is invented for this pu
 ## Usage
 
 ```sh
-./dev/screenshots/run.sh
+./dev/screenshots/run.sh          # in a throwaway Docker container
+./dev/screenshots/run-local.sh    # straight from this checkout (Node + Playwright with a Chromium)
 ```
+
+`run-local.sh` needs `npm ci` in `gateway/` and Playwright (set `CHROMIUM_PATH` to a Chromium if
+Playwright's own isn't installed). Without internet, `OFFLINE_TILES=1` draws plain map tiles for
+the car map instead of OpenStreetMap's.
 
 Needs Docker and network access (it `apk add`s Chromium and `npm install`s `playwright-core`
 inside a throwaway container — nothing is installed on your host). Takes a couple of minutes.
@@ -27,6 +32,16 @@ a fresh shot just because the pipeline touched it.
   dashboards (including a dedicated "Chart types" one — see its own comment on why that's separate
   from the shared home dashboard), notifications, hardware inventory, and backup settings directly
   into a fresh SQLite database. Run once per pipeline invocation, before the app itself starts.
+- **`seed-energy-data.js`** — the energy & charging side: meters, eight weeks of charging sessions
+  and car readings with a weekday routine, four weeks of hourly energy and solar forecasts, two
+  months of prices, two cars, a calendar and trips, three managed loads (energy manager) and an
+  OCPP bridge with sessions, a tariff and costs. Deterministic (seeded random), so every run
+  gives the same pictures.
+- **`offline-stubs.js`** — preloaded into the app (`node -r`): answers the outside services
+  (EnergyZero prices, Open-Meteo solar forecast, CBS fuel price, address lookups, GitHub release
+  checks) with synthetic data, so the run needs no internet and looks the same every time.
+- **`fake-miniserver.js`** also serves energy meters, a Wallbox, a car's JSON (`/car.json`) and
+  a calendar (`/calendar.ics`) for those pages.
 - **`take-screenshots.js`** — Playwright, driving the seeded app at `http://127.0.0.1:15590`
   (`playwright-core` + Alpine's own system Chromium — Playwright's bundled Chromium download is
   glibc-only and doesn't run on this image's musl base). Logs in once, then for each of light/dark:

@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.33.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.34.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -76,7 +76,171 @@ It provides:
 </tr>
 </table>
 
-*(Demo data — light/dark follows your system theme on GitHub.)*
+### Energy & charging
+
+<table>
+<tr>
+<td width="50%">
+
+**Smart charging** — on time in the cheapest way: solar first, then the cheapest hours. While the car is out it plans from when it is expected home.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/smart-charging-dark.png">
+  <img src="docs/screenshots/smart-charging-light.png" alt="Smart charging with the car away: what it needs, ready by, expected home, the plan with its solar and grid part, and the price chart with planned hours">
+</picture>
+
+</td>
+<td width="50%">
+
+**Meters** — grid, solar, Wallbox and house live from the Miniserver, and per hour.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/energy-meters-dark.png">
+  <img src="docs/screenshots/energy-meters-light.png" alt="The Meters page: live grid, solar, Wallbox and house power and an hourly chart of the day">
+</picture>
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Agenda** — calendars (ICS, iCloud, CalDAV) and trips; appointments with the car get the distance and the kWh they need.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/agenda-dark.png">
+  <img src="docs/screenshots/agenda-light.png" alt="The agenda week view with a car appointment opened: distance, consumption, kWh needed, leave and ready-by time, climate at departure">
+</picture>
+
+</td>
+<td width="50%">
+
+**Vehicles** — the car's own data (Škoda API, Homey, Home Assistant, MQTT, HTTP), where it is, and its values for Monitor and Loxone.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/vehicle-dark.png">
+  <img src="docs/screenshots/vehicle-light.png" alt="A vehicle page: battery, range, plugged in, at home, odometer, a small map and the values to add to Monitor">
+</picture>
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Energy manager** — hot water, heat pump and appliances planned together with the car, on prices, the solar forecast and the real values.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/energy-manager-dark.png">
+  <img src="docs/screenshots/energy-manager-light.png" alt="The energy manager: what it would send now, and a 36-hour plan of prices, solar, car charging, hot water, heat pump and washing machine">
+</picture>
+
+</td>
+<td width="50%">
+
+**OCPP & charging costs** — a Loxone Wallbox reported to an OCPP backend, with costs, reimbursement and the quarterly export.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/ocpp-dark.png">
+  <img src="docs/screenshots/ocpp-light.png" alt="An OCPP bridge with charging statistics, costs and reimbursement per month, quarter and year, and the reimbursement tariff">
+</picture>
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Learned** — departures, energy per trip, driving per weekday from the odometer, the solar forecast and the house profile.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/learned-dark.png">
+  <img src="docs/screenshots/learned-light.png" alt="The Learned page: departure times per weekday, energy per trip and driving per weekday">
+</picture>
+
+</td>
+<td width="50%">
+
+**Driving & costs** — consumption learned from the battery, km on electricity and fuel, cost per km and what driving electric saved.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/driving-dark.png">
+  <img src="docs/screenshots/driving-light.png" alt="Driving and costs: consumption, km per month, cost per km and saving">
+</picture>
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Vehicles** — every car with its state of charge, range and a small map of where it is parked.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/vehicles-dark.png">
+  <img src="docs/screenshots/vehicles-light.png" alt="The Vehicles overview: each car with its battery level, range and a small map">
+</picture>
+
+</td>
+<td width="50%">
+
+**Settings → Energy & charging** — electricity price, solar forecast, fuel, calendars and climate at departure in one place.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/settings-energy-dark.png">
+  <img src="docs/screenshots/settings-energy-light.png" alt="Settings, Energy and charging tab: prices, solar and fuel, the linked calendars and the agenda and climate settings">
+</picture>
+
+</td>
+</tr>
+</table>
+
+### Your language, your layout
+
+<table>
+<tr>
+<td width="50%">
+
+**In Dutch (or any language)** — the whole interface translates; Dutch is included, other languages can be added and translated in the app.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/smart-charging-nl-dark.png">
+  <img src="docs/screenshots/smart-charging-nl-light.png" alt="The Smart charging page in Dutch">
+</picture>
+
+</td>
+<td width="50%">
+
+**Fold away what you don't need** — every card folds (remembered per device), long explanations shrink to one line with ⓘ, settings only show what applies.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/settings-folded-dark.png">
+  <img src="docs/screenshots/settings-folded-light.png" alt="The Settings page with two cards folded and explanations on one line">
+</picture>
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Modules** — switch whole parts on or off; what is off disappears from the menu.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/modules-dark.png">
+  <img src="docs/screenshots/modules-light.png" alt="Administration → Modules with the integration and energy modules and their status">
+</picture>
+
+</td>
+<td width="50%">
+
+**Translations** — translate texts in the app, per module, with progress.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/translations-dark.png">
+  <img src="docs/screenshots/translations-light.png" alt="The Translations page with progress per module and English next to Dutch">
+</picture>
+
+</td>
+</tr>
+</table>
+
+*(Demo data — light/dark follows your system theme on GitHub. Regenerate them with `dev/screenshots/run.sh` (Docker) or `run-local.sh`.)*
 
 ## Quick start
 
@@ -519,19 +683,33 @@ would do); set *Output* to *Live* to let it control the Wallbox through a Loxone
 
 - **Modes**: *Off*, *Now* (full power), *Solar* (only solar surplus, with start/stop delays), *Min + Solar*
   (minimum power plus surplus) and *Smart plan* (ready by the deadline at the lowest cost). *Charge now* / *Pause*
-  apply until the car is unplugged; a "ready by" can be set per session.
+  apply until the car is unplugged. A **"ready by"** can be set by hand — for this session, or while the car is
+  out for when it comes back (one time, kept over a plug-in or restart) — optionally with how far you go
+  ("120 km", "30 kWh" or "full").
 - **Plan**: how much the car needs (from its own state of charge when a vehicle data source gives it, otherwise
   learned from the energy of the trip it came back from) and by when (the agenda or the learned weekday pattern,
-  whichever is first). Solar surplus is valued at what exporting it earns (net metering = the price of that
+  whichever is first). **While the car is out** the plan starts at the time it is expected home (a car
+  appointment that is going on, else the learned end of the day's last trip from the odometer, or the usual
+  plug-in time); the page shows *Expected home* and, next to it, what it would do if the car (or another car)
+  came home right now. The km the car usually still drives that day are added to what it needs. Solar surplus is valued at what exporting it earns (net metering = the price of that
   moment, or a fixed feed-in tariff), grid energy at the all-in price; the cheapest intervals win. For a plug-in
-  hybrid intervals above the fuel break-even price (fuel price x l/100 km vs kWh/km) are skipped.
+  hybrid intervals above the fuel break-even price (fuel price x l/100 km vs kWh/km) are skipped. Every planned
+  interval shows its solar and grid part (e.g. *11.0 kWh (2.9 ☀️ + 8.1 ⚡)*), also in the chart.
 - **Control** every 30 s: the charging power is written to a Loxone virtual input (kW, 0 = stop; optional 1/0
   "charging allowed" input) on change and at least every 5 minutes, never above the grid connection limit.
   A *Send test value* button checks the wiring. Published as `loxsuite/planner/{setpoint_kw,mode,need_kwh,…}`.
 - **Prices**: EnergyZero (free) or ENTSO-E (API key) day-ahead prices, turned into all-in prices by a tariff
   formula, or calibrated automatically against a Loxone *Spot Price Optimizer* (samples every 15 min, linear fit
-  over two weeks). Without internet prices: an estimate per hour of day from the Spot Price Optimizer.
-- **Fuel**: manual price, or the CBS national average for Euro95 (daily).
+  over two weeks). Your contract bills **per hour** (the average of the four quarters, most suppliers) or **per
+  quarter** (ENTSO-E delivers quarters). A **fixed contract** can have a normal and a low (dal) tariff with low
+  hours (default weekdays 23:00–07:00) and the whole weekend. Without internet prices: an estimate per hour of
+  day from the Spot Price Optimizer.
+- **Fuel**: manual price, or the CBS national average pump price (incl. VAT and excise) of what you tank —
+  Euro95 (E10), diesel or LPG — with an optional surcharge per litre (Super 98, a dearer station).
+
+Electricity price, home & solar forecast, fuel, the calendars and the agenda settings live under
+**Settings → Energy & charging**, since the other energy pages use them too. The **Charge log** (every
+Wallbox session with automatic checks of the output to Loxone) is under **Logs**.
 
 ### Meters
 
@@ -546,25 +724,37 @@ What the planner learned, viewable: **departures per weekday** (unplug times, me
 quartile − 15 min, overridable per weekday), **energy per trip** (weekday × part of day × time away; trips that
 emptied a hybrid's battery are marked), the **solar forecast** (Open-Meteo irradiance on your panel plane x kWp,
 corrected per hour of the day with what the PV meter really produced; error band and the last 28 days) and the
-**house profile** (workday/weekend per hour) with tomorrow's expected surplus. Every Wallbox session is kept
-beyond the Wallbox's own log of ~100.
+**house profile** (workday/weekend per hour) with tomorrow's expected surplus, and **driving per weekday**
+from the car's odometer (last 8 weeks: on how many days, how far, when it leaves and is back). Every Wallbox
+session is kept beyond the Wallbox's own log of ~100.
 
 ### Agenda
 
-Day, week, month and year views of ICS calendars (Nextcloud, Google, Outlook, iCloud — secret/subscription link,
-stored encrypted) plus trips planned in LoxSuite (one-off or weekly). An appointment needs the car when its title
+Day, week, month and year views of your calendars plus trips planned in LoxSuite (one-off or weekly). As many
+calendars as you like: **ICS links** (Google's private "secret address in iCal format", Outlook, Nextcloud;
+several at once, one per line) or **iCloud / CalDAV** — iCloud only offers a *public* ICS link, so LoxSuite signs
+in with an **app-specific password** (appleid.apple.com), lists the account's calendars and you tick which to
+add; also Nextcloud, Fastmail and other CalDAV servers. Addresses and passwords are stored encrypted, LoxSuite
+only reads. An appointment needs the car when its title
 holds a marker (🚗 / #auto by default) or when you switch *Car needed* on in LoxSuite (stored in LoxSuite only).
 Hints like `🚗 120 km`, `🚗 30 kWh` or `🚗 full` are understood. For car appointments with an address LoxSuite
 looks up the driving distance and time from home (OpenStreetMap Nominatim + OSRM; only those addresses are sent,
 results cached), adds the margin (default 20 km) and turns it into kWh; the planner makes sure the car is ready
 before you have to leave. Learned departures, planned charging and past sessions are shown in the views.
 
+**Climate at departure** (cars on the Škoda API): switch it on per appointment or trip with a temperature
+(16–26 °C); a set time before you leave (default 20 min) LoxSuite starts the car's air conditioning, once per
+departure, retried twice when the car doesn't answer. For a weekly trip switching it off skips just that week.
+Global switch: off, **log only** (default — writes down what it would send) or on; a notification rule *Car:
+climate at departure* reports started / failed.
+
 ### App & push
 
 On a phone LoxSuite gets a bottom tab bar and fits the screen; it also installs as an app on the phone's home screen (manifest + service worker) and can send **web push**
 notifications (VAPID keys generated per installation). Switch push on per device under the account menu → App & push;
-use the channel `loxsuite-push://all` (one click) or send your personal notifications to your own devices
-(`loxsuite-push://user/<id>`). Requires LoxSuite over HTTPS with a valid certificate; on iPhone from iOS 16.4
+use the channel `loxsuite-push://all` (one click) for admin rules, and under Profile → Notifications switch on
+**Push to my devices**: per subscribed alert you choose *Channel and push*, *Only my channel* (e.g. Telegram for
+"device offline") or *Only push*. Requires LoxSuite over HTTPS with a valid certificate; on iPhone from iOS 16.4
 when added to the home screen. Notification triggers for the car: **plug-in / swap reminders** (the car is home,
 not plugged in and needed soon; for a hybrid only when the saving against fuel is above your threshold; push
 buttons *Remind me at 22:00* / *Not today*; reminders that keep being ignored raise the threshold for that
@@ -585,8 +775,13 @@ hybrid can run its battery empty and drive on fuel, so its reserve defaults to 0
 
 - **Per vehicle**: type, usable battery (kWh), the car's own charge limit, reserve, consumption
   (kWh/km, optional) and, for a plug-in hybrid, fuel use (l/100 km).
-- **Data source** (optional) — instead of one integration per car brand, LoxSuite reads from something
-  that already talks to the car:
+- **Data source** (optional):
+  - **Škoda** — the official MyŠkoda API with an API key from the MyŠkoda app and the VIN: battery %, ranges,
+    plugged in, charging state and power, charge limit, odometer, parking position and fuel level. Škoda allows
+    20 requests per hour per car; LoxSuite reads every 10 minutes (every 4 while plugged in) and shows how many
+    requests are left and until when the key is valid. Used for *Climate at departure* (see Agenda).
+  
+  Or, instead of one integration per car brand, from something that already talks to the car:
   - **Homey Pro** — local Web API with an API key (Homey → Settings → API Keys). *Load devices* lists
     the Homey's devices (cars first); pick the car and which capability is which value.
   - **Home Assistant** — REST API with a long-lived access token. *Load entities* lists the entities
@@ -608,8 +803,27 @@ hybrid can run its battery empty and drive on fuel, so its reserve defaults to 0
   failing/recovered* reports both transitions.
 - **Use elsewhere**: the values are published as retained MQTT topics `loxsuite/vehicles/<id>/{soc,
   range_km,plugged,charging,home,energy_kwh,limit_soc,odometer_km}`; *Use in Monitor, dashboards &
-  Loxone* adds them as monitors in one click, and they can be mapped to Loxone like any topic. A
-  history of readings is kept for learning consumption and driving patterns later.
+  Loxone* shows which ones are already monitors and adds the ones you tick; they can be mapped to Loxone like
+  any topic. A history of readings is kept for learning consumption and driving patterns.
+- **Where it is**: a small street map (OpenStreetMap) on the vehicles overview and the vehicle page.
+
+### Driving & costs
+
+Wallbox → Driving & costs, per car, from its own odometer and battery %: trips, km per month, **electric
+consumption** learned from the battery drop per km (used for planning unless you set one), for a hybrid the km on
+electricity vs. fuel, the **charging cost** per kWh (grid at that hour's price, solar at its feed-in value), cost
+per km electric vs. fuel and what driving electric saved.
+
+### Energy manager
+
+The other big consumers — **hot water**, a **heat pump** (heating/cooling) and **appliances** (washing machine,
+dryer…) — planned together with the car from the prices, the solar forecast and the learned house load, in
+priority order for the solar surplus (the car takes its own place). Runs in **shadow mode**: it measures, plans and
+shows per load what it would send to Loxone (virtual inputs) and why, so you can compare with your own Loxone
+logic first. It learns usage **patterns** (hot water every day around 07:00, the washing machine on Wednesday
+morning) and plans ahead of them, works with the **real values** as well as the forecast (the current hour from
+the meters, the next hours corrected when the solar forecast is off; an hour planned on solar that isn't there
+waits), and shows per day what each load cost and what better timing would have saved.
 
 ### OCPP (Loxone Wallbox → OCPP backend)
 
@@ -634,6 +848,9 @@ online there.
   isn't using the same ChargePoint ID.
 - **Quarterly export**: Excel or CSV of all sessions in a quarter with meter readings at start/end,
   for manual uploads when sessions can't go over OCPP.
+- **Costs & reimbursement**: what the charged kWh cost (the real hourly price with solar at its feed-in
+  value, or a fixed price) against the reimbursement tariff(s) you get, per session, month, quarter and year,
+  in the statistics, the export and over MQTT.
 - **Statistics**: today / week / month / quarter / previous quarter / year tiles, a per-month chart and
   the last session's kWh. The same values are published as retained MQTT topics
   (`loxsuite/ocpp/<id>/…`); *Use in Monitor & dashboards* adds them as monitors in one click.
@@ -831,6 +1048,21 @@ instead of removing and re-adding it — Mosquitto's dynamic-security plugin has
 command, so this does an add-then-remove behind the scenes when the topic or type actually
 changes, ordered so a failed add never leaves a role with neither the old nor the new grant.
 
+### Modules
+
+Administration → Modules: switch whole parts of LoxSuite on or off — the MQTT bridge (the broker itself stops),
+Monitor & dashboards, Loxone logs, the AI assistant, Energy, Vehicles, Smart charging, OCPP & charging costs and
+the Energy manager. What is off disappears from the menu, its notification triggers and access-role areas; its
+data stays. Per module: a status with a setup checklist, an export (zip) and *Remove data*.
+
+### Languages & display
+
+The whole interface is translatable; **Dutch** ships with LoxSuite. Administration → Languages adds languages and
+picks the default; each user can choose their own (Profile). The **Translations** page (its own access right)
+translates every text in the app, per module, with progress; translations are kept in the database and can be
+exported/imported. Language, **24-hour or 12-hour clock** and **time zone** are set under Settings → General →
+Display; dates and numbers follow the chosen language.
+
 ### Settings
 
 - **Broker connection** — host/port/username/password/TLS the gateway itself uses to connect to
@@ -966,6 +1198,11 @@ whatever channel(s) they already send to.
   longer cookie on top of an in-memory session.
 - **Light/dark theme** toggle in the sidebar, remembered per browser, applied before first paint
   (no flash of the wrong theme).
+- **Fold cards away** — every card with a title has a chevron; folded cards show only their title. Remembered
+  per device, so phone and PC each keep their own layout.
+- **Compact explanations** — long explanations show as one line with ⓘ (hover for the whole text, click to
+  unfold); the lightbulb in the top bar shows them all in full. Settings only show the fields that apply to
+  the current choice (e.g. the ENTSO-E token only for ENTSO-E).
 - An interactive **Help** page (in the sidebar) walks through everything above from inside the app.
 
 ## Security

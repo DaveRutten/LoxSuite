@@ -25,61 +25,6 @@
 </div>
 
 <% if (canEdit('charging')) { %>
-<div class="card">
-  <h2 style="margin-top:0;"><%= t('Calendars') %></h2>
-  <% if (!site.lat) { %><p class="hint" style="color:#b8860b;"><%= t('Set the home location under') %> <a href="/planner#settings"><%= t('Planner → Settings') %></a> <%= t('so distances can be calculated.') %></p><% } %>
-  <% if (calendars.length) { %>
-    <table>
-      <thead><tr><th><%= t('Name') %></th><th><%= t('Address') %></th><th><%= t('Car') %></th><th><%= t('Last sync') %></th><th></th></tr></thead>
-      <tbody>
-        <% calendars.forEach(c => { %>
-          <tr>
-            <td><span style="display:inline-block; width:10px; height:10px; border-radius:3px; background:<%= c.color %>;"></span> <%= c.name %><%= c.enabled ? '' : ' (off)' %></td>
-            <td class="hint"><%= c.kind === 'caldav' ? (/icloud\.com$/.test(c.urlHost) ? 'iCloud' : 'CalDAV') + ' · ' + (c.username || '') : c.urlHost %></td>
-            <td><%= (vehicles.find(v => v.id === c.vehicle_id) || {}).name || '—' %></td>
-            <td class="hint"><%= c.last_sync_at ? formatDateTime(c.last_sync_at) : '—' %><% if (c.last_error) { %> <span style="color:var(--danger);"><%= c.last_error %></span><% } %></td>
-            <td><form method="post" action="/agenda/calendars/<%= c.id %>/delete" onsubmit="return confirm(<%= JSON.stringify(t('Remove this calendar from LoxSuite?')) %>);" style="margin:0;"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-    <div class="btn-row" style="margin-top:0.5rem;"><button type="button" class="btn-soft" id="ag-sync"><%- icon('refresh') %> <%= t('Sync now') %></button><span class="hint" id="ag-sync-msg" style="margin:0;"></span></div>
-  <% } %>
-  <details style="margin-top:0.8rem;" <%= calendars.length ? '' : 'open' %>>
-    <summary><strong><%= t('Add calendar') %></strong> <span class="hint"><%= t('— as many as you like: ICS links, iCloud or CalDAV') %></span></summary>
-    <form method="post" action="/agenda/calendars" style="margin-top:0.6rem;" id="ag-cal-form">
-      <div class="form-grid">
-        <div><label><%= t('Type') %></label><select name="kind" id="ag-kind">
-          <option value="ics"><%= t('ICS link (Google, Outlook, Nextcloud)') %></option>
-          <option value="icloud"><%= t('iCloud (Apple)') %></option>
-          <option value="caldav"><%= t('Other CalDAV server') %></option></select></div>
-        <div data-show-if="kind=ics"><label><%= t('Name (optional)') %></label><input type="text" name="name" placeholder="<%= t('from the calendar itself') %>"></div>
-        <div data-show-if="kind=ics" style="grid-column: span 2;"><label><%= t('ICS address(es) — one per line') %></label><textarea name="url" rows="2" autocomplete="off" spellcheck="false" placeholder="https://… or webcal://…" style="width:100%; font-family:monospace; font-size:0.8rem;"></textarea></div>
-        <div data-show-if="kind=caldav" style="grid-column: span 2;"><label><%= t('CalDAV server') %></label><input type="text" name="server" placeholder="https://cloud.example.nl/remote.php/dav"></div>
-        <div data-show-if="kind=icloud|caldav"><label><%= t('User name (Apple ID e-mail for iCloud)') %></label><input type="text" name="username" autocomplete="off"></div>
-        <div data-show-if="kind=icloud|caldav"><label><%= t('App-specific password') %></label><input type="password" name="password" autocomplete="new-password" placeholder="xxxx-xxxx-xxxx-xxxx"></div>
-        <div><label><%= t('Colour') %></label><input type="color" name="color" value="#3b82c4"></div>
-        <div><label><%= t('Car (optional)') %></label><select name="vehicle_id"><option value=""><%= t('— any —') %></option><% vehicles.forEach(v => { %><option value="<%= v.id %>"><%= v.name %></option><% }) %></select></div>
-      </div>
-      <div data-show-if="kind=icloud|caldav" style="margin-top:0.6rem;">
-        <button type="button" class="btn-soft" id="ag-discover"><%- icon('refresh') %> <%= t('Find calendars') %></button>
-        <span class="hint" id="ag-discover-msg" style="margin:0 0 0 0.5rem;"></span>
-        <div id="ag-cal-picks" class="pick-grid" hidden></div>
-      </div>
-      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="kind=ics">
-        <%= t('Nextcloud: calendar → … → Copy subscription link. Google: calendar settings → "Secret address in iCal format". Outlook: Settings → Calendar → Shared calendars → Publish → ICS link. The address is stored encrypted; LoxSuite only reads it (every 15 minutes).') %>
-        <%= t('Google\'s secret address is private: only someone with the link can read it, the calendar is not made public.') %>
-      </p>
-      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="kind=icloud">
-        <%= t('iCloud only shares a calendar as an ICS link when you make it public. Instead LoxSuite signs in with an app-specific password: appleid.apple.com → Sign-In and Security → App-Specific Passwords → create one named "LoxSuite". Your Apple ID password is never asked for; you can revoke the app password there at any time. It is stored encrypted and only used to read calendars.') %>
-      </p>
-      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="kind=caldav">
-        <%= t('Nextcloud: https://<server>/remote.php/dav with an app password (Settings → Security). Fastmail: https://caldav.fastmail.com. LoxSuite only reads.') %>
-      </p>
-      <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="primary" id="ag-cal-add"><%- icon('plus') %> <%= t('Add') %></button></div>
-    </form>
-  </details>
-</div>
 
 <div class="card">
   <h2 style="margin-top:0;"><%= t('Trips planned in LoxSuite') %></h2>
@@ -109,35 +54,7 @@
   </details>
 </div>
 
-<div class="card" id="settings">
-  <h2 style="margin-top:0;"><%= t('Settings') %></h2>
-  <form method="post" action="/agenda/settings">
-    <div class="form-grid">
-      <div><label><%= t('Car markers in the title') %></label><input type="text" name="tags" value="<%= cfg.tags.join(' ') %>"></div>
-      <div><label><%= t('Margin on distance (km)') %></label><input type="text" name="margin_km" value="<%= cfg.margin_km %>"></div>
-      <div><label><%= t('Ready this long before leaving (min)') %></label><input type="text" name="ready_margin_min" value="<%= cfg.ready_margin_min %>"></div>
-      <div><label><%= t('Calculate distances (OpenStreetMap)') %></label><%- toggleSwitch('geo', !!cfg.geo) %></div>
-    </div>
-    <h3 style="margin:1.1rem 0 0.4rem;">🌡️ <%= t('Climate at departure') %></h3>
-    <div class="form-grid">
-      <div><label><%= t('Climate at departure') %></label><select name="climate_mode">
-        <% [['off', 'Off'], ['log', 'Log only (send nothing)'], ['on', 'On: start the air conditioning']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= (cfg.climate_mode || 'log') === v ? 'selected' : '' %>><%= t(lbl) %></option><% }) %>
-      </select></div>
-      <div data-show-if="climate_mode=log|on"><label><%= t('Start this long before leaving (min)') %></label><input type="text" name="climate_lead_min" value="<%= cfg.climate_lead_min || 20 %>"></div>
-      <div data-show-if="climate_mode=log|on"><label><%= t('Also when not plugged in (uses the battery)') %></label><%- toggleSwitch('climate_on_battery', cfg.climate_on_battery !== false) %></div>
-    </div>
-    <p class="hint" style="margin:0.5rem 0 0;"><%= t('Choose a temperature per appointment or trip (click it in the agenda). At the set time before you leave, LoxSuite asks the car to start its air conditioning through the Škoda API, once per departure. Only for cars with the Škoda API as data source; each start uses one of the 20 API requests per hour. With "Log only" LoxSuite just writes down what it would have sent.') %><% if (!skodaCars) { %> <strong><%= t('No car uses the Škoda API yet.') %></strong><% } %></p>
-    <% if (climateRuns.length) { %>
-      <table class="table" style="margin-top:0.6rem; font-size:0.85rem;"><thead><tr><th><%= t('Leaves') %></th><th><%= t('Trip') %></th><th><%= t('Status') %></th><th><%= t('Detail') %></th></tr></thead><tbody>
-        <% climateRuns.forEach(r => { %><tr><td><%= formatDateTime(r.depart_at) %></td><td><%= r.title %> · <%= r.target_c %> °C</td><td><%= ({ sent: t('sent'), logged: t('logged'), failed: t('failed'), skipped: t('skipped'), retry: t('trying again'), off: t('switched off') })[r.status] || r.status %></td><td><%= r.message %></td></tr><% }) %>
-      </tbody></table>
-    <% } %>
-    <p class="hint" style="margin:0.5rem 0 0;">
-      <%= t('An appointment needs the car when its title or description contains one of the markers, e.g.') %> <code>🚗 Birthday</code> or <code>Visit #auto</code><%= t('. Add a hint like') %> <code>🚗 120 km</code>, <code>🚗 30 kWh</code> or <code>🚗 full</code> <%= t('to skip the distance lookup. For car appointments with an address, the driving distance from home is looked up (only those addresses are sent, results are kept), doubled for the way back plus the margin, and turned into kWh with the car\'s consumption.') %>
-    </p>
-    <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
-  </form>
-</div>
+<p class="hint" data-hint-keep><%= t('Calendars, car markers and climate at departure are set under') %> <a href="/settings/energy#calendars"><%= t('Settings → Energy & charging') %></a>.</p>
 <% } %>
 
 <style>.ag-need td { padding:0.3rem 0.2rem; } .ag-need td:last-child { white-space:nowrap; text-align:right; }</style>
@@ -404,36 +321,6 @@
     document.getElementById('ag-close').onclick = function (e) { e.preventDefault(); selected = null; render(); };
   }
 
-  var syncBtn = document.getElementById('ag-sync');
-  if (syncBtn) syncBtn.onclick = function () { syncBtn.disabled = true; post('/agenda/sync.json', {}).then(function (d) { document.getElementById('ag-sync-msg').textContent = (d.results || []).map(function (r) { return r.ok ? r.events + ' events' : r.message; }).join(' · '); load(); }).finally(function () { syncBtn.disabled = false; }); };
-  var calForm = document.getElementById('ag-cal-form');
-  if (calForm) {
-    var picks = document.getElementById('ag-cal-picks'), dmsg = document.getElementById('ag-discover-msg');
-    var T2 = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
-    document.getElementById('ag-discover').onclick = function () {
-      var kind = calForm.kind.value;
-      dmsg.textContent = T2('Searching…'); picks.hidden = true;
-      post('/agenda/caldav/discover.json', { server: kind === 'icloud' ? '' : calForm.server.value, username: calForm.username.value, password: calForm.password.value }).then(function (d) {
-        if (!d.ok) { dmsg.textContent = d.message || 'Error'; return; }
-        dmsg.textContent = T2('Tick the calendars to add:');
-        picks.innerHTML = d.calendars.map(function (c, i) {
-          return '<label class="pick"><input type="checkbox" name="cal" value="' + i + '"><span class="pick-text"><span class="pick-name">' + (c.color ? '<span style="display:inline-block; width:0.7em; height:0.7em; border-radius:50%; background:' + esc(c.color) + '; margin-right:0.3em;"></span>' : '') + esc(c.name) + '</span></span></label>';
-        }).join('') || '<p class="hint" style="margin:0;">' + esc(T2('No calendars found.')) + '</p>';
-        picks.hidden = false;
-        calForm._cals = d.calendars;
-      }).catch(function (e) { dmsg.textContent = e.message; });
-    };
-    calForm.addEventListener('submit', function (e) {
-      var kind = calForm.kind.value;
-      if (kind === 'ics') { if (!calForm.url.value.trim()) { e.preventDefault(); alert(T2('Fill in the ICS address.')); } return; }
-      e.preventDefault();
-      var chosen = Array.prototype.slice.call(picks.querySelectorAll('input[name=cal]:checked')).map(function (c) { return calForm._cals[Number(c.value)]; });
-      if (!chosen.length) { dmsg.textContent = T2('First find the calendars and tick one or more.'); return; }
-      post('/agenda/caldav/add.json', { server: kind === 'icloud' ? '' : calForm.server.value, username: calForm.username.value, password: calForm.password.value, calendars: chosen, color: calForm.color.value, vehicle_id: calForm.vehicle_id.value })
-        .then(function (d) { if (!d.ok) { dmsg.textContent = d.message || 'Error'; return; } location.href = '/agenda?saved=1'; })
-        .catch(function (er) { dmsg.textContent = er.message; });
-    });
-  }
   var tf = document.getElementById('ag-trip-form');
   if (tf) tf.addEventListener('submit', function () {
     var dep = document.getElementById('ag-dep').value; var ret = document.getElementById('ag-ret').value;

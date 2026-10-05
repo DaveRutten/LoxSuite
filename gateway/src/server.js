@@ -310,6 +310,8 @@ async function main() {
   // router, so it's gated per-route inside that file instead of once here.
   app.use('/mappings', requireAuth, mappingRoutes);
   app.use('/incoming', requireAuth, requirePermission('incoming', 'view'), incomingRoutes);
+  // Settings → Energy & charging (prices, solar, fuel, calendars): part of Smart charging, so its own rights
+  app.use('/settings/energy', requireAuth, requirePermission('charging', 'view'), require('./routes/settingsEnergy'));
   app.use('/settings', requireAuth, requirePermission('settings', 'view'), settingsRoutes);
   app.use('/mqtt-users', requireAuth, requirePermission('mqtt_users', 'view'), mqttUsersRoutes);
   app.use('/mqtt-roles', requireAuth, requirePermission('mqtt_roles', 'view'), mqttRolesRoutes);

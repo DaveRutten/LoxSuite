@@ -86,7 +86,7 @@ const MODULES = [
     key: 'charging', group: 'energy', label: 'Smart charging', defaultOn: false, requires: ['energy', 'vehicles'],
     description: 'Charge at the cheapest and sunniest moments, ready before you leave, with a log of every session.',
     parts: ['Smart charging (planner, output to the Wallbox)', 'Charge log with automatic checks', 'Learned departures and energy per trip', 'Agenda (calendars, trips)', 'Plug-in reminders, fuel price'],
-    routes: ['/planner', '/learned', '/agenda'],
+    routes: ['/planner', '/learned', '/agenda', '/settings/energy'],
     workers: [
       { start: lazy('./planner', 'startPlanner'), stop: lazy('./planner', 'stopPlanner') },
       { start: lazy('./chargeLog', 'startChargeLog'), stop: lazy('./chargeLog', 'stopChargeLog') },

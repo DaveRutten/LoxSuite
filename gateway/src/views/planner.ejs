@@ -101,78 +101,7 @@
     </form>
   </details>
 
-  <details style="margin-top:0.6rem;" <%= saved === 'prices' ? 'open' : '' %>>
-    <summary><strong><%= t('Electricity price') %></strong> <span class="hint"><%= priceStatus ? (priceStatus.ok ? `· ${priceStatus.count} intervals, until ${formatDateTime(priceStatus.until)}` : `· ${priceStatus.error}`) : '' %></span></summary>
-    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
-      <input type="hidden" name="section" value="prices">
-      <div class="form-grid">
-        <div><label><%= t('Source') %></label><select name="source">
-          <option value="energyzero" <%= priceCfg.source === 'energyzero' ? 'selected' : '' %>><%= t('EnergyZero (day-ahead, free)') %></option>
-          <option value="entsoe" <%= priceCfg.source === 'entsoe' ? 'selected' : '' %>><%= t('ENTSO-E (day-ahead, API key)') %></option>
-          <option value="loxone" <%= priceCfg.source === 'loxone' ? 'selected' : '' %>><%= t('Loxone Spot Price Optimizer (estimate from recent prices)') %></option>
-          <option value="fixed" <%= priceCfg.source === 'fixed' ? 'selected' : '' %>><%= t('Fixed price') %></option></select></div>
-        <div data-show-if="source=entsoe"><label><%= t('ENTSO-E token') %></label><input type="password" name="entsoe_token" autocomplete="new-password" placeholder="<%= priceCfg.hasEntsoeToken ? 'Leave blank to keep' : '' %>"></div>
-        <div data-show-if="source=energyzero|entsoe"><label><%= t('Your contract bills per') %></label><select name="price_interval">
-          <option value="hour" <%= priceCfg.price_interval !== 'quarter' ? 'selected' : '' %>><%= t('hour (average of the quarters)') %></option>
-          <option value="quarter" <%= priceCfg.price_interval === 'quarter' ? 'selected' : '' %>><%= t('quarter of an hour') %></option></select></div>
-      </div>
-      <div class="form-grid" style="margin-top:0.8rem;" data-show-if="source=fixed">
-        <div><label><%= t('Price (€/kWh, all-in)') %></label><input type="text" name="fixed_eur_kwh" value="<%= priceCfg.fixed_eur_kwh %>"></div>
-        <div><label><%= t('Low tariff (€/kWh, empty = single tariff)') %></label><input type="text" name="fixed_low_eur_kwh" value="<%= priceCfg.fixed_low_eur_kwh ?? '' %>" placeholder="0.22"></div>
-        <div data-show-if="fixed_low_eur_kwh"><label><%= t('Low from') %></label><input type="text" name="fixed_low_from" value="<%= priceCfg.fixed_low_from || '23:00' %>" placeholder="23:00"></div>
-        <div data-show-if="fixed_low_eur_kwh"><label><%= t('Low until') %></label><input type="text" name="fixed_low_until" value="<%= priceCfg.fixed_low_until || '07:00' %>" placeholder="07:00"></div>
-        <div data-show-if="fixed_low_eur_kwh"><label><%= t('Whole weekend low') %></label><%- toggleSwitch('fixed_low_weekend', priceCfg.fixed_low_weekend !== false) %></div>
-      </div>
-      <div class="form-grid" style="margin-top:0.8rem;" data-show-if="source=energyzero|entsoe">
-        <div><label><%= t('Supplier markup (€/kWh, excl. VAT)') %></label><input type="text" name="markup_eur_kwh" value="<%= priceCfg.markup_eur_kwh %>"></div>
-        <div><label><%= t('Energy tax (€/kWh, incl. VAT)') %></label><input type="text" name="energy_tax_eur_kwh" value="<%= priceCfg.energy_tax_eur_kwh %>"></div>
-        <div><label><%= t('VAT (%)') %></label><input type="text" name="vat_pct" value="<%= priceCfg.vat_pct %>"></div>
-        <div><label><%= t('Calibrate to Loxone') %><%= spo ? ` (${spo.name})` : '' %></label><%- toggleSwitch('calibrate_loxone', !!priceCfg.calibrate_loxone) %></div>
-      </div>
-      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=fixed"><%= t('A fixed contract: one price, or a normal and a low (dal) tariff — in the Netherlands usually low on weekdays from 23:00 to 07:00 and all weekend. The plan then charges in the low hours where it can.') %></p>
-      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=energyzero|entsoe"><%= t('Since October 2025 the day-ahead market has a price per quarter of an hour; most dynamic contracts still bill the average per hour. ENTSO-E delivers the quarters, EnergyZero only hours.') %></p>
-      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=energyzero|entsoe|loxone">
-        <%= t('All-in price = (market + markup) × VAT + energy tax. With') %> <em><%= t('Calibrate') %></em> <%= t('LoxSuite instead learns the formula from the price your Spot Price Optimizer shows (sampled every 15 minutes, fitted over two weeks)') %><%= priceStatus && priceStatus.calib ? ` — now: all-in = ${priceStatus.calib.a} × market + ${priceStatus.calib.b} (${priceStatus.calib.n} samples)` : spo ? ' — needs a day of samples first' : ' — no Spot Price Optimizer found' %>.
-      </p>
-      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-recalc="prices"><%= t('Fetch prices now') %></button></div>
-    </form>
-  </details>
-
-  <details style="margin-top:0.6rem;" <%= saved === 'solar' ? 'open' : '' %>>
-    <summary><strong><%= t('Home & solar forecast') %></strong> <span class="hint"><%= solarStatus ? (solarStatus.ok ? `· updated ${formatDateTime(solarStatus.at)}` : `· ${solarStatus.error}`) : '' %></span></summary>
-    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
-      <input type="hidden" name="section" value="solar">
-      <div class="form-grid">
-        <div><label><%= t('Home latitude') %></label><input type="text" name="lat" value="<%= site.lat ?? '' %>" placeholder="51.6"></div>
-        <div><label><%= t('Home longitude') %></label><input type="text" name="lon" value="<%= site.lon ?? '' %>" placeholder="5.5"></div>
-        <div><label><%= t('Forecast on') %></label><%- toggleSwitch('enabled', !!solarCfg.enabled) %></div>
-      </div>
-      <div class="form-grid" style="margin-top:0.8rem;">
-        <div data-show-if="enabled"><label><%= t('Installed power (kWp)') %></label><input type="text" name="kwp" value="<%= solarCfg.kwp ?? '' %>" placeholder="11.8"></div>
-        <div data-show-if="enabled"><label><%= t('Tilt (°)') %></label><input type="text" name="tilt" value="<%= solarCfg.tilt %>"></div>
-        <div data-show-if="enabled"><label><%= t('Azimuth (° , 0 = south, -90 = east, 90 = west)') %></label><input type="text" name="azimuth" value="<%= solarCfg.azimuth %>"></div>
-        <div data-show-if="enabled"><label><%= t('System efficiency') %></label><input type="text" name="efficiency" value="<%= solarCfg.efficiency %>"></div>
-      </div>
-      <p class="hint" style="margin:0.5rem 0 0;"><%= t('Weather forecast from Open-Meteo (irradiance on your panels), corrected per hour of the day with what the PV meter really produced. The home location is also used for distances in the agenda.') %></p>
-      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-recalc="solar"><%= t('Fetch forecast now') %></button></div>
-    </form>
-  </details>
-
-  <details style="margin-top:0.6rem;" <%= saved === 'fuel' ? 'open' : '' %>>
-    <summary><strong><%= t('Fuel (plug-in hybrid)') %></strong> <span class="hint">· <%= fuel.label %> € <%= fuel.eur_l.toFixed(3) %>/l (<%= fuel.source === 'auto' ? t('CBS') + (fuel.date ? ' ' + fuel.date.split('-').reverse().join('-') : '') + (fuel.markup ? ', ' + t('incl. surcharge') + ' € ' + Number(fuel.markup).toFixed(3) : '') : t('manual') %>)</span></summary>
-    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
-      <input type="hidden" name="section" value="fuel">
-      <div class="form-grid">
-        <div><label><%= t('What do you tank?') %></label><select name="fuel_type"><% Object.entries(fuelTypes).forEach(([k, v]) => { %><option value="<%= k %>" <%= (cfg.fuel_type || 'euro95') === k ? 'selected' : '' %>><%= v.label %></option><% }) %></select></div>
-        <div><label><%= t('Automatic (CBS national average)') %></label><%- toggleSwitch('fuel_auto', !!cfg.fuel_auto) %></div>
-        <div data-show-if="fuel_auto"><label><%= t('Surcharge on the CBS price (€/l)') %></label><input type="text" name="fuel_markup_eur_l" value="<%= cfg.fuel_markup_eur_l || 0 %>" placeholder="0.12"></div>
-        <div data-show-if="!fuel_auto"><label><%= t('Fuel price (€/l)') %></label><input type="text" name="fuel_eur_l" value="<%= cfg.fuel_eur_l %>"></div>
-        <div><label><%= t('Default consumption (kWh/km)') %></label><input type="text" name="default_kwh_per_km" value="<%= cfg.default_kwh_per_km %>"></div>
-      </div>
-      <p class="hint" style="margin:0.5rem 0 0;"><%= t('For a plug-in hybrid LoxSuite compares the cost per km on electricity with fuel (using the car\'s l/100 km), and doesn\'t charge in intervals where fuel is cheaper.') %> <%= t('The CBS price is the average pump price in the Netherlands of the day, including VAT and excise duty; Euro95 at Dutch pumps is E10. For Super 98 / E5, or a station that is dearer or cheaper than average, add a surcharge (e.g. 0.12). A CBS price older than 14 days is not used; then the manual price applies.') %></p>
-      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-recalc="fuel"><%= t('Fetch fuel price now') %></button></div>
-    </form>
-  </details>
+  <p class="hint" style="margin:0.6rem 0 0;" data-hint-keep><%= t('Electricity price, solar forecast and fuel are under') %> <a href="/settings/energy"><%= t('Settings → Energy & charging') %></a>.</p>
 
   <details style="margin-top:0.6rem;" <%= saved === 'reminders' ? 'open' : '' %>>
     <summary><strong><%= t('Reminders') %></strong></summary>

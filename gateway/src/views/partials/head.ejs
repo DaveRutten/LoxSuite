@@ -17,10 +17,10 @@
   <% if (typeof lang !== 'undefined' && lang !== 'en') { %>
   <script src="/i18n/<%= lang %>.js?v=<%= typeof i18nVersion !== 'undefined' ? i18nVersion : assetVersion %>"></script>
   <script src="/i18n.js?v=<%= assetVersion %>"></script>
+  <% } %>
   <script src="/monitor-picks.js?v=<%= assetVersion %>"></script>
   <script src="/show-if.js?v=<%= assetVersion %>" defer></script>
   <script src="/mini-map.js?v=<%= assetVersion %>"></script>
-  <% } %>
   <script>
     // Dates and numbers in the browser follow the user's language (nl -> nl-NL) and the clock setting
     // (Administration > Languages, 24 h by default) instead of the browser's own locale: every
@@ -165,14 +165,13 @@
 
       <% const em = (k) => mod(k) && canView(k); const energyAny = em('charging') || em('vehicles') || em('energy') || em('energy_manager') || em('ocpp'); %>
       <% if (energyAny) { %>
-        <% const wallboxExpanded = ['planner', 'chargelog', 'energymanager', 'agenda', 'vehicles', 'driving', 'energy', 'learned', 'ocpp'].includes(active); %>
+        <% const wallboxExpanded = ['planner', 'energymanager', 'agenda', 'vehicles', 'driving', 'energy', 'learned', 'ocpp'].includes(active); %>
         <button type="button" class="nav-section-label" data-nav-section="wallbox" aria-expanded="<%= isCollapsed('wallbox', wallboxExpanded) ? 'false' : 'true' %>">
           <span><%= t('Energy & charging') %></span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('wallbox', wallboxExpanded) ? 'hidden' : '' %>>
           <% if (em('charging')) { %>
             <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>"><%= t('Smart charging') %></a>
-            <a href="/planner/log" class="<%= active === 'chargelog' ? 'active' : '' %>"><%= t('Charge log') %></a>
             <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>"><%= t('Agenda') %></a>
             <a href="/learned" class="<%= active === 'learned' ? 'active' : '' %>"><%= t('Learned') %></a>
           <% } %>
@@ -199,8 +198,8 @@
       <% } %>
 
       <%
-        const logActiveKeys = ['logs-system', 'logs-notifications', 'logs-loxone', 'logs-loxone-commands', 'logs-mqtt'];
-        const logsSectionVisible = canView('logs_system') || canView('logs_notifications') || canView('logs_loxone') || canView('logs_loxone_commands') || canView('logs_mqtt');
+        const logActiveKeys = ['logs-system', 'logs-notifications', 'logs-loxone', 'logs-loxone-commands', 'logs-mqtt', 'chargelog'];
+        const logsSectionVisible = canView('logs_system') || canView('logs_notifications') || canView('logs_loxone') || canView('logs_loxone_commands') || canView('logs_mqtt') || em('charging');
       %>
       <% if (logsSectionVisible) { %>
         <% const logsExpanded = logActiveKeys.includes(active); %>
@@ -213,6 +212,7 @@
           <% if (canView('logs_loxone') && mod('loxone_logs')) { %><a href="/logs/loxone" class="<%= active === 'logs-loxone' ? 'active' : '' %>"><%= t('Loxone Miniservers') %></a><% } %>
           <% if (canView('logs_loxone_commands') && mod('mqtt')) { %><a href="/logs/loxone-commands" class="<%= active === 'logs-loxone-commands' ? 'active' : '' %>"><%= t('Loxone Commands') %></a><% } %>
           <% if (canView('logs_mqtt') && mod('mqtt')) { %><a href="/logs/mqtt" class="<%= active === 'logs-mqtt' ? 'active' : '' %>"><%= t('MQTT Broker') %></a><% } %>
+          <% if (em('charging')) { %><a href="/planner/log" class="<%= active === 'chargelog' ? 'active' : '' %>"><%= t('Charge log') %></a><% } %>
         </div>
       <% } %>
       <% if (canView('translations') && typeof multiLang !== 'undefined' && multiLang) { %><a href="/translations" class="<%= active === 'translations' ? 'active' : '' %>"><%= t('Translations') %></a><% } %>
@@ -400,6 +400,8 @@
                      for anyone who can't also canEdit. */ %>
               <% if (canEdit('settings')) { %>
                 <a href="/settings" class="<%= active === 'settings' ? 'active' : '' %>"><%= t('Settings') %></a>
+              <% } else if ((typeof moduleOn !== 'function' || moduleOn('charging')) && canView('charging')) { %>
+                <a href="/settings/energy" class="<%= active === 'settings' ? 'active' : '' %>"><%= t('Settings') %></a>
               <% } %>
               <% if (currentUser.isAdmin) { %>
                 <a href="/admin/general" class="<%= active === 'admin' ? 'active' : '' %>"><%= t('Administration') %></a>

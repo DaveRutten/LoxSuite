@@ -37,3 +37,12 @@ test('every catalog text belongs to a known module', () => {
   const keys = new Set(['core', ...require('../src/modules').MODULES.map((m) => m.key)]);
   for (const e of i18n.catalog()) assert.ok(keys.has(e.module), `${e.key} → ${e.module}`);
 });
+
+test('page helpers load in every language, not only when a translation is active', () => {
+  const head = require('fs').readFileSync(require('path').join(__dirname, '../src/views/partials/head.ejs'), 'utf8');
+  const langBlock = head.slice(head.indexOf("lang !== 'en'"), head.indexOf('<% } %>', head.indexOf("lang !== 'en'")));
+  for (const f of ['monitor-picks.js', 'show-if.js', 'mini-map.js']) {
+    assert.ok(head.includes(f), `${f} is loaded`);
+    assert.ok(!langBlock.includes(f), `${f} is outside the language-only block`);
+  }
+});

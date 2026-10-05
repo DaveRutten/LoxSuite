@@ -174,8 +174,8 @@
 
 <h2 style="margin-top:1.3rem;"><%= t('Which car is plugged in') %></h2>
 <div class="form-grid">
-  <div><label><%= t('NFC tags of this car (one per line)') %></label><textarea name="id_tags" rows="2" placeholder="B02B058D414C27"><%= v.id_tags || '' %></textarea></div>
-  <div><label><%= t('Loxone users of this car (one per line)') %></label><textarea name="loxone_users" rows="2" placeholder="<%= t('Dave Rutten') %>"><%= v.loxone_users || '' %></textarea></div>
+  <div><label><%= t('NFC tags of this car (one per line)') %></label><textarea name="id_tags" rows="2" placeholder="04A1B2C3D4E5F6"><%= v.id_tags || '' %></textarea></div>
+  <div><label><%= t('Loxone users of this car (one per line)') %></label><textarea name="loxone_users" rows="2" placeholder="<%= t('Alex') %>"><%= v.loxone_users || '' %></textarea></div>
   <div><label><%= t('Report its sessions over OCPP') %></label><%- toggleSwitch('ocpp_report', v.ocpp_report === undefined || v.ocpp_report === null ? true : !!v.ocpp_report) %></div>
 </div>
 <p class="hint" style="margin-top:0.5rem;">
@@ -184,8 +184,8 @@
 
 <h2 style="margin-top:1.3rem;"><%= t('At home') %></h2>
 <div class="form-grid">
-  <div><label><%= t('Home latitude') %></label><input type="text" name="home_lat" value="<%= val(v.home_lat) %>" placeholder="51.6"></div>
-  <div><label><%= t('Home longitude') %></label><input type="text" name="home_lon" value="<%= val(v.home_lon) %>" placeholder="5.5"></div>
+  <div><label><%= t('Home latitude') %></label><input type="text" name="home_lat" value="<%= val(v.home_lat) %>" placeholder="52.09"></div>
+  <div><label><%= t('Home longitude') %></label><input type="text" name="home_lon" value="<%= val(v.home_lon) %>" placeholder="5.12"></div>
   <div><label><%= t('Radius (m)') %></label><input type="text" name="home_radius_m" value="<%= val(v.home_radius_m) %>"></div>
   <div><label><%= t('Or: location text that means home') %></label><input type="text" name="home_value" value="<%= val(v.home_value) %>" placeholder="<%= t('home') %>"></div>
 </div>

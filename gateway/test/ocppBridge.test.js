@@ -85,14 +85,14 @@ test('buildXlsx produces a zip with a worksheet and buildCsv a semicolon file', 
 const { normalizeNfcTag, parseUserTagMap, resolveIdTag } = require('../src/ocppBridge');
 
 test('normalizeNfcTag turns a Loxone NFC tag into an OCPP idTag', () => {
-  assert.equal(normalizeNfcTag('EC B0 2B 05 8D 41 4C 27 EC'), 'B02B058D414C27');
+  assert.equal(normalizeNfcTag('EC 04 A1 B2 C3 D4 E5 F6 EC'), '04A1B2C3D4E5F6');
   assert.equal(normalizeNfcTag('04:a1:b2:c3:00:00'), '04A1B2C3');
   assert.equal(normalizeNfcTag(''), '');
 });
 
 test('parseUserTagMap reads "user = tag" lines case-insensitively', () => {
-  const m = parseUserTagMap('Dave Rutten = B02B058D414C27\nGuest: GUEST01\n\njunk');
-  assert.equal(m.get('dave rutten'), 'B02B058D414C27');
+  const m = parseUserTagMap('Alex Example = 04A1B2C3D4E5F6\nGuest: GUEST01\n\njunk');
+  assert.equal(m.get('alex example'), '04A1B2C3D4E5F6');
   assert.equal(m.get('guest'), 'GUEST01');
   assert.equal(m.size, 2);
 });

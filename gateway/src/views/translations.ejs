@@ -26,12 +26,12 @@
   </div>
 
   <div class="card">
-    <table class="table" id="tr-table" data-no-i18n>
+    <table class="table" id="tr-table" data-no-i18n style="table-layout:fixed; width:100%;">
       <thead><tr><th style="width:45%;"><%= t('English') %></th><th><%= (langs.find(l => l.code === lang) || {}).name %></th></tr></thead>
       <tbody>
         <% entries.forEach(e => { %>
           <tr data-module="<%= e.module %>" data-key="<%= e.key %>" data-done="<%= e.text ? 1 : 0 %>">
-            <td style="vertical-align:top;"><div><%= e.key %></div><div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;"><%= e.where.slice(0, 3).join(', ') %><%= e.where.length > 3 ? ' …' : '' %></div></td>
+            <td style="vertical-align:top; overflow-wrap:anywhere; white-space:normal;"><div><%= e.key %></div><div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;"><%= e.where.slice(0, 3).join(', ') %><%= e.where.length > 3 ? ' …' : '' %></div></td>
             <td style="vertical-align:top;">
               <% if (canEdit('translations')) { %>
                 <textarea rows="<%= e.key.length > 70 ? 3 : 1 %>" style="width:100%;" data-orig="<%= e.text %>"><%= e.text %></textarea>

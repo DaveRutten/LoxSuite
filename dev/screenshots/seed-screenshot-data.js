@@ -5,8 +5,9 @@
 process.env.DB_PATH = process.env.DB_PATH || '/data/screenshot.db';
 const fs = require('fs');
 const path = require('path');
-const db = require('/app/src/db');
-const { encrypt } = require('/app/src/secretCrypto');
+const APP_DIR = process.env.APP_DIR || '/app';
+const db = require(path.join(APP_DIR, 'src/db'));
+const { encrypt } = require(path.join(APP_DIR, 'src/secretCrypto'));
 
 const FAKE_MS_HOST = process.env.FAKE_MS_HOST || '127.0.0.1';
 const FAKE_MS_PORT = Number(process.env.FAKE_MS_PORT || 7701);

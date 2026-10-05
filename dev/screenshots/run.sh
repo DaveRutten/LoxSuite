@@ -54,29 +54,32 @@ echo "==> Copying the screenshot scripts themselves in..."
 docker cp "$SCRIPT_DIR/fake-miniserver.js" "$CONTAINER:/app/fake-miniserver.js"
 docker cp "$SCRIPT_DIR/seed-screenshot-data.js" "$CONTAINER:/app/seed-screenshot-data.js"
 docker cp "$SCRIPT_DIR/take-screenshots.js" "$CONTAINER:/app/take-screenshots.js"
+docker cp "$SCRIPT_DIR/seed-energy-data.js" "$CONTAINER:/app/seed-energy-data.js"
+docker cp "$SCRIPT_DIR/offline-stubs.js" "$CONTAINER:/app/offline-stubs.js"
 
 echo "==> Seeding a fresh synthetic database..."
 docker exec \
   -e DB_PATH=/data/screenshot.db -e SESSION_SECRET=screenshot \
   -e ADMIN_USERNAME=admin -e ADMIN_PASSWORD=admin12345678 \
   -e BACKUP_DIR=/data/backups -e FAKE_MS_HOST=127.0.0.1 -e FAKE_MS_PORT=7701 \
-  "$CONTAINER" sh -c 'rm -f /data/screenshot.db && rm -rf /data/backups && node /app/seed-screenshot-data.js'
+  "$CONTAINER" sh -c 'rm -f /data/screenshot.db && rm -rf /data/backups && node /app/seed-screenshot-data.js && node /app/seed-energy-data.js'
 
 echo "==> Starting the fake Miniserver..."
 # --security-revert=CVE-2023-46809: Node 20+ disables RSA_PKCS1_PADDING for private decryption by
 # default; Loxone's own handshake uses PKCS#1v1.5 throughout with no alternative — safe to revert
 # here specifically because this is a local, throwaway dev tool never exposed to real traffic.
-docker exec -d "$CONTAINER" node --security-revert=CVE-2023-46809 /app/fake-miniserver.js
+docker exec -d "$CONTAINER" sh -c 'node --security-revert=CVE-2023-46809 /app/fake-miniserver.js 2>/dev/null || node /app/fake-miniserver.js'
 sleep 1
 
 echo "==> Starting the app against the seeded database..."
 docker exec -d \
   -e DB_PATH=/data/screenshot.db -e PORT=15590 -e SESSION_SECRET=screenshot \
   -e ADMIN_USERNAME=admin -e ADMIN_PASSWORD=admin12345678 -e BACKUP_DIR=/data/backups \
-  "$CONTAINER" sh -c 'cd /app && node src/server.js > /tmp/app.log 2>&1'
-sleep 5
+  -e TZ=Europe/Amsterdam "$CONTAINER" sh -c 'cd /app && node -r /app/offline-stubs.js src/server.js > /tmp/app.log 2>&1'
+# the app connects to the Miniserver, syncs the calendar and reads the car in its first minute
+sleep 75
 
-echo "==> Running the Playwright screenshot pass (light + dark, 13 pages each)..."
+echo "==> Running the Playwright screenshot pass (light + dark, every page)..."
 docker exec "$CONTAINER" sh -c 'rm -rf /data/shots'
 docker exec -w /app "$CONTAINER" node take-screenshots.js
 

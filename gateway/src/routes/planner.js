@@ -170,6 +170,7 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
     }, reminders.DEFAULTS);
   }
   await planner.recalc().catch(() => {});
+  if (['prices', 'solar', 'fuel'].includes(section)) return res.redirect(`/settings/energy?saved=${encodeURIComponent(section)}#prices`);
   res.redirect(`/planner?saved=${encodeURIComponent(section || '1')}#settings`);
 }));
 

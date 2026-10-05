@@ -56,7 +56,7 @@
   </div>
   <div>
     <label><%= t('Loxone user → tag (optional, one per line)') %></label>
-    <textarea name="user_tag_map" rows="3" placeholder="<%= t('Dave Rutten = B02B058D414C27') %>"><%= b.user_tag_map || '' %></textarea>
+    <textarea name="user_tag_map" rows="3" placeholder="<%= t('Alex = 04A1B2C3D4E5F6') %>"><%= b.user_tag_map || '' %></textarea>
   </div>
   <div><label><%= t('Wait for authorization (s)') %></label><input type="number" name="auth_wait_s" min="0" max="900" value="<%= b.auth_wait_s != null ? b.auth_wait_s : 60 %>"></div>
 </div>

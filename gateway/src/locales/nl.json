@@ -976,8 +976,6 @@
   "Database:": "Database:",
   "dataPoint #{0} is missing \"topicTemplate\"": "dataPoint #{0} mist \"topicTemplate\"",
   "Date": "Datum",
-  "Dave Rutten": "Dave Rutten",
-  "Dave Rutten = B02B058D414C27": "Dave Rutten = B02B058D414C27",
   "Day": "Dag",
   "day": "dag",
   "Days back": "Dagen terug",
@@ -3874,5 +3872,13 @@
   "Fill in the ICS address.": "Vul het ICS-adres in.",
   "from the calendar itself": "uit de agenda zelf",
   "ICS address(es) — one per line": "ICS-adres(sen) — één per regel",
-  "Name (optional)": "Naam (optioneel)"
+  "Name (optional)": "Naam (optioneel)",
+  "Alex": "Alex",
+  "Alex = 04A1B2C3D4E5F6": "Alex = 04A1B2C3D4E5F6",
+  "Agenda & climate at departure": "Agenda & klimaat bij vertrek",
+  "Calendars, car markers and climate at departure are set under": "Agenda's, automarkeringen en klimaat bij vertrek stel je in onder",
+  "Electricity price, solar forecast and fuel are under": "Stroomprijs, zonnevoorspelling en brandstof staan onder",
+  "Prices, solar & fuel": "Prijzen, zon & brandstof",
+  "Settings → Energy & charging": "Instellingen → Energie & laden",
+  "Used by Smart charging, the energy manager, Driving & costs and OCPP costs.": "Gebruikt door Slim laden, de energiemanager, Rijden & kosten en de OCPP-kosten."
 }

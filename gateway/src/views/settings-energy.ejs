@@ -1,0 +1,217 @@
+<%- include('partials/head', { pageTitle: 'Settings', active: 'settings' }) %>
+<%- include('partials/tabs-settings', { active: 'energy' }) %>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
+
+<div class="card" id="prices">
+  <h2 style="margin-top:0;"><%= t('Prices, solar & fuel') %></h2>
+  <p class="hint" style="margin:0 0 0.4rem;"><%= t('Used by Smart charging, the energy manager, Driving & costs and OCPP costs.') %></p>
+  <details <%= saved === 'prices' ? 'open' : '' %>>
+    <summary><strong><%= t('Electricity price') %></strong> <span class="hint"><%= priceStatus ? (priceStatus.ok ? `· ${priceStatus.count} intervals, until ${formatDateTime(priceStatus.until)}` : `· ${priceStatus.error}`) : '' %></span></summary>
+    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+      <input type="hidden" name="section" value="prices">
+      <div class="form-grid">
+        <div><label><%= t('Source') %></label><select name="source">
+          <option value="energyzero" <%= priceCfg.source === 'energyzero' ? 'selected' : '' %>><%= t('EnergyZero (day-ahead, free)') %></option>
+          <option value="entsoe" <%= priceCfg.source === 'entsoe' ? 'selected' : '' %>><%= t('ENTSO-E (day-ahead, API key)') %></option>
+          <option value="loxone" <%= priceCfg.source === 'loxone' ? 'selected' : '' %>><%= t('Loxone Spot Price Optimizer (estimate from recent prices)') %></option>
+          <option value="fixed" <%= priceCfg.source === 'fixed' ? 'selected' : '' %>><%= t('Fixed price') %></option></select></div>
+        <div data-show-if="source=entsoe"><label><%= t('ENTSO-E token') %></label><input type="password" name="entsoe_token" autocomplete="new-password" placeholder="<%= priceCfg.hasEntsoeToken ? 'Leave blank to keep' : '' %>"></div>
+        <div data-show-if="source=energyzero|entsoe"><label><%= t('Your contract bills per') %></label><select name="price_interval">
+          <option value="hour" <%= priceCfg.price_interval !== 'quarter' ? 'selected' : '' %>><%= t('hour (average of the quarters)') %></option>
+          <option value="quarter" <%= priceCfg.price_interval === 'quarter' ? 'selected' : '' %>><%= t('quarter of an hour') %></option></select></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;" data-show-if="source=fixed">
+        <div><label><%= t('Price (€/kWh, all-in)') %></label><input type="text" name="fixed_eur_kwh" value="<%= priceCfg.fixed_eur_kwh %>"></div>
+        <div><label><%= t('Low tariff (€/kWh, empty = single tariff)') %></label><input type="text" name="fixed_low_eur_kwh" value="<%= priceCfg.fixed_low_eur_kwh ?? '' %>" placeholder="0.22"></div>
+        <div data-show-if="fixed_low_eur_kwh"><label><%= t('Low from') %></label><input type="text" name="fixed_low_from" value="<%= priceCfg.fixed_low_from || '23:00' %>" placeholder="23:00"></div>
+        <div data-show-if="fixed_low_eur_kwh"><label><%= t('Low until') %></label><input type="text" name="fixed_low_until" value="<%= priceCfg.fixed_low_until || '07:00' %>" placeholder="07:00"></div>
+        <div data-show-if="fixed_low_eur_kwh"><label><%= t('Whole weekend low') %></label><%- toggleSwitch('fixed_low_weekend', priceCfg.fixed_low_weekend !== false) %></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;" data-show-if="source=energyzero|entsoe">
+        <div><label><%= t('Supplier markup (€/kWh, excl. VAT)') %></label><input type="text" name="markup_eur_kwh" value="<%= priceCfg.markup_eur_kwh %>"></div>
+        <div><label><%= t('Energy tax (€/kWh, incl. VAT)') %></label><input type="text" name="energy_tax_eur_kwh" value="<%= priceCfg.energy_tax_eur_kwh %>"></div>
+        <div><label><%= t('VAT (%)') %></label><input type="text" name="vat_pct" value="<%= priceCfg.vat_pct %>"></div>
+        <div><label><%= t('Calibrate to Loxone') %><%= spo ? ` (${spo.name})` : '' %></label><%- toggleSwitch('calibrate_loxone', !!priceCfg.calibrate_loxone) %></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=fixed"><%= t('A fixed contract: one price, or a normal and a low (dal) tariff — in the Netherlands usually low on weekdays from 23:00 to 07:00 and all weekend. The plan then charges in the low hours where it can.') %></p>
+      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=energyzero|entsoe"><%= t('Since October 2025 the day-ahead market has a price per quarter of an hour; most dynamic contracts still bill the average per hour. ENTSO-E delivers the quarters, EnergyZero only hours.') %></p>
+      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=energyzero|entsoe|loxone">
+        <%= t('All-in price = (market + markup) × VAT + energy tax. With') %> <em><%= t('Calibrate') %></em> <%= t('LoxSuite instead learns the formula from the price your Spot Price Optimizer shows (sampled every 15 minutes, fitted over two weeks)') %><%= priceStatus && priceStatus.calib ? ` — now: all-in = ${priceStatus.calib.a} × market + ${priceStatus.calib.b} (${priceStatus.calib.n} samples)` : spo ? ' — needs a day of samples first' : ' — no Spot Price Optimizer found' %>.
+      </p>
+      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-recalc="prices"><%= t('Fetch prices now') %></button></div>
+    </form>
+  </details>
+
+  <details style="margin-top:0.6rem;" <%= saved === 'solar' ? 'open' : '' %>>
+    <summary><strong><%= t('Home & solar forecast') %></strong> <span class="hint"><%= solarStatus ? (solarStatus.ok ? `· updated ${formatDateTime(solarStatus.at)}` : `· ${solarStatus.error}`) : '' %></span></summary>
+    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+      <input type="hidden" name="section" value="solar">
+      <div class="form-grid">
+        <div><label><%= t('Home latitude') %></label><input type="text" name="lat" value="<%= site.lat ?? '' %>" placeholder="52.09"></div>
+        <div><label><%= t('Home longitude') %></label><input type="text" name="lon" value="<%= site.lon ?? '' %>" placeholder="5.12"></div>
+        <div><label><%= t('Forecast on') %></label><%- toggleSwitch('enabled', !!solarCfg.enabled) %></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div data-show-if="enabled"><label><%= t('Installed power (kWp)') %></label><input type="text" name="kwp" value="<%= solarCfg.kwp ?? '' %>" placeholder="8.4"></div>
+        <div data-show-if="enabled"><label><%= t('Tilt (°)') %></label><input type="text" name="tilt" value="<%= solarCfg.tilt %>"></div>
+        <div data-show-if="enabled"><label><%= t('Azimuth (° , 0 = south, -90 = east, 90 = west)') %></label><input type="text" name="azimuth" value="<%= solarCfg.azimuth %>"></div>
+        <div data-show-if="enabled"><label><%= t('System efficiency') %></label><input type="text" name="efficiency" value="<%= solarCfg.efficiency %>"></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;"><%= t('Weather forecast from Open-Meteo (irradiance on your panels), corrected per hour of the day with what the PV meter really produced. The home location is also used for distances in the agenda.') %></p>
+      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-recalc="solar"><%= t('Fetch forecast now') %></button></div>
+    </form>
+  </details>
+
+  <details style="margin-top:0.6rem;" <%= saved === 'fuel' ? 'open' : '' %>>
+    <summary><strong><%= t('Fuel (plug-in hybrid)') %></strong> <span class="hint">· <%= fuel.label %> € <%= fuel.eur_l.toFixed(3) %>/l (<%= fuel.source === 'auto' ? t('CBS') + (fuel.date ? ' ' + fuel.date.split('-').reverse().join('-') : '') + (fuel.markup ? ', ' + t('incl. surcharge') + ' € ' + Number(fuel.markup).toFixed(3) : '') : t('manual') %>)</span></summary>
+    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+      <input type="hidden" name="section" value="fuel">
+      <div class="form-grid">
+        <div><label><%= t('What do you tank?') %></label><select name="fuel_type"><% Object.entries(fuelTypes).forEach(([k, v]) => { %><option value="<%= k %>" <%= (cfg.fuel_type || 'euro95') === k ? 'selected' : '' %>><%= v.label %></option><% }) %></select></div>
+        <div><label><%= t('Automatic (CBS national average)') %></label><%- toggleSwitch('fuel_auto', !!cfg.fuel_auto) %></div>
+        <div data-show-if="fuel_auto"><label><%= t('Surcharge on the CBS price (€/l)') %></label><input type="text" name="fuel_markup_eur_l" value="<%= cfg.fuel_markup_eur_l || 0 %>" placeholder="0.12"></div>
+        <div data-show-if="!fuel_auto"><label><%= t('Fuel price (€/l)') %></label><input type="text" name="fuel_eur_l" value="<%= cfg.fuel_eur_l %>"></div>
+        <div><label><%= t('Default consumption (kWh/km)') %></label><input type="text" name="default_kwh_per_km" value="<%= cfg.default_kwh_per_km %>"></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;"><%= t('For a plug-in hybrid LoxSuite compares the cost per km on electricity with fuel (using the car\'s l/100 km), and doesn\'t charge in intervals where fuel is cheaper.') %> <%= t('The CBS price is the average pump price in the Netherlands of the day, including VAT and excise duty; Euro95 at Dutch pumps is E10. For Super 98 / E5, or a station that is dearer or cheaper than average, add a surcharge (e.g. 0.12). A CBS price older than 14 days is not used; then the manual price applies.') %></p>
+      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-recalc="fuel"><%= t('Fetch fuel price now') %></button></div>
+    </form>
+  </details>
+
+</div>
+
+<% if (canView('charging')) { %>
+<div class="card" id="calendars">
+  <h2 style="margin-top:0;"><%= t('Calendars') %></h2>
+  <% if (!site.lat) { %><p class="hint" style="color:#b8860b;"><%= t('Set the home location under') %> <a href="/planner#settings"><%= t('Planner → Settings') %></a> <%= t('so distances can be calculated.') %></p><% } %>
+  <% if (calendars.length) { %>
+    <table>
+      <thead><tr><th><%= t('Name') %></th><th><%= t('Address') %></th><th><%= t('Car') %></th><th><%= t('Last sync') %></th><th></th></tr></thead>
+      <tbody>
+        <% calendars.forEach(c => { %>
+          <tr>
+            <td><span style="display:inline-block; width:10px; height:10px; border-radius:3px; background:<%= c.color %>;"></span> <%= c.name %><%= c.enabled ? '' : ' (off)' %></td>
+            <td class="hint"><%= c.kind === 'caldav' ? (/icloud\.com$/.test(c.urlHost) ? 'iCloud' : 'CalDAV') + ' · ' + (c.username || '') : c.urlHost %></td>
+            <td><%= (vehicles.find(v => v.id === c.vehicle_id) || {}).name || '—' %></td>
+            <td class="hint"><%= c.last_sync_at ? formatDateTime(c.last_sync_at) : '—' %><% if (c.last_error) { %> <span style="color:var(--danger);"><%= c.last_error %></span><% } %></td>
+            <td><form method="post" action="/agenda/calendars/<%= c.id %>/delete" onsubmit="return confirm(<%= JSON.stringify(t('Remove this calendar from LoxSuite?')) %>);" style="margin:0;"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <div class="btn-row" style="margin-top:0.5rem;"><button type="button" class="btn-soft" id="ag-sync"><%- icon('refresh') %> <%= t('Sync now') %></button><span class="hint" id="ag-sync-msg" style="margin:0;"></span></div>
+  <% } %>
+  <details style="margin-top:0.8rem;" <%= calendars.length ? '' : 'open' %>>
+    <summary><strong><%= t('Add calendar') %></strong> <span class="hint"><%= t('— as many as you like: ICS links, iCloud or CalDAV') %></span></summary>
+    <form method="post" action="/agenda/calendars" style="margin-top:0.6rem;" id="ag-cal-form">
+      <div class="form-grid">
+        <div><label><%= t('Type') %></label><select name="kind" id="ag-kind">
+          <option value="ics"><%= t('ICS link (Google, Outlook, Nextcloud)') %></option>
+          <option value="icloud"><%= t('iCloud (Apple)') %></option>
+          <option value="caldav"><%= t('Other CalDAV server') %></option></select></div>
+        <div data-show-if="kind=ics"><label><%= t('Name (optional)') %></label><input type="text" name="name" placeholder="<%= t('from the calendar itself') %>"></div>
+        <div data-show-if="kind=ics" style="grid-column: span 2;"><label><%= t('ICS address(es) — one per line') %></label><textarea name="url" rows="2" autocomplete="off" spellcheck="false" placeholder="https://… or webcal://…" style="width:100%; font-family:monospace; font-size:0.8rem;"></textarea></div>
+        <div data-show-if="kind=caldav" style="grid-column: span 2;"><label><%= t('CalDAV server') %></label><input type="text" name="server" placeholder="https://cloud.example.nl/remote.php/dav"></div>
+        <div data-show-if="kind=icloud|caldav"><label><%= t('User name (Apple ID e-mail for iCloud)') %></label><input type="text" name="username" autocomplete="off"></div>
+        <div data-show-if="kind=icloud|caldav"><label><%= t('App-specific password') %></label><input type="password" name="password" autocomplete="new-password" placeholder="xxxx-xxxx-xxxx-xxxx"></div>
+        <div><label><%= t('Colour') %></label><input type="color" name="color" value="#3b82c4"></div>
+        <div><label><%= t('Car (optional)') %></label><select name="vehicle_id"><option value=""><%= t('— any —') %></option><% vehicles.forEach(v => { %><option value="<%= v.id %>"><%= v.name %></option><% }) %></select></div>
+      </div>
+      <div data-show-if="kind=icloud|caldav" style="margin-top:0.6rem;">
+        <button type="button" class="btn-soft" id="ag-discover"><%- icon('refresh') %> <%= t('Find calendars') %></button>
+        <span class="hint" id="ag-discover-msg" style="margin:0 0 0 0.5rem;"></span>
+        <div id="ag-cal-picks" class="pick-grid" hidden></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="kind=ics">
+        <%= t('Nextcloud: calendar → … → Copy subscription link. Google: calendar settings → "Secret address in iCal format". Outlook: Settings → Calendar → Shared calendars → Publish → ICS link. The address is stored encrypted; LoxSuite only reads it (every 15 minutes).') %>
+        <%= t('Google\'s secret address is private: only someone with the link can read it, the calendar is not made public.') %>
+      </p>
+      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="kind=icloud">
+        <%= t('iCloud only shares a calendar as an ICS link when you make it public. Instead LoxSuite signs in with an app-specific password: appleid.apple.com → Sign-In and Security → App-Specific Passwords → create one named "LoxSuite". Your Apple ID password is never asked for; you can revoke the app password there at any time. It is stored encrypted and only used to read calendars.') %>
+      </p>
+      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="kind=caldav">
+        <%= t('Nextcloud: https://<server>/remote.php/dav with an app password (Settings → Security). Fastmail: https://caldav.fastmail.com. LoxSuite only reads.') %>
+      </p>
+      <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="primary" id="ag-cal-add"><%- icon('plus') %> <%= t('Add') %></button></div>
+    </form>
+  </details>
+</div>
+
+<div class="card" id="agenda-settings">
+  <h2 style="margin-top:0;"><%= t('Agenda & climate at departure') %></h2>
+  <form method="post" action="/agenda/settings">
+    <div class="form-grid">
+      <div><label><%= t('Car markers in the title') %></label><input type="text" name="tags" value="<%= cfg.tags.join(' ') %>"></div>
+      <div><label><%= t('Margin on distance (km)') %></label><input type="text" name="margin_km" value="<%= cfg.margin_km %>"></div>
+      <div><label><%= t('Ready this long before leaving (min)') %></label><input type="text" name="ready_margin_min" value="<%= cfg.ready_margin_min %>"></div>
+      <div><label><%= t('Calculate distances (OpenStreetMap)') %></label><%- toggleSwitch('geo', !!cfg.geo) %></div>
+    </div>
+    <h3 style="margin:1.1rem 0 0.4rem;">🌡️ <%= t('Climate at departure') %></h3>
+    <div class="form-grid">
+      <div><label><%= t('Climate at departure') %></label><select name="climate_mode">
+        <% [['off', 'Off'], ['log', 'Log only (send nothing)'], ['on', 'On: start the air conditioning']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= (cfg.climate_mode || 'log') === v ? 'selected' : '' %>><%= t(lbl) %></option><% }) %>
+      </select></div>
+      <div data-show-if="climate_mode=log|on"><label><%= t('Start this long before leaving (min)') %></label><input type="text" name="climate_lead_min" value="<%= cfg.climate_lead_min || 20 %>"></div>
+      <div data-show-if="climate_mode=log|on"><label><%= t('Also when not plugged in (uses the battery)') %></label><%- toggleSwitch('climate_on_battery', cfg.climate_on_battery !== false) %></div>
+    </div>
+    <p class="hint" style="margin:0.5rem 0 0;"><%= t('Choose a temperature per appointment or trip (click it in the agenda). At the set time before you leave, LoxSuite asks the car to start its air conditioning through the Škoda API, once per departure. Only for cars with the Škoda API as data source; each start uses one of the 20 API requests per hour. With "Log only" LoxSuite just writes down what it would have sent.') %><% if (!skodaCars) { %> <strong><%= t('No car uses the Škoda API yet.') %></strong><% } %></p>
+    <% if (climateRuns.length) { %>
+      <table class="table" style="margin-top:0.6rem; font-size:0.85rem;"><thead><tr><th><%= t('Leaves') %></th><th><%= t('Trip') %></th><th><%= t('Status') %></th><th><%= t('Detail') %></th></tr></thead><tbody>
+        <% climateRuns.forEach(r => { %><tr><td><%= formatDateTime(r.depart_at) %></td><td><%= r.title %> · <%= r.target_c %> °C</td><td><%= ({ sent: t('sent'), logged: t('logged'), failed: t('failed'), skipped: t('skipped'), retry: t('trying again'), off: t('switched off') })[r.status] || r.status %></td><td><%= r.message %></td></tr><% }) %>
+      </tbody></table>
+    <% } %>
+    <p class="hint" style="margin:0.5rem 0 0;">
+      <%= t('An appointment needs the car when its title or description contains one of the markers, e.g.') %> <code>🚗 Birthday</code> or <code>Visit #auto</code><%= t('. Add a hint like') %> <code>🚗 120 km</code>, <code>🚗 30 kWh</code> or <code>🚗 full</code> <%= t('to skip the distance lookup. For car appointments with an address, the driving distance from home is looked up (only those addresses are sent, results are kept), doubled for the way back plus the margin, and turned into kWh with the car\'s consumption.') %>
+    </p>
+    <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
+  </form>
+</div>
+<% } %>
+
+<script>
+(function () {
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function post(url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); }
+  function load() {}
+  document.querySelectorAll('[data-recalc]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var body = {}; body[b.dataset.recalc] = true; b.disabled = true;
+      post('/planner/recalc.json', body).then(function (d) { var r = d[b.dataset.recalc]; b.textContent = r && r.ok ? 'Done' : 'Failed: ' + (r && r.message || ''); }).finally(function () { b.disabled = false; });
+    });
+  });
+  var syncBtn = document.getElementById('ag-sync');
+  if (syncBtn) syncBtn.onclick = function () { syncBtn.disabled = true; post('/agenda/sync.json', {}).then(function (d) { document.getElementById('ag-sync-msg').textContent = (d.results || []).map(function (r) { return r.ok ? r.events + ' events' : r.message; }).join(' · ');}).finally(function () { syncBtn.disabled = false; }); };
+  var calForm = document.getElementById('ag-cal-form');
+  if (calForm) {
+    var picks = document.getElementById('ag-cal-picks'), dmsg = document.getElementById('ag-discover-msg');
+    var T2 = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
+    document.getElementById('ag-discover').onclick = function () {
+      var kind = calForm.kind.value;
+      dmsg.textContent = T2('Searching…'); picks.hidden = true;
+      post('/agenda/caldav/discover.json', { server: kind === 'icloud' ? '' : calForm.server.value, username: calForm.username.value, password: calForm.password.value }).then(function (d) {
+        if (!d.ok) { dmsg.textContent = d.message || 'Error'; return; }
+        dmsg.textContent = T2('Tick the calendars to add:');
+        picks.innerHTML = d.calendars.map(function (c, i) {
+          return '<label class="pick"><input type="checkbox" name="cal" value="' + i + '"><span class="pick-text"><span class="pick-name">' + (c.color ? '<span style="display:inline-block; width:0.7em; height:0.7em; border-radius:50%; background:' + esc(c.color) + '; margin-right:0.3em;"></span>' : '') + esc(c.name) + '</span></span></label>';
+        }).join('') || '<p class="hint" style="margin:0;">' + esc(T2('No calendars found.')) + '</p>';
+        picks.hidden = false;
+        calForm._cals = d.calendars;
+      }).catch(function (e) { dmsg.textContent = e.message; });
+    };
+    calForm.addEventListener('submit', function (e) {
+      var kind = calForm.kind.value;
+      if (kind === 'ics') { if (!calForm.url.value.trim()) { e.preventDefault(); alert(T2('Fill in the ICS address.')); } return; }
+      e.preventDefault();
+      var chosen = Array.prototype.slice.call(picks.querySelectorAll('input[name=cal]:checked')).map(function (c) { return calForm._cals[Number(c.value)]; });
+      if (!chosen.length) { dmsg.textContent = T2('First find the calendars and tick one or more.'); return; }
+      post('/agenda/caldav/add.json', { server: kind === 'icloud' ? '' : calForm.server.value, username: calForm.username.value, password: calForm.password.value, calendars: chosen, color: calForm.color.value, vehicle_id: calForm.vehicle_id.value })
+        .then(function (d) { if (!d.ok) { dmsg.textContent = d.message || 'Error'; return; } location.href = '/settings/energy?saved=1#calendars'; })
+        .catch(function (er) { dmsg.textContent = er.message; });
+    });
+  }
+})();
+</script>
+
+<%- include('partials/foot') %>

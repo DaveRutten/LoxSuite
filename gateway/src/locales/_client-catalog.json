@@ -50,9 +50,9 @@
  },
  {
   "key": "— needs a day of samples first",
-  "module": "charging",
+  "module": "core",
   "where": [
-   "planner"
+   "settings-energy"
   ]
  },
  {
@@ -64,9 +64,9 @@
  },
  {
   "key": "— no Spot Price Optimizer found",
-  "module": "charging",
+  "module": "core",
   "where": [
-   "planner"
+   "settings-energy"
   ]
  },
  {
@@ -4253,6 +4253,7 @@
   "where": [
    "learned (script)",
    "planner (script)",
+   "settings-energy (script)",
    "src/reminders.js"
   ]
  },
@@ -4686,11 +4687,11 @@
  },
  {
   "key": "Error",
-  "module": "charging",
+  "module": "monitor",
   "where": [
-   "agenda (script)",
    "app (script)",
    "public/monitor-picks.js",
+   "settings-energy (script)",
    "src/format.js",
    "src/routes/miniservers.js"
   ]
@@ -5085,9 +5086,9 @@
  },
  {
   "key": "Fill in the ICS address.",
-  "module": "charging",
+  "module": "core",
   "where": [
-   "agenda (script)"
+   "settings-energy (script)"
   ]
  },
  {
@@ -5142,9 +5143,9 @@
  },
  {
   "key": "First find the calendars and tick one or more.",
-  "module": "charging",
+  "module": "core",
   "where": [
-   "agenda (script)"
+   "settings-energy (script)"
   ]
  },
  {
@@ -6186,9 +6187,9 @@
  },
  {
   "key": "Leave blank to keep",
-  "module": "charging",
+  "module": "core",
   "where": [
-   "planner"
+   "settings-energy"
   ]
  },
  {
@@ -6510,9 +6511,9 @@
  },
  {
   "key": "Log only (send nothing)",
-  "module": "charging",
+  "module": "core",
   "where": [
-   "agenda"
+   "settings-energy"
   ]
  },
  {
@@ -7752,9 +7753,9 @@
  },
  {
   "key": "No calendars found.",
-  "module": "charging",
+  "module": "core",
   "where": [
-   "agenda (script)"
+   "settings-energy (script)"
   ]
  },
  {
@@ -8642,13 +8643,13 @@
  },
  {
   "key": "Off",
-  "module": "charging",
+  "module": "monitor",
   "where": [
-   "agenda",
    "monitor",
    "planner",
    "planner (script)",
-   "public/mappings-loxone-to-mqtt-tabulator.js"
+   "public/mappings-loxone-to-mqtt-tabulator.js",
+   "public/mappings-mqtt-to-loxone-tabulator.js"
   ]
  },
  {
@@ -8744,9 +8745,9 @@
  },
  {
   "key": "On: start the air conditioning",
-  "module": "charging",
+  "module": "core",
   "where": [
-   "agenda"
+   "settings-energy"
   ]
  },
  {
@@ -10055,9 +10056,9 @@
  },
  {
   "key": "Searching…",
-  "module": "charging",
+  "module": "core",
   "where": [
-   "agenda (script)"
+   "settings-energy (script)"
   ]
  },
  {
@@ -10236,6 +10237,7 @@
   "module": "core",
   "where": [
    "settings",
+   "settings-energy",
    "settings-general",
    "src/moduleInfo.js",
    "src/permissionAreas.js"
@@ -11550,9 +11552,9 @@
  },
  {
   "key": "Tick the calendars to add:",
-  "module": "charging",
+  "module": "core",
   "where": [
-   "agenda (script)"
+   "settings-energy (script)"
   ]
  },
  {
