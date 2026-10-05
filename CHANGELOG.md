@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.32.1-alpha.1] - 2026-10-05
+
+### Fixed
+- **Automatic fuel price showed € 1.30** — the price of 1 January 2006: the CBS API ignores `$orderby` and returns
+  the oldest rows first. LoxSuite now asks for the last 30 days only and takes the newest day (e.g. Euro95
+  € 2.465 on 28-09-2026). A CBS price older than 14 days is not used.
+
+### Added
+- **What do you tank?** Euro95 (E10), diesel or LPG from the same CBS data, plus a surcharge per litre for
+  Super 98 / E5 or a dearer station. The settings line shows type, price, CBS date and surcharge. The CBS price
+  is the average Dutch pump price including VAT and excise duty.
+
 ## [0.32.0-alpha.1] - 2026-10-05
 
 ### Added

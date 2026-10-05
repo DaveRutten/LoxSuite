@@ -3809,5 +3809,15 @@
   "Back home": "Thuis",
   "morning": "ochtend",
   "afternoon": "middag",
-  "evening": "avond"
+  "evening": "avond",
+  "CBS": "CBS",
+  "Diesel": "Diesel",
+  "Fuel price when not automatic (€/l)": "Brandstofprijs als het niet automatisch is (€/l)",
+  "incl. surcharge": "incl. toeslag",
+  "manual": "handmatig",
+  "No fuel prices found in the CBS data.": "Geen brandstofprijzen gevonden in de CBS-gegevens.",
+  "Perioden ge '{0}'": "Perioden ge '{0}'",
+  "Surcharge on the CBS price (€/l)": "Toeslag op de CBS-prijs (€/l)",
+  "The CBS price is the average pump price in the Netherlands of the day, including VAT and excise duty; Euro95 at Dutch pumps is E10. For Super 98 / E5, or a station that is dearer or cheaper than average, add a surcharge (e.g. 0.12). A CBS price older than 14 days is not used; then the manual price applies.": "De CBS-prijs is de gemiddelde pompprijs in Nederland van die dag, inclusief btw en accijns; Euro95 aan de Nederlandse pomp is E10. Voor Super 98 / E5, of een tankstation dat duurder of goedkoper is dan gemiddeld, vul je een toeslag in (bijv. 0,12). Een CBS-prijs ouder dan 14 dagen wordt niet gebruikt; dan geldt de handmatige prijs.",
+  "What do you tank?": "Wat tank je?"
 }

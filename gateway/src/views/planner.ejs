@@ -148,15 +148,17 @@
   </details>
 
   <details style="margin-top:0.6rem;" <%= saved === 'fuel' ? 'open' : '' %>>
-    <summary><strong><%= t('Fuel (plug-in hybrid)') %></strong> <span class="hint">· € <%= fuel.eur_l.toFixed(3) %>/l (<%= fuel.source %><%= fuel.date ? ', ' + fuel.date : '' %>)</span></summary>
+    <summary><strong><%= t('Fuel (plug-in hybrid)') %></strong> <span class="hint">· <%= fuel.label %> € <%= fuel.eur_l.toFixed(3) %>/l (<%= fuel.source === 'auto' ? t('CBS') + (fuel.date ? ' ' + fuel.date.split('-').reverse().join('-') : '') + (fuel.markup ? ', ' + t('incl. surcharge') + ' € ' + Number(fuel.markup).toFixed(3) : '') : t('manual') %>)</span></summary>
     <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
       <input type="hidden" name="section" value="fuel">
       <div class="form-grid">
-        <div><label><%= t('Fuel price (€/l)') %></label><input type="text" name="fuel_eur_l" value="<%= cfg.fuel_eur_l %>"></div>
+        <div><label><%= t('What do you tank?') %></label><select name="fuel_type"><% Object.entries(fuelTypes).forEach(([k, v]) => { %><option value="<%= k %>" <%= (cfg.fuel_type || 'euro95') === k ? 'selected' : '' %>><%= v.label %></option><% }) %></select></div>
         <div><label><%= t('Automatic (CBS national average)') %></label><%- toggleSwitch('fuel_auto', !!cfg.fuel_auto) %></div>
+        <div><label><%= t('Surcharge on the CBS price (€/l)') %></label><input type="text" name="fuel_markup_eur_l" value="<%= cfg.fuel_markup_eur_l || 0 %>" placeholder="0.12"></div>
+        <div><label><%= t('Fuel price when not automatic (€/l)') %></label><input type="text" name="fuel_eur_l" value="<%= cfg.fuel_eur_l %>"></div>
         <div><label><%= t('Default consumption (kWh/km)') %></label><input type="text" name="default_kwh_per_km" value="<%= cfg.default_kwh_per_km %>"></div>
       </div>
-      <p class="hint" style="margin:0.5rem 0 0;"><%= t('For a plug-in hybrid LoxSuite compares the cost per km on electricity with fuel (using the car\'s l/100 km), and doesn\'t charge in intervals where fuel is cheaper.') %></p>
+      <p class="hint" style="margin:0.5rem 0 0;"><%= t('For a plug-in hybrid LoxSuite compares the cost per km on electricity with fuel (using the car\'s l/100 km), and doesn\'t charge in intervals where fuel is cheaper.') %> <%= t('The CBS price is the average pump price in the Netherlands of the day, including VAT and excise duty; Euro95 at Dutch pumps is E10. For Super 98 / E5, or a station that is dearer or cheaper than average, add a surcharge (e.g. 0.12). A CBS price older than 14 days is not used; then the manual price applies.') %></p>
       <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-recalc="fuel"><%= t('Fetch fuel price now') %></button></div>
     </form>
   </details>

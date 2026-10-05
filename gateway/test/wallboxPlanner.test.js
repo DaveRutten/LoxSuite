@@ -231,7 +231,12 @@ test('plugDecision: hybrid by saving, electric by need', () => {
 });
 
 test('parseCbs finds the Euro95 price', () => {
-  assert.deepEqual(fuel.parseCbs({ value: [{ Perioden: '20261002', BenzineEuro95_1: 2.087, Diesel_2: 1.79 }] }), { eur_l: 2.087, date: '2026-10-02', field: 'BenzineEuro95_1' });
+  assert.deepEqual(fuel.parseCbs({ value: [{ Perioden: '20261002', BenzineEuro95_1: 2.087, Diesel_2: 1.79 }] }), { eur_l: 2.087, date: '2026-10-02', prices: { euro95: 2.087, diesel: 1.79 } });
+  // the API returns oldest first (it ignores $orderby): the newest row wins
+  const rows = { value: [{ Perioden: '20260926', BenzineEuro95_1: 2.462, Diesel_2: 2.522, Lpg_3: 0.959 }, { Perioden: '20260928', BenzineEuro95_1: 2.465, Diesel_2: 2.526, Lpg_3: 0.956 }, { Perioden: '20260927', BenzineEuro95_1: 2.463, Diesel_2: 2.522, Lpg_3: 0.954 }] };
+  assert.equal(fuel.parseCbs(rows).date, '2026-09-28');
+  assert.deepEqual(fuel.parseCbs(rows).prices, { euro95: 2.465, diesel: 2.526, lpg: 0.956 });
+  assert.match(fuel.cbsUrl(Date.parse('2026-10-05T12:00:00Z')), /\$filter=Perioden%20ge%20'20260905'/);
   assert.equal(fuel.parseCbs({ value: [] }), null);
 });
 
@@ -340,4 +345,16 @@ test('makePlan counts the solar part of a mixed interval (solar below the Wallbo
   assert.equal(plan.pvKwh, 3);
   assert.equal(plan.gridKwh, 8);
   assert.ok(plan.notes.some((n) => /below the Wallbox minimum/.test(n)));
+});
+
+test('pickPrice: what you tank, plus a surcharge; stale or missing -> manual', () => {
+  const fuel = require('../src/fuelPrice');
+  const auto = { date: '2026-09-28', prices: { euro95: 2.465, diesel: 2.526, lpg: 0.956 } };
+  const now = Date.parse('2026-10-05T12:00:00Z');
+  assert.equal(fuel.pickPrice({ fuel_auto: true }, auto, now).eur_l, 2.465);
+  assert.equal(fuel.pickPrice({ fuel_auto: true, fuel_type: 'diesel' }, auto, now).eur_l, 2.526);
+  assert.equal(fuel.pickPrice({ fuel_auto: true, fuel_markup_eur_l: '0.12' }, auto, now).eur_l, 2.585);
+  assert.equal(fuel.pickPrice({ fuel_auto: true, fuel_eur_l: 2.3 }, auto, Date.parse('2026-11-01')).source, 'manual');
+  assert.equal(fuel.pickPrice({ fuel_auto: false, fuel_eur_l: 2.3 }, auto, now).eur_l, 2.3);
+  assert.equal(fuel.pickPrice({ fuel_auto: true }, { date: '2026-10-01', eur_l: 2.4 }, now).eur_l, 2.4); // old stored format
 });

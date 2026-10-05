@@ -27,7 +27,7 @@ router.get('/', asyncHandler(async (req, res) => {
     cfg: await planner.getConfig(), priceCfg: { ...pcfg, entsoe_token: undefined, hasEntsoeToken: !!pcfg.entsoe_token },
     solarCfg: await solar.getConfig(), site: await solar.getSite(), remCfg: await reminders.getConfig(),
     priceStatus: await settings.get('prices_status', null), solarStatus: await settings.get('solar_status', null),
-    fuel: await fuelPrice.currentFuelPrice(), spo: await prices.findSpotOptimizer().catch(() => null),
+    fuel: await fuelPrice.currentFuelPrice(), fuelTypes: fuelPrice.FUEL_TYPES, spo: await prices.findSpotOptimizer().catch(() => null),
     saved: req.query.saved || null, error: req.query.error || null,
   });
 }));
@@ -150,7 +150,11 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
     await settings.patch('solar', { enabled: !!b.enabled, kwp: num(b.kwp), tilt: num(b.tilt, 35), azimuth: num(b.azimuth, 0), efficiency: num(b.efficiency, 0.85) }, solar.DEFAULTS);
     solar.refreshForecast().catch(() => {});
   } else if (section === 'fuel') {
-    await planner.saveConfig({ fuel_eur_l: num(b.fuel_eur_l, 2.1), fuel_auto: !!b.fuel_auto, default_kwh_per_km: num(b.default_kwh_per_km, 0.2) });
+    await planner.saveConfig({
+      fuel_eur_l: num(b.fuel_eur_l, 2.1), fuel_auto: !!b.fuel_auto, default_kwh_per_km: num(b.default_kwh_per_km, 0.2),
+      fuel_type: Object.keys(fuelPrice.FUEL_TYPES).includes(b.fuel_type) ? b.fuel_type : 'euro95',
+      fuel_markup_eur_l: Math.max(-1, Math.min(2, num(b.fuel_markup_eur_l, 0))),
+    });
     if (b.fuel_auto) fuelPrice.refreshFuelPrice().catch(() => {});
   } else if (section === 'reminders') {
     await settings.patch('reminders', {

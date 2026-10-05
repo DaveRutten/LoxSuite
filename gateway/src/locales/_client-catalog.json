@@ -4181,6 +4181,13 @@
   ]
  },
  {
+  "key": "Diesel",
+  "module": "charging",
+  "where": [
+   "src/fuelPrice.js"
+  ]
+ },
+ {
   "key": "Dimmer",
   "module": "monitor",
   "where": [
@@ -7819,17 +7826,17 @@
   ]
  },
  {
-  "key": "No Euro95 price found in the CBS data.",
-  "module": "charging",
-  "where": [
-   "src/fuelPrice.js"
-  ]
- },
- {
   "key": "No events.",
   "module": "charging",
   "where": [
    "planner-log (script)"
+  ]
+ },
+ {
+  "key": "No fuel prices found in the CBS data.",
+  "module": "charging",
+  "where": [
+   "src/fuelPrice.js"
   ]
  },
  {
@@ -8957,6 +8964,13 @@
   "module": "ocpp",
   "where": [
    "src/ocppExport.js"
+  ]
+ },
+ {
+  "key": "Perioden ge '{0}'",
+  "module": "charging",
+  "where": [
+   "src/fuelPrice.js"
   ]
  },
  {
