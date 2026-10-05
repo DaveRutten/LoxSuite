@@ -110,7 +110,7 @@ test('learned pattern: tap water hot before its usual use (shower ~07:00 → nig
   const on = plan.loads[0].hours.filter((h) => h.values.now === 1);
   assert.equal(on.length, 1);
   assert.ok(new Date(on[0].ms).getUTCHours() < 7);
-  assert.match(on[0].reason, /usual use ~07:00/);
+  assert.match(on[0].reason, /hot before the usual use ~07:00/);
   // Switched off in the settings: back to the solar block.
   const off = em.planLoads({ hours, nowMs: T0, localOf, feedIn: 'fixed', feedInEur: 0.05,
     loads: [{ id: 1, kind: 'dhw', name: 'Tapwater', priority: 1, patterns, settings: { ...em.KINDS.dhw.defaults, kw: 2.5, earliest: 0, latest: 24, use_patterns: false } }] });

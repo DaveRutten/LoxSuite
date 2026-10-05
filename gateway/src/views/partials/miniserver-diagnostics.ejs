@@ -24,7 +24,7 @@
 <div class="ms-diagnostics-card">
   <div class="ms-diagnostics" data-ms-diagnostics-id="<%= ms.id %>">
     <div>
-      <span class="hint" style="margin:0;">Miniserver state</span>
+      <span class="hint" style="margin:0;"><%= t('Miniserver state') %></span>
       <div>
         <% if (plc) { %>
           <span class="badge <%= plc[1] %>" title="Miniserver's own PLC run state (jdev/sps/state), code <%= ms.plc_state %>."><%= plc[0] %></span>
@@ -34,31 +34,31 @@
       </div>
     </div>
     <div>
-      <span class="hint" style="margin:0;">Firmware</span>
+      <span class="hint" style="margin:0;"><%= t('Firmware') %></span>
       <div data-ms-firmware-id="<%= ms.id %>"><%= ms.firmware_version || '-' %></div>
     </div>
     <div>
-      <span class="hint" style="margin:0;">Generation</span>
+      <span class="hint" style="margin:0;"><%= t('Generation') %></span>
       <div data-ms-generation-id="<%= ms.id %>" <% if (ms.miniserver_type !== null && ms.miniserver_type !== undefined) { %>title="Reported by this Miniserver itself (msInfo.miniserverType)."<% } %>><%= miniserverGenerationLabel(ms.miniserver_type) || '-' %></div>
     </div>
     <div>
-      <span class="hint" style="margin:0;">CPU load</span>
+      <span class="hint" style="margin:0;"><%= t('CPU load') %></span>
       <div><%= ms.cpu_load || '-' %></div>
     </div>
     <div>
-      <span class="hint" style="margin:0;">Heap</span>
+      <span class="hint" style="margin:0;"><%= t('Heap') %></span>
       <div title="<%= ms.heap_status || '' %>"><%= formatHeapStatus(ms.heap_status) || '-' %></div>
     </div>
     <div>
-      <span class="hint" style="margin:0;">Tasks</span>
+      <span class="hint" style="margin:0;"><%= t('Tasks') %></span>
       <div><%= ms.num_tasks || '-' %></div>
     </div>
     <div>
-      <span class="hint" style="margin:0;">Firmware date</span>
+      <span class="hint" style="margin:0;"><%= t('Firmware date') %></span>
       <div><%= ms.firmware_date || '-' %></div>
     </div>
     <div>
-      <span class="hint" style="margin:0;">Update channel</span>
+      <span class="hint" style="margin:0;"><%= t('Update channel') %></span>
       <div data-ms-update-level-id="<%= ms.id %>"><%= ms.update_level || '-' %></div>
     </div>
   </div>
@@ -79,13 +79,13 @@
   %>
   <div class="ms-update-actions">
     <% if (canEdit('miniservers')) { %>
-    <button type="button" class="btn-test ms-check-update-btn" data-ms-id="<%= ms.id %>" <%= msOffline ? 'disabled' : '' %> title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : '' %>"><%- icon('refresh') %> Check for update</button>
-    <button type="button" class="btn-edit ms-update-firmware-btn" data-ms-id="<%= ms.id %>" data-ms-name="<%= ms.name %>" disabled title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : 'Run "Check for update" first — Loxone doesn\'t expose a plain update-available flag over HTTP, so this only unlocks once you\'ve looked at the current release channel yourself' %>"><%- icon('upload') %> Update to latest release</button>
+    <button type="button" class="btn-test ms-check-update-btn" data-ms-id="<%= ms.id %>" <%= msOffline ? 'disabled' : '' %> title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : '' %>"><%- icon('refresh') %> <%= t('Check for update') %></button>
+    <button type="button" class="btn-edit ms-update-firmware-btn" data-ms-id="<%= ms.id %>" data-ms-name="<%= ms.name %>" disabled title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : 'Run "Check for update" first — Loxone doesn\'t expose a plain update-available flag over HTTP, so this only unlocks once you\'ve looked at the current release channel yourself' %>"><%- icon('upload') %> <%= t('Update to latest release') %></button>
     <% } %>
     <% if (canEdit('dashboard')) { %>
     <form class="inline" method="post" action="/dashboards/quick-add-diag">
       <input type="hidden" name="miniserver_id" value="<%= ms.id %>">
-      <button type="submit" class="primary" <%= msOffline ? 'disabled' : '' %> title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : 'Pin CPU load, Heap value and Task count on the Dashboard, each as its own widget' %>"><%- icon('plus') %> Add to Dashboard</button>
+      <button type="submit" class="primary" <%= msOffline ? 'disabled' : '' %> title="<%= msOffline ? 'Unavailable while this Miniserver is offline' : 'Pin CPU load, Heap value and Task count on the Dashboard, each as its own widget' %>"><%- icon('plus') %> <%= t('Add to Dashboard') %></button>
     </form>
     <% } %>
     <% if (canEdit('monitor')) { %>
@@ -98,11 +98,7 @@
   <div class="ms-update-result" data-ms-update-result-for="<%= ms.id %>"></div>
   <% if (canEdit('miniservers')) { %>
   <p class="hint" style="margin-top:0.4rem; margin-bottom:0;">
-    "Check for update" reads this Miniserver's own release channel (Loxone doesn't expose a plain
-    yes/no "update available" flag over HTTP, so this is a best-effort read, not a guarantee —
-    it's also what unlocks the button below). "Update to latest release" sends the actual update
-    command — a <strong>real firmware update and reboot</strong> on this Miniserver right now,
-    every device it controls briefly stops responding while it restarts.
+    <%= t('"Check for update" reads this Miniserver\'s own release channel (Loxone doesn\'t expose a plain yes/no "update available" flag over HTTP, so this is a best-effort read, not a guarantee — it\'s also what unlocks the button below). "Update to latest release" sends the actual update command — a') %> <strong><%= t('real firmware update and reboot') %></strong> <%= t('on this Miniserver right now, every device it controls briefly stops responding while it restarts.') %>
   </p>
   <% } %>
   <% } %>

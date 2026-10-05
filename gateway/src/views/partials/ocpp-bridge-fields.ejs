@@ -1,90 +1,84 @@
 <div class="form-grid">
-  <div><label>Name</label><input type="text" name="name" value="<%= b.name || '' %>" placeholder="Carport" required></div>
+  <div><label><%= t('Name') %></label><input type="text" name="name" value="<%= b.name || '' %>" placeholder="<%= t('Carport') %>" required></div>
   <div>
-    <label>Wallbox</label>
+    <label><%= t('Wallbox') %></label>
     <select name="wallbox" required>
-      <% if (!wallboxes.length) { %><option value="">No Wallbox found on any reachable Miniserver</option><% } %>
+      <% if (!wallboxes.length) { %><option value=""><%= t('No Wallbox found on any reachable Miniserver') %></option><% } %>
       <% wallboxes.forEach(w => { const val = w.miniserverId + '|' + w.uuid; %>
         <option value="<%= val %>" <%= (b.miniserver_id === w.miniserverId && b.control_uuid === w.uuid) ? 'selected' : '' %>><%= w.name %> (<%= w.miniserverName %>)</option>
       <% }) %>
     </select>
   </div>
-  <div><label>Enabled</label><%- toggleSwitch('enabled', !!b.enabled) %></div>
+  <div><label><%= t('Enabled') %></label><%- toggleSwitch('enabled', !!b.enabled) %></div>
 </div>
 
-<h2 style="margin-top:1.3rem;">OCPP backend</h2>
+<h2 style="margin-top:1.3rem;"><%= t('OCPP backend') %></h2>
 <div class="form-grid">
   <div>
-    <label>Mode</label>
+    <label><%= t('Mode') %></label>
     <select name="mode">
-      <option value="dry" <%= b.mode !== 'live' ? 'selected' : '' %>>Dry run (log only, send nothing)</option>
-      <option value="live" <%= b.mode === 'live' ? 'selected' : '' %>>Live</option>
+      <option value="dry" <%= b.mode !== 'live' ? 'selected' : '' %>><%= t('Dry run (log only, send nothing)') %></option>
+      <option value="live" <%= b.mode === 'live' ? 'selected' : '' %>><%= t('Live') %></option>
     </select>
   </div>
-  <div><label>Server URL</label><input type="text" name="server_url" value="<%= b.server_url || '' %>" placeholder="wss://ocpp.example.com" required></div>
-  <div><label>ChargePoint ID</label><input type="text" name="charge_point_id" value="<%= b.charge_point_id || '' %>" placeholder="LL-XXXXXX" required></div>
+  <div><label><%= t('Server URL') %></label><input type="text" name="server_url" value="<%= b.server_url || '' %>" placeholder="<%= t('wss://ocpp.example.com') %>" required></div>
+  <div><label><%= t('ChargePoint ID') %></label><input type="text" name="charge_point_id" value="<%= b.charge_point_id || '' %>" placeholder="<%= t('LL-XXXXXX') %>" required></div>
 </div>
 <div class="form-grid" style="margin-top:0.85rem;">
   <div>
-    <label>Password (OCPP Basic auth)</label>
+    <label><%= t('Password (OCPP Basic auth)') %></label>
     <input type="password" name="password" autocomplete="new-password" placeholder="<%= isNew ? '' : 'Leave blank to keep the current password' %>">
   </div>
   <div>
-    <label>ID tag</label>
+    <label><%= t('ID tag') %></label>
     <select name="id_tag_mode" id="ocpp-idtag-mode">
-      <option value="fixed" <%= b.id_tag_mode !== 'auto' ? 'selected' : '' %>>Fixed: always use the tag below</option>
-      <option value="auto" <%= b.id_tag_mode === 'auto' ? 'selected' : '' %>>Automatic: from Loxone, else the tag below</option>
+      <option value="fixed" <%= b.id_tag_mode !== 'auto' ? 'selected' : '' %>><%= t('Fixed: always use the tag below') %></option>
+      <option value="auto" <%= b.id_tag_mode === 'auto' ? 'selected' : '' %>><%= t('Automatic: from Loxone, else the tag below') %></option>
     </select>
   </div>
   <div>
-    <label>ID tag (fixed / fallback)</label>
+    <label><%= t('ID tag (fixed / fallback)') %></label>
     <input type="text" name="id_tag" id="ocpp-idtag" value="<%= b.id_tag || '' %>" maxlength="20" required>
-    <button type="button" class="btn-soft" id="ocpp-nfc-pick-btn" style="margin-top:0.35rem;"><%- icon('list') %> Choose a Loxone NFC tag</button>
+    <button type="button" class="btn-soft" id="ocpp-nfc-pick-btn" style="margin-top:0.35rem;"><%- icon('list') %> <%= t('Choose a Loxone NFC tag') %></button>
     <select id="ocpp-nfc-pick" hidden style="margin-top:0.35rem;"></select>
     <p class="hint" id="ocpp-nfc-pick-msg" style="margin:0.3rem 0 0;" hidden></p>
   </div>
 </div>
 <div class="form-grid" id="ocpp-idtag-auto" style="margin-top:0.85rem;" <%= b.id_tag_mode === 'auto' ? '' : 'hidden' %>>
   <div>
-    <label>NFC Code Touch (optional)</label>
+    <label><%= t('NFC Code Touch (optional)') %></label>
     <select name="nfc_control_uuid">
-      <option value="">— none —</option>
+      <option value=""><%= t('— none —') %></option>
       <% (typeof nfcs !== 'undefined' ? nfcs : []).forEach(n => { %>
         <option value="<%= n.uuid %>" <%= b.nfc_control_uuid === n.uuid ? 'selected' : '' %>><%= n.name %> (<%= n.miniserverName %>)</option>
       <% }) %>
     </select>
   </div>
   <div>
-    <label>Loxone user &rarr; tag (optional, one per line)</label>
-    <textarea name="user_tag_map" rows="3" placeholder="Dave Rutten = B02B058D414C27"><%= b.user_tag_map || '' %></textarea>
+    <label><%= t('Loxone user → tag (optional, one per line)') %></label>
+    <textarea name="user_tag_map" rows="3" placeholder="<%= t('Dave Rutten = B02B058D414C27') %>"><%= b.user_tag_map || '' %></textarea>
   </div>
-  <div><label>Wait for authorization (s)</label><input type="number" name="auth_wait_s" min="0" max="900" value="<%= b.auth_wait_s != null ? b.auth_wait_s : 60 %>"></div>
+  <div><label><%= t('Wait for authorization (s)') %></label><input type="number" name="auth_wait_s" min="0" max="900" value="<%= b.auth_wait_s != null ? b.auth_wait_s : 60 %>"></div>
 </div>
 <p class="hint" style="margin-top:0.5rem;">
-  The ChargePoint ID is appended to the Server URL (<code>wss://…/&lt;ChargePoint ID&gt;</code>) and also used as the
-  Basic-auth username. The ID tag is sent with every transaction; register the same tag at your backend.
-  <strong>Automatic</strong> uses the tag of a badge read on the chosen NFC Code Touch around plug-in (normalised like
-  Loxone's own OCPP connector does: hex, without the "EC" specifier and trailing zeros), else the tag mapped to the
-  Loxone user the Wallbox reports for the session, else the fixed tag. The session start is reported after the
-  authorization arrives (or the wait time passes), but with the plug-in time and meter reading.
-  The bridge identifies itself as <code>Loxone / WallboxTree-LoxSuite</code>.
+  <%= t('The ChargePoint ID is appended to the Server URL (') %><code>wss://…/&lt;ChargePoint ID&gt;</code><%= t(') and also used as the Basic-auth username. The ID tag is sent with every transaction; register the same tag at your backend.') %>
+  <strong><%= t('Automatic') %></strong> <%= t('uses the tag of a badge read on the chosen NFC Code Touch around plug-in (normalised like Loxone\'s own OCPP connector does: hex, without the "EC" specifier and trailing zeros), else the tag mapped to the Loxone user the Wallbox reports for the session, else the fixed tag. The session start is reported after the authorization arrives (or the wait time passes), but with the plug-in time and meter reading. The bridge identifies itself as') %> <code>Loxone / WallboxTree-LoxSuite</code>.
 </p>
 
-<h2 style="margin-top:1.3rem;">Details</h2>
+<h2 style="margin-top:1.3rem;"><%= t('Details') %></h2>
 <div class="form-grid">
   <% const serialSug = typeof serialSuggestion !== 'undefined' ? serialSuggestion : null; %>
   <div>
-    <label>Serial number (optional)</label>
+    <label><%= t('Serial number (optional)') %></label>
     <input type="text" name="serial" value="<%= b.serial || (isNew && serialSug ? serialSug : '') %>" placeholder="<%= serialSug || 'B05F4595' %>">
-    <% if (serialSug) { %><p class="hint" style="margin:0.3rem 0 0;">Hardware lists a Wallbox with serial <code><%= serialSug %></code>.</p><% } %>
+    <% if (serialSug) { %><p class="hint" style="margin:0.3rem 0 0;"><%= t('Hardware lists a Wallbox with serial') %> <code><%= serialSug %></code>.</p><% } %>
   </div>
-  <div><label>EAN (optional, export title)</label><input type="text" name="ean" value="<%= b.ean || '' %>"></div>
-  <div><label>Meter values every (s)</label><input type="number" name="meter_interval_s" min="10" max="3600" value="<%= b.meter_interval_s %>"></div>
-  <div><label>Stop delay after unplug (s)</label><input type="number" name="stop_delay_s" min="0" max="900" value="<%= b.stop_delay_s %>"></div>
+  <div><label><%= t('EAN (optional, export title)') %></label><input type="text" name="ean" value="<%= b.ean || '' %>"></div>
+  <div><label><%= t('Meter values every (s)') %></label><input type="number" name="meter_interval_s" min="10" max="3600" value="<%= b.meter_interval_s %>"></div>
+  <div><label><%= t('Stop delay after unplug (s)') %></label><input type="number" name="stop_delay_s" min="0" max="900" value="<%= b.stop_delay_s %>"></div>
 </div>
 <p class="hint" style="margin-top:0.5rem;">
-  The Wallbox's meter reading only updates about once a minute, so a session is closed a little after the car is
-  unplugged to capture the final reading. Re-plugging within that window continues the same session.
+  <%= t('The Wallbox\'s meter reading only updates about once a minute, so a session is closed a little after the car is unplugged to capture the final reading. Re-plugging within that window continues the same session.') %>
 </p>
 <script>
 (function () {

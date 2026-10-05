@@ -1,11 +1,8 @@
 <%- include('partials/head', { pageTitle: 'Monitor', active: 'monitor' }) %>
 
 <p class="hint">
-  Track an MQTT topic or a value read directly from a Loxone Miniserver over time. History is stored
-  in SQLite (so it survives a gateway restart) and kept for <strong><%= retentionDays %></strong> days
-  before being purged automatically &mdash;
-  <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
-  Open a monitor for a chart, a raw-values table, and a CSV export.
+  <%= t('Track an MQTT topic or a value read directly from a Loxone Miniserver over time. History is stored in SQLite (so it survives a gateway restart) and kept for') %> <strong><%= retentionDays %></strong> <%= t('days before being purged automatically —') %>
+  <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %><%= t('. Open a monitor for a chart, a raw-values table, and a CSV export.') %>
 </p>
 
 <% if (error) { %>
@@ -14,90 +11,87 @@
 
 <% if (canEdit('monitor')) { %>
 <details class="add-panel" <%= prefillTopic ? 'open' : '' %>>
-  <summary>Add monitor</summary>
+  <summary><%= t('Add monitor') %></summary>
   <div class="add-panel-body">
     <form method="post" action="/monitor" id="add-monitor-form">
       <div class="form-grid">
         <div>
-          <label>Source</label>
+          <label><%= t('Source') %></label>
           <select name="source_type" id="source-type-select">
-            <option value="mqtt">MQTT topic</option>
-            <option value="loxone">Loxone (direct, polled)</option>
-            <option value="miniserver_diag">Miniserver diagnostic</option>
+            <option value="mqtt"><%= t('MQTT topic') %></option>
+            <option value="loxone"><%= t('Loxone (direct, polled)') %></option>
+            <option value="miniserver_diag"><%= t('Miniserver diagnostic') %></option>
           </select>
         </div>
-        <div><label>Label (optional)</label><input type="text" name="label" placeholder="Leave blank to auto-generate one"></div>
+        <div><label><%= t('Label (optional)') %></label><input type="text" name="label" placeholder="<%= t('Leave blank to auto-generate one') %>"></div>
       </div>
 
       <div class="form-grid" id="mqtt-fields" style="margin-top:0.85rem;">
         <div>
-          <label>MQTT topic</label>
-          <input type="text" name="topic" list="known-topics" placeholder="shellies/.../energy" value="<%= prefillTopic %>">
+          <label><%= t('MQTT topic') %></label>
+          <input type="text" name="topic" list="known-topics" placeholder="<%= t('shellies/.../energy') %>" value="<%= prefillTopic %>">
           <datalist id="known-topics">
-            <% knownTopics.forEach(t => { %><option value="<%= t %>"></option><% }) %>
+            <% knownTopics.forEach(tt => { %><option value="<%= tt %>"></option><% }) %>
           </datalist>
         </div>
       </div>
 
       <div class="form-grid" id="loxone-fields" style="margin-top:0.85rem; display:none;">
         <div>
-          <label>Miniserver</label>
+          <label><%= t('Miniserver') %></label>
           <select id="loxone-miniserver-select">
-            <option value="">Select a Miniserver&hellip;</option>
+            <option value=""><%= t('Select a Miniserver…') %></option>
             <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
           </select>
           <input type="hidden" name="miniserver_id" id="loxone-miniserver-id">
         </div>
         <div>
-          <label>Filter states</label>
-          <input type="text" id="loxone-state-filter" placeholder="Type to filter, e.g. living room" disabled>
+          <label><%= t('Filter states') %></label>
+          <input type="text" id="loxone-state-filter" placeholder="<%= t('Type to filter, e.g. living room') %>" disabled>
         </div>
         <div>
-          <label>State</label>
+          <label><%= t('State') %></label>
           <select name="loxone_uuid" id="loxone-state-select" disabled>
-            <option value="">Pick a Miniserver first&hellip;</option>
+            <option value=""><%= t('Pick a Miniserver first…') %></option>
           </select>
         </div>
         <div>
-          <label>Poll interval</label>
+          <label><%= t('Poll interval') %></label>
           <select name="poll_interval_ms">
-            <option value="5000">5 seconds</option>
-            <option value="10000" selected>10 seconds</option>
-            <option value="30000">30 seconds</option>
-            <option value="60000">1 minute</option>
-            <option value="300000">5 minutes</option>
+            <option value="5000"><%= t('5 seconds') %></option>
+            <option value="10000" selected><%= t('10 seconds') %></option>
+            <option value="30000"><%= t('30 seconds') %></option>
+            <option value="60000"><%= t('1 minute') %></option>
+            <option value="300000"><%= t('5 minutes') %></option>
           </select>
         </div>
       </div>
 
       <div class="form-grid" id="miniserver-diag-fields" style="margin-top:0.85rem; display:none;">
         <div>
-          <label>Miniserver</label>
+          <label><%= t('Miniserver') %></label>
           <select name="miniserver_id" id="diag-miniserver-select" disabled>
-            <option value="">Select a Miniserver&hellip;</option>
+            <option value=""><%= t('Select a Miniserver…') %></option>
             <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
           </select>
         </div>
         <div>
-          <label>Field</label>
+          <label><%= t('Field') %></label>
           <select name="diag_field">
-            <option value="cpu_load">CPU load</option>
-            <option value="heap_value_kb">Heap value</option>
-            <option value="heap_total_kb">Heap total</option>
-            <option value="num_tasks">Task count</option>
+            <option value="cpu_load"><%= t('CPU load') %></option>
+            <option value="heap_value_kb"><%= t('Heap value') %></option>
+            <option value="heap_total_kb"><%= t('Heap total') %></option>
+            <option value="num_tasks"><%= t('Task count') %></option>
           </select>
         </div>
       </div>
       <p class="hint" id="miniserver-diag-hint" style="margin-top:0.5rem; display:none;">
-        Not polled independently &mdash; reuses whatever the
-        <a href="/miniservers">Miniservers</a> page's own background check already reads on its
-        own interval (Settings, default 60s), so adding one of these never adds extra load on the
-        Miniserver. "Heap value" is deliberately not labeled free/used: Loxone doesn't document
-        which of the two numbers it returns is which.
+        <%= t('Not polled independently — reuses whatever the') %>
+        <a href="/miniservers"><%= t('Miniservers') %></a> <%= t('page\'s own background check already reads on its own interval (Settings, default 60s), so adding one of these never adds extra load on the Miniserver. "Heap value" is deliberately not labeled free/used: Loxone doesn\'t document which of the two numbers it returns is which.') %>
       </p>
 
       <div style="margin-top:0.9rem;">
-        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+        <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add') %></button>
         <span class="hint" id="loxone-fetch-status" style="margin:0 0 0 0.6rem; display:inline;"></span>
       </div>
     </form>
@@ -110,33 +104,33 @@
   <div class="table-toolbar">
     <div class="search-combo">
       <select id="monitor-filter-field">
-        <option value="0">Status</option>
-        <option value="1" selected>Label</option>
-        <option value="2">Source</option>
-        <option value="3">Dashboard</option>
-        <option value="4">Notification</option>
-        <option value="5">Raw value</option>
-        <option value="7">Last updated</option>
-        <option value="8">Room</option>
-        <option value="9">Category</option>
+        <option value="0"><%= t('Status') %></option>
+        <option value="1" selected><%= t('Label') %></option>
+        <option value="2"><%= t('Source') %></option>
+        <option value="3"><%= t('Dashboard') %></option>
+        <option value="4"><%= t('Notification') %></option>
+        <option value="5"><%= t('Raw value') %></option>
+        <option value="7"><%= t('Last updated') %></option>
+        <option value="8"><%= t('Room') %></option>
+        <option value="9"><%= t('Category') %></option>
       </select>
       <div class="clearable-input-wrap">
-        <input type="text" id="monitor-filter-query" placeholder="Filter…">
-        <button type="button" id="monitor-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+        <input type="text" id="monitor-filter-query" placeholder="<%= t('Filter…') %>">
+        <button type="button" id="monitor-filter-clear" class="icon-btn clearable-input-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
       </div>
     </div>
     <% if (canEdit('monitor')) { %>
     <form method="post" action="/monitor/enable-all" style="margin:0;">
-      <button type="submit" class="btn-edit" <%= disabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Enable all (<%= disabledCount %>)</button>
+      <button type="submit" class="btn-edit" <%= disabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> <%= t('Enable all (') %><%= disabledCount %>)</button>
     </form>
     <form method="post" action="/monitor/disable-all" style="margin:0;">
-      <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Disable all (<%= enabledCount %>)</button>
+      <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> <%= t('Disable all (') %><%= enabledCount %>)</button>
     </form>
     <form method="post" action="/monitor/clear-unused" data-confirm="Delete every monitor not used on any dashboard (<%= unusedCount %> right now), along with its history? Monitors still on a dashboard are never touched." style="margin:0;">
-      <button type="submit" class="danger" <%= unusedCount === 0 ? 'disabled' : '' %>><%- icon('trash') %> Clear unused (<%= unusedCount %>)</button>
+      <button type="submit" class="danger" <%= unusedCount === 0 ? 'disabled' : '' %>><%- icon('trash') %> <%= t('Clear unused (') %><%= unusedCount %>)</button>
     </form>
     <form method="post" action="/monitor/clear-all" data-confirm="Delete ALL <%= monitors.length %> monitors and their history, including ones still on a dashboard? Those panels will be left with nothing to show. This can't be undone." style="margin:0;">
-      <button type="submit" class="danger" <%= monitors.length === 0 ? 'disabled' : '' %>><%- icon('trash') %> Clear all (<%= monitors.length %>)</button>
+      <button type="submit" class="danger" <%= monitors.length === 0 ? 'disabled' : '' %>><%- icon('trash') %> <%= t('Clear all (') %><%= monitors.length %>)</button>
     </form>
     <% } %>
   </div>
@@ -144,7 +138,7 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Status</th><th>Label</th><th>Source</th><th>Dashboard</th><th>Notification</th><th>Raw value</th><th>Scaled value</th><th>Last updated</th><th data-default-hidden>Room</th><th data-default-hidden>Category</th><th>Actions</th></tr>
+      <tr><th><%= t('Status') %></th><th><%= t('Label') %></th><th><%= t('Source') %></th><th><%= t('Dashboard') %></th><th><%= t('Notification') %></th><th><%= t('Raw value') %></th><th><%= t('Scaled value') %></th><th><%= t('Last updated') %></th><th data-default-hidden><%= t('Room') %></th><th data-default-hidden><%= t('Category') %></th><th><%= t('Actions') %></th></tr>
     </thead>
     <tbody>
       <% monitors.forEach(m => { %>
@@ -153,11 +147,11 @@
           <td><a href="/monitor/<%= m.id %>"><%= m.label %></a></td>
           <td>
             <% if (m.source_type === 'mqtt') { %>
-              MQTT &middot; <code><%= m.mqtt_topic %></code>
+              <%= t('MQTT ·') %> <code><%= m.mqtt_topic %></code>
             <% } else if (m.source_type === 'miniserver_diag') { %>
-              Diagnostic &middot; <%= m.miniserver_name || '-' %> <span class="hint" style="margin:0;">(reuses the Miniservers page's own check, not polled separately)</span>
+              <%= t('Diagnostic ·') %> <%= m.miniserver_name || '-' %> <span class="hint" style="margin:0;"><%= t('(reuses the Miniservers page\'s own check, not polled separately)') %></span>
             <% } else { %>
-              Loxone &middot; <%= m.miniserver_name || '-' %> <span class="hint" style="margin:0;">(every <%= Math.round(m.poll_interval_ms / 1000) %>s)</span>
+              <%= t('Loxone ·') %> <%= m.miniserver_name || '-' %> <span class="hint" style="margin:0;"><%= t('(every') %> <%= Math.round(m.poll_interval_ms / 1000) %>s)</span>
             <% } %>
           </td>
           <td>
@@ -169,14 +163,14 @@
                 </a>
               <% }) %>
             <% } else { %>
-              <span class="badge badge-neutral">None</span>
+              <span class="badge badge-neutral"><%= t('None') %></span>
             <% } %>
           </td>
           <td>
             <% if (m.hasNotifyThreshold) { %>
-              <span class="badge badge-warning" title="At least one threshold rung on this monitor's own chart is flagged Notify — crossing into it logs an event to the Notification Center.">Notify</span>
+              <span class="badge badge-warning" title="<%= t('At least one threshold rung on this monitor\'s own chart is flagged Notify — crossing into it logs an event to the Notification Center.') %>"><%= t('Notify') %></span>
             <% } else { %>
-              <span class="badge badge-neutral">None</span>
+              <span class="badge badge-neutral"><%= t('None') %></span>
             <% } %>
           </td>
           <td><% if (m.current) { %><span class="truncate" title="<%= m.current.value %>"><%= m.current.value %></span><% } else { %>-<% } %></td>
@@ -209,14 +203,14 @@
           <td><%= m.category || '-' %></td>
           <td>
             <div class="row-actions">
-              <a class="inline" href="/monitor/<%= m.id %>"><button type="button" class="btn-soft"><%- icon('list') %> View</button></a>
+              <a class="inline" href="/monitor/<%= m.id %>"><button type="button" class="btn-soft"><%- icon('list') %> <%= t('View') %></button></a>
               <% if (canEdit('monitor')) { %>
-              <button type="button" class="btn-edit" data-toggle-row="monitor-edit-<%= m.id %>"><%- icon('edit') %> Edit</button>
+              <button type="button" class="btn-edit" data-toggle-row="monitor-edit-<%= m.id %>"><%- icon('edit') %> <%= t('Edit') %></button>
               <form class="inline" method="post" action="/monitor/<%= m.id %>/toggle">
                 <button type="submit" class="btn-edit"><%- icon('power') %> <%= m.enabled ? 'Disable' : 'Enable' %></button>
               </form>
-              <form class="inline" method="post" action="/monitor/<%= m.id %>/delete" data-confirm="Delete this monitor and all of its history?" data-ajax-delete>
-                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+              <form class="inline" method="post" action="/monitor/<%= m.id %>/delete" data-confirm="<%= t('Delete this monitor and all of its history?') %>" data-ajax-delete>
+                <button type="submit" class="danger"><%- icon('trash') %> <%= t('Delete') %></button>
               </form>
               <% } %>
             </div>
@@ -226,31 +220,31 @@
         <tr class="expand-row" id="monitor-edit-<%= m.id %>">
           <td colspan="10">
             <form method="post" action="/monitor/<%= m.id %>/update" class="form-grid" style="max-width:28rem;">
-              <div><label>Label</label><input type="text" name="label" value="<%= m.label %>" required></div>
+              <div><label><%= t('Label') %></label><input type="text" name="label" value="<%= m.label %>" required></div>
               <% if (m.source_type === 'loxone') { %>
               <div>
-                <label>Poll interval</label>
+                <label><%= t('Poll interval') %></label>
                 <select name="poll_interval_ms">
-                  <option value="5000" <%= m.poll_interval_ms === 5000 ? 'selected' : '' %>>5 seconds</option>
-                  <option value="10000" <%= m.poll_interval_ms === 10000 ? 'selected' : '' %>>10 seconds</option>
-                  <option value="30000" <%= m.poll_interval_ms === 30000 ? 'selected' : '' %>>30 seconds</option>
-                  <option value="60000" <%= m.poll_interval_ms === 60000 ? 'selected' : '' %>>1 minute</option>
-                  <option value="300000" <%= m.poll_interval_ms === 300000 ? 'selected' : '' %>>5 minutes</option>
+                  <option value="5000" <%= m.poll_interval_ms === 5000 ? 'selected' : '' %>><%= t('5 seconds') %></option>
+                  <option value="10000" <%= m.poll_interval_ms === 10000 ? 'selected' : '' %>><%= t('10 seconds') %></option>
+                  <option value="30000" <%= m.poll_interval_ms === 30000 ? 'selected' : '' %>><%= t('30 seconds') %></option>
+                  <option value="60000" <%= m.poll_interval_ms === 60000 ? 'selected' : '' %>><%= t('1 minute') %></option>
+                  <option value="300000" <%= m.poll_interval_ms === 300000 ? 'selected' : '' %>><%= t('5 minutes') %></option>
                 </select>
               </div>
               <% } else if (m.source_type === 'miniserver_diag') { %>
-              <div><label>Field</label><input type="text" value="<%= m.miniserver_name %> &middot; <%= DIAG_FIELD_LABELS[m.diag_field] || m.diag_field %>" disabled title="The Miniserver/field can't be changed — delete and re-add to track a different one."></div>
+              <div><label><%= t('Field') %></label><input type="text" value="<%= m.miniserver_name %> &middot; <%= DIAG_FIELD_LABELS[m.diag_field] || m.diag_field %>" disabled title="<%= t('The Miniserver/field can\'t be changed — delete and re-add to track a different one.') %>"></div>
               <% } else { %>
-              <div><label>MQTT topic</label><input type="text" value="<%= m.mqtt_topic %>" disabled title="The topic itself can't be changed — delete and re-add to track a different topic."></div>
+              <div><label><%= t('MQTT topic') %></label><input type="text" value="<%= m.mqtt_topic %>" disabled title="<%= t('The topic itself can\'t be changed — delete and re-add to track a different topic.') %>"></div>
               <% } %>
-              <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+              <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
             </form>
           </td>
         </tr>
         <% } %>
       <% }) %>
       <% if (monitors.length === 0) { %>
-        <tr><td colspan="8" class="empty">No monitors yet &mdash; add one above, or use the "Monitor" shortcut on a topic in <a href="/incoming/messages">Live Traffic</a>.</td></tr>
+        <tr><td colspan="8" class="empty"><%= t('No monitors yet — add one above, or use the "Monitor" shortcut on a topic in') %> <a href="/incoming/messages"><%= t('Live Traffic') %></a>.</td></tr>
       <% } %>
     </tbody>
   </table>

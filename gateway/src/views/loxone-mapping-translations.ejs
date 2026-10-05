@@ -1,8 +1,7 @@
 <%- include('partials/head', { pageTitle: 'Translations', active: 'loxone-to-mqtt' }) %>
 
 <p class="hint">
-  Translation table for Loxone &rarr; <code><%= mapping.mqtt_topic %></code><% if (mapping.miniserver_name) { %> (<%= mapping.miniserver_name %>)<% } %>.
-  If the value Loxone sends has no match here, it is passed through unchanged.
+  <%= t('Translation table for Loxone →') %> <code><%= mapping.mqtt_topic %></code><% if (mapping.miniserver_name) { %> (<%= mapping.miniserver_name %>)<% } %><%= t('. If the value Loxone sends has no match here, it is passed through unchanged.') %>
 </p>
 
 <% if (error) { %>
@@ -11,13 +10,13 @@
 
 <% if (canEdit('loxone_to_mqtt')) { %>
 <details class="add-panel">
-  <summary>Add translation</summary>
+  <summary><%= t('Add translation') %></summary>
   <div class="add-panel-body">
     <form method="post" action="/mappings/loxone-to-mqtt/<%= mapping.id %>/translations">
       <div class="form-grid">
-        <div><label>Value from Loxone (e.g. "1")</label><input type="text" name="match_value" required></div>
-        <div><label>Becomes (e.g. "on")</label><input type="text" name="output_value" required></div>
-        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+        <div><label><%= t('Value from Loxone (e.g. "1")') %></label><input type="text" name="match_value" required></div>
+        <div><label><%= t('Becomes (e.g. "on")') %></label><input type="text" name="output_value" required></div>
+        <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add') %></button>
       </div>
     </form>
   </div>
@@ -27,7 +26,7 @@
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="columns-menu columns-menu-inline" id="mt-columns-menu">
-      <button type="button" class="btn-soft" id="mt-columns-btn"><%- icon('columns') %> Columns</button>
+      <button type="button" class="btn-soft" id="mt-columns-btn"><%- icon('columns') %> <%= t('Columns') %></button>
       <div class="columns-menu-panel" id="mt-columns-panel" hidden></div>
     </div>
   </div>
@@ -40,7 +39,7 @@
 </div>
 <script type="application/json" id="mt-rows"><%- JSON.stringify(translations) %></script>
 
-<p><a href="/mappings/loxone-to-mqtt">&larr; Back to mappings</a></p>
+<p><a href="/mappings/loxone-to-mqtt"><%= t('← Back to mappings') %></a></p>
 
 <link rel="stylesheet" href="/vendor/tabulator.min.css">
 <link rel="stylesheet" href="/tabulator-theme.css">

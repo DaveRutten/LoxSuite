@@ -176,6 +176,8 @@ async function main() {
   // loadUserContext knows who is logged in (res.locals.t there).
   app.locals.t = (key, vars) => i18n.translate(i18n.defaultLanguage(), key, vars);
   app.locals.lang = 'en';
+  app.locals.uiLocale = 'en-GB';
+  app.locals.clock12 = false;
   app.locals.icon = icon;
   app.locals.toggleSwitch = toggleSwitch;
   app.locals.formatDateTime = formatDateTime;
@@ -231,11 +233,18 @@ async function main() {
   );
   
   app.get('/healthz', (req, res) => res.status(200).json({ ok: true }));
+  // The browser's dictionary for texts its scripts build (public/i18n.js). Public and cacheable:
+  // translations are not secret, and the URL carries a version that changes with every edit.
+  app.get('/i18n/:lang.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(`window.LS_I18N=${JSON.stringify(i18n.clientDict(String(req.params.lang)))};`);
+  });
   
   // Public: Loxone calls this directly, no login involved.
   app.use('/api/loxone-in', loxoneInboundRoutes);
   
-  app.use((req, res, next) => { const lang = i18n.defaultLanguage(); res.locals.lang = lang; res.locals.t = i18n.translator(lang); res.locals.multiLang = i18n.listLanguages().length > 1; next(); });
+  app.use((req, res, next) => { const lang = i18n.defaultLanguage(); res.locals.lang = lang; res.locals.t = i18n.translator(lang); res.locals.multiLang = i18n.listLanguages().length > 1; res.locals.uiLocale = i18n.localeOf(lang); res.locals.clock12 = i18n.clock12(); res.locals.i18nVersion = i18n.dictVersion(); next(); });
   app.use(attachCsrfToken);
   app.use(verifyCsrfToken);
   

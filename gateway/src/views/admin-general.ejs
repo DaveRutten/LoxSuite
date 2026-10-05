@@ -23,48 +23,48 @@
   const versionStatus = getVersionStatus();
 %>
 <div class="card">
-  <h2>LoxSuite version</h2>
+  <h2><%= t('LoxSuite version') %></h2>
   <p class="hint">
-    <span style="display:block;">Installed: <strong style="color:var(--text);">v<%= versionStatus.currentVersion %></strong></span>
+    <span style="display:block;"><%= t('Installed:') %> <strong style="color:var(--text);">v<%= versionStatus.currentVersion %></strong></span>
     <span style="display:block;">
       <% if (versionStatus.updateAvailable) { %>
-        Available: <strong style="color:var(--text);">v<%= versionStatus.latestVersion %></strong>
+        <%= t('Available:') %> <strong style="color:var(--text);">v<%= versionStatus.latestVersion %></strong>
       <% } else if (versionStatus.latestVersion) { %>
         <%
           // Deliberately NOT "Available: vX (up to date)" — that repeats the exact same version
           // string Installed just showed right above it, which reads as if something's wrong
           // (two different-looking labels claiming the same number) rather than as reassurance.
         %>
-        <strong style="color:var(--success);">Up to date</strong>
+        <strong style="color:var(--success);"><%= t('Up to date') %></strong>
       <% } else if (versionStatus.lastCheckReached === false) { %>
-        Available: unknown &mdash; could not reach GitHub (offline, timeout, or rate-limited)
+        <%= t('Available: unknown — could not reach GitHub (offline, timeout, or rate-limited)') %>
       <% } else if (versionStatus.lastCheckReached === true) { %>
-        Available: unknown &mdash; no release tags found on GitHub yet
+        <%= t('Available: unknown — no release tags found on GitHub yet') %>
       <% } else { %>
-        Available: unknown &mdash; not checked yet
+        <%= t('Available: unknown — not checked yet') %>
       <% } %>
     </span>
     <% if (versionStatus.checkedAt) { %>
-      <span style="display:block; margin-top:0.2rem;">Last checked: <%= formatDateTime(versionStatus.checkedAt) %><% if (justChecked) { %> &mdash; just now<% } %></span>
+      <span style="display:block; margin-top:0.2rem;"><%= t('Last checked:') %> <%= formatDateTime(versionStatus.checkedAt) %><% if (justChecked) { %> <%= t('— just now') %><% } %></span>
     <% } %>
   </p>
   <div class="row-actions" style="justify-content:flex-start;">
     <form method="post" action="/admin/check-update" style="margin:0;">
-      <button type="submit" class="btn-test"><%- icon('refresh') %> Check for updates now</button>
+      <button type="submit" class="btn-test"><%- icon('refresh') %> <%= t('Check for updates now') %></button>
     </form>
     <% if (versionStatus.updateAvailable && versionStatus.changelog) { %>
-      <button type="button" class="btn-soft" id="view-changelog-btn"><%- icon('list') %> View changelog</button>
+      <button type="button" class="btn-soft" id="view-changelog-btn"><%- icon('list') %> <%= t('View changelog') %></button>
     <% } %>
-    <a class="inline" href="https://github.com/DaveRutten/LoxSuite" target="_blank" rel="noopener"><button type="button" class="btn-soft"><%- icon('link') %> GitHub page</button></a>
+    <a class="inline" href="https://github.com/DaveRutten/LoxSuite" target="_blank" rel="noopener"><button type="button" class="btn-soft"><%- icon('link') %> <%= t('GitHub page') %></button></a>
   </div>
 </div>
 
 <% if (versionStatus.updateAvailable && versionStatus.changelog) { %>
 <dialog id="update-changelog-dialog" class="update-changelog-dialog">
-  <h2>What's new in v<%= versionStatus.latestVersion %></h2>
+  <h2><%= t('What\'s new in v') %><%= versionStatus.latestVersion %></h2>
   <div class="update-changelog-body"><%- versionStatus.changelogHtml %></div>
   <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
-    <button type="button" class="btn-soft" id="close-changelog-btn">Close</button>
+    <button type="button" class="btn-soft" id="close-changelog-btn"><%= t('Close') %></button>
   </div>
 </dialog>
 <script>
@@ -86,7 +86,7 @@
 <% } %>
 
 <div class="card">
-  <h2>Database</h2>
+  <h2><%= t('Database') %></h2>
   <%
     // Postgres and MySQL/MariaDB are both real network servers (Server: host:port/db); only
     // SQLite is a local file (File: path) — everything non-sqlite takes the network-server
@@ -95,62 +95,51 @@
   %>
   <div style="margin-bottom:0.6rem; padding:0.6rem 0.9rem; border-radius:var(--radius); background:var(--surface-alt); border:1px solid var(--border);">
     <p class="hint" style="margin:0;">
-      <span style="display:block;">Backend: <strong style="color:var(--text);"><%= dbBackendLabels[dbInfo.backend] || dbInfo.backend %></strong><% if (dbInfo.version) { %> (v<%= dbInfo.version %>)<% } %></span>
+      <span style="display:block;"><%= t('Backend:') %> <strong style="color:var(--text);"><%= dbBackendLabels[dbInfo.backend] || dbInfo.backend %></strong><% if (dbInfo.version) { %> (v<%= dbInfo.version %>)<% } %></span>
       <% if (dbInfo.backend !== 'sqlite') { %>
-        <span style="display:block;">Server: <strong style="color:var(--text);"><%= dbInfo.host %>:<%= dbInfo.port %>/<%= dbInfo.database %></strong></span>
+        <span style="display:block;"><%= t('Server:') %> <strong style="color:var(--text);"><%= dbInfo.host %>:<%= dbInfo.port %>/<%= dbInfo.database %></strong></span>
       <% } else { %>
-        <span style="display:block;">File: <strong style="color:var(--text);"><%= dbInfo.dbPath %></strong></span>
+        <span style="display:block;"><%= t('File:') %> <strong style="color:var(--text);"><%= dbInfo.dbPath %></strong></span>
       <% } %>
     </p>
   </div>
   <p class="hint">
-    Set via the <code>DB_BACKEND</code>/<code>DATABASE_URL</code> (or <code>DB_HOST</code>/<code>DB_NAME</code>/<code>DB_USER</code>/...) environment
+    <%= t('Set via the') %> <code>DB_BACKEND</code>/<code>DATABASE_URL</code> <%= t('(or') %> <code>DB_HOST</code>/<code>DB_NAME</code>/<code>DB_USER</code>/...) environment
     variables — restart required to change, not a setting on this page.
   </p>
   <% if (dbInfo.backend === 'sqlite') { %>
     <p class="hint">
-      SQLite is fine for most installs, but a large one — many Monitors polled often, a long
-      retention window, a busy Loxone Commands log — writes every one of those to a single local
-      file with no concurrent-writer support of its own; Postgres or MySQL/MariaDB handle that
-      load better and are worth switching to once things start feeling slow (see
-      <code>gateway/src/db/transfer.js</code> to move your existing data over).
+      <%= t('SQLite is fine for most installs, but a large one — many Monitors polled often, a long retention window, a busy Loxone Commands log — writes every one of those to a single local file with no concurrent-writer support of its own; Postgres or MySQL/MariaDB handle that load better and are worth switching to once things start feeling slow (see') %>
+      <code>gateway/src/db/transfer.js</code> <%= t('to move your existing data over).') %>
     </p>
   <% } %>
 </div>
 
 <div class="card">
-  <h2>Tech report</h2>
+  <h2><%= t('Tech report') %></h2>
   <p class="hint">
-    A single diagnostic snapshot — LoxSuite/DB/Node versions, recent System/MQTT/Loxone Commands
-    log lines, config counts (mappings, monitors, Miniservers, ...), and live MQTT/Miniserver
-    connection status. Usernames are partially masked and passwords/secrets are never included —
-    safe to share when asking for help diagnosing a config mistake or a real bug.
+    <%= t('A single diagnostic snapshot — LoxSuite/DB/Node versions, recent System/MQTT/Loxone Commands log lines, config counts (mappings, monitors, Miniservers, ...), and live MQTT/Miniserver connection status. Usernames are partially masked and passwords/secrets are never included — safe to share when asking for help diagnosing a config mistake or a real bug.') %>
   </p>
   <div class="row-actions" style="justify-content:flex-start;">
-    <a class="inline" href="/admin/tech-report"><button type="button" class="btn-soft"><%- icon('list') %> View tech report</button></a>
-    <a class="inline" href="/admin/tech-report/download"><button type="button" class="btn-soft"><%- icon('download') %> Download JSON</button></a>
+    <a class="inline" href="/admin/tech-report"><button type="button" class="btn-soft"><%- icon('list') %> <%= t('View tech report') %></button></a>
+    <a class="inline" href="/admin/tech-report/download"><button type="button" class="btn-soft"><%- icon('download') %> <%= t('Download JSON') %></button></a>
   </div>
 </div>
 
 <div class="card">
-  <h2>Device templates</h2>
+  <h2><%= t('Device templates') %></h2>
   <p class="hint" id="device-templates-hint">
-    "Common commands"/"Common data" device definitions (Shelly, HeatMeister, ...), loaded from
-    three tiers, each able to override an earlier one's same device: this app's own built-ins,
-    anything fetched from GitHub below, then your own files in the bind-mounted
-    <code>device-templates/user/</code> folder — see <a href="/mappings/commands">Common Commands</a>
-    for the point-and-click editor instead.
+    <%= t('"Common commands"/"Common data" device definitions (Shelly, HeatMeister, ...), loaded from three tiers, each able to override an earlier one\'s same device: this app\'s own built-ins, anything fetched from GitHub below, then your own files in the bind-mounted') %>
+    <code>device-templates/user/</code> <%= t('folder — see') %> <a href="/mappings/commands"><%= t('Common Commands') %></a>
+    <%= t('for the point-and-click editor instead.') %>
   </p>
   <p class="hint">
-    <span style="display:block;">Built-in: <strong style="color:var(--text);"><%= templateSources.bundled.reduce((n, f) => n + f.families.length, 0) %> device(s)</strong></span>
-    <span style="display:block;">Fetched from GitHub: <strong style="color:var(--text);"><%= templateSources.synced.reduce((n, f) => n + f.families.length, 0) %> device(s)</strong></span>
-    <span style="display:block;">Your own (<code>device-templates/user/</code>): <strong style="color:var(--text);"><%= templateSources.user.reduce((n, f) => n + f.families.length, 0) %> device(s)</strong></span>
+    <span style="display:block;"><%= t('Built-in:') %> <strong style="color:var(--text);"><%= templateSources.bundled.reduce((n, f) => n + f.families.length, 0) %> <%= t('device(s)') %></strong></span>
+    <span style="display:block;"><%= t('Fetched from GitHub:') %> <strong style="color:var(--text);"><%= templateSources.synced.reduce((n, f) => n + f.families.length, 0) %> <%= t('device(s)') %></strong></span>
+    <span style="display:block;"><%= t('Your own (') %><code>device-templates/user/</code>): <strong style="color:var(--text);"><%= templateSources.user.reduce((n, f) => n + f.families.length, 0) %> <%= t('device(s)') %></strong></span>
     <% if (!templateSources.splitLayout) { %>
       <span style="display:block; margin-top:0.2rem;">
-        Running the old flat <code>device-templates/</code> layout still (a bare/local run outside
-        Docker, or a Docker install that hasn't restarted since updating to this version yet) —
-        the built-in vs. your-own split above isn't active yet; everything above is read from that
-        one folder together.
+        <%= t('Running the old flat') %> <code>device-templates/</code> <%= t('layout still (a bare/local run outside Docker, or a Docker install that hasn\'t restarted since updating to this version yet) — the built-in vs. your-own split above isn\'t active yet; everything above is read from that one folder together.') %>
       </span>
     <% } %>
   </p>
@@ -158,10 +147,8 @@
   <% if (staleUserFiles.length > 0) { %>
     <div style="margin-bottom:1rem; padding:0.6rem 0.9rem; border-radius:var(--radius); background:var(--warning-soft); border:1px solid var(--warning);">
       <p class="hint" style="color:var(--warning); margin:0 0 0.4rem;">
-        <strong><%= staleUserFiles.length %> file(s) in <code>device-templates/user/</code> look identical to a current built-in/GitHub-fetched device</strong>
-        — almost certainly a leftover copy from before the built-in/synced split existed, silently
-        shadowing whatever that device's built-in definition is updated to next. Safe to delete
-        from <code>user/</code> so the built-in (or a GitHub-synced update) takes over again.
+        <strong><%= staleUserFiles.length %> <%= t('file(s) in') %> <code>device-templates/user/</code> <%= t('look identical to a current built-in/GitHub-fetched device') %></strong>
+        <%= t('— almost certainly a leftover copy from before the built-in/synced split existed, silently shadowing whatever that device\'s built-in definition is updated to next. Safe to delete from') %> <code>user/</code> <%= t('so the built-in (or a GitHub-synced update) takes over again.') %>
       </p>
       <p class="hint" style="margin:0; display:flex; flex-wrap:wrap; gap:0.4rem;">
         <% staleUserFiles.forEach((f) => { %>
@@ -172,36 +159,33 @@
   <% } %>
   <% if (templateResult) { %>
     <% if (templateResult.action === 'reload') { %>
-      <p class="hint" style="color: var(--success);">Reloaded — <%= templateResult.deviceCount %> device(s) loaded (<%= templateResult.familyCount %> with commands, <%= templateResult.dataFamilyCount %> with data points).</p>
+      <p class="hint" style="color: var(--success);"><%= t('Reloaded —') %> <%= templateResult.deviceCount %> <%= t('device(s) loaded (') %><%= templateResult.familyCount %> <%= t('with commands,') %> <%= templateResult.dataFamilyCount %> <%= t('with data points).') %></p>
     <% } else if (templateResult.action === 'fetch-github') { %>
       <% if (templateResult.error) { %>
-        <p class="hint" style="color: var(--error);">Could not fetch from GitHub — <%= templateResult.error %></p>
+        <p class="hint" style="color: var(--error);"><%= t('Could not fetch from GitHub —') %> <%= templateResult.error %></p>
       <% } else { %>
         <p class="hint" style="color: var(--success);">
-          Fetched <%= templateResult.written.length %> file(s) from GitHub into <code>device-templates/synced/</code><% if (templateResult.failed.length > 0) { %>, <%= templateResult.failed.length %> skipped (failed to parse: <%= templateResult.failed.map((f) => f.file).join(', ') %>)<% } %>.
-          Now <%= templateResult.deviceCount %> device(s) loaded total (<%= templateResult.familyCount %> with commands, <%= templateResult.dataFamilyCount %> with data points).
+          <%= t('Fetched') %> <%= templateResult.written.length %> <%= t('file(s) from GitHub into') %> <code>device-templates/synced/</code><% if (templateResult.failed.length > 0) { %>, <%= templateResult.failed.length %> <%= t('skipped (failed to parse:') %> <%= templateResult.failed.map((f) => f.file).join(', ') %>)<% } %><%= t('. Now') %> <%= templateResult.deviceCount %> <%= t('device(s) loaded total (') %><%= templateResult.familyCount %> <%= t('with commands,') %> <%= templateResult.dataFamilyCount %> <%= t('with data points).') %>
         </p>
       <% } %>
     <% } %>
   <% } %>
   <div class="row-actions" style="justify-content:flex-start;">
     <form method="post" action="/admin/device-templates/fetch-github" style="margin:0;">
-      <button type="submit" class="btn-test"><%- icon('link') %> Fetch latest built-ins from GitHub</button>
+      <button type="submit" class="btn-test"><%- icon('link') %> <%= t('Fetch latest built-ins from GitHub') %></button>
     </form>
     <form method="post" action="/admin/device-templates/reload" style="margin:0;">
-      <button type="submit" class="btn-soft"><%- icon('refresh') %> Reload from disk</button>
+      <button type="submit" class="btn-soft"><%- icon('refresh') %> <%= t('Reload from disk') %></button>
     </form>
   </div>
 </div>
 
 <div class="card">
-  <h2>Setup wizard</h2>
+  <h2><%= t('Setup wizard') %></h2>
   <p class="hint">
-    The guided first-run setup (admin password, timezone, Miniserver, MQTT broker, SSO, backups,
-    notifications) — safe to run again any time, e.g. to double-check something or walk through it
-    again in this test version.
+    <%= t('The guided first-run setup (admin password, timezone, Miniserver, MQTT broker, SSO, backups, notifications) — safe to run again any time, e.g. to double-check something or walk through it again in this test version.') %>
   </p>
-  <a href="/setup"><button type="button" class="btn-soft"><%- icon('refresh') %> Run setup wizard again</button></a>
+  <a href="/setup"><button type="button" class="btn-soft"><%- icon('refresh') %> <%= t('Run setup wizard again') %></button></a>
 </div>
 
 <%- include('partials/foot') %>

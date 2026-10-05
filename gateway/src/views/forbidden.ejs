@@ -1,11 +1,10 @@
 <%- include('partials/head', { pageTitle: 'Not authorized', active: '' }) %>
 
 <div class="card">
-  <h2>Not authorized</h2>
+  <h2><%= t('Not authorized') %></h2>
   <p class="hint" style="margin-bottom:0;">
-    Your Access Role doesn't have permission to view <strong><%= area %></strong>. Ask an administrator
-    to grant it on the <a href="/admin/roles">Access Roles</a> page, or head back to the
-    <a href="/">Dashboard</a>.
+    <%= t('Your Access Role doesn\'t have permission to view') %> <strong><%= area %></strong><%= t('. Ask an administrator to grant it on the') %> <a href="/admin/roles"><%= t('Access Roles') %></a> <%= t('page, or head back to the') %>
+    <a href="/"><%= t('Dashboard') %></a>.
   </p>
 </div>
 

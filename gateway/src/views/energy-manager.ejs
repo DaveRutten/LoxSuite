@@ -1,27 +1,26 @@
 <%- include('partials/head', { pageTitle: 'Energy manager', active: 'energymanager' }) %>
 
-<% if (saved) { %><p class="hint" style="color: var(--success);">Saved.</p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 
 <p class="hint">
-  The other big consumers, planned together with the car from the prices, the solar forecast and your house load. This runs in
-  <strong>shadow mode</strong>: LoxSuite measures, plans and shows what it <em>would</em> send to Loxone &mdash; nothing is sent.
-  Compare it with what your own Loxone logic does; later you connect the virtual inputs and switch a load to Live.
+  <%= t('The other big consumers, planned together with the car from the prices, the solar forecast and your house load. This runs in') %>
+  <strong><%= t('shadow mode') %></strong><%= t(': LoxSuite measures, plans and shows what it') %> <em><%= t('would') %></em> <%= t('send to Loxone — nothing is sent. Compare it with what your own Loxone logic does; later you connect the virtual inputs and switch a load to Live.') %>
 </p>
 
 <div class="card">
   <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-    <h2 style="margin:0;">Now</h2>
+    <h2 style="margin:0;"><%= t('Now') %></h2>
     <div class="btn-row" style="margin:0;">
       <span class="hint" id="em-status" style="margin:0;"></span>
-      <% if (canEdit('energy_manager')) { %><button type="button" class="btn-soft" id="em-recalc">Recalculate</button><button type="button" class="btn-soft" id="em-import">Import 30 days from Loxone</button><% } %>
+      <% if (canEdit('energy_manager')) { %><button type="button" class="btn-soft" id="em-recalc"><%= t('Recalculate') %></button><button type="button" class="btn-soft" id="em-import"><%= t('Import 30 days from Loxone') %></button><% } %>
     </div>
   </div>
-  <div id="em-now" style="margin-top:0.6rem;"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+  <div id="em-now" style="margin-top:0.6rem;"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0;">Plan &mdash; next 36 hours</h2>
+  <h2 style="margin-top:0;"><%= t('Plan — next 36 hours') %></h2>
   <div id="em-plan"></div>
 </div>
 
@@ -29,23 +28,23 @@
 
 <% if (canEdit('energy_manager')) { %>
 <div class="card">
-  <h2 style="margin-top:0;">Consumers</h2>
-  <p class="hint">Priority 1 is served first when there is solar surplus. The car (Smart charging) takes its place at the priority set below.</p>
+  <h2 style="margin-top:0;"><%= t('Consumers') %></h2>
+  <p class="hint"><%= t('Priority 1 is served first when there is solar surplus. The car (Smart charging) takes its place at the priority set below.') %></p>
   <% loads.forEach(l => { %>
     <details style="border-top:1px solid var(--border); padding:0.5rem 0;">
-      <summary style="cursor:pointer;"><strong><%= l.name %></strong> <span class="hint">· <%= kinds[l.kind].label %> · priority <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
+      <summary style="cursor:pointer;"><strong><%= l.name %></strong> <span class="hint">· <%= kinds[l.kind].label %> <%= t('· priority') %> <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
       <%- include('partials/energy-load-form', { l, kinds, meters }) %>
-      <form method="post" action="/energy-manager/loads/<%= l.id %>/delete" style="margin-top:0.4rem;" onsubmit="return confirm('Delete <%= l.name %> and its history?');"><button type="submit" class="btn-soft">Delete</button></form>
+      <form method="post" action="/energy-manager/loads/<%= l.id %>/delete" style="margin-top:0.4rem;" onsubmit="return confirm(<%= JSON.stringify(t('Delete {name} and its history?', { name: l.name })) %>);"><button type="submit" class="btn-soft"><%= t('Delete') %></button></form>
     </details>
   <% }) %>
   <details style="border-top:1px solid var(--border); padding:0.5rem 0;" <%= loads.length ? '' : 'open' %>>
-    <summary style="cursor:pointer;"><strong>+ Add a consumer</strong></summary>
+    <summary style="cursor:pointer;"><strong><%= t('+ Add a consumer') %></strong></summary>
     <%- include('partials/energy-load-form', { l: null, kinds, meters }) %>
   </details>
   <form method="post" action="/energy-manager/settings" class="form-grid" style="margin-top:0.8rem; border-top:1px solid var(--border); padding-top:0.8rem;">
-    <div><label>Priority of the car</label><input type="text" name="car_priority" value="<%= cfg.car_priority %>"></div>
-    <div><label>Prefer own solar (€/kWh bonus)</label><input type="text" name="solar_bonus_eur" value="<%= cfg.solar_bonus_eur %>"></div>
-    <div style="align-self:end;"><button type="submit" class="btn-soft">Save</button></div>
+    <div><label><%= t('Priority of the car') %></label><input type="text" name="car_priority" value="<%= cfg.car_priority %>"></div>
+    <div><label><%= t('Prefer own solar (€/kWh bonus)') %></label><input type="text" name="solar_bonus_eur" value="<%= cfg.solar_bonus_eur %>"></div>
+    <div style="align-self:end;"><button type="submit" class="btn-soft"><%= t('Save') %></button></div>
   </form>
 </div>
 <% } %>
@@ -135,7 +134,7 @@
           (l.daily.length ? l.daily.map(function (x) { return '<tr><td>' + esc(dayLabel(x.day)) + '</td><td>' + nf(x.kwh, 1) + '</td><td>' + eur(x.cost) + '</td><td>' + eur(x.eurPerKwh, 3) + '</td><td>' + (x.solarShare == null ? '—' : x.solarShare + '%') + '</td><td>' + (x.advisedShare == null ? '<span class="hint">not logged yet</span>' : x.advisedShare + '%') + '</td><td style="color:' + (x.potential > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(x.potential) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No measurements yet.</td></tr>') + '</tbody></table></div>';
       }
       h += patternsHtml(l);
-      h += '<p class="hint" style="margin:0.6rem 0 0; font-size:0.8rem;">Later, to let LoxSuite drive it: ' + l.signals.map(function (s) { return 'virtual input <code>' + esc(s.vi) + '</code> (' + esc(s.unit) + ') &rarr; ' + esc(s.hint); }).join('; ') + '.</p>';
+      h += '<p class="hint" style="margin:0.6rem 0 0; font-size:0.8rem;">Later, to let LoxSuite drive it: ' + l.signals.map(function (s) { return 'virtual input <code>' + esc(s.vi) + '</code> (' + esc(s.unit) + ') &rarr; <span>' + esc(s.hint) + '</span>'; }).join('; ') + '.</p>';
       return h + '</div>';
     }).join('');
     Array.prototype.forEach.call(document.querySelectorAll('[data-req]'), function (b) {

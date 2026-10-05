@@ -3,9 +3,9 @@
 <% if (miniservers.length > 1) { %>
 <form method="get" action="/hardware" class="form-grid" style="margin-bottom:1rem; align-items:end;">
   <div>
-    <label>Miniserver</label>
+    <label><%= t('Miniserver') %></label>
     <select name="miniserver_id" onchange="this.form.submit()">
-      <option value="">All Miniservers</option>
+      <option value=""><%= t('All Miniservers') %></option>
       <% miniservers.forEach(ms => { %>
         <option value="<%= ms.id %>" <%= miniserverId === ms.id ? 'selected' : '' %>><%= ms.name %></option>
       <% }) %>
@@ -18,12 +18,12 @@
   <div class="table-toolbar">
     <div class="search-combo">
       <select id="hardware-category-filter">
-        <option value="">All categories</option>
+        <option value=""><%= t('All categories') %></option>
         <% categories.forEach(c => { %><option value="<%= c.key %>"><%= c.label %></option><% }) %>
       </select>
       <div class="clearable-input-wrap">
-        <input type="text" id="hardware-filter-query" placeholder="Filter by name, place, type, serial…">
-        <button type="button" id="hardware-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+        <input type="text" id="hardware-filter-query" placeholder="<%= t('Filter by name, place, type, serial…') %>">
+        <button type="button" id="hardware-filter-clear" class="icon-btn clearable-input-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
       </div>
     </div>
     <%
@@ -47,7 +47,7 @@
           class="btn-soft"
           style="background:<%= enabled ? 'var(--success-soft)' : 'var(--surface-alt)' %>; color:<%= enabled ? 'var(--success)' : 'var(--text-muted)' %>; border-color:<%= enabled ? 'var(--success)' : 'var(--text-muted)' %>;"
           title="<%= enabled ? 'Enabled — click to disable' : 'Disabled — click to enable' %>"
-        ><%- icon(enabled ? 'check' : 'x') %> Alert <%= r.label %></button>
+        ><%- icon(enabled ? 'check' : 'x') %> <%= t('Alert') %> <%= r.label %></button>
       </form>
     <% }) %>
   </div>
@@ -56,20 +56,20 @@
   <table>
     <thead>
       <tr>
-        <th>Category</th>
-        <th>Type</th>
-        <th>Name</th>
-        <th>Place</th>
-        <% if (hasAudioZones) { %><th>Zone of</th><th>Output</th><% } %>
-        <th>Serial</th>
-        <th>MAC</th>
-        <% if (miniservers.length > 1) { %><th>Miniserver</th><% } %>
-        <th style="max-width:8rem;">Firmware</th>
-        <th>Online</th>
-        <th style="min-width:7.5rem;">Battery</th>
-        <th>Signal</th>
-        <th>Hops</th>
-        <th>Last seen</th>
+        <th><%= t('Category') %></th>
+        <th><%= t('Type') %></th>
+        <th><%= t('Name') %></th>
+        <th><%= t('Place') %></th>
+        <% if (hasAudioZones) { %><th><%= t('Zone of') %></th><th><%= t('Output') %></th><% } %>
+        <th><%= t('Serial') %></th>
+        <th><%= t('MAC') %></th>
+        <% if (miniservers.length > 1) { %><th><%= t('Miniserver') %></th><% } %>
+        <th style="max-width:8rem;"><%= t('Firmware') %></th>
+        <th><%= t('Online') %></th>
+        <th style="min-width:7.5rem;"><%= t('Battery') %></th>
+        <th><%= t('Signal') %></th>
+        <th><%= t('Hops') %></th>
+        <th><%= t('Last seen') %></th>
       </tr>
     </thead>
     <tbody>
@@ -106,10 +106,10 @@
             <% if (d.battery === null) { %>
               -
             <% } else if (d.battery === 127) { %>
-              <span class="badge badge-neutral">External power</span>
+              <span class="badge badge-neutral"><%= t('External power') %></span>
             <% } else { %>
               <span class="badge <%= (d.batt_weak || d.bat_too_weak_for_update) ? 'badge-warning' : 'badge-neutral' %>">
-                <%= d.battery %>%<% if (d.batt_weak || d.bat_too_weak_for_update) { %> weak<% } %>
+                <%= d.battery %>%<% if (d.batt_weak || d.bat_too_weak_for_update) { %> <%= t('weak') %><% } %>
               </span>
             <% } %>
           </td>
@@ -119,7 +119,7 @@
         </tr>
       <% }) %>
       <% if (devices.length === 0) { %>
-        <tr><td colspan="<%= 12 + (miniservers.length > 1 ? 1 : 0) + (hasAudioZones ? 2 : 0) %>" class="empty">No hardware seen yet &mdash; make sure a Miniserver is configured and its <code>/data/status</code> is reachable.</td></tr>
+        <tr><td colspan="<%= 12 + (miniservers.length > 1 ? 1 : 0) + (hasAudioZones ? 2 : 0) %>" class="empty"><%= t('No hardware seen yet — make sure a Miniserver is configured and its') %> <code>/data/status</code> <%= t('is reachable.') %></td></tr>
       <% } %>
     </tbody>
   </table>

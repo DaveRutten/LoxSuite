@@ -3,90 +3,84 @@
 <%- include('partials/tabs-mappings', { active: 'commands' }) %>
 
 <p class="hint">
-  Pick a device &mdash; from every device the broker has actually seen traffic for, across all known
-  types &mdash; and the device type is filled in automatically; correct it manually if it guessed wrong
-  or the device hasn't been seen yet. Then pick a command to build a topic and send it straight to a
-  new Loxone &rarr; MQTT mapping.
+  <%= t('Pick a device — from every device the broker has actually seen traffic for, across all known types — and the device type is filled in automatically; correct it manually if it guessed wrong or the device hasn\'t been seen yet. Then pick a command to build a topic and send it straight to a new Loxone → MQTT mapping.') %>
 </p>
 
-<% if (saved) { %><p class="hint" style="color: var(--success);">Catalog saved.</p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Catalog saved.') %></p><% } %>
 
 <div class="card" style="margin-bottom:1.5rem;">
   <div class="form-grid">
     <div>
-      <label for="device-input">Device</label>
-      <input type="text" id="device-input" list="known-devices" placeholder="shellyplug-s-02086E" value="<%= presetDevice %>">
+      <label for="device-input"><%= t('Device') %></label>
+      <input type="text" id="device-input" list="known-devices" placeholder="<%= t('shellyplug-s-02086E') %>" value="<%= presetDevice %>">
       <datalist id="known-devices">
         <% allDevices.forEach(d => { %><option value="<%= d %>"></option><% }) %>
       </datalist>
     </div>
     <div>
-      <label for="family-select">Device type</label>
+      <label for="family-select"><%= t('Device type') %></label>
       <select id="family-select">
         <% catalog.forEach(f => { %>
           <option value="<%= f.key %>" <%= f.key === presetFamily ? 'selected' : '' %>><%= f.label %></option>
         <% }) %>
       </select>
-      <span class="hint" id="auto-detected-hint" style="display:none;">auto-detected from the device</span>
+      <span class="hint" id="auto-detected-hint" style="display:none;"><%= t('auto-detected from the device') %></span>
     </div>
     <div>
-      <label for="command-select">Command</label>
+      <label for="command-select"><%= t('Command') %></label>
       <select id="command-select"></select>
     </div>
     <div>
-      <label for="channel-input">Channel</label>
+      <label for="channel-input"><%= t('Channel') %></label>
       <input type="number" id="channel-input" min="0" value="0" style="max-width:6rem;">
     </div>
     <div>
-      <label for="action-select">Payload value</label>
+      <label for="action-select"><%= t('Payload value') %></label>
       <select id="action-select"></select>
     </div>
   </div>
 
-  <p style="margin:1rem 0 0.5rem;">Topic: <code id="topic-preview">&mdash;</code></p>
+  <p style="margin:1rem 0 0.5rem;"><%= t('Topic:') %> <code id="topic-preview">&mdash;</code></p>
   <%
     // Only shown once a command's payload actually needs substituting anything (currently: Gen2/
     // Gen3's {channel}-in-JSON commands) — Gen1's plain "on"/"off"/... strings have nothing to
     // fill in, so this stayed hidden for every family before Gen2 existed, and still does for
     // Gen1 today; no reason to show a second, identical-to-the-dropdown line for those.
   %>
-  <p style="margin:0 0 0.5rem; display:none;" id="payload-preview-row">Payload: <code id="payload-preview">&mdash;</code></p>
+  <p style="margin:0 0 0.5rem; display:none;" id="payload-preview-row"><%= t('Payload:') %> <code id="payload-preview">&mdash;</code></p>
   <div class="row-actions">
     <a class="inline" id="use-in-mapping-link" href="#">
-      <button type="button" class="primary"><%- icon('link') %> Use in mapping</button>
+      <button type="button" class="primary"><%- icon('link') %> <%= t('Use in mapping') %></button>
     </a>
-    <button type="button" id="copy-topic-btn" class="btn-soft"><%- icon('copy') %> <span class="btn-label">Copy topic</span></button>
-    <button type="button" id="copy-payload-btn" class="btn-soft" style="display:none;"><%- icon('copy') %> <span class="btn-label">Copy payload</span></button>
+    <button type="button" id="copy-topic-btn" class="btn-soft"><%- icon('copy') %> <span class="btn-label"><%= t('Copy topic') %></span></button>
+    <button type="button" id="copy-payload-btn" class="btn-soft" style="display:none;"><%- icon('copy') %> <span class="btn-label"><%= t('Copy payload') %></span></button>
   </div>
 </div>
 
 <div class="card" id="rgbw-create-card" style="margin-bottom:1.5rem; display:none;">
   <p class="hint" style="margin-top:0;">
-    This device type needs two Loxone &rarr; MQTT mappings sharing one topic to work (RGB color and
-    White %, see the "Set color"/"Set white %" commands above) &mdash; create both in one step, already
-    set to the right topic and the <strong>Shelly RGBW/White</strong> transform, instead of adding
-    them by hand one at a time.
+    <%= t('This device type needs two Loxone → MQTT mappings sharing one topic to work (RGB color and White %, see the "Set color"/"Set white %" commands above) — create both in one step, already set to the right topic and the') %> <strong><%= t('Shelly RGBW/White') %></strong> <%= t('transform, instead of adding them by hand one at a time.') %>
   </p>
   <form method="post" action="/mappings/commands/create-rgbw" class="form-grid" style="align-items:end;" id="rgbw-create-form">
     <input type="hidden" name="device" id="rgbw-device-hidden">
     <input type="hidden" name="family" id="rgbw-family-hidden">
     <div>
-      <label for="rgbw-mode-select">RGB value format Loxone sends</label>
+      <label for="rgbw-mode-select"><%= t('RGB value format Loxone sends') %></label>
       <select name="rgb_mode" id="rgbw-mode-select">
-        <option value="rgb">Hue,Saturation,Value (or a bare hue)</option>
-        <option value="rgb-percent">Loxone's "Analoge ingang RGB" packed %</option>
+        <option value="rgb"><%= t('Hue,Saturation,Value (or a bare hue)') %></option>
+        <option value="rgb-percent"><%= t('Loxone\'s "Analoge ingang RGB" packed %') %></option>
       </select>
     </div>
     <div>
-      <button type="submit" class="primary"><%- icon('plus') %> Create RGB + White mappings</button>
+      <button type="submit" class="primary"><%- icon('plus') %> <%= t('Create RGB + White mappings') %></button>
     </div>
   </form>
 </div>
 
-<% if (isCustomized) { %><p class="hint"><strong>Catalog is customized</strong> — kept even after an app update. New built-in commands/data points (added by an app update, e.g. Shelly's Reboot command) won't show up here on their own; use <strong>Sync new built-in commands</strong> below to add whatever's missing without touching your own edits.</p><% } %>
+<% if (isCustomized) { %><p class="hint"><strong><%= t('Catalog is customized') %></strong> <%= t('— kept even after an app update. New built-in commands/data points (added by an app update, e.g. Shelly\'s Reboot command) won\'t show up here on their own; use') %> <strong><%= t('Sync new built-in commands') %></strong> <%= t('below to add whatever\'s missing without touching your own edits.') %></p><% } %>
 <% if (typeof synced !== 'undefined' && synced !== null) { %>
   <p class="hint" style="color: var(--success);">
-    <% if (synced === '0') { %>Nothing to sync — catalog isn't customized, it already reads straight from the built-ins.<% } else { %>Synced <%= synced %> new built-in command<%= synced === '1' ? '' : 's' %>/data point<%= synced === '1' ? '' : 's' %> into your customized catalog.<% } %>
+    <% if (synced === '0') { %><%= t('Nothing to sync — catalog isn\'t customized, it already reads straight from the built-ins.') %><% } else { %><%= t('Synced') %> <%= synced %> <%= t('new built-in command') %><%= synced === '1' ? '' : 's' %>/data point<%= synced === '1' ? '' : 's' %> <%= t('into your customized catalog.') %><% } %>
   </p>
 <% } %>
 
@@ -95,35 +89,33 @@
   <textarea name="data_json" id="data-editor-hidden" hidden></textarea>
 
   <% if (dataCatalog && dataCatalog.length > 0) { %>
-  <h2>Common data</h2>
+  <h2><%= t('Common data') %></h2>
   <p class="hint">
-    The mirror image of the commands above — read-only topics these devices already publish on their
-    own (power, energy, position, ...), for adding as a <a href="/monitor">Monitor</a> rather than
-    sending anything. Uses the same Device field above.
+    <%= t('The mirror image of the commands above — read-only topics these devices already publish on their own (power, energy, position, ...), for adding as a') %> <a href="/monitor"><%= t('Monitor') %></a> <%= t('rather than sending anything. Uses the same Device field above.') %>
   </p>
   <div class="card" style="margin-bottom:1.5rem;">
     <div class="form-grid">
       <div>
-        <label for="data-family-select">Device type</label>
+        <label for="data-family-select"><%= t('Device type') %></label>
         <select id="data-family-select">
           <% dataCatalog.forEach(f => { %><option value="<%= f.key %>"><%= f.label %></option><% }) %>
         </select>
       </div>
       <div>
-        <label for="data-point-select">Data point</label>
+        <label for="data-point-select"><%= t('Data point') %></label>
         <select id="data-point-select"></select>
       </div>
       <div id="data-channel-field">
-        <label for="data-channel-input">Channel</label>
+        <label for="data-channel-input"><%= t('Channel') %></label>
         <input type="number" id="data-channel-input" min="0" value="0" style="max-width:6rem;">
       </div>
     </div>
-    <p style="margin:1rem 0 0.5rem;">Topic: <code id="data-topic-preview">&mdash;</code></p>
+    <p style="margin:1rem 0 0.5rem;"><%= t('Topic:') %> <code id="data-topic-preview">&mdash;</code></p>
     <div class="row-actions">
       <a class="inline" id="use-in-monitor-link" href="#">
-        <button type="button" class="primary"><%- icon('link') %> Use as Monitor</button>
+        <button type="button" class="primary"><%- icon('link') %> <%= t('Use as Monitor') %></button>
       </a>
-      <button type="button" id="copy-data-topic-btn" class="btn-soft"><%- icon('copy') %> <span class="btn-label">Copy topic</span></button>
+      <button type="button" id="copy-data-topic-btn" class="btn-soft"><%- icon('copy') %> <span class="btn-label"><%= t('Copy topic') %></span></button>
     </div>
   </div>
 
@@ -167,23 +159,23 @@
   %>
 
   <details class="add-panel">
-    <summary>Show all data devices (<%= dataCatalog.length %>)</summary>
+    <summary><%= t('Show all data devices (') %><%= dataCatalog.length %>)</summary>
     <div class="add-panel-body">
       <div class="row-actions" style="margin-bottom:0.85rem;">
-        <button type="button" class="btn-soft" id="add-data-family-btn"><%- icon('plus') %> Add device type</button>
+        <button type="button" class="btn-soft" id="add-data-family-btn"><%- icon('plus') %> <%= t('Add device type') %></button>
         <label class="btn-soft inline-file-btn">
-          <%- icon('upload') %> Import data device (JSON/XML)
+          <%- icon('upload') %> <%= t('Import data device (JSON/XML)') %>
           <input type="file" id="import-data-file" accept=".json,.xml" hidden>
         </label>
-        <a href="#" id="download-data-example-json" class="btn-soft"><%- icon('download') %> Example .json</a>
-        <a href="#" id="download-data-example-xml" class="btn-soft"><%- icon('download') %> Example .xml</a>
+        <a href="#" id="download-data-example-json" class="btn-soft"><%- icon('download') %> <%= t('Example .json') %></a>
+        <a href="#" id="download-data-example-xml" class="btn-soft"><%- icon('download') %> <%= t('Example .xml') %></a>
       </div>
       <div id="data-reference-list">
         <% dataCatalog.forEach(f => { %>
           <details class="add-panel catalog-family-details" data-kind="data">
             <summary>
               <%= f.label %>
-              <span class="hint" style="margin:0;">(<%= f.dataPoints.length %> data point<%= f.dataPoints.length === 1 ? '' : 's' %>)</span>
+              <span class="hint" style="margin:0;">(<%= f.dataPoints.length %> <%= t('data point') %><%= f.dataPoints.length === 1 ? '' : 's' %>)</span>
             </summary>
             <div class="add-panel-body"><%- familyFieldsHtml('data', f) %></div>
           </details>
@@ -193,25 +185,25 @@
   </details>
   <% } %>
 
-  <h2>Common commands reference</h2>
+  <h2><%= t('Common commands reference') %></h2>
   <details class="add-panel">
-    <summary>Show all command devices (<%= catalog.length %>)</summary>
+    <summary><%= t('Show all command devices (') %><%= catalog.length %>)</summary>
     <div class="add-panel-body">
       <div class="row-actions" style="margin-bottom:0.85rem;">
-        <button type="button" class="btn-soft" id="add-command-family-btn"><%- icon('plus') %> Add device type</button>
+        <button type="button" class="btn-soft" id="add-command-family-btn"><%- icon('plus') %> <%= t('Add device type') %></button>
         <label class="btn-soft inline-file-btn">
-          <%- icon('upload') %> Import command device (JSON/XML)
+          <%- icon('upload') %> <%= t('Import command device (JSON/XML)') %>
           <input type="file" id="import-commands-file" accept=".json,.xml" hidden>
         </label>
-        <a href="#" id="download-commands-example-json" class="btn-soft"><%- icon('download') %> Example .json</a>
-        <a href="#" id="download-commands-example-xml" class="btn-soft"><%- icon('download') %> Example .xml</a>
+        <a href="#" id="download-commands-example-json" class="btn-soft"><%- icon('download') %> <%= t('Example .json') %></a>
+        <a href="#" id="download-commands-example-xml" class="btn-soft"><%- icon('download') %> <%= t('Example .xml') %></a>
       </div>
       <div id="commands-reference-list">
         <% catalog.forEach(f => { %>
           <details class="add-panel catalog-family-details" data-kind="commands">
             <summary>
               <%= f.label %>
-              <span class="hint" style="margin:0;">(<%= f.commands.length %> command<%= f.commands.length === 1 ? '' : 's' %>)</span>
+              <span class="hint" style="margin:0;">(<%= f.commands.length %> <%= t('command') %><%= f.commands.length === 1 ? '' : 's' %>)</span>
             </summary>
             <div class="add-panel-body"><%- familyFieldsHtml('commands', f) %></div>
           </details>
@@ -221,23 +213,19 @@
   </details>
 
   <p class="hint">
-    <code>{device}</code> is the device's own ID as it appears in its topics, <code>{channel}</code> is the
-    channel number (0-based) — either can appear in the topic, the payload, or both (Shelly Gen2/Gen3's
-    JSON-RPC payloads carry <code>{channel}</code> instead of the topic; a "Payload" line and Copy button
-    appear above once that's the case). If Loxone sends a numeric 0/1 instead of the text values above,
-    add a <strong>translation table</strong> to the mapping after creating it (e.g. 1 &rarr; on, 0 &rarr; off).
+    <code>{device}</code> <%= t('is the device\'s own ID as it appears in its topics,') %> <code>{channel}</code> <%= t('is the channel number (0-based) — either can appear in the topic, the payload, or both (Shelly Gen2/Gen3\'s JSON-RPC payloads carry') %> <code>{channel}</code> <%= t('instead of the topic; a "Payload" line and Copy button appear above once that\'s the case). If Loxone sends a numeric 0/1 instead of the text values above, add a') %> <strong><%= t('translation table') %></strong> <%= t('to the mapping after creating it (e.g. 1 → on, 0 → off).') %>
   </p>
 
 </form>
 <div class="row-actions" style="margin-top:0.5rem;">
-  <button type="submit" form="catalog-editor-form" class="btn-edit"><%- icon('edit') %> Save catalog</button>
+  <button type="submit" form="catalog-editor-form" class="btn-edit"><%- icon('edit') %> <%= t('Save catalog') %></button>
   <% if (isCustomized) { %>
   <form method="post" action="/mappings/commands/catalog/sync-builtin" style="margin:0;">
-    <button type="submit" class="btn-soft"><%- icon('refresh') %> Sync new built-in commands</button>
+    <button type="submit" class="btn-soft"><%- icon('refresh') %> <%= t('Sync new built-in commands') %></button>
   </form>
   <% } %>
-  <form method="post" action="/mappings/commands/catalog/reset" style="margin:0;" data-confirm="Reset to the built-in defaults? Any edits you've made here will be lost.">
-    <button type="submit" class="btn-soft">Reset to built-in defaults</button>
+  <form method="post" action="/mappings/commands/catalog/reset" style="margin:0;" data-confirm="<%= t('Reset to the built-in defaults? Any edits you\'ve made here will be lost.') %>">
+    <button type="submit" class="btn-soft"><%= t('Reset to built-in defaults') %></button>
   </form>
 </div>
 

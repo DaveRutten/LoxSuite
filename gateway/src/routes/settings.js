@@ -39,6 +39,15 @@ async function loadGatewaySettings() {
 // than a hand-maintained list, so it can never drift out of sync with what's actually valid here.
 const TIMEZONES = Intl.supportedValuesOf('timeZone');
 
+// Language (installation default) and clock for the Display card — next to the timezone.
+router.use((req, res, next) => {
+  const i18n = require('../i18n');
+  res.locals.langOptions = i18n.listLanguages().filter((l) => l.enabled);
+  res.locals.defaultLanguage = i18n.defaultLanguage();
+  res.locals.clockSetting = i18n.clock12() ? '12' : '24';
+  next();
+});
+
 router.get('/', asyncHandler(async (req, res) => {
   res.render('settings-general', { gatewaySettings: await loadGatewaySettings(), timezones: TIMEZONES, saved: false, error: null });
 }));
@@ -85,6 +94,12 @@ router.post('/', requirePermission('settings', 'edit'), asyncHandler(async (req,
   const heartbeatMinutes = Number(req.body.heartbeat_interval_minutes);
   await db.prepare('UPDATE gateway_settings SET heartbeat_interval_minutes = ? WHERE id = 1')
     .run(Number.isFinite(heartbeatMinutes) && heartbeatMinutes > 0 ? Math.round(heartbeatMinutes) : 0);
+  {
+    const i18n = require('../i18n');
+    const lang = String(req.body.default_language || '');
+    if (lang && lang !== i18n.defaultLanguage() && i18n.listLanguages().some((l) => l.code === lang)) await i18n.setDefaultLanguage(lang);
+    if (req.body.clock === '12' || req.body.clock === '24') await i18n.setClock(req.body.clock);
+  }
   if (timezone) {
     await db.prepare('UPDATE gateway_settings SET display_timezone = ? WHERE id = 1').run(timezone);
     await invalidateTimezoneCache();

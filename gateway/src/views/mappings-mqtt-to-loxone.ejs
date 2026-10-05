@@ -7,21 +7,21 @@
 <% } %>
 
 <% if (miniservers.length === 0) { %>
-  <p class="hint">Add a <a href="/miniservers">Miniserver</a> first.</p>
+  <p class="hint"><%= t('Add a') %> <a href="/miniservers"><%= t('Miniserver') %></a> <%= t('first.') %></p>
 <% } else { %>
   <% if (canEdit('mqtt_to_loxone')) { %>
   <details class="add-panel" <%= prefillTopic ? 'open' : '' %>>
-    <summary>Add mapping</summary>
+    <summary><%= t('Add mapping') %></summary>
     <div class="add-panel-body">
       <form method="post" action="/mappings/mqtt-to-loxone">
         <div class="form-grid">
           <div>
-            <label>MQTT topic</label>
-            <input type="text" name="mqtt_topic" id="mqtt-topic-input" list="topic-suggestions" placeholder="home/livingroom/light" value="<%= prefillTopic %>" required>
+            <label><%= t('MQTT topic') %></label>
+            <input type="text" name="mqtt_topic" id="mqtt-topic-input" list="topic-suggestions" placeholder="<%= t('home/livingroom/light') %>" value="<%= prefillTopic %>" required>
             <datalist id="topic-suggestions"></datalist>
           </div>
           <div>
-            <label>Miniserver</label>
+            <label><%= t('Miniserver') %></label>
             <select name="miniserver_id" id="miniserver-select" required>
               <% miniservers.forEach(ms => { %>
                 <option value="<%= ms.id %>"><%= ms.name %></option>
@@ -29,37 +29,37 @@
             </select>
           </div>
           <div>
-            <label>Transport</label>
+            <label><%= t('Transport') %></label>
             <select name="transport">
-              <option value="http">HTTP (Virtual Input)</option>
-              <option value="udp">UDP (Virtual Input)</option>
+              <option value="http"><%= t('HTTP (Virtual Input)') %></option>
+              <option value="udp"><%= t('UDP (Virtual Input)') %></option>
             </select>
           </div>
           <div>
-            <label>Virtual input name <span class="hint" style="margin:0;display:inline;">(UDP: documentation only, not sent)</span></label>
-            <input type="text" name="target" list="target-suggestions" placeholder="LivingRoomLight" required>
+            <label><%= t('Virtual input name') %> <span class="hint" style="margin:0;display:inline;"><%= t('(UDP: documentation only, not sent)') %></span></label>
+            <input type="text" name="target" list="target-suggestions" placeholder="<%= t('LivingRoomLight') %>" required>
             <datalist id="target-suggestions">
-              <% targetSuggestions.forEach(t => { %><option value="<%= t %>"><% }) %>
+              <% targetSuggestions.forEach(tt => { %><option value="<%= tt %>"><% }) %>
             </datalist>
           </div>
           <div>
-            <label>Value transform</label>
+            <label><%= t('Value transform') %></label>
             <select name="value_transform">
-              <option value="passthrough">Pass through unchanged</option>
-              <option value="bool_on_off">on/off &rarr; 1/0</option>
-              <option value="json_path">JSON path</option>
-              <option value="translation_table">Translation table (manage after adding)</option>
+              <option value="passthrough"><%= t('Pass through unchanged') %></option>
+              <option value="bool_on_off"><%= t('on/off → 1/0') %></option>
+              <option value="json_path"><%= t('JSON path') %></option>
+              <option value="translation_table"><%= t('Translation table (manage after adding)') %></option>
             </select>
           </div>
           <div>
-            <label>Transform argument (e.g. JSON path "data.temp")</label>
+            <label><%= t('Transform argument (e.g. JSON path "data.temp")') %></label>
             <input type="text" name="transform_arg">
           </div>
           <div>
-            <label>Min. interval between updates (ms, 0 = off)</label>
+            <label><%= t('Min. interval between updates (ms, 0 = off)') %></label>
             <input type="number" name="min_interval_ms" value="0" min="0">
           </div>
-          <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+          <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add') %></button>
         </div>
       </form>
     </div>
@@ -70,20 +70,20 @@
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="search-single">
-      <input type="text" id="m2l-search" placeholder="Filter&hellip;">
-      <button type="button" id="m2l-search-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+      <input type="text" id="m2l-search" placeholder="<%= t('Filter…') %>">
+      <button type="button" id="m2l-search-clear" class="icon-btn clearable-input-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
     </div>
     <% if (canEdit('mqtt_to_loxone')) { %>
     <% var disabledCount = mappings.filter(m => !m.enabled).length; var enabledCount = mappings.length - disabledCount; %>
     <form method="post" action="/mappings/mqtt-to-loxone/enable-all" style="margin:0;">
-      <button type="submit" class="btn-edit" <%= disabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Enable all (<%= disabledCount %>)</button>
+      <button type="submit" class="btn-edit" <%= disabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> <%= t('Enable all (') %><%= disabledCount %>)</button>
     </form>
     <form method="post" action="/mappings/mqtt-to-loxone/disable-all" style="margin:0;">
-      <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Disable all (<%= enabledCount %>)</button>
+      <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> <%= t('Disable all (') %><%= enabledCount %>)</button>
     </form>
     <% } %>
     <div class="columns-menu columns-menu-inline" id="m2l-columns-menu">
-      <button type="button" class="btn-soft" id="m2l-columns-btn"><%- icon('columns') %> Columns</button>
+      <button type="button" class="btn-soft" id="m2l-columns-btn"><%- icon('columns') %> <%= t('Columns') %></button>
       <div class="columns-menu-panel" id="m2l-columns-panel" hidden></div>
     </div>
   </div>

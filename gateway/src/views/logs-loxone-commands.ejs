@@ -1,13 +1,7 @@
 <%- include('partials/head', { pageTitle: 'Logs', active: 'logs-loxone-commands', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/loxone-commands', topbarRangeValue: range, topbarRangeExtra: { q: query.q, level: query.level } }) %>
 
 <p class="hint">
-  Every Virtual Output command Loxone sends this gateway (UDP or HTTP), accepted or rejected —
-  who sent it (the configured Miniserver's name when its Host matches the sender's IP, otherwise
-  just the IP), when, which MQTT topic it targeted, and the value transition (what it was before
-  &rarr; what it became). Use this to check whether a command from the Miniserver actually arrives
-  here at all before chasing the Loxone &rarr; MQTT mapping itself. Persisted in SQLite and kept
-  for <strong><%= retentionDays %></strong> days, same retention setting as the other tabs
-  &mdash; <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
+  <%= t('Every Virtual Output command Loxone sends this gateway (UDP or HTTP), accepted or rejected — who sent it (the configured Miniserver\'s name when its Host matches the sender\'s IP, otherwise just the IP), when, which MQTT topic it targeted, and the value transition (what it was before → what it became). Use this to check whether a command from the Miniserver actually arrives here at all before chasing the Loxone → MQTT mapping itself. Persisted in SQLite and kept for') %> <strong><%= retentionDays %></strong> <%= t('days, same retention setting as the other tabs —') %> <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
 </p>
 
 <form method="get" action="/logs/loxone-commands" class="form-grid" style="margin-bottom:1rem; align-items:end;">
@@ -21,39 +15,36 @@
   %>
   <input type="hidden" name="range" value="<%= range %>">
   <div>
-    <label>Result</label>
+    <label><%= t('Result') %></label>
     <select name="level" data-auto-submit-form>
-      <option value="" <%= !query.level ? 'selected' : '' %>>All</option>
-      <option value="error" <%= query.level === 'error' ? 'selected' : '' %>>Rejected</option>
-      <option value="info" <%= query.level === 'info' ? 'selected' : '' %>>Accepted</option>
+      <option value="" <%= !query.level ? 'selected' : '' %>><%= t('All') %></option>
+      <option value="error" <%= query.level === 'error' ? 'selected' : '' %>><%= t('Rejected') %></option>
+      <option value="info" <%= query.level === 'info' ? 'selected' : '' %>><%= t('Accepted') %></option>
     </select>
   </div>
 </form>
 
 <% if (canEdit('logs_loxone_commands')) { %>
 <details class="add-panel" style="margin-bottom:1rem;" <%= testError ? 'open' : '' %>>
-  <summary>Send test command</summary>
+  <summary><%= t('Send test command') %></summary>
   <div class="add-panel-body">
     <p class="hint" style="margin-top:0;">
-      Fires the same UDP packet a real Loxone Virtual UDP Output sends, straight at this gateway —
-      handy for seeing the whole arc without waiting for the Miniserver to happen to send an
-      unmapped command: pick a token with no mapping yet, send it (shows up below as
-      <strong>Rejected</strong>), add a mapping for it via that row's own "+ Mapping" button (turns
-      into <strong>Pending</strong>), then send the exact same thing again (turns into
-      <strong>Accepted</strong>).
+      <%= t('Fires the same UDP packet a real Loxone Virtual UDP Output sends, straight at this gateway — handy for seeing the whole arc without waiting for the Miniserver to happen to send an unmapped command: pick a token with no mapping yet, send it (shows up below as') %>
+      <strong><%= t('Rejected') %></strong><%= t('), add a mapping for it via that row\'s own "+ Mapping" button (turns into') %> <strong><%= t('Pending') %></strong><%= t('), then send the exact same thing again (turns into') %>
+      <strong><%= t('Accepted') %></strong>).
     </p>
     <% if (testError) { %><p class="error"><%= testError %></p><% } %>
     <form method="post" action="/logs/loxone-commands/test-send" class="form-grid" style="align-items:end;">
       <div>
-        <label>Token</label>
-        <input type="text" name="token" placeholder="e.g. test-token-1" required>
+        <label><%= t('Token') %></label>
+        <input type="text" name="token" placeholder="<%= t('e.g. test-token-1') %>" required>
       </div>
       <div>
-        <label>Value</label>
+        <label><%= t('Value') %></label>
         <input type="text" name="value" placeholder="1" required>
       </div>
       <div>
-        <button type="submit" class="primary"><%- icon('link') %> Send</button>
+        <button type="submit" class="primary"><%- icon('link') %> <%= t('Send') %></button>
       </div>
     </form>
   </div>
@@ -64,27 +55,27 @@
   <div class="table-toolbar">
     <div class="search-combo log-search-combo">
       <select class="log-search-field">
-        <option value="time">Time</option>
-        <option value="client">Client</option>
-        <option value="command" selected>Command</option>
-        <option value="result">Result</option>
+        <option value="time"><%= t('Time') %></option>
+        <option value="client"><%= t('Client') %></option>
+        <option value="command" selected><%= t('Command') %></option>
+        <option value="result"><%= t('Result') %></option>
       </select>
       <div class="clearable-input-wrap">
-        <input type="text" class="log-search-query" placeholder="Filter…">
-        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+        <input type="text" class="log-search-query" placeholder="<%= t('Filter…') %>">
+        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
       </div>
     </div>
     <span class="log-selection-count hint" style="margin:0;"></span>
-    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label">Copy selection</span></button>
+    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label"><%= t('Copy selection') %></span></button>
     <% if (canEdit('logs_loxone_commands')) { %>
-    <a href="/logs/loxone-commands/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
+    <a href="/logs/loxone-commands/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> <%= t('Export .log') %></button></a>
     <% } %>
   </div>
 
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th data-filter-key="time">Time</th><th data-filter-key="client">Client</th><th data-filter-key="command">Command</th><th>From value</th><th>To value</th><th data-filter-key="result">Result</th><th>Actions</th></tr>
+      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="<%= t('Select all') %>"></th><th data-filter-key="time"><%= t('Time') %></th><th data-filter-key="client"><%= t('Client') %></th><th data-filter-key="command"><%= t('Command') %></th><th><%= t('From value') %></th><th><%= t('To value') %></th><th data-filter-key="result"><%= t('Result') %></th><th><%= t('Actions') %></th></tr>
     </thead>
     <tbody>
       <%
@@ -110,7 +101,7 @@
           <td>
             <span class="badge <%= accepted ? 'badge-ok' : 'badge-off' %>"><%= accepted ? 'Accepted' : 'Rejected' %></span>
             <% if (!accepted) { %><div class="hint" style="margin:0.25rem 0 0;"><%= r.line.replace(/^Rejected:\s*/, '') %></div><% } %>
-            <% if (isPending) { %><span class="badge badge-purple" style="margin-top:0.25rem;" title="A mapping now exists for this — it'll show as Accepted the next time Loxone actually sends this exact command again">Pending</span><% } %>
+            <% if (isPending) { %><span class="badge badge-purple" style="margin-top:0.25rem;" title="<%= t('A mapping now exists for this — it\'ll show as Accepted the next time Loxone actually sends this exact command again') %>"><%= t('Pending') %></span><% } %>
           </td>
           <td>
             <% if (canEdit('loxone_to_mqtt') && !accepted && r.line === NO_MAPPING_REASON && r.commandTopic && !isPending) { %>
@@ -122,18 +113,18 @@
                 if (r.transport) mappingHref += `&transport=${encodeURIComponent(r.transport.toLowerCase())}`;
                 if (r.sourceMiniserverId) mappingHref += `&miniserver_id=${encodeURIComponent(r.sourceMiniserverId)}`;
               %>
-              <a href="<%= mappingHref %>"><button type="button" class="btn-soft"><%- icon('plus') %> Mapping</button></a>
+              <a href="<%= mappingHref %>"><button type="button" class="btn-soft"><%- icon('plus') %> <%= t('Mapping') %></button></a>
             <% } else if (canEdit('loxone_to_mqtt') && accepted && r.commandTopic) { %>
               <form method="post" action="/mappings/loxone-to-mqtt/disable-by-topic" data-confirm="Disable the mapping for &quot;<%= r.commandTopic %>&quot;? Loxone commands for it will start showing as rejected instead of being applied.">
                 <input type="hidden" name="mqtt_topic" value="<%= r.commandTopic %>">
-                <button type="submit" class="danger"><%- icon('x') %> Reject</button>
+                <button type="submit" class="danger"><%- icon('x') %> <%= t('Reject') %></button>
               </form>
             <% } %>
           </td>
         </tr>
       <% }) %>
       <% if (rows.length === 0) { %>
-        <tr><td colspan="8" class="empty">No Loxone commands received yet.</td></tr>
+        <tr><td colspan="8" class="empty"><%= t('No Loxone commands received yet.') %></td></tr>
       <% } %>
     </tbody>
   </table>

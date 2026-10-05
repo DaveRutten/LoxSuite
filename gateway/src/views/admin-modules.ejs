@@ -93,7 +93,7 @@
         }
         if (s.tables && s.tables.length) {
           html += '<table class="table" style="font-size:0.8rem;"><tbody>' + s.tables.map(function (t) {
-            return '<tr><td>' + esc(t.label) + (t.wipe ? '' : ' <span style="opacity:0.7;">(' + esc(T.kept) + ')</span>') + '</td><td style="text-align:right;">' + Number(t.rows).toLocaleString('nl-NL') + '</td></tr>';
+            return '<tr><td>' + esc(t.label) + (t.wipe ? '' : ' <span style="opacity:0.7;">(' + esc(T.kept) + ')</span>') + '</td><td style="text-align:right;">' + Number(t.rows).toLocaleString(undefined) + '</td></tr>';
           }).join('') + '</tbody></table>';
         }
         d.querySelector('.mod-status-body').innerHTML = html || esc(T.none);

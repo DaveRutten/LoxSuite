@@ -7,29 +7,25 @@
 <% } %>
 
 <p class="hint">
-  <strong>HTTP</strong>: paste the callback URL into the Virtual Output HTTP command in Loxone Config.<br>
-  <strong>UDP</strong>: send <code>&lt;token&gt;=\v</code> to the gateway on the listed UDP port from a Virtual UDP Output.
-  Loxone replaces <code>\v</code> with the actual value on every call. The mapping's own MQTT topic also works in place
-  of the token (e.g. <code>&lt;mqtt_topic&gt;=on</code>), so you don't have to copy the generated token if you'd rather
-  type the topic you already know.<br>
-  <strong>Test</strong>: publish a value on a mapping's row to check the device reacts, without needing Loxone at all
-  &mdash; any value transform (e.g. a translation table) is applied exactly as it would be for a real call.
+  <strong><%= t('HTTP') %></strong><%= t(': paste the callback URL into the Virtual Output HTTP command in Loxone Config.') %><br>
+  <strong><%= t('UDP') %></strong><%= t(': send') %> <code>&lt;token&gt;=\v</code> <%= t('to the gateway on the listed UDP port from a Virtual UDP Output. Loxone replaces') %> <code>\v</code> <%= t('with the actual value on every call. The mapping\'s own MQTT topic also works in place of the token (e.g.') %> <code>&lt;mqtt_topic&gt;=on</code><%= t('), so you don\'t have to copy the generated token if you\'d rather type the topic you already know.') %><br>
+  <strong><%= t('Test') %></strong><%= t(': publish a value on a mapping\'s row to check the device reacts, without needing Loxone at all — any value transform (e.g. a translation table) is applied exactly as it would be for a real call.') %>
 </p>
 
 <% if (canEdit('loxone_to_mqtt')) { %>
 <details class="add-panel" <%= (prefillTopic || prefillTransport || prefillMiniserverId) ? 'open' : '' %>>
-  <summary>Add mapping</summary>
+  <summary><%= t('Add mapping') %></summary>
   <div class="add-panel-body">
     <form method="post" action="/mappings/loxone-to-mqtt">
       <div class="form-grid">
         <div>
-          <label>MQTT topic</label>
-          <input type="text" name="mqtt_topic" id="mqtt-topic-input" list="topic-suggestions" value="<%= prefillTopic %>" placeholder="home/livingroom/temperature" required>
+          <label><%= t('MQTT topic') %></label>
+          <input type="text" name="mqtt_topic" id="mqtt-topic-input" list="topic-suggestions" value="<%= prefillTopic %>" placeholder="<%= t('home/livingroom/temperature') %>" required>
           <datalist id="topic-suggestions"></datalist>
-          <span class="hint" style="margin:0.3rem 0 0;">Not sure about the topic for a Shelly or similar device? Use the <a href="/mappings/commands">Common commands</a> builder.</span>
+          <span class="hint" style="margin:0.3rem 0 0;"><%= t('Not sure about the topic for a Shelly or similar device? Use the') %> <a href="/mappings/commands"><%= t('Common commands') %></a> <%= t('builder.') %></span>
         </div>
         <div>
-          <label>Miniserver (informational)</label>
+          <label><%= t('Miniserver (informational)') %></label>
           <select name="miniserver_id">
             <option value="">-</option>
             <% miniservers.forEach(ms => { %>
@@ -38,14 +34,14 @@
           </select>
         </div>
         <div>
-          <label>Transport</label>
+          <label><%= t('Transport') %></label>
           <select name="transport">
-            <option value="http" <%= prefillTransport === 'http' ? 'selected' : '' %>>HTTP (Virtual Output)</option>
-            <option value="udp" <%= prefillTransport === 'udp' ? 'selected' : '' %>>UDP (Virtual Output)</option>
+            <option value="http" <%= prefillTransport === 'http' ? 'selected' : '' %>><%= t('HTTP (Virtual Output)') %></option>
+            <option value="udp" <%= prefillTransport === 'udp' ? 'selected' : '' %>><%= t('UDP (Virtual Output)') %></option>
           </select>
         </div>
         <div>
-          <label>QoS</label>
+          <label><%= t('QoS') %></label>
           <select name="qos">
             <option value="0">0</option>
             <option value="1">1</option>
@@ -53,13 +49,13 @@
           </select>
         </div>
         <div>
-          <label>Retain</label>
+          <label><%= t('Retain') %></label>
           <%- toggleSwitch('retain', false) %>
         </div>
         <div>
-          <label>Value transform</label>
+          <label><%= t('Value transform') %></label>
           <select name="value_transform" id="add-value-transform-select">
-            <option value="passthrough">Pass through unchanged</option>
+            <option value="passthrough"><%= t('Pass through unchanged') %></option>
             <%
               // Behaves exactly like "Pass through unchanged" server-side (loxone.js's own
               // applyLoxoneToMqttTransform only special-cases translation_table/shelly_rgbw, every
@@ -69,21 +65,21 @@
               // box (see mappings-loxone-to-mqtt-tabulator.js's own buildWhitePicker), since nothing
               // about a mapping otherwise says "this one happens to be a dimmer".
             %>
-            <option value="dimmer">Dimmer (0-100%)</option>
-            <option value="translation_table">Translation table (manage after adding)</option>
-            <option value="shelly_rgbw">Shelly RGBW/White (color/N/set JSON)</option>
+            <option value="dimmer"><%= t('Dimmer (0-100%)') %></option>
+            <option value="translation_table"><%= t('Translation table (manage after adding)') %></option>
+            <option value="shelly_rgbw"><%= t('Shelly RGBW/White (color/N/set JSON)') %></option>
           </select>
         </div>
         <div id="add-shelly-rgbw-mode-field" style="display:none;">
-          <label>Shelly RGBW mode</label>
+          <label><%= t('Shelly RGBW mode') %></label>
           <select name="transform_arg">
-            <option value="rgb">RGB (from Loxone's RGB output, "H,S,V")</option>
-            <option value="rgb-percent">RGB (Loxone's Analog input RGB, "R+G*1000+B*1000000")</option>
-            <option value="white">White (0-100%)</option>
-            <option value="tunablew">Tunable white (from Loxone Lumitech, "brightness,kelvin")</option>
+            <option value="rgb"><%= t('RGB (from Loxone\'s RGB output, "H,S,V")') %></option>
+            <option value="rgb-percent"><%= t('RGB (Loxone\'s Analog input RGB, "R+G*1000+B*1000000")') %></option>
+            <option value="white"><%= t('White (0-100%)') %></option>
+            <option value="tunablew"><%= t('Tunable white (from Loxone Lumitech, "brightness,kelvin")') %></option>
           </select>
         </div>
-        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+        <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add') %></button>
       </div>
     </form>
   </div>
@@ -93,20 +89,20 @@
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="search-single">
-      <input type="text" id="l2m-search" placeholder="Filter&hellip;">
-      <button type="button" id="l2m-search-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+      <input type="text" id="l2m-search" placeholder="<%= t('Filter…') %>">
+      <button type="button" id="l2m-search-clear" class="icon-btn clearable-input-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
     </div>
     <% if (canEdit('loxone_to_mqtt')) { %>
     <% var disabledCount = mappings.filter(m => !m.enabled).length; var enabledCount = mappings.length - disabledCount; %>
     <form method="post" action="/mappings/loxone-to-mqtt/enable-all" style="margin:0;">
-      <button type="submit" class="btn-edit" <%= disabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Enable all (<%= disabledCount %>)</button>
+      <button type="submit" class="btn-edit" <%= disabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> <%= t('Enable all (') %><%= disabledCount %>)</button>
     </form>
     <form method="post" action="/mappings/loxone-to-mqtt/disable-all" style="margin:0;">
-      <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> Disable all (<%= enabledCount %>)</button>
+      <button type="submit" class="btn-edit" <%= enabledCount === 0 ? 'disabled' : '' %>><%- icon('power') %> <%= t('Disable all (') %><%= enabledCount %>)</button>
     </form>
     <% } %>
     <div class="columns-menu columns-menu-inline" id="l2m-columns-menu">
-      <button type="button" class="btn-soft" id="l2m-columns-btn"><%- icon('columns') %> Columns</button>
+      <button type="button" class="btn-soft" id="l2m-columns-btn"><%- icon('columns') %> <%= t('Columns') %></button>
       <div class="columns-menu-panel" id="l2m-columns-panel" hidden></div>
     </div>
   </div>
@@ -117,10 +113,9 @@
 </div>
 
 <dialog id="l2m-test-dialog" class="update-changelog-dialog l2m-test-dialog">
-  <h2 id="l2m-test-dialog-title">Test</h2>
+  <h2 id="l2m-test-dialog-title"><%= t('Test') %></h2>
   <p class="hint" style="margin-top:0;">
-    Publishes a value on this mapping to check the device reacts, without needing Loxone at all —
-    any value transform (e.g. a translation table) is applied exactly as it would be for a real call.
+    <%= t('Publishes a value on this mapping to check the device reacts, without needing Loxone at all — any value transform (e.g. a translation table) is applied exactly as it would be for a real call.') %>
   </p>
   <%
     // Its own row (label above, picker below) rather than everything crammed onto one wrapping
@@ -130,12 +125,12 @@
     // color picker) predictably left-aligned under the same label instead of reflowing differently
     // depending on how wide its own content happens to be.
   %>
-  <label style="display:block; margin:0 0 0.4rem; font-size:0.78rem;">Value to send:</label>
+  <label style="display:block; margin:0 0 0.4rem; font-size:0.78rem;"><%= t('Value to send:') %></label>
   <div id="l2m-test-value-wrap"></div>
   <span class="hint" id="l2m-test-result" style="display:block; margin-top:0.7rem;"></span>
   <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:0.9rem;">
-    <button type="button" class="btn-soft" id="l2m-test-dialog-close">Close</button>
-    <button type="button" id="l2m-test-send-btn" class="btn-test"><%- icon('link') %> Send</button>
+    <button type="button" class="btn-soft" id="l2m-test-dialog-close"><%= t('Close') %></button>
+    <button type="button" id="l2m-test-send-btn" class="btn-test"><%- icon('link') %> <%= t('Send') %></button>
   </div>
 </dialog>
 

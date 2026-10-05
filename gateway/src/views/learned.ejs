@@ -1,35 +1,34 @@
 <%- include('partials/head', { pageTitle: 'Learned', active: 'learned' }) %>
 
-<% if (saved) { %><p class="hint" style="color: var(--success);">Saved.</p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
 
 <p class="hint">
-  What LoxSuite learned from your own data &mdash; updated continuously and used by the smart charging plan. Departure times
-  can be overridden per weekday; everything else follows the data. <span id="ln-meta"></span>
+  <%= t('What LoxSuite learned from your own data — updated continuously and used by the smart charging plan. Departure times can be overridden per weekday; everything else follows the data.') %> <span id="ln-meta"></span>
 </p>
 
 <div class="card">
-  <h2 style="margin-top:0;">Driving pattern &mdash; when does the car leave?</h2>
-  <p class="hint" style="margin:0 0 0.5rem;">Each dot is an unplug; green = a morning departure, red line = median. "Ready by" = the early quartile of that day's departures minus 15 minutes, so the car is almost always ready in time. A weekday without a regular morning departure has none.</p>
+  <h2 style="margin-top:0;"><%= t('Driving pattern — when does the car leave?') %></h2>
+  <p class="hint" style="margin:0 0 0.5rem;"><%= t('Each dot is an unplug; green = a morning departure, red line = median. "Ready by" = the early quartile of that day\'s departures minus 15 minutes, so the car is almost always ready in time. A weekday without a regular morning departure has none.') %></p>
   <form method="post" action="/learned/overrides">
-    <div style="overflow-x:auto;"><table id="ln-dep"><tbody><tr><td class="hint">Loading&hellip;</td></tr></tbody></table></div>
-    <% if (canEdit('charging')) { %><div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save own times</button><button type="button" class="btn-soft" id="ln-sync">Read sessions from the Wallbox now</button></div><% } %>
+    <div style="overflow-x:auto;"><table id="ln-dep"><tbody><tr><td class="hint"><%= t('Loading…') %></td></tr></tbody></table></div>
+    <% if (canEdit('charging')) { %><div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save own times') %></button><button type="button" class="btn-soft" id="ln-sync"><%= t('Read sessions from the Wallbox now') %></button></div><% } %>
   </form>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0;">Energy per trip</h2>
-  <p class="hint" style="margin:0 0 0.5rem;">Each dot = what was charged after such a trip (only trips that started with a charged car). "Safe" = enough 3 out of 4 times. <span id="ln-trip-note"></span></p>
-  <div style="overflow-x:auto;"><table id="ln-trips"><tbody><tr><td class="hint">Loading&hellip;</td></tr></tbody></table></div>
+  <h2 style="margin-top:0;"><%= t('Energy per trip') %></h2>
+  <p class="hint" style="margin:0 0 0.5rem;"><%= t('Each dot = what was charged after such a trip (only trips that started with a charged car). "Safe" = enough 3 out of 4 times.') %> <span id="ln-trip-note"></span></p>
+  <div style="overflow-x:auto;"><table id="ln-trips"><tbody><tr><td class="hint"><%= t('Loading…') %></td></tr></tbody></table></div>
 </div>
 
 <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr)); gap:1rem;">
   <div class="card">
-    <h2 style="margin-top:0;">Solar &mdash; forecast tomorrow</h2>
-    <div id="ln-solar"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+    <h2 style="margin-top:0;"><%= t('Solar — forecast tomorrow') %></h2>
+    <div id="ln-solar"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
   </div>
   <div class="card">
-    <h2 style="margin-top:0;">House consumption &mdash; expected profile</h2>
-    <div id="ln-house"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+    <h2 style="margin-top:0;"><%= t('House consumption — expected profile') %></h2>
+    <div id="ln-house"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
   </div>
 </div>
 

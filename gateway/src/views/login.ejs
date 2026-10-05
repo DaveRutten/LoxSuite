@@ -11,7 +11,7 @@
   <div class="login-box">
     <div class="brand">
       <span class="brand-icon"><%- icon('logo', { size: 18 }) %></span>
-      <span>LoxSuite</span>
+      <span><%= t('LoxSuite') %></span>
     </div>
     <div class="card">
       <% if (error) { %>
@@ -22,26 +22,25 @@
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <div class="form-grid">
           <div>
-            <label for="username">Username</label>
+            <label for="username"><%= t('Username') %></label>
             <input type="text" id="username" name="username" required autofocus>
           </div>
           <div>
-            <label for="password">Password</label>
+            <label for="password"><%= t('Password') %></label>
             <input type="password" id="password" name="password" required>
           </div>
           <div>
             <label style="display:flex; align-items:center; gap:0.5rem; font-weight:400;">
               <input type="checkbox" name="remember" value="1" style="width:auto;">
-              Remember me for 30 days
+              <%= t('Remember me for 30 days') %>
             </label>
           </div>
-          <button type="submit" class="primary">Log in</button>
+          <button type="submit" class="primary"><%= t('Log in') %></button>
         </div>
       </form>
       <% } else { %>
         <p class="hint" style="margin:0;">
-          Local sign-in is only available from the local network — from here, use Single Sign-On
-          below.
+          <%= t('Local sign-in is only available from the local network — from here, use Single Sign-On below.') %>
         </p>
       <% } %>
       <% if (ssoEnabled) { %>
@@ -52,7 +51,7 @@
           <div style="flex:1; height:1px; background:var(--border);"></div>
         </div>
         <% } %>
-        <a href="/login/sso"><button type="button" class="btn-soft" style="width:100%; display:flex; justify-content:center; <%= localLoginAllowed ? '' : 'margin-top:1rem;' %>">Log in with <%= ssoButtonLabel %></button></a>
+        <a href="/login/sso"><button type="button" class="btn-soft" style="width:100%; display:flex; justify-content:center; <%= localLoginAllowed ? '' : 'margin-top:1rem;' %>"><%= t('Log in with') %> <%= ssoButtonLabel %></button></a>
       <% } %>
     </div>
   </div>

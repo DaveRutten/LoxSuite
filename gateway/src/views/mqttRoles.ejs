@@ -7,22 +7,19 @@
 <% } %>
 
 <p class="hint">
-  Roles define what a client is allowed to publish/subscribe to. <code>client</code> (full access) and
-  <code>admin</code> (broker control) are built-in and used by the gateway itself &mdash; create a custom
-  role here if you want to scope a device to only its own topics. You can edit their ACLs too, but be
-  careful: removing <code>client</code>'s <code>#</code> access breaks every device using it, and removing
-  <code>admin</code>'s <code>$CONTROL/dynamic-security/#</code> access locks the gateway out of managing
-  users/roles until you fix it via <code>mosquitto_ctrl</code>. The roles themselves can't be deleted.
+  <%= t('Roles define what a client is allowed to publish/subscribe to.') %> <code>client</code> <%= t('(full access) and') %>
+  <code>admin</code> <%= t('(broker control) are built-in and used by the gateway itself — create a custom role here if you want to scope a device to only its own topics. You can edit their ACLs too, but be careful: removing') %> <code>client</code>'s <code>#</code> <%= t('access breaks every device using it, and removing') %>
+  <code>admin</code>'s <code>$CONTROL/dynamic-security/#</code> <%= t('access locks the gateway out of managing users/roles until you fix it via') %> <code>mosquitto_ctrl</code><%= t('. The roles themselves can\'t be deleted.') %>
 </p>
 
 <% if (canEdit('mqtt_roles')) { %>
 <details class="add-panel">
-  <summary>Add role</summary>
+  <summary><%= t('Add role') %></summary>
   <div class="add-panel-body">
     <form method="post" action="/mqtt-roles">
       <div class="form-grid">
-        <div><label>Role name</label><input type="text" name="rolename" required></div>
-        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+        <div><label><%= t('Role name') %></label><input type="text" name="rolename" required></div>
+        <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add') %></button>
       </div>
     </form>
   </div>
@@ -33,14 +30,14 @@
   <details class="add-panel">
     <summary>
       <%= role.rolename %>
-      <% if (protectedRoles.includes(role.rolename)) { %><span class="badge badge-neutral" style="margin-left:0.5rem;">Built-in</span><% } %>
-      <span class="hint" style="margin:0 0 0 0.5rem;"><%= (role.acls || []).length %> ACL<%= (role.acls || []).length === 1 ? '' : 's' %></span>
+      <% if (protectedRoles.includes(role.rolename)) { %><span class="badge badge-neutral" style="margin-left:0.5rem;"><%= t('Built-in') %></span><% } %>
+      <span class="hint" style="margin:0 0 0 0.5rem;"><%= (role.acls || []).length %> <%= t('ACL') %><%= (role.acls || []).length === 1 ? '' : 's' %></span>
     </summary>
     <div class="add-panel-body">
     <% if (!protectedRoles.includes(role.rolename) && canEdit('mqtt_roles')) { %>
       <div class="row-actions" style="justify-content:flex-end; margin-bottom:0.9rem;">
-        <form method="post" action="/mqtt-roles/<%= role.rolename %>/delete" data-confirm="Delete this role?">
-          <button type="submit" class="danger"><%- icon('trash') %> Delete role</button>
+        <form method="post" action="/mqtt-roles/<%= role.rolename %>/delete" data-confirm="<%= t('Delete this role?') %>">
+          <button type="submit" class="danger"><%- icon('trash') %> <%= t('Delete role') %></button>
         </form>
       </div>
     <% } %>
@@ -48,7 +45,7 @@
     <div class="table-wrap">
       <table class="acl-table">
         <thead>
-          <tr><th>ACL type</th><th>Topic filter</th><th>Allow</th><th>Actions</th></tr>
+          <tr><th><%= t('ACL type') %></th><th><%= t('Topic filter') %></th><th><%= t('Allow') %></th><th><%= t('Actions') %></th></tr>
         </thead>
         <tbody>
           <% (role.acls || []).forEach((acl, i) => { %>
@@ -60,11 +57,11 @@
               <td>
                 <% if (canEdit('mqtt_roles')) { %>
                 <div class="row-actions">
-                  <button type="button" class="btn-edit" data-toggle-row="<%= editRowId %>"><%- icon('edit') %> Edit</button>
+                  <button type="button" class="btn-edit" data-toggle-row="<%= editRowId %>"><%- icon('edit') %> <%= t('Edit') %></button>
                   <form class="inline" method="post" action="/mqtt-roles/<%= role.rolename %>/acls/delete">
                     <input type="hidden" name="acltype" value="<%= acl.acltype %>">
                     <input type="hidden" name="topic" value="<%= acl.topic %>">
-                    <button type="submit" class="danger"><%- icon('trash') %> Remove</button>
+                    <button type="submit" class="danger"><%- icon('trash') %> <%= t('Remove') %></button>
                   </form>
                 </div>
                 <% } %>
@@ -77,29 +74,29 @@
                   <input type="hidden" name="old_acltype" value="<%= acl.acltype %>">
                   <input type="hidden" name="old_topic" value="<%= acl.topic %>">
                   <div>
-                    <label>ACL type</label>
+                    <label><%= t('ACL type') %></label>
                     <select name="acltype">
-                      <% aclTypes.forEach(t => { %>
-                        <option value="<%= t %>" <%= t === acl.acltype ? 'selected' : '' %>><%= t %></option>
+                      <% aclTypes.forEach(tt => { %>
+                        <option value="<%= tt %>" <%= tt === acl.acltype ? 'selected' : '' %>><%= tt %></option>
                       <% }) %>
                     </select>
                   </div>
-                  <div><label>Topic filter</label><input type="text" name="topic" value="<%= acl.topic %>" required></div>
+                  <div><label><%= t('Topic filter') %></label><input type="text" name="topic" value="<%= acl.topic %>" required></div>
                   <div>
-                    <label>Effect</label>
+                    <label><%= t('Effect') %></label>
                     <select name="allow">
-                      <option value="1" <%= acl.allow ? 'selected' : '' %>>Allow</option>
-                      <option value="0" <%= !acl.allow ? 'selected' : '' %>>Deny</option>
+                      <option value="1" <%= acl.allow ? 'selected' : '' %>><%= t('Allow') %></option>
+                      <option value="0" <%= !acl.allow ? 'selected' : '' %>><%= t('Deny') %></option>
                     </select>
                   </div>
-                  <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+                  <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
                 </form>
               </td>
             </tr>
             <% } %>
           <% }) %>
           <% if (!role.acls || role.acls.length === 0) { %>
-            <tr><td colspan="4" class="empty">No ACLs on this role &mdash; it currently grants no access.</td></tr>
+            <tr><td colspan="4" class="empty"><%= t('No ACLs on this role — it currently grants no access.') %></td></tr>
           <% } %>
         </tbody>
       </table>
@@ -109,22 +106,22 @@
     <form method="post" action="/mqtt-roles/<%= role.rolename %>/acls">
       <div class="form-grid">
         <div>
-          <label>ACL type</label>
+          <label><%= t('ACL type') %></label>
           <select name="acltype">
-            <% aclTypes.forEach(t => { %>
-              <option value="<%= t %>"><%= t %></option>
+            <% aclTypes.forEach(tt => { %>
+              <option value="<%= tt %>"><%= tt %></option>
             <% }) %>
           </select>
         </div>
-        <div><label>Topic filter</label><input type="text" name="topic" placeholder="home/livingroom/#" required></div>
+        <div><label><%= t('Topic filter') %></label><input type="text" name="topic" placeholder="<%= t('home/livingroom/#') %>" required></div>
         <div>
-          <label>Effect</label>
+          <label><%= t('Effect') %></label>
           <select name="allow">
-            <option value="1">Allow</option>
-            <option value="0">Deny</option>
+            <option value="1"><%= t('Allow') %></option>
+            <option value="0"><%= t('Deny') %></option>
           </select>
         </div>
-        <button type="submit" class="primary"><%- icon('plus') %> Add ACL</button>
+        <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add ACL') %></button>
       </div>
     </form>
     <% } %>

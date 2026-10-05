@@ -140,7 +140,10 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
           const r = at.get(h.ms);
           r.values.now = 1;
           r.values.setpoint = solar || (p25 !== null && h.price <= p25) ? s.buffer_setpoint : s.normal_setpoint;
-          r.reason = (solar ? 'solar surplus' : 'cheapest block of the day') + (usual && latest === usual.from ? ` (hot before the usual use ~${String(usual.from).padStart(2, '0')}:00)` : '');
+          const usualAt = String(usual?.from ?? '').padStart(2, '0');
+          r.reason = usual && latest === usual.from
+            ? (solar ? `solar surplus, hot before the usual use ~${usualAt}:00` : `cheapest block of the day, hot before the usual use ~${usualAt}:00`)
+            : (solar ? 'solar surplus' : 'cheapest block of the day');
           consume(h.ms, kw);
         }
       }
@@ -176,7 +179,7 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
           r.values.release = rel.has(h.ms) ? 1 : 0;
           const sign = s.season === 'cooling' ? -1 : 1;
           r.values.correction = solar || cheap ? sign * (Number(s.up) || 0) : dear ? -sign * (Number(s.down) || 0) : 0;
-          r.reason = solar ? 'solar surplus: pre-' + (sign > 0 ? 'heat' : 'cool') : cheap ? 'cheap hour: pre-' + (sign > 0 ? 'heat' : 'cool')
+          r.reason = solar ? (sign > 0 ? 'solar surplus: pre-heat' : 'solar surplus: pre-cool') : cheap ? (sign > 0 ? 'cheap hour: pre-heat' : 'cheap hour: pre-cool')
             : dear ? 'expensive hour: ease off' : rel.has(h.ms) ? 'cheaper half of the day' : 'blocked (expensive)';
           if (rel.has(h.ms)) consume(h.ms, kw);
         }

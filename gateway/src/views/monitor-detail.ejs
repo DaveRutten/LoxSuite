@@ -10,11 +10,11 @@
     <code><%= monitor.mqtt_topic %></code>
   <% } else if (monitor.source_type === 'miniserver_diag') { %>
     <%= monitor.miniserver_name || '-' %> &middot; <%= DIAG_FIELD_LABELS[monitor.diag_field] || monitor.diag_field %>
-    <span class="hint" style="margin:0;">(reuses the Miniservers page's own check, not polled separately)</span>
+    <span class="hint" style="margin:0;"><%= t('(reuses the Miniservers page\'s own check, not polled separately)') %></span>
   <% } else { %>
-    <%= monitor.miniserver_name || '-' %>, every <%= Math.round(monitor.poll_interval_ms / 1000) %>s
+    <%= monitor.miniserver_name || '-' %><%= t(', every') %> <%= Math.round(monitor.poll_interval_ms / 1000) %>s
   <% } %>
-  &mdash; <a href="/monitor">&larr; back to Monitor</a>
+  &mdash; <a href="/monitor"><%= t('← back to Monitor') %></a>
 </p>
 
 <%
@@ -44,7 +44,7 @@
 <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem; margin-bottom:1.25rem;">
   <form method="get" action="/monitor/<%= monitor.id %>" class="range-picker-form" style="display:flex; align-items:flex-start; gap:0.5rem;">
     <%- rangeField(range, { autoSubmit: true }) %>
-    <button type="submit" class="btn-soft range-go-btn">Go</button>
+    <button type="submit" class="btn-soft range-go-btn"><%= t('Go') %></button>
   </form>
 
   <%
@@ -56,12 +56,12 @@
   %>
   <div class="row-actions" style="margin-left:auto;">
     <% if (hasNumeric && canEdit('monitor')) { %>
-    <button type="button" class="icon-btn icon-btn-edit" title="Chart settings" data-toggle-row="monitor-chart-settings"><%- icon('edit') %></button>
+    <button type="button" class="icon-btn icon-btn-edit" title="<%= t('Chart settings') %>" data-toggle-row="monitor-chart-settings"><%- icon('edit') %></button>
     <% } %>
-    <a href="/monitor/<%= monitor.id %>/export.csv?range=<%= range %>"><button type="button" class="btn-soft"><%- icon('copy') %> Export CSV</button></a>
+    <a href="/monitor/<%= monitor.id %>/export.csv?range=<%= range %>"><button type="button" class="btn-soft"><%- icon('copy') %> <%= t('Export CSV') %></button></a>
     <% if (canEdit('monitor')) { %>
-    <form method="post" action="/monitor/<%= monitor.id %>/clear-history" data-confirm="Delete all recorded history for this monitor? The monitor itself (and any dashboard panel using it) stays, just with nothing to show until the next reading comes in.">
-      <button type="submit" class="danger" <%= rows.length === 0 ? 'disabled' : '' %>><%- icon('trash') %> Clear history</button>
+    <form method="post" action="/monitor/<%= monitor.id %>/clear-history" data-confirm="<%= t('Delete all recorded history for this monitor? The monitor itself (and any dashboard panel using it) stays, just with nothing to show until the next reading comes in.') %>">
+      <button type="submit" class="danger" <%= rows.length === 0 ? 'disabled' : '' %>><%- icon('trash') %> <%= t('Clear history') %></button>
     </form>
     <% } %>
   </div>
@@ -71,7 +71,7 @@
 
 <% if (hasNumeric) { %>
   <% if (truncated) { %>
-    <p class="hint">The list below only covers the most recent <%= rows.length %> readings &mdash; a monitor polled every few seconds can log more than that within "<%= range %>". The chart above isn't affected (it averages down to a fixed number of points instead, so it always covers the full range) &mdash; this only limits the raw, exact readings listed below it. Export CSV for the full history, or pick a shorter range to see every reading listed.</p>
+    <p class="hint"><%= t('The list below only covers the most recent') %> <%= rows.length %> <%= t('readings — a monitor polled every few seconds can log more than that within "') %><%= range %><%= t('". The chart above isn\'t affected (it averages down to a fixed number of points instead, so it always covers the full range) — this only limits the raw, exact readings listed below it. Export CSV for the full history, or pick a shorter range to see every reading listed.') %></p>
   <% } %>
   <% if (canEdit('monitor')) { %>
     <%
@@ -95,7 +95,7 @@
     %>
     <form id="monitor-chart-settings" method="post" action="/monitor/<%= monitor.id %>/chart-settings" class="form-grid panel-settings-form">
         <div class="panel-settings-form-head" style="grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; margin-bottom:0.3rem;">
-          <strong>Chart settings</strong>
+          <strong><%= t('Chart settings') %></strong>
           <div class="row-actions">
             <%
               // Unlike a dashboard panel's own save-as-default (scoped per dashboard+panel_type,
@@ -107,40 +107,40 @@
               // in-place live-patching does, since this page just does a normal full-page reload
               // on every save already (see the main Save button below).
             %>
-            <button type="submit" formaction="/monitor/<%= monitor.id %>/chart-settings/save-as-default" class="icon-btn icon-btn-neutral" title="Save these settings as the shared default for every monitor's chart"><%- icon('star') %></button>
-            <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('lightbulb') %></button>
+            <button type="submit" formaction="/monitor/<%= monitor.id %>/chart-settings/save-as-default" class="icon-btn icon-btn-neutral" title="<%= t('Save these settings as the shared default for every monitor\'s chart') %>"><%- icon('star') %></button>
+            <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="<%= t('Show/hide the help text under each field') %>"><%- icon('lightbulb') %></button>
             <% if (chartDefaultExists) { %>
-            <button type="submit" formaction="/monitor/<%= monitor.id %>/chart-settings/reset-to-default" class="icon-btn icon-btn-neutral" title="Apply the shared default chart style to this monitor"><%- icon('refresh') %></button>
+            <button type="submit" formaction="/monitor/<%= monitor.id %>/chart-settings/reset-to-default" class="icon-btn icon-btn-neutral" title="<%= t('Apply the shared default chart style to this monitor') %>"><%- icon('refresh') %></button>
             <% } %>
-            <button type="button" class="icon-btn icon-btn-danger" data-toggle-row="monitor-chart-settings" title="Close" aria-label="Close"><%- icon('x') %></button>
+            <button type="button" class="icon-btn icon-btn-danger" data-toggle-row="monitor-chart-settings" title="<%= t('Close') %>" aria-label="<%= t('Close') %>"><%- icon('x') %></button>
           </div>
         </div>
         <div class="threshold-builder-details-wrap" style="grid-column:1/-1;">
           <details class="threshold-builder-details" open>
-            <summary>Legend</summary>
+            <summary><%= t('Legend') %></summary>
             <div class="form-grid">
               <div>
-                <label>Legend</label>
+                <label><%= t('Legend') %></label>
                 <select name="legend_position" id="monitor-legend-position-select">
-                  <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto</option>
-                  <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
-                  <option value="bottom" <%= legendPos === 'bottom' ? 'selected' : '' %>>Bottom</option>
-                  <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
-                  <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
-                  <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
+                  <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>><%= t('Auto') %></option>
+                  <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>><%= t('Top') %></option>
+                  <option value="bottom" <%= legendPos === 'bottom' ? 'selected' : '' %>><%= t('Bottom') %></option>
+                  <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>><%= t('Left') %></option>
+                  <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>><%= t('Right') %></option>
+                  <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>><%= t('Off') %></option>
                 </select>
               </div>
-              <div data-legend-for="on"><label>Legend alignment</label>
+              <div data-legend-for="on"><label><%= t('Legend alignment') %></label>
                 <select name="legend_align">
-                  <option value="start" <%= (config.legendAlign || 'start') === 'start' ? 'selected' : '' %>>Left</option>
-                  <option value="center" <%= config.legendAlign === 'center' ? 'selected' : '' %>>Center</option>
-                  <option value="end" <%= config.legendAlign === 'end' ? 'selected' : '' %>>Right</option>
+                  <option value="start" <%= (config.legendAlign || 'start') === 'start' ? 'selected' : '' %>><%= t('Left') %></option>
+                  <option value="center" <%= config.legendAlign === 'center' ? 'selected' : '' %>><%= t('Center') %></option>
+                  <option value="end" <%= config.legendAlign === 'end' ? 'selected' : '' %>><%= t('Right') %></option>
                 </select>
               </div>
-              <div data-legend-for="on"><label>Show min in legend</label><%- toggleSwitch('legend_show_min', !!config.legendShowMin) %></div>
-              <div data-legend-for="on"><label>Show max in legend</label><%- toggleSwitch('legend_show_max', !!config.legendShowMax) %></div>
-              <div data-legend-for="on"><label>Show average in legend</label><%- toggleSwitch('legend_show_avg', !!config.legendShowAvg) %></div>
-              <div data-legend-for="on"><label>Show current value in legend</label><%- toggleSwitch('legend_show_current', !!config.legendShowCurrent) %></div>
+              <div data-legend-for="on"><label><%= t('Show min in legend') %></label><%- toggleSwitch('legend_show_min', !!config.legendShowMin) %></div>
+              <div data-legend-for="on"><label><%= t('Show max in legend') %></label><%- toggleSwitch('legend_show_max', !!config.legendShowMax) %></div>
+              <div data-legend-for="on"><label><%= t('Show average in legend') %></label><%- toggleSwitch('legend_show_avg', !!config.legendShowAvg) %></div>
+              <div data-legend-for="on"><label><%= t('Show current value in legend') %></label><%- toggleSwitch('legend_show_current', !!config.legendShowCurrent) %></div>
             </div>
           </details>
         </div>
@@ -152,36 +152,36 @@
           // moment this page loads, purely because of where it happens to be stored on disk.
           var displayUnit = ownSeries.unit || config.unit || '';
         %>
-        <div><label>Y-axis unit (optional)</label><%- unitField('unit_chart', displayUnit) %></div>
-        <div><label>Value scale (optional)</label><%- scaleField('monitor_scale', monitorScale) %></div>
-        <div><label>Decimals (optional)</label><input type="number" name="monitor_decimals" min="0" max="6" placeholder="Default" value="<%= monitorDecimals %>"></div>
-        <div><label>Stepped line</label>
+        <div><label><%= t('Y-axis unit (optional)') %></label><%- unitField('unit_chart', displayUnit) %></div>
+        <div><label><%= t('Value scale (optional)') %></label><%- scaleField('monitor_scale', monitorScale) %></div>
+        <div><label><%= t('Decimals (optional)') %></label><input type="number" name="monitor_decimals" min="0" max="6" placeholder="<%= t('Default') %>" value="<%= monitorDecimals %>"></div>
+        <div><label><%= t('Stepped line') %></label>
           <select name="stepped_line">
-            <option value="" <%= steppedVal === '' ? 'selected' : '' %>>Off</option>
-            <option value="before" <%= steppedVal === 'before' ? 'selected' : '' %>>Before</option>
-            <option value="after" <%= steppedVal === 'after' ? 'selected' : '' %>>After</option>
-            <option value="middle" <%= steppedVal === 'middle' ? 'selected' : '' %>>Middle</option>
+            <option value="" <%= steppedVal === '' ? 'selected' : '' %>><%= t('Off') %></option>
+            <option value="before" <%= steppedVal === 'before' ? 'selected' : '' %>><%= t('Before') %></option>
+            <option value="after" <%= steppedVal === 'after' ? 'selected' : '' %>><%= t('After') %></option>
+            <option value="middle" <%= steppedVal === 'middle' ? 'selected' : '' %>><%= t('Middle') %></option>
           </select>
         </div>
-        <div><label>Curve</label>
+        <div><label><%= t('Curve') %></label>
           <select name="curve_tension">
-            <option value="0" <%= curveTension == 0 ? 'selected' : '' %>>Straight</option>
-            <option value="0.15" <%= curveTension == 0.15 ? 'selected' : '' %>>Slight curve</option>
-            <option value="0.4" <%= curveTension == 0.4 ? 'selected' : '' %>>Smooth</option>
+            <option value="0" <%= curveTension == 0 ? 'selected' : '' %>><%= t('Straight') %></option>
+            <option value="0.15" <%= curveTension == 0.15 ? 'selected' : '' %>><%= t('Slight curve') %></option>
+            <option value="0.4" <%= curveTension == 0.4 ? 'selected' : '' %>><%= t('Smooth') %></option>
           </select>
         </div>
-        <div><label>Show points on line</label><%- toggleSwitch('show_points', !!config.points) %></div>
-        <div><label>Fill area under line</label><%- toggleSwitch('fill_area', !!config.fill) %></div>
-        <div><label>Animate on load</label><%- toggleSwitch('enable_animation', !!config.animation) %></div>
-        <div><label>Y-axis scale</label>
+        <div><label><%= t('Show points on line') %></label><%- toggleSwitch('show_points', !!config.points) %></div>
+        <div><label><%= t('Fill area under line') %></label><%- toggleSwitch('fill_area', !!config.fill) %></div>
+        <div><label><%= t('Animate on load') %></label><%- toggleSwitch('enable_animation', !!config.animation) %></div>
+        <div><label><%= t('Y-axis scale') %></label>
           <select name="y_scale_type">
-            <option value="linear" <%= yScaleType === 'linear' ? 'selected' : '' %>>Linear</option>
-            <option value="logarithmic" <%= yScaleType === 'logarithmic' ? 'selected' : '' %>>Logarithmic</option>
+            <option value="linear" <%= yScaleType === 'linear' ? 'selected' : '' %>><%= t('Linear') %></option>
+            <option value="logarithmic" <%= yScaleType === 'logarithmic' ? 'selected' : '' %>><%= t('Logarithmic') %></option>
           </select>
         </div>
-        <div><label>Y-axis min (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto" value="<%= config.yMin != null ? config.yMin : '' %>"></div>
-        <div><label>Y-axis max (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto" value="<%= config.yMax != null ? config.yMax : '' %>"></div>
-        <div><label>Zoom &amp; pan (scroll to zoom, drag to pan)</label><%- toggleSwitch('enable_zoom', !!config.zoom) %></div>
+        <div><label><%= t('Y-axis min (optional)') %></label><input type="number" name="y_min" step="any" placeholder="<%= t('Auto') %>" value="<%= config.yMin != null ? config.yMin : '' %>"></div>
+        <div><label><%= t('Y-axis max (optional)') %></label><input type="number" name="y_max" step="any" placeholder="<%= t('Auto') %>" value="<%= config.yMax != null ? config.yMax : '' %>"></div>
+        <div><label><%= t('Zoom & pan (scroll to zoom, drag to pan)') %></label><%- toggleSwitch('enable_zoom', !!config.zoom) %></div>
         <div style="grid-column:1/-1;"><%- valueMappingField('monitor_value_labels', ownSeries.valueLabels || []) %></div>
         <div style="grid-column:1/-1;"><%- thresholdField('chart_thresholds', config.thresholds || [], true) %></div>
         <div style="grid-column:1/-1;"><%- annotationField('chart_annotations', config.annotations || []) %></div>
@@ -191,9 +191,9 @@
           // own Edit form), so a button implying "nothing's saved until you click this" would just
           // contradict what's actually happening. This status text is the only save affordance.
         %>
-        <span class="hint panel-save-status" style="grid-column:1/-1; margin:0;">Saved</span>
+        <span class="hint panel-save-status" style="grid-column:1/-1; margin:0;"><%= t('Saved') %></span>
     </form>
-    <span class="panel-drawer-resize-handle" title="Drag to resize"></span>
+    <span class="panel-drawer-resize-handle" title="<%= t('Drag to resize') %>"></span>
   <% } %>
   <%
     var canvasStepped = config.stepped === true ? 'before' : (config.stepped || '');
@@ -205,7 +205,7 @@
   %>
   <div class="card chart-wrap" id="monitor-chart-wrap">
     <div class="monitor-current-value-bar">
-      <span class="monitor-current-value-label">Current value</span>
+      <span class="monitor-current-value-label"><%= t('Current value') %></span>
       <span class="monitor-current-value-main" <% if (currentMainColor) { %>style="color: <%= currentMainColor %>;"<% } %>><%= currentMainText %></span>
       <span class="hint" style="margin:0;"><%= currentSubText %></span>
     </div>
@@ -223,12 +223,12 @@
   </div>
 <% } else { %>
   <p class="hint" style="font-size:1rem;">
-    Current value: <strong <% if (currentMainColor) { %>style="color: <%= currentMainColor %>;"<% } %>><%= currentMainText %></strong>
+    <%= t('Current value:') %> <strong <% if (currentMainColor) { %>style="color: <%= currentMainColor %>;"<% } %>><%= currentMainText %></strong>
     <span class="hint" style="margin:0;"><%= currentSubText %></span>
   </p>
-  <p class="hint">This monitor hasn't recorded any numeric values yet, so there's nothing to chart &mdash; the raw values are listed below instead.</p>
+  <p class="hint"><%= t('This monitor hasn\'t recorded any numeric values yet, so there\'s nothing to chart — the raw values are listed below instead.') %></p>
   <% if (truncated) { %>
-    <p class="hint">Showing the most recent <%= rows.length %> readings in this range. Export CSV for the full history.</p>
+    <p class="hint"><%= t('Showing the most recent') %> <%= rows.length %> <%= t('readings in this range. Export CSV for the full history.') %></p>
   <% } %>
 <% } %>
 
@@ -240,15 +240,15 @@
 <div class="history-groups-wrap" id="monitor-history-groups">
   <% if (rows.length === 0) { %>
     <table>
-      <thead><tr><th>Timestamp</th><th>Raw value</th></tr></thead>
-      <tbody><tr><td colspan="2" class="empty">No readings in this range yet.</td></tr></tbody>
+      <thead><tr><th><%= t('Timestamp') %></th><th><%= t('Raw value') %></th></tr></thead>
+      <tbody><tr><td colspan="2" class="empty"><%= t('No readings in this range yet.') %></td></tr></tbody>
     </table>
   <% } else { %>
     <% groups.forEach((g, gi) => { %>
       <details class="history-group" data-group-key="<%= g.key %>" <%= gi === 0 ? 'open' : '' %>>
-        <summary><%= g.label %> <span class="hint">(<%= g.rows.length %> reading<%= g.rows.length === 1 ? '' : 's' %>)</span></summary>
+        <summary><%= g.label %> <span class="hint">(<%= g.rows.length %> <%= t('reading') %><%= g.rows.length === 1 ? '' : 's' %>)</span></summary>
         <table>
-          <thead><tr><th>Timestamp</th><th>Raw value</th></tr></thead>
+          <thead><tr><th><%= t('Timestamp') %></th><th><%= t('Raw value') %></th></tr></thead>
           <tbody>
             <% g.rows.forEach(r => { %>
               <tr><td><%= formatDateTime(r.recordedAt) %></td><td><span class="truncate" title="<%= r.value %>"><%= r.value %></span></td></tr>

@@ -1,75 +1,86 @@
 <%
   const cfg = v.config || {};
   const cf = (key) => (cfg.fields && cfg.fields[key]) || {};
-  const src = v.source_type || 'none';
+  const src = v.source_kind || v.source_type || 'none';
   const val = (x) => (x === null || x === undefined ? '' : x);
 %>
 <div class="form-grid">
-  <div><label>Name</label><input type="text" name="name" value="<%= v.name || '' %>" placeholder="Skoda" required></div>
+  <div><label><%= t('Name') %></label><input type="text" name="name" value="<%= v.name || '' %>" placeholder="<%= t('Skoda') %>" required></div>
   <div>
-    <label>Type</label>
+    <label><%= t('Type') %></label>
     <select name="type" id="veh-type">
-      <option value="phev" <%= v.type === 'phev' ? 'selected' : '' %>>Plug-in hybrid</option>
-      <option value="bev" <%= v.type === 'bev' ? 'selected' : '' %>>Full electric</option>
+      <option value="phev" <%= v.type === 'phev' ? 'selected' : '' %>><%= t('Plug-in hybrid') %></option>
+      <option value="bev" <%= v.type === 'bev' ? 'selected' : '' %>><%= t('Full electric') %></option>
     </select>
   </div>
-  <div><label>Enabled</label><%- toggleSwitch('enabled', !!v.enabled) %></div>
+  <div><label><%= t('Enabled') %></label><%- toggleSwitch('enabled', !!v.enabled) %></div>
 </div>
 <div class="form-grid" style="margin-top:0.85rem;">
-  <div><label>Usable battery (kWh)</label><input type="text" name="battery_kwh" value="<%= val(v.battery_kwh) %>" placeholder="26"></div>
-  <div><label>Charge limit in the car (%)</label><input type="text" name="charge_limit_pct" value="<%= val(v.charge_limit_pct) %>" placeholder="100"></div>
-  <div><label>Reserve (%)</label><input type="text" name="reserve_pct" value="<%= val(v.reserve_pct) %>" placeholder="0"></div>
-  <div><label>Consumption (kWh/km, optional)</label><input type="text" name="kwh_per_km" value="<%= val(v.kwh_per_km) %>" placeholder="<%= v.kwh_per_km_learned ? 'learned: ' + v.kwh_per_km_learned : 'learned from the odometer' %>"><% if (v.kwh_per_km_learned) { %><span class="hint" style="display:block;font-size:0.78rem;">Learned <%= Math.round(v.kwh_per_km_learned * 1000) / 10 %> kWh/100 km over <%= Math.round(v.kwh_per_km_learned_km || 0) %> km &mdash; leave empty to use it.</span><% } else { %><span class="hint" style="display:block;font-size:0.78rem;">Leave empty: learned automatically when the odometer and battery % are mapped.</span><% } %></div>
-  <div id="veh-fuel-wrap" <%= v.type === 'bev' ? 'hidden' : '' %>><label>Fuel use (l/100 km)</label><input type="text" name="fuel_l_per_100km" value="<%= val(v.fuel_l_per_100km) %>" placeholder="6.5"></div>
+  <div><label><%= t('Usable battery (kWh)') %></label><input type="text" name="battery_kwh" value="<%= val(v.battery_kwh) %>" placeholder="26"></div>
+  <div><label><%= t('Charge limit in the car (%)') %></label><input type="text" name="charge_limit_pct" value="<%= val(v.charge_limit_pct) %>" placeholder="100"></div>
+  <div><label><%= t('Reserve (%)') %></label><input type="text" name="reserve_pct" value="<%= val(v.reserve_pct) %>" placeholder="0"></div>
+  <div><label><%= t('Consumption (kWh/km, optional)') %></label><input type="text" name="kwh_per_km" value="<%= val(v.kwh_per_km) %>" placeholder="<%= v.kwh_per_km_learned ? 'learned: ' + v.kwh_per_km_learned : 'learned from the odometer' %>"><% if (v.kwh_per_km_learned) { %><span class="hint" style="display:block;font-size:0.78rem;"><%= t('Learned') %> <%= Math.round(v.kwh_per_km_learned * 1000) / 10 %> <%= t('kWh/100 km over') %> <%= Math.round(v.kwh_per_km_learned_km || 0) %> <%= t('km — leave empty to use it.') %></span><% } else { %><span class="hint" style="display:block;font-size:0.78rem;"><%= t('Leave empty: learned automatically when the odometer and battery % are mapped.') %></span><% } %></div>
+  <div id="veh-fuel-wrap" <%= v.type === 'bev' ? 'hidden' : '' %>><label><%= t('Fuel use (l/100 km)') %></label><input type="text" name="fuel_l_per_100km" value="<%= val(v.fuel_l_per_100km) %>" placeholder="6.5"></div>
 </div>
 <p class="hint" style="margin-top:0.5rem;">
-  A plug-in hybrid can run empty without harm (it drives on fuel), so its reserve is normally 0. The battery size and
-  charge limit turn a state of charge into kWh; without a data source the charging planner estimates it.
+  <%= t('A plug-in hybrid can run empty without harm (it drives on fuel), so its reserve is normally 0. The battery size and charge limit turn a state of charge into kWh; without a data source the charging planner estimates it.') %>
 </p>
 
-<h2 style="margin-top:1.3rem;">Data source</h2>
+<h2 style="margin-top:1.3rem;"><%= t('Data source') %></h2>
 <div class="form-grid">
   <div>
-    <label>Source</label>
+    <label><%= t('Source') %></label>
     <select name="source_type" id="veh-source">
-      <option value="none" <%= src === 'none' ? 'selected' : '' %>>None (estimate)</option>
-      <option value="homey" <%= src === 'homey' ? 'selected' : '' %>>Homey Pro (local Web API)</option>
-      <option value="homeassistant" <%= src === 'homeassistant' ? 'selected' : '' %>>Home Assistant (REST API)</option>
-      <option value="mqtt" <%= src === 'mqtt' ? 'selected' : '' %>>MQTT topics (Node-RED, evcc, ...)</option>
-      <option value="http" <%= src === 'http' ? 'selected' : '' %>>HTTP / JSON URL</option>
+      <option value="none" <%= src === 'none' ? 'selected' : '' %>><%= t('None (estimate)') %></option>
+      <option value="homey" <%= src === 'homey' ? 'selected' : '' %>><%= t('Homey Pro (local Web API)') %></option>
+      <option value="skoda" <%= src === 'skoda' ? 'selected' : '' %>><%= t('Škoda (official MyŠkoda API)') %></option>
+      <option value="homeassistant" <%= src === 'homeassistant' ? 'selected' : '' %>><%= t('Home Assistant (REST API)') %></option>
+      <option value="mqtt" <%= src === 'mqtt' ? 'selected' : '' %>><%= t('MQTT topics (Node-RED, evcc, ...)') %></option>
+      <option value="http" <%= src === 'http' ? 'selected' : '' %>><%= t('HTTP / JSON URL') %></option>
     </select>
   </div>
-  <div class="veh-src" data-src="http homey homeassistant" <%= ['http', 'homey', 'homeassistant'].includes(src) ? '' : 'hidden' %>>
-    <label>Poll every (s)</label><input type="number" name="poll_interval_s" min="60" max="86400" value="<%= cfg.interval_s || 300 %>">
+  <div class="veh-src" data-src="http homey homeassistant skoda" <%= ['http', 'homey', 'homeassistant', 'skoda'].includes(src) ? '' : 'hidden' %>>
+    <label><%= t('Poll every (s)') %></label><input type="number" name="poll_interval_s" min="60" max="86400" value="<%= cfg.interval_s || (src === 'skoda' ? 600 : 300) %>">
   </div>
-  <div class="veh-src" data-src="mqtt http homey homeassistant" <%= src === 'none' ? 'hidden' : '' %>>
-    <label>Alert when no update for (h)</label><input type="number" name="stale_after_h" min="0" max="720" value="<%= cfg.stale_after_h != null ? cfg.stale_after_h : 24 %>">
+  <div class="veh-src" data-src="mqtt http homey homeassistant skoda" <%= src === 'none' ? 'hidden' : '' %>>
+    <label><%= t('Alert when no update for (h)') %></label><input type="number" name="stale_after_h" min="0" max="720" value="<%= cfg.stale_after_h != null ? cfg.stale_after_h : 24 %>">
   </div>
+</div>
+
+<!-- Škoda (official MyŠkoda Public API) -->
+<div class="veh-src" data-src="skoda" <%= src === 'skoda' ? '' : 'hidden' %> style="margin-top:0.85rem;">
+  <div class="form-grid">
+    <div><label><%= t('VIN (chassis number)') %></label><input type="text" name="skoda_vin" maxlength="17" style="text-transform:uppercase;" value="<%= src === 'skoda' ? (cfg.vin || '') : '' %>" placeholder="TMBJB9NY5RF999999"></div>
+    <div><label><%= t('API key') %></label><input type="password" name="skoda_key" autocomplete="new-password" placeholder="<%= src === 'skoda' && v.hasSecret ? t('Leave blank to keep the saved key') : t('From the MyŠkoda app') %>"></div>
+  </div>
+  <p class="hint" style="margin:0.5rem 0 0;">
+    <%= t('Create the key in the MyŠkoda app (API keys, for this car) and paste it here; it is stored encrypted. LoxSuite only reads the car: battery %, range, plugged in, charging, charge limit, odometer and parking position. Škoda allows 20 requests per hour per car, so LoxSuite reads every 10 minutes, every 4 minutes while the car is plugged in.') %>
+    <a href="https://public.api.connect.skoda-auto.cz/docs" target="_blank" rel="noopener"><%= t('About the MyŠkoda API') %></a>
+  </p>
 </div>
 
 <!-- Homey -->
 <div class="veh-src" data-src="homey" <%= src === 'homey' ? '' : 'hidden' %> style="margin-top:0.85rem;">
   <div class="form-grid">
-    <div><label>Homey address</label><input type="text" name="homey_url" value="<%= src === 'homey' ? (cfg.url || '') : '' %>" placeholder="http://192.168.15.20"></div>
+    <div><label><%= t('Homey address') %></label><input type="text" name="homey_url" value="<%= src === 'homey' ? (cfg.url || '') : '' %>" placeholder="http://192.168.15.20"></div>
     <div>
-      <label>API key</label>
+      <label><%= t('API key') %></label>
       <input type="password" name="homey_key" autocomplete="new-password" placeholder="<%= src === 'homey' && v.hasSecret ? 'Leave blank to keep the saved key' : 'Homey > Settings > API Keys' %>">
     </div>
     <div>
-      <label>Device</label>
+      <label><%= t('Device') %></label>
       <input type="hidden" name="homey_device_id" id="homey-device-id" value="<%= cfg.device_id || '' %>">
       <input type="hidden" name="homey_device_name" id="homey-device-name" value="<%= cfg.device_name || '' %>">
       <select id="homey-device"><option value=""><%= cfg.device_name ? cfg.device_name : '— load devices first —' %></option></select>
-      <button type="button" class="btn-soft" id="homey-load" style="margin-top:0.35rem;"><%- icon('refresh') %> Load devices</button>
+      <button type="button" class="btn-soft" id="homey-load" style="margin-top:0.35rem;"><%- icon('refresh') %> <%= t('Load devices') %></button>
     </div>
   </div>
   <p class="hint" id="homey-msg" style="margin:0.4rem 0 0;">
-    Create an API key on the Homey (Settings &rarr; API Keys, with the "View devices" permission). Every car app on the
-    Homey works this way: pick the car, then which capability is which value.
+    <%= t('Create an API key on the Homey (Settings → API Keys, with the "View devices" permission). Every car app on the Homey works this way: pick the car, then which capability is which value.') %>
   </p>
   <datalist id="homey-cap-list"></datalist>
   <table style="margin-top:0.6rem;">
-    <thead><tr><th>Value</th><th>Homey capability</th><th>Now</th></tr></thead>
+    <thead><tr><th><%= t('Value') %></th><th><%= t('Homey capability') %></th><th><%= t('Now') %></th></tr></thead>
     <tbody>
       <% fields.forEach(f => { %>
         <tr><td><%= f.label %></td>
@@ -83,22 +94,22 @@
 <!-- Home Assistant -->
 <div class="veh-src" data-src="homeassistant" <%= src === 'homeassistant' ? '' : 'hidden' %> style="margin-top:0.85rem;">
   <div class="form-grid">
-    <div><label>Home Assistant address</label><input type="text" name="ha_url" value="<%= src === 'homeassistant' ? (cfg.url || '') : '' %>" placeholder="http://homeassistant.local:8123"></div>
+    <div><label><%= t('Home Assistant address') %></label><input type="text" name="ha_url" value="<%= src === 'homeassistant' ? (cfg.url || '') : '' %>" placeholder="http://homeassistant.local:8123"></div>
     <div>
-      <label>Long-lived access token</label>
+      <label><%= t('Long-lived access token') %></label>
       <input type="password" name="ha_token" autocomplete="new-password" placeholder="<%= src === 'homeassistant' && v.hasSecret ? 'Leave blank to keep the saved token' : 'Profile > Security > Long-lived tokens' %>">
     </div>
-    <div><label>&nbsp;</label><button type="button" class="btn-soft" id="ha-load"><%- icon('refresh') %> Load entities</button></div>
+    <div><label>&nbsp;</label><button type="button" class="btn-soft" id="ha-load"><%- icon('refresh') %> <%= t('Load entities') %></button></div>
   </div>
-  <p class="hint" id="ha-msg" style="margin:0.4rem 0 0;">A field can use an entity's state, or one of its attributes (a device_tracker's latitude/longitude, for example).</p>
+  <p class="hint" id="ha-msg" style="margin:0.4rem 0 0;"><%= t('A field can use an entity\'s state, or one of its attributes (a device_tracker\'s latitude/longitude, for example).') %></p>
   <datalist id="ha-entity-list"></datalist>
   <table style="margin-top:0.6rem;">
-    <thead><tr><th>Value</th><th>Entity</th><th>Attribute (optional)</th><th>Now</th></tr></thead>
+    <thead><tr><th><%= t('Value') %></th><th><%= t('Entity') %></th><th><%= t('Attribute (optional)') %></th><th><%= t('Now') %></th></tr></thead>
     <tbody>
       <% fields.forEach(f => { %>
         <tr><td><%= f.label %></td>
           <td><input type="text" name="ha_entity_<%= f.key %>" list="ha-entity-list" value="<%= src === 'homeassistant' ? (cf(f.key).entity || '') : '' %>" data-field="<%= f.key %>" class="ha-entity" placeholder="—"></td>
-          <td><input type="text" name="ha_attr_<%= f.key %>" value="<%= src === 'homeassistant' ? (cf(f.key).attribute || '') : '' %>" data-field="<%= f.key %>" class="ha-attr" placeholder="state"></td>
+          <td><input type="text" name="ha_attr_<%= f.key %>" value="<%= src === 'homeassistant' ? (cf(f.key).attribute || '') : '' %>" data-field="<%= f.key %>" class="ha-attr" placeholder="<%= t('state') %>"></td>
           <td class="hint ha-now" data-field="<%= f.key %>"></td></tr>
       <% }) %>
     </tbody>
@@ -109,24 +120,23 @@
 <div class="veh-src" data-src="mqtt" <%= src === 'mqtt' ? '' : 'hidden' %> style="margin-top:0.85rem;">
   <div class="form-grid">
     <div>
-      <label>Fill in from preset</label>
+      <label><%= t('Fill in from preset') %></label>
       <select id="mqtt-preset"><option value="">—</option>
         <% Object.entries(presets).forEach(([k, p]) => { %><option value="<%= k %>"><%= p.label %></option><% }) %>
       </select>
     </div>
   </div>
   <p class="hint" style="margin:0.4rem 0 0;">
-    Topics on LoxSuite's own broker. Node-RED, Homey (MQTT Client app), evcc, TeslaMate and others can publish there. Pick
-    a topic from what the broker has seen; for a JSON payload give the path to the value (<code>battery.soc</code>).
+    <%= t('Topics on LoxSuite\'s own broker. Node-RED, Homey (MQTT Client app), evcc, TeslaMate and others can publish there. Pick a topic from what the broker has seen; for a JSON payload give the path to the value (') %><code>battery.soc</code>).
   </p>
   <datalist id="mqtt-topic-list"></datalist>
   <table style="margin-top:0.6rem;">
-    <thead><tr><th>Value</th><th>Topic</th><th>JSON path (optional)</th><th>Now</th></tr></thead>
+    <thead><tr><th><%= t('Value') %></th><th><%= t('Topic') %></th><th><%= t('JSON path (optional)') %></th><th><%= t('Now') %></th></tr></thead>
     <tbody>
       <% fields.forEach(f => { %>
         <tr><td><%= f.label %></td>
           <td><input type="text" name="mqtt_topic_<%= f.key %>" list="mqtt-topic-list" value="<%= src === 'mqtt' ? (cf(f.key).topic || '') : '' %>" data-field="<%= f.key %>" class="mqtt-topic" placeholder="—"></td>
-          <td><input type="text" name="mqtt_path_<%= f.key %>" value="<%= src === 'mqtt' ? (cf(f.key).path || '') : '' %>" placeholder="(whole payload)"></td>
+          <td><input type="text" name="mqtt_path_<%= f.key %>" value="<%= src === 'mqtt' ? (cf(f.key).path || '') : '' %>" placeholder="<%= t('(whole payload)') %>"></td>
           <td class="hint mqtt-now" data-field="<%= f.key %>"></td></tr>
       <% }) %>
     </tbody>
@@ -136,14 +146,14 @@
 <!-- HTTP -->
 <div class="veh-src" data-src="http" <%= src === 'http' ? '' : 'hidden' %> style="margin-top:0.85rem;">
   <div class="form-grid">
-    <div><label>URL (returns JSON)</label><input type="text" name="http_url" value="<%= src === 'http' ? (cfg.url || '') : '' %>" placeholder="http://192.168.15.30:1880/car"></div>
+    <div><label><%= t('URL (returns JSON)') %></label><input type="text" name="http_url" value="<%= src === 'http' ? (cfg.url || '') : '' %>" placeholder="http://192.168.15.30:1880/car"></div>
     <div>
-      <label>Headers (optional, one per line)</label>
+      <label><%= t('Headers (optional, one per line)') %></label>
       <textarea name="http_headers" rows="2" placeholder="<%= src === 'http' && v.hasSecret ? 'Leave blank to keep the saved headers' : 'Authorization: Bearer …' %>"></textarea>
     </div>
   </div>
   <table style="margin-top:0.6rem;">
-    <thead><tr><th>Value</th><th>JSON path</th></tr></thead>
+    <thead><tr><th><%= t('Value') %></th><th><%= t('JSON path') %></th></tr></thead>
     <tbody>
       <% fields.forEach(f => { %>
         <tr><td><%= f.label %></td><td><input type="text" name="http_path_<%= f.key %>" value="<%= src === 'http' ? (cf(f.key).path || '') : '' %>" placeholder="—"></td></tr>
@@ -152,41 +162,35 @@
   </table>
 </div>
 
-<div class="veh-src" data-src="mqtt http homey homeassistant" <%= src === 'none' ? 'hidden' : '' %>>
+<div class="veh-src" data-src="mqtt http homey homeassistant skoda" <%= src === 'none' ? 'hidden' : '' %>>
   <div class="btn-row" style="margin-top:0.8rem;">
-    <button type="button" class="btn-test" id="veh-test-btn"><%- icon('refresh') %> Test source</button>
+    <button type="button" class="btn-test" id="veh-test-btn"><%- icon('refresh') %> <%= t('Test source') %></button>
   </div>
   <div id="veh-test-result" style="margin-top:0.6rem;"></div>
   <p class="hint" style="margin:0.4rem 0 0;">
-    Reads the source once with the settings in this form (nothing is saved). When the source fails or stops updating,
-    a notification rule of type <a href="/admin/notifications?trigger_type=vehicle_source_status">Vehicle data source failing/recovered</a> tells you.
+    <%= t('Reads the source once with the settings in this form (nothing is saved). When the source fails or stops updating, a notification rule of type') %> <a href="/admin/notifications?trigger_type=vehicle_source_status"><%= t('Vehicle data source failing/recovered') %></a> <%= t('tells you.') %>
   </p>
 </div>
 
-<h2 style="margin-top:1.3rem;">Which car is plugged in</h2>
+<h2 style="margin-top:1.3rem;"><%= t('Which car is plugged in') %></h2>
 <div class="form-grid">
-  <div><label>NFC tags of this car (one per line)</label><textarea name="id_tags" rows="2" placeholder="B02B058D414C27"><%= v.id_tags || '' %></textarea></div>
-  <div><label>Loxone users of this car (one per line)</label><textarea name="loxone_users" rows="2" placeholder="Dave Rutten"><%= v.loxone_users || '' %></textarea></div>
-  <div><label>Report its sessions over OCPP</label><%- toggleSwitch('ocpp_report', v.ocpp_report === undefined || v.ocpp_report === null ? true : !!v.ocpp_report) %></div>
+  <div><label><%= t('NFC tags of this car (one per line)') %></label><textarea name="id_tags" rows="2" placeholder="B02B058D414C27"><%= v.id_tags || '' %></textarea></div>
+  <div><label><%= t('Loxone users of this car (one per line)') %></label><textarea name="loxone_users" rows="2" placeholder="<%= t('Dave Rutten') %>"><%= v.loxone_users || '' %></textarea></div>
+  <div><label><%= t('Report its sessions over OCPP') %></label><%- toggleSwitch('ocpp_report', v.ocpp_report === undefined || v.ocpp_report === null ? true : !!v.ocpp_report) %></div>
 </div>
 <p class="hint" style="margin-top:0.5rem;">
-  Only needed with more than one car on the same Wallbox. A session belongs to this car when its NFC tag or the Loxone user of
-  the session matches, or when this car's data source says it is plugged in. Switch <em>Report over OCPP</em> off for a car
-  whose charging isn't reimbursed (e.g. the private car next to the company car): its sessions are then not sent to the
-  backend and left out of the quarterly export.
+  <%= t('Only needed with more than one car on the same Wallbox. A session belongs to this car when its NFC tag or the Loxone user of the session matches, or when this car\'s data source says it is plugged in. Switch') %> <em><%= t('Report over OCPP') %></em> <%= t('off for a car whose charging isn\'t reimbursed (e.g. the private car next to the company car): its sessions are then not sent to the backend and left out of the quarterly export.') %>
 </p>
 
-<h2 style="margin-top:1.3rem;">At home</h2>
+<h2 style="margin-top:1.3rem;"><%= t('At home') %></h2>
 <div class="form-grid">
-  <div><label>Home latitude</label><input type="text" name="home_lat" value="<%= val(v.home_lat) %>" placeholder="51.6"></div>
-  <div><label>Home longitude</label><input type="text" name="home_lon" value="<%= val(v.home_lon) %>" placeholder="5.5"></div>
-  <div><label>Radius (m)</label><input type="text" name="home_radius_m" value="<%= val(v.home_radius_m) %>"></div>
-  <div><label>Or: location text that means home</label><input type="text" name="home_value" value="<%= val(v.home_value) %>" placeholder="home"></div>
+  <div><label><%= t('Home latitude') %></label><input type="text" name="home_lat" value="<%= val(v.home_lat) %>" placeholder="51.6"></div>
+  <div><label><%= t('Home longitude') %></label><input type="text" name="home_lon" value="<%= val(v.home_lon) %>" placeholder="5.5"></div>
+  <div><label><%= t('Radius (m)') %></label><input type="text" name="home_radius_m" value="<%= val(v.home_radius_m) %>"></div>
+  <div><label><%= t('Or: location text that means home') %></label><input type="text" name="home_value" value="<%= val(v.home_value) %>" placeholder="<%= t('home') %>"></div>
 </div>
 <p class="hint" style="margin-top:0.5rem;">
-  Decides whether the car is at home when it isn't plugged in (for "car is home but not plugged in" reminders). With
-  coordinates from the source the car counts as home within the radius; otherwise when the location field equals the
-  text (a Home Assistant device_tracker reports <code>home</code>). Plugged in always counts as home.
+  <%= t('Decides whether the car is at home when it isn\'t plugged in (for "car is home but not plugged in" reminders). With coordinates from the source the car counts as home within the radius; otherwise when the location field equals the text (a Home Assistant device_tracker reports') %> <code>home</code><%= t('). Plugged in always counts as home.') %>
 </p>
 
 <script>

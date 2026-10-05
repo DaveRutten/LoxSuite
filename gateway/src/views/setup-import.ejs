@@ -18,37 +18,31 @@
   <div class="login-box" style="max-width:42rem;">
     <div class="brand">
       <span class="brand-icon"><%- icon('logo', { size: 18 }) %></span>
-      <span>LoxSuite setup</span>
+      <span><%= t('LoxSuite setup') %></span>
     </div>
 
     <div class="card">
-      <h2>Existing SQLite data found</h2>
+      <h2><%= t('Existing SQLite data found') %></h2>
       <% if (error) { %>
         <p class="error"><%= error %></p>
       <% } %>
       <p class="hint">
-        This install just started up against a database backend other than SQLite, but a real,
-        already-used SQLite database is still sitting at <code><%= sqlitePath %></code>. Switching
-        backends doesn't move your data on its own — this fresh database only has the default
-        Administrator/Viewer roles and the account you just logged in with, none of your actual
-        Miniservers, Monitors, dashboards, or history.
+        <%= t('This install just started up against a database backend other than SQLite, but a real, already-used SQLite database is still sitting at') %> <code><%= sqlitePath %></code><%= t('. Switching backends doesn\'t move your data on its own — this fresh database only has the default Administrator/Viewer roles and the account you just logged in with, none of your actual Miniservers, Monitors, dashboards, or history.') %>
       </p>
       <p class="hint">
-        You can import that existing data now — it <strong>replaces</strong> everything currently in
-        this database with what's in the SQLite file, including the user account you're logged in
-        with right now. You'll be signed out once it finishes, to log back in with your real account.
+        <%= t('You can import that existing data now — it') %> <strong><%= t('replaces') %></strong> <%= t('everything currently in this database with what\'s in the SQLite file, including the user account you\'re logged in with right now. You\'ll be signed out once it finishes, to log back in with your real account.') %>
       </p>
 
-      <h3 style="margin-top:1.1rem;">What would be imported</h3>
+      <h3 style="margin-top:1.1rem;"><%= t('What would be imported') %></h3>
       <div class="table-wrap" style="max-height:14rem; overflow-y:auto; margin-top:0.5rem;">
         <table>
-          <thead><tr><th>Table</th><th style="text-align:right;">Rows</th></tr></thead>
+          <thead><tr><th><%= t('Table') %></th><th style="text-align:right;"><%= t('Rows') %></th></tr></thead>
           <tbody>
             <% scan.rowCounts.filter(r => r.count > 0).forEach(r => { %>
               <tr><td><%= r.table %></td><td style="text-align:right;"><%= r.count %></td></tr>
             <% }) %>
             <% if (!scan.rowCounts.some(r => r.count > 0)) { %>
-              <tr><td colspan="2" class="hint">No rows in any table — nothing meaningful to import.</td></tr>
+              <tr><td colspan="2" class="hint"><%= t('No rows in any table — nothing meaningful to import.') %></td></tr>
             <% } %>
           </tbody>
         </table>
@@ -57,17 +51,16 @@
       <% if (scan.orphanFindings.length > 0) { %>
         <div style="margin-top:1rem; padding:0.6rem 0.9rem; border-radius:var(--radius); background:var(--surface-alt); border:1px solid var(--border);">
           <p class="hint" style="margin:0 0 0.4rem; color:var(--danger);">
-            Found rows whose foreign key points at a row that no longer exists (SQLite never
-            enforced these) — Postgres/MySQL do, so the import will fail unless these are skipped:
+            <%= t('Found rows whose foreign key points at a row that no longer exists (SQLite never enforced these) — Postgres/MySQL do, so the import will fail unless these are skipped:') %>
           </p>
           <ul style="margin:0; padding-left:1.1rem; font-size:0.82rem; color:var(--text-muted);">
             <% scan.orphanFindings.forEach(f => { %>
-              <li><%= f.table %>.<%= f.column %> &rarr; <%= f.refTable %>.id: <%= f.count %> row(s)</li>
+              <li><%= f.table %>.<%= f.column %> &rarr; <%= f.refTable %><%= t('.id:') %> <%= f.count %> <%= t('row(s)') %></li>
             <% }) %>
           </ul>
           <label style="display:flex; align-items:center; gap:0.4rem; margin-top:0.6rem; font-size:0.85rem;">
             <input type="checkbox" id="prune-orphans-checkbox">
-            Skip these rows and import everything else
+            <%= t('Skip these rows and import everything else') %>
           </label>
         </div>
       <% } %>
@@ -77,17 +70,17 @@
       </div>
       <div id="import-done" hidden style="margin-top:1rem;">
         <p class="hint" style="color:var(--success);">
-          Import complete — click below to sign in again with your real account.
+          <%= t('Import complete — click below to sign in again with your real account.') %>
         </p>
-        <button type="button" id="import-login-btn" class="primary" style="width:100%;">Log out &amp; sign in again</button>
+        <button type="button" id="import-login-btn" class="primary" style="width:100%;"><%= t('Log out & sign in again') %></button>
       </div>
 
       <div id="import-actions" style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
         <form method="post" action="/setup/import/dismiss">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <button type="submit" class="btn-soft">I don't need this — skip</button>
+          <button type="submit" class="btn-soft"><%= t('I don\'t need this — skip') %></button>
         </form>
-        <button type="button" id="import-start-btn" class="primary" style="width:auto; margin-top:0;">Start import</button>
+        <button type="button" id="import-start-btn" class="primary" style="width:auto; margin-top:0;"><%= t('Start import') %></button>
       </div>
     </div>
   </div>

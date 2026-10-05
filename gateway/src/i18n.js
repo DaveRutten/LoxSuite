@@ -24,6 +24,8 @@ let languages = [{ code: BASE, name: 'English', enabled: 1, is_default: 1 }];
 const shipped = new Map(); // lang -> Map(key -> text)  (locale files)
 const custom = new Map(); // lang -> Map(key -> { text, by, at })  (DB)
 let catalogCache = null;
+const clientKeys = new Set(); // texts translated in the browser (public/i18n.js)
+let version = 1; // bumps on every change, for the browser's cached dictionary
 
 const hash = (key) => crypto.createHash('sha1').update(String(key)).digest('hex');
 const CODE = /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/;
@@ -31,7 +33,7 @@ const CODE = /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/;
 function loadShipped() {
   shipped.clear();
   let files = [];
-  try { files = fs.readdirSync(LOCALE_DIR).filter((f) => f.endsWith('.json')); } catch { files = []; }
+  try { files = fs.readdirSync(LOCALE_DIR).filter((f) => f.endsWith('.json') && !f.startsWith('_')); } catch { files = []; }
   for (const f of files) {
     try { shipped.set(f.replace(/\.json$/, ''), new Map(Object.entries(JSON.parse(fs.readFileSync(path.join(LOCALE_DIR, f), 'utf8'))))); } catch (e) { console.error(`[i18n] ${f}: ${e.message}`); }
   }
@@ -48,7 +50,33 @@ async function loadDb() {
   } catch { /* before migration */ }
 }
 
-async function init() { loadShipped(); await loadDb(); }
+// Installation-wide display options: the clock (24 h by default — the usual in the Netherlands and
+// most of Europe; 12 h for those who want am/pm).
+let options = { clock: '24' };
+async function loadOptions() {
+  try { const v = await require('./wallboxSettings').get('i18n', {}); options = { clock: '24', ...(v && typeof v === 'object' ? v : {}) }; } catch { /* defaults */ }
+}
+async function setClock(clock) {
+  options = { ...options, clock: clock === '12' ? '12' : '24' };
+  await require('./wallboxSettings').set('i18n', options);
+}
+const clock12 = () => options.clock === '12';
+// BCP 47 locale for dates and numbers in the browser: nl -> nl-NL, en -> en-GB (day-month order), other codes as is.
+const LOCALES = { nl: 'nl-NL', en: 'en-GB', de: 'de-DE', fr: 'fr-FR' };
+const localeOf = (lang) => LOCALES[lang] || lang || 'en-GB';
+
+async function init() { loadShipped(); await loadDb(); await loadOptions(); version = Date.now(); }
+
+// The browser's dictionary for a language: only the texts its scripts build and server messages.
+function clientDict(lang) {
+  catalog();
+  const out = {};
+  if (!lang || lang === BASE) return out;
+  // every translated text: also catches English that reaches the page from server data and scripts
+  for (const e of catalogCache || []) { const v = lookup(lang, e.key); if (v && v !== e.key) out[e.key] = v; }
+  return out;
+}
+const dictVersion = () => version;
 
 function listLanguages() { return languages.map((l) => ({ code: l.code, name: l.name, enabled: !!l.enabled, isDefault: !!l.is_default })); }
 function enabledLanguages() { return listLanguages().filter((l) => l.enabled); }
@@ -133,6 +161,13 @@ function catalog() {
     for (const g of GROUPS) add(g.label, 'core', 'modules');
     for (const m of MODULES) { add(m.label, m.key, 'modules'); add(m.description, m.key, 'modules'); for (const p of m.parts || []) add(p, m.key, 'modules'); }
   } catch { /* modules not loadable */ }
+  // Texts the browser builds and server messages (scripts/i18n-extract.js -> _client-catalog.json).
+  try {
+    for (const e of JSON.parse(fs.readFileSync(path.join(LOCALE_DIR, '_client-catalog.json'), 'utf8'))) {
+      for (const w of e.where) add(e.key, e.module, w);
+      clientKeys.add(e.key);
+    }
+  } catch { /* not generated */ }
   try { for (const a of require('./permissionAreas').AREAS) add(a.label, a.module || 'core', 'permissionAreas'); } catch { /* none */ }
   // Labels in moduleInfo.js (status tables, Getting started checklist), per module block.
   try {
@@ -185,12 +220,14 @@ async function saveTranslation(lang, key, text, by = null) {
   if (!v || v === (shipped.get(lang)?.get(k) || '')) {
     await db.prepare('DELETE FROM translations WHERE lang = ? AND key_hash = ?').run(lang, hash(k));
     custom.get(lang)?.delete(k);
+    version += 1;
     return null;
   }
   const at = new Date().toISOString();
   await db.upsert('translations', { lang, key_hash: hash(k), msg_key: k, text: v, updated_by: by, updated_at: at }, ['lang', 'key_hash']);
   if (!custom.has(lang)) custom.set(lang, new Map());
   custom.get(lang).set(k, { text: v, by, at });
+  version += 1;
   return v;
 }
 
@@ -250,11 +287,11 @@ async function removeLanguage(code) {
   await loadDb();
 }
 
-function _reset() { languages = [{ code: BASE, name: 'English', enabled: 1, is_default: 1 }]; shipped.clear(); custom.clear(); catalogCache = null; }
+function _reset() { clientKeys.clear(); languages = [{ code: BASE, name: 'English', enabled: 1, is_default: 1 }]; shipped.clear(); custom.clear(); catalogCache = null; }
 function _set({ langs, files } = {}) { if (langs) languages = langs; if (files) for (const [k, v] of Object.entries(files)) shipped.set(k, new Map(Object.entries(v))); }
 
 module.exports = {
-  BASE, init, loadShipped, listLanguages, enabledLanguages, defaultLanguage, resolveLanguage, translate, translator, fill,
+  BASE, init, setClock, clientDict, dictVersion, clock12, localeOf, loadShipped, listLanguages, enabledLanguages, defaultLanguage, resolveLanguage, translate, translator, fill,
   extract, catalog, progress, entries, saveTranslation, exportLanguage, importLanguage,
   addLanguage, setLanguageEnabled, setDefaultLanguage, removeLanguage, moduleOfView, _reset, _set,
 };

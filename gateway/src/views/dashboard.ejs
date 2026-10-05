@@ -1,18 +1,18 @@
 <%- include('partials/head', { pageTitle: 'Dashboard', active: 'dashboard', refresh: 5, liveSwap: true, dashboardId: dashboard.id }) %>
 
 <p class="hint">
-Logged in as <strong><%= username %></strong>
+<%= t('Logged in as') %> <strong><%= username %></strong>
 </p>
 
 <% const isCollapsed = (key) => collapsedSections.includes(key); %>
 
 <button type="button" class="section-toggle" data-nav-section="home-status" aria-expanded="<%= isCollapsed('home-status') ? 'false' : 'true' %>">
-  <h2>Status</h2><%- icon('chevron') %>
+  <h2><%= t('Status') %></h2><%- icon('chevron') %>
 </button>
 <div class="section-body" <%= isCollapsed('home-status') ? 'hidden' : '' %> style="margin-bottom:1.5rem;">
   <div class="stat-grid compact">
     <div class="stat-card">
-      <div class="label">MQTT broker</div>
+      <div class="label"><%= t('MQTT broker') %></div>
       <div class="value" data-live-id="stat-mqtt-status">
         <span class="badge badge-live <%= mqttConnected ? 'badge-ok' : 'badge-off' %>">
           <%= mqttConnected ? 'Connected' : 'Not connected' %>
@@ -20,27 +20,27 @@ Logged in as <strong><%= username %></strong>
       </div>
     </div>
     <div class="stat-card">
-      <div class="label">Active mappings MQTT &rarr; Loxone</div>
+      <div class="label"><%= t('Active mappings MQTT → Loxone') %></div>
       <div class="value" data-live-id="stat-map-in-count"><%= mqttToLoxoneCount %></div>
     </div>
     <div class="stat-card">
-      <div class="label">Active mappings Loxone &rarr; MQTT</div>
+      <div class="label"><%= t('Active mappings Loxone → MQTT') %></div>
       <div class="value" data-live-id="stat-map-out-count"><%= loxoneToMqttCount %></div>
     </div>
   </div>
 </div>
 
 <button type="button" class="section-toggle" data-nav-section="home-load" aria-expanded="<%= isCollapsed('home-load') ? 'false' : 'true' %>">
-  <h2>Load</h2><%- icon('chevron') %>
+  <h2><%= t('Load') %></h2><%- icon('chevron') %>
 </button>
 <div class="section-body" <%= isCollapsed('home-load') ? 'hidden' : '' %> style="margin-bottom:1.5rem;">
   <div class="stat-grid compact">
     <div class="stat-card">
-      <div class="label">Messages / sec (10s average)</div>
+      <div class="label"><%= t('Messages / sec (10s average)') %></div>
       <div class="value" data-live-id="stat-msgs-per-sec"><%= stats.messagesPerSecond %></div>
     </div>
     <div class="stat-card">
-      <div class="label">Total messages since start</div>
+      <div class="label"><%= t('Total messages since start') %></div>
       <%
         // The title attribute has to live on an element INSIDE this div, not the div itself —
         // the live-refresh swap (foot.ejs's swapFrom) only ever replaces a [data-live-id]
@@ -50,24 +50,24 @@ Logged in as <strong><%= username %></strong>
       <div class="value" data-live-id="stat-total-msgs"><span title="<%= stats.totalMessages %>"><%= formatCount(stats.totalMessages) %></span></div>
     </div>
     <div class="stat-card">
-      <div class="label">Unique topics seen</div>
+      <div class="label"><%= t('Unique topics seen') %></div>
       <div class="value" data-live-id="stat-topics-seen"><%= stats.topicsSeen %></div>
     </div>
     <div class="stat-card">
-      <div class="label">Connected MQTT clients</div>
+      <div class="label"><%= t('Connected MQTT clients') %></div>
       <div class="value" data-live-id="stat-connected-clients"><%= connectedClientCount %></div>
     </div>
   </div>
 </div>
 
 <button type="button" class="section-toggle" data-nav-section="home-miniservers" aria-expanded="<%= isCollapsed('home-miniservers') ? 'false' : 'true' %>">
-  <h2>Miniservers</h2><%- icon('chevron') %>
+  <h2><%= t('Miniservers') %></h2><%- icon('chevron') %>
 </button>
 <div class="section-body" <%= isCollapsed('home-miniservers') ? 'hidden' : '' %> style="margin-bottom:1.5rem;">
   <div class="filterable-table-card">
     <div class="table-toolbar">
       <div class="columns-menu columns-menu-inline" id="home-ms-columns-menu">
-        <button type="button" class="btn-soft" id="home-ms-columns-btn"><%- icon('columns') %> Columns</button>
+        <button type="button" class="btn-soft" id="home-ms-columns-btn"><%- icon('columns') %> <%= t('Columns') %></button>
         <div class="columns-menu-panel" id="home-ms-columns-panel" hidden></div>
       </div>
     </div>
@@ -85,13 +85,13 @@ Logged in as <strong><%= username %></strong>
 </div>
 
 <button type="button" class="section-toggle" data-nav-section="home-panels" aria-expanded="<%= isCollapsed('home-panels') ? 'false' : 'true' %>">
-  <h2>Panels</h2><%- icon('chevron') %>
+  <h2><%= t('Panels') %></h2><%- icon('chevron') %>
 </button>
 <div class="section-body" <%= isCollapsed('home-panels') ? 'hidden' : '' %>>
   <p class="hint">
-    Shared by everyone who logs in &mdash; charts, gauges, current values, and more, built from your
-    <a href="/monitor">monitors</a>. Personal boards live under <a href="/dashboards">My Dashboards</a>
-    instead.
+    <%= t('Shared by everyone who logs in — charts, gauges, current values, and more, built from your') %>
+    <a href="/monitor"><%= t('monitors') %></a><%= t('. Personal boards live under') %> <a href="/dashboards"><%= t('My Dashboards') %></a>
+    <%= t('instead.') %>
   </p>
 
   <%- include('partials/panel-grid', { dashboardId: dashboard.id, panels: panels, monitors: monitors, canEditPanels: canEdit('dashboard'), defaultPanelDecimals: defaultPanelDecimals, panelTypeDefaultsExist: panelTypeDefaultsExist }) %>

@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.30.0-alpha.1] - 2026-10-05
+
+### Added
+- **Škoda as a vehicle data source** — the official MyŠkoda Public API, next to Homey, Home Assistant, MQTT and HTTP.
+  Create an API key for the car in the MyŠkoda app and paste it with the VIN (stored encrypted; no password needed).
+  LoxSuite reads battery %, electric and total range, plugged in, charging state and power, charge limit, odometer,
+  parking position and fuel level. Škoda allows 20 requests per hour per car: LoxSuite reads every 10 minutes, every
+  4 minutes while the car is plugged in or the Wallbox has a car, and waits when Škoda says the limit is reached. The
+  vehicle page shows how many requests are left and until when the API key is valid (warning two weeks ahead).
+  Read-only for now; starting climate or charging comes later.
+- **The whole interface in Dutch.** Every page is now translatable — about 3,600 texts, all translated into Dutch:
+  - texts in the pages themselves (t() in the views, wrapped automatically),
+  - texts the browser builds (charts, tables, status lines, messages) and messages from the server, translated in
+    the browser by public/i18n.js, also when a text is built from pieces ("Learned: 2.4 kWh/day …"),
+  - country names in Geo-blocking via the browser/Node's own region names.
+  `scripts/i18n-extract.js` collects the texts of scripts and server messages; a test keeps the Dutch file complete.
+- **Language, clock and timezone together** under Settings → General → Display. The clock is 24-hour by default
+  (12-hour optional) and dates and numbers follow the user's language instead of the browser's own settings.
+  Administration → Languages keeps adding/switching languages and translating.
+
+### Changed
+- Energy manager reasons are complete sentences now (e.g. "cheap hour: pre-heat"), so they translate well.
+
 ## [0.29.0-alpha.1] - 2026-10-05
 
 ### Added

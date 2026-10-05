@@ -16,36 +16,26 @@
   <p class="error"><%= error %></p>
 <% } %>
 <% if (saved) { %>
-  <p class="hint" style="color: var(--success);">Saved.</p>
+  <p class="hint" style="color: var(--success);"><%= t('Saved.') %></p>
 <% } %>
 
 
 <p class="hint" style="background:var(--warning-soft); color:var(--warning); padding:0.75rem 1rem; border-radius:8px; margin-bottom:1.25rem;">
-  <strong>Experimental.</strong> This feature works, but small/local models in particular (Ollama's
-  default <code>llama3.2</code>, for instance) have been observed skipping a needed lookup step,
-  inventing a value instead of reading a real tool result, or narrating a tool call in plain text
-  instead of actually making one. The underlying data is correct when read directly &mdash; the
-  model doesn't always use it correctly. Treat anything the assistant reports as worth
-  double-checking before acting on it. A larger local model or a hosted provider
-  (Claude/ChatGPT/Gemini) tends to follow instructions more reliably than a small local one, at
-  the cost of speed or a per-token bill.
+  <strong><%= t('Experimental.') %></strong> <%= t('This feature works, but small/local models in particular (Ollama\'s default') %> <code>llama3.2</code><%= t(', for instance) have been observed skipping a needed lookup step, inventing a value instead of reading a real tool result, or narrating a tool call in plain text instead of actually making one. The underlying data is correct when read directly — the model doesn\'t always use it correctly. Treat anything the assistant reports as worth double-checking before acting on it. A larger local model or a hosted provider (Claude/ChatGPT/Gemini) tends to follow instructions more reliably than a small local one, at the cost of speed or a per-token bill.') %>
 </p>
 
 <p class="hint">
-  Lets a Loxone Miniserver's native MCP server plugin power an AI chat assistant and richer
-  dashboard suggestions &mdash; entirely optional, and off by default. With this disabled, LoxSuite
-  behaves exactly as it does today. Enabling it here only turns on the global connection to your
-  chosen AI provider; each Miniserver still needs its own MCP connection authorized from its own
-  <a href="/miniservers">Miniservers</a> edit page.
+  <%= t('Lets a Loxone Miniserver\'s native MCP server plugin power an AI chat assistant and richer dashboard suggestions — entirely optional, and off by default. With this disabled, LoxSuite behaves exactly as it does today. Enabling it here only turns on the global connection to your chosen AI provider; each Miniserver still needs its own MCP connection authorized from its own') %>
+  <a href="/miniservers"><%= t('Miniservers') %></a> <%= t('edit page.') %>
 </p>
 
 <div class="card">
-  <h2>AI provider</h2>
+  <h2><%= t('AI provider') %></h2>
 
   <form method="post" action="/admin/ai">
     <div class="form-grid">
       <div>
-        <label>Enabled</label>
+        <label><%= t('Enabled') %></label>
         <%- toggleSwitch('enabled', settings.enabled, { id: 'ai-enabled-toggle' }) %>
       </div>
     </div>
@@ -56,7 +46,7 @@
     %>
     <div id="ai-properties" class="form-grid" style="margin-top:0.85rem; <%= settings.enabled ? '' : 'display:none;' %>">
       <div>
-        <label>Provider</label>
+        <label><%= t('Provider') %></label>
         <select name="provider" id="ai-provider-select">
           <%
             // Ollama listed first — it's the recommended default (self-hosted, no API key, no
@@ -64,71 +54,66 @@
             // The other three are the "extra option" hosted APIs, in the order this feature added
             // support for them.
           %>
-          <option value="ollama" <%= settings.provider === 'ollama' ? 'selected' : '' %>>Ollama / OpenWebUI (self-hosted, default)</option>
-          <option value="anthropic" <%= settings.provider === 'anthropic' ? 'selected' : '' %>>Claude (Anthropic)</option>
-          <option value="openai" <%= settings.provider === 'openai' ? 'selected' : '' %>>ChatGPT (OpenAI)</option>
-          <option value="gemini" <%= settings.provider === 'gemini' ? 'selected' : '' %>>Gemini (Google)</option>
+          <option value="ollama" <%= settings.provider === 'ollama' ? 'selected' : '' %>><%= t('Ollama / OpenWebUI (self-hosted, default)') %></option>
+          <option value="anthropic" <%= settings.provider === 'anthropic' ? 'selected' : '' %>><%= t('Claude (Anthropic)') %></option>
+          <option value="openai" <%= settings.provider === 'openai' ? 'selected' : '' %>><%= t('ChatGPT (OpenAI)') %></option>
+          <option value="gemini" <%= settings.provider === 'gemini' ? 'selected' : '' %>><%= t('Gemini (Google)') %></option>
         </select>
         <p class="hint">
-          Ollama/OpenWebUI runs entirely on your own hardware (or any Ollama-compatible server you
-          already have) &mdash; no API key, no per-token billing. Claude/ChatGPT/Gemini are hosted
-          APIs, each billed per token and needing their own key.
+          <%= t('Ollama/OpenWebUI runs entirely on your own hardware (or any Ollama-compatible server you already have) — no API key, no per-token billing. Claude/ChatGPT/Gemini are hosted APIs, each billed per token and needing their own key.') %>
         </p>
       </div>
       <div>
-        <label>Model</label>
+        <label><%= t('Model') %></label>
         <select id="ai-model-select"></select>
-        <input type="text" name="model" id="ai-model-custom-input" placeholder="Model name" value="<%= settings.model %>" style="margin-top:0.35rem; display:none;">
+        <input type="text" name="model" id="ai-model-custom-input" placeholder="<%= t('Model name') %>" value="<%= settings.model %>" style="margin-top:0.35rem; display:none;">
         <p class="hint" id="ai-model-hint"></p>
       </div>
       <div id="ai-base-url-wrap" style="<%= settings.provider === 'ollama' ? '' : 'display:none;' %>">
-        <label>Base URL</label>
+        <label><%= t('Base URL') %></label>
         <input type="text" name="base_url" value="<%= settings.base_url || '' %>" placeholder="http://ollama:11434">
         <p class="hint">
-          Where your Ollama/OpenWebUI server is reachable from this container &mdash;
-          <code>http://ollama:11434</code> for the bundled Ollama service already in
-          <code>docker-compose.yml</code> (comment that service out if you don't want it, or point
-          this at a different/external instance instead), or an external host's own address.
+          <%= t('Where your Ollama/OpenWebUI server is reachable from this container —') %>
+          <code>http://ollama:11434</code> <%= t('for the bundled Ollama service already in') %>
+          <code>docker-compose.yml</code> <%= t('(comment that service out if you don\'t want it, or point this at a different/external instance instead), or an external host\'s own address.') %>
         </p>
       </div>
       <div id="ai-ollama-model-status-wrap" style="<%= settings.provider === 'ollama' && settings.enabled ? '' : 'display:none;' %>">
-        <label>Model status</label>
-        <p id="ai-ollama-model-status" class="hint">Checking&hellip;</p>
+        <label><%= t('Model status') %></label>
+        <p id="ai-ollama-model-status" class="hint"><%= t('Checking…') %></p>
         <pre id="ai-ollama-pull-log" class="ai-ollama-pull-log" hidden></pre>
-        <p class="hint" style="margin-top:0.7rem;">Downloaded models</p>
+        <p class="hint" style="margin-top:0.7rem;"><%= t('Downloaded models') %></p>
         <div id="ai-ollama-models-list" class="ai-ollama-models-list"></div>
       </div>
       <div id="ai-effort-wrap" style="<%= settings.provider === 'anthropic' ? '' : 'display:none;' %>">
-        <label>Effort</label>
+        <label><%= t('Effort') %></label>
         <select name="effort">
           <% ['low', 'medium', 'high', 'xhigh', 'max'].forEach(level => { %>
             <option value="<%= level %>" <%= level === settings.effort ? 'selected' : '' %>><%= level %></option>
           <% }) %>
         </select>
-        <p class="hint">Trades cost/latency for depth of reasoning on every chat turn. Claude only.</p>
+        <p class="hint"><%= t('Trades cost/latency for depth of reasoning on every chat turn. Claude only.') %></p>
       </div>
       <div>
-        <label>API key</label>
+        <label><%= t('API key') %></label>
         <input type="password" name="api_key" placeholder="<%= settings.api_key ? 'Leave blank to keep the current key' : '' %>">
         <p class="hint" id="ai-api-key-hint"></p>
       </div>
       <div>
-        <label>Suggested dashboards</label>
+        <label><%= t('Suggested dashboards') %></label>
         <select name="suggestions_mode">
-          <option value="0" <%= settings.suggestions_mode === 0 ? 'selected' : '' %>>Heuristic only (unchanged)</option>
-          <option value="1" <%= settings.suggestions_mode === 1 ? 'selected' : '' %>>AI only</option>
-          <option value="2" <%= settings.suggestions_mode === 2 ? 'selected' : '' %>>AI + heuristic combined</option>
+          <option value="0" <%= settings.suggestions_mode === 0 ? 'selected' : '' %>><%= t('Heuristic only (unchanged)') %></option>
+          <option value="1" <%= settings.suggestions_mode === 1 ? 'selected' : '' %>><%= t('AI only') %></option>
+          <option value="2" <%= settings.suggestions_mode === 2 ? 'selected' : '' %>><%= t('AI + heuristic combined') %></option>
         </select>
         <p class="hint">
-          Whether <a href="/live-data">Live Data</a>'s "Suggest dashboard" button asks the AI
-          provider for richer suggestions. Falls back to the heuristic automatically if the AI
-          request fails.
+          <%= t('Whether') %> <a href="/live-data"><%= t('Live Data') %></a><%= t('\'s "Suggest dashboard" button asks the AI provider for richer suggestions. Falls back to the heuristic automatically if the AI request fails.') %>
         </p>
       </div>
     </div>
 
     <div id="ai-save-row" style="margin-top:0.9rem; <%= settings.enabled ? '' : 'display:none;' %>">
-      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
     </div>
   </form>
 

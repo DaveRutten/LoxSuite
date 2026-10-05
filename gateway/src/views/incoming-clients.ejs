@@ -1,24 +1,18 @@
 <%- include('partials/head', { pageTitle: 'Client Activity', active: 'incoming-clients', refresh: 5, liveSwap: true }) %>
 
 <p class="hint">
-  Refreshes every 5 seconds. In-memory only, so this clears on a gateway restart. The
-  <strong>Device</strong> column shows the topic prefix seen in that device's own MQTT traffic when one is
-  known (hover to see the raw MQTT client ID) &mdash; otherwise it falls back to the raw client ID.
-  Disconnected clients are also auto-removed after <strong><%= retentionHours %></strong> hours
-  (<% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>)
-  &mdash; each removal is logged on the <a href="/logs/system">System</a> log.
+  <%= t('Refreshes every 5 seconds. In-memory only, so this clears on a gateway restart. The') %>
+  <strong><%= t('Device') %></strong> <%= t('column shows the topic prefix seen in that device\'s own MQTT traffic when one is known (hover to see the raw MQTT client ID) — otherwise it falls back to the raw client ID. Disconnected clients are also auto-removed after') %> <strong><%= retentionHours %></strong> <%= t('hours (') %><% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %><%= t(') — each removal is logged on the') %> <a href="/logs/system"><%= t('System') %></a> <%= t('log.') %>
 </p>
 
 <div class="tabs">
-  <a href="/incoming/clients?tab=device" class="<%= tab === 'device' ? 'active' : '' %>">Devices (<%= deviceCount %>)</a>
-  <a href="/incoming/clients?tab=system" class="<%= tab === 'system' ? 'active' : '' %>">LoxSuite itself (<%= systemCount %>)</a>
+  <a href="/incoming/clients?tab=device" class="<%= tab === 'device' ? 'active' : '' %>"><%= t('Devices (') %><%= deviceCount %>)</a>
+  <a href="/incoming/clients?tab=system" class="<%= tab === 'system' ? 'active' : '' %>"><%= t('LoxSuite itself (') %><%= systemCount %>)</a>
 </div>
 
 <% if (tab === 'system') { %>
   <p class="hint">
-    LoxSuite's own MQTT connections — the gateway's own persistent connection, the one-shot
-    dynamic-security bootstrap that runs on every boot, and any ad-hoc Test button use — not real
-    devices. Hidden from the Devices tab by default so real IoT traffic isn't buried among them.
+    <%= t('LoxSuite\'s own MQTT connections — the gateway\'s own persistent connection, the one-shot dynamic-security bootstrap that runs on every boot, and any ad-hoc Test button use — not real devices. Hidden from the Devices tab by default so real IoT traffic isn\'t buried among them.') %>
   </p>
 <% } %>
 
@@ -26,22 +20,22 @@
   <div class="table-toolbar">
     <div class="search-combo">
       <select id="clients-filter-field">
-        <option value="0">Device</option>
-        <option value="1">Address</option>
-        <option value="2">User</option>
-        <option value="3">Status</option>
+        <option value="0"><%= t('Device') %></option>
+        <option value="1"><%= t('Address') %></option>
+        <option value="2"><%= t('User') %></option>
+        <option value="3"><%= t('Status') %></option>
       </select>
       <div class="clearable-input-wrap">
-        <input type="text" id="clients-filter-query" placeholder="Filter…">
-        <button type="button" id="clients-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+        <input type="text" id="clients-filter-query" placeholder="<%= t('Filter…') %>">
+        <button type="button" id="clients-filter-clear" class="icon-btn clearable-input-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
       </div>
     </div>
     <% if (canEdit('incoming')) { %>
     <form method="post" action="/incoming/clients/rescan" style="margin:0;">
-      <button type="submit" class="btn-soft" title="Ask every currently-connected Shelly Gen1 device to re-announce itself, so a renamed device's real topic prefix (or a status stuck from before a restart) resolves correctly without waiting for its next reconnect."><%- icon('refresh') %> Rescan devices</button>
+      <button type="submit" class="btn-soft" title="<%= t('Ask every currently-connected Shelly Gen1 device to re-announce itself, so a renamed device\'s real topic prefix (or a status stuck from before a restart) resolves correctly without waiting for its next reconnect.') %>"><%- icon('refresh') %> <%= t('Rescan devices') %></button>
     </form>
-    <form method="post" action="/incoming/clients/clear" data-confirm="Clear disconnected clients from this list? Clients that are still actively connected stay listed." style="margin:0;">
-      <button type="submit" class="danger"><%- icon('trash') %> Clear list</button>
+    <form method="post" action="/incoming/clients/clear" data-confirm="<%= t('Clear disconnected clients from this list? Clients that are still actively connected stay listed.') %>" style="margin:0;">
+      <button type="submit" class="danger"><%- icon('trash') %> <%= t('Clear list') %></button>
     </form>
     <% } %>
   </div>
@@ -49,7 +43,7 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Device</th><th>Address</th><th>User</th><th>Status</th><th>Connected since</th><th>Disconnected</th><th>Actions</th></tr>
+      <tr><th><%= t('Device') %></th><th><%= t('Address') %></th><th><%= t('User') %></th><th><%= t('Status') %></th><th><%= t('Connected since') %></th><th><%= t('Disconnected') %></th><th><%= t('Actions') %></th></tr>
     </thead>
     <tbody>
       <% clients.forEach(c => { %>
@@ -78,10 +72,10 @@
             <div class="row-actions">
               <% if (family) { %>
                 <a class="inline" href="/mappings/commands?family=<%= encodeURIComponent(family) %>&device=<%= encodeURIComponent(c.displayName) %>">
-                  <button type="button" class="btn-soft"><%- icon('link') %> Suggest commands</button>
+                  <button type="button" class="btn-soft"><%- icon('link') %> <%= t('Suggest commands') %></button>
                 </a>
                 <a class="inline" href="/incoming/schedules?family=<%= encodeURIComponent(family) %>&device=<%= encodeURIComponent(c.displayName) %>&resolved=<%= c.resolvedFromTopic ? '1' : '0' %>">
-                  <button type="button" class="btn-soft"><%- icon('refresh') %> Schedule command<% if (scheduleCounts[c.displayName]) { %> (<%= scheduleCounts[c.displayName] %>)<% } %></button>
+                  <button type="button" class="btn-soft"><%- icon('refresh') %> <%= t('Schedule command') %><% if (scheduleCounts[c.displayName]) { %> (<%= scheduleCounts[c.displayName] %>)<% } %></button>
                 </a>
               <% } %>
             </div>
@@ -89,7 +83,7 @@
         </tr>
       <% }) %>
       <% if (clients.length === 0) { %>
-        <tr><td colspan="7" class="empty">No clients seen since the gateway started.</td></tr>
+        <tr><td colspan="7" class="empty"><%= t('No clients seen since the gateway started.') %></td></tr>
       <% } %>
     </tbody>
   </table>
@@ -97,11 +91,7 @@
 </div>
 
 <p class="hint">
-  "Suggest commands" and "Schedule command" both appear once a device's traffic has been
-  recognized as belonging to a known Common Commands family (see that page — includes anything
-  added via a <a href="/mappings/commands">device template</a>, not just the built-in ones) and
-  open with the device type and device pre-selected. "Schedule command" opts that device into
-  repeating a command on a timer — e.g. a nightly reboot — entirely optional per device.
+  <%= t('"Suggest commands" and "Schedule command" both appear once a device\'s traffic has been recognized as belonging to a known Common Commands family (see that page — includes anything added via a') %> <a href="/mappings/commands"><%= t('device template') %></a><%= t(', not just the built-in ones) and open with the device type and device pre-selected. "Schedule command" opts that device into repeating a command on a timer — e.g. a nightly reboot — entirely optional per device.') %>
 </p>
 
 <script>

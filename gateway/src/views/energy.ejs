@@ -1,22 +1,20 @@
 <%- include('partials/head', { pageTitle: 'Meters', active: 'energy' }) %>
 
 <% if (error) { %><p class="error"><%= error %></p><% } %>
-<% if (saved) { %><p class="hint" style="color: var(--success);">Saved.</p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
 
 <p class="hint">
-  The Loxone meters LoxSuite uses for smart charging and learning: the grid connection, the solar panels, the Wallbox and
-  (if you have one) a home battery. Values come live from the Miniserver; every minute they are stored, and per hour
-  they are rolled up into kWh. The house load is calculated: grid + solar &minus; Wallbox &minus; battery.
+  <%= t('The Loxone meters LoxSuite uses for smart charging and learning: the grid connection, the solar panels, the Wallbox and (if you have one) a home battery. Values come live from the Miniserver; every minute they are stored, and per hour they are rolled up into kWh. The house load is calculated: grid + solar − Wallbox − battery.') %>
 </p>
 
 <div class="card">
-  <h2 style="margin-top:0;">Now</h2>
-  <div id="en-live" style="display:flex; gap:0.7rem; flex-wrap:wrap;"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+  <h2 style="margin-top:0;"><%= t('Now') %></h2>
+  <div id="en-live" style="display:flex; gap:0.7rem; flex-wrap:wrap;"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
 </div>
 
 <div class="card">
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
-    <h2 style="margin:0;">Per hour</h2>
+    <h2 style="margin:0;"><%= t('Per hour') %></h2>
     <div class="btn-row" style="margin:0;">
       <button type="button" class="btn-soft" id="en-prev">&lsaquo;</button>
       <strong id="en-day" style="min-width:8rem; text-align:center;"></strong>
@@ -29,17 +27,17 @@
 
 <% if (canEdit('energy')) { %>
 <div class="card">
-  <h2 style="margin-top:0;">Meters</h2>
+  <h2 style="margin-top:0;"><%= t('Meters') %></h2>
   <form method="post" action="/energy/meters">
     <table>
-      <thead><tr><th>Role</th><th>Loxone control</th><th>Counts the other way</th><th>Stored</th></tr></thead>
+      <thead><tr><th><%= t('Role') %></th><th><%= t('Loxone control') %></th><th><%= t('Counts the other way') %></th><th><%= t('Stored') %></th></tr></thead>
       <tbody>
         <% roles.forEach(r => { const m = byRole[r.key] || {}; const cur = m.miniserver_id && m.control_uuid ? m.miniserver_id + '|' + m.control_uuid : ''; const c = counts[r.key]; %>
           <tr>
             <td><strong><%= r.label %></strong><% if (r.bidirectional) { %><div class="hint" style="margin:0; font-size:0.75rem;"><%= r.importLabel %> / <%= r.exportLabel %></div><% } %></td>
             <td>
               <select name="meter_<%= r.key %>">
-                <option value="">— none —</option>
+                <option value=""><%= t('— none —') %></option>
                 <% candidates.forEach(cd => { const val = cd.miniserverId + '|' + cd.uuid; const sel = cur ? cur === val : (!byRole[r.key] && cd.suggest === r.key); %>
                   <option value="<%= val %>" <%= sel ? 'selected' : '' %>><%= cd.name %> (<%= cd.type %><%= cd.bidirectional ? ', bidirectional' : '' %> &middot; <%= cd.miniserverName %>)<%= !byRole[r.key] && cd.suggest === r.key ? ' — suggested' : '' %></option>
                 <% }) %>
@@ -52,24 +50,22 @@
       </tbody>
     </table>
     <p class="hint" style="margin:0.5rem 0 0;">
-      Positive means: grid = import, solar = production, Wallbox = charging the car, battery = charging. Turn on
-      <em>Counts the other way</em> for a meter that reports the opposite. Suggestions are based on the control's name and type.
-      <% if (counts.house) { %>House: <%= counts.house.n %> h stored.<% } %>
+      <%= t('Positive means: grid = import, solar = production, Wallbox = charging the car, battery = charging. Turn on') %>
+      <em><%= t('Counts the other way') %></em> <%= t('for a meter that reports the opposite. Suggestions are based on the control\'s name and type.') %>
+      <% if (counts.house) { %><%= t('House:') %> <%= counts.house.n %> <%= t('h stored.') %><% } %>
     </p>
-    <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> Save</button></div>
+    <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
   </form>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0;">History from Loxone</h2>
+  <h2 style="margin-top:0;"><%= t('History from Loxone') %></h2>
   <p class="hint">
-    Reads the hourly kWh of the chosen meters from the Miniserver's own statistics, so the house profile and the solar
-    correction don't start from zero. Hours LoxSuite measured itself are kept. Uses the Miniserver's MCP server: authorize it
-    once under Miniservers &rarr; edit &rarr; AI Assistant.
+    <%= t('Reads the hourly kWh of the chosen meters from the Miniserver\'s own statistics, so the house profile and the solar correction don\'t start from zero. Hours LoxSuite measured itself are kept. Uses the Miniserver\'s MCP server: authorize it once under Miniservers → edit → AI Assistant.') %>
   </p>
   <div class="btn-row" style="align-items:flex-end;">
-    <div><label>Days back</label><input type="number" id="en-import-days" value="90" min="1" max="400" style="width:7rem;"></div>
-    <button type="button" class="btn-soft" id="en-import-btn"><%- icon('download') %> Import</button>
+    <div><label><%= t('Days back') %></label><input type="number" id="en-import-days" value="90" min="1" max="400" style="width:7rem;"></div>
+    <button type="button" class="btn-soft" id="en-import-btn"><%- icon('download') %> <%= t('Import') %></button>
   </div>
   <div id="en-import-result" class="hint" style="margin-top:0.5rem;"></div>
 </div>
@@ -78,14 +74,14 @@
 <% if (canEdit('monitor')) { %>
 <div class="card">
   <details>
-    <summary><strong>Use in Monitor, dashboards &amp; Loxone</strong></summary>
-    <p class="hint">Published as retained MQTT topics <code>loxsuite/energy/&lt;role&gt;/power_kw</code> and <code>…/today_kwh</code> (also for the house).</p>
+    <summary><strong><%= t('Use in Monitor, dashboards & Loxone') %></strong></summary>
+    <p class="hint"><%= t('Published as retained MQTT topics') %> <code>loxsuite/energy/&lt;role&gt;/power_kw</code> and <code>…/today_kwh</code> <%= t('(also for the house).') %></p>
     <div id="en-monitor-picks" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:0.3rem 1rem;">
       <% Object.entries(topics).forEach(([k, t]) => { %>
         <label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" value="<%= k %>" <%= ['house_power_kw', 'pv_power_kw', 'grid_power_kw'].includes(k) ? 'checked' : '' %>> <code style="font-size:0.75rem;"><%= t %></code></label>
       <% }) %>
     </div>
-    <div class="btn-row" style="margin-top:0.6rem;"><button type="button" class="btn-soft" id="en-monitor-btn"><%- icon('plus') %> Add to Monitor</button></div>
+    <div class="btn-row" style="margin-top:0.6rem;"><button type="button" class="btn-soft" id="en-monitor-btn"><%- icon('plus') %> <%= t('Add to Monitor') %></button></div>
     <div id="en-monitor-result" class="hint" style="margin-top:0.4rem;"></div>
   </details>
 </div>

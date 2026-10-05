@@ -1,35 +1,32 @@
 <%- include('partials/head', { pageTitle: 'Logs', active: 'logs-system', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/system', topbarRangeValue: range, topbarRangeExtra: { q: query.q } }) %>
 
 <p class="hint">
-  This gateway's own housekeeping events &mdash; e.g. a disconnected MQTT client getting
-  auto-removed from <a href="/incoming/clients">Client Activity</a>. Persisted in SQLite and kept
-  for <strong><%= retentionDays %></strong> days, same retention setting as the other two tabs
-  &mdash; <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
+  <%= t('This gateway\'s own housekeeping events — e.g. a disconnected MQTT client getting auto-removed from') %> <a href="/incoming/clients"><%= t('Client Activity') %></a><%= t('. Persisted in SQLite and kept for') %> <strong><%= retentionDays %></strong> <%= t('days, same retention setting as the other two tabs —') %> <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
 </p>
 
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="search-combo log-search-combo">
       <select class="log-search-field">
-        <option value="time">Time</option>
-        <option value="message" selected>Message</option>
+        <option value="time"><%= t('Time') %></option>
+        <option value="message" selected><%= t('Message') %></option>
       </select>
       <div class="clearable-input-wrap">
-        <input type="text" class="log-search-query" placeholder="Filter…">
-        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+        <input type="text" class="log-search-query" placeholder="<%= t('Filter…') %>">
+        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
       </div>
     </div>
     <span class="log-selection-count hint" style="margin:0;"></span>
-    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label">Copy selection</span></button>
+    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label"><%= t('Copy selection') %></span></button>
     <% if (canEdit('logs_system')) { %>
-    <a href="/logs/system/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
+    <a href="/logs/system/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> <%= t('Export .log') %></button></a>
     <% } %>
   </div>
 
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th data-filter-key="time">Time</th><th data-filter-key="message">Message</th></tr>
+      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="<%= t('Select all') %>"></th><th data-filter-key="time"><%= t('Time') %></th><th data-filter-key="message"><%= t('Message') %></th></tr>
     </thead>
     <tbody>
       <% rows.forEach(r => { %>
@@ -40,7 +37,7 @@
         </tr>
       <% }) %>
       <% if (rows.length === 0) { %>
-        <tr><td colspan="3" class="empty">No system events recorded yet.</td></tr>
+        <tr><td colspan="3" class="empty"><%= t('No system events recorded yet.') %></td></tr>
       <% } %>
     </tbody>
   </table>

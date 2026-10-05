@@ -1,11 +1,9 @@
 <%- include('partials/head', { pageTitle: 'Logs', active: 'logs-mqtt', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/mqtt', topbarRangeValue: range, topbarRangeExtra: { q: query.q, level: query.level } }) %>
 
 <p class="hint">
-  Raw lines from the Mosquitto broker's own log file, newest first, refreshing every 5 seconds.
-  Persisted in SQLite and kept for <strong><%= retentionDays %></strong> days &mdash;
-  <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
-  <strong>Level</strong> is a best-effort guess from each line's wording (Mosquitto doesn't tag
-  lines with a severity itself) &mdash; not a guarantee.
+  <%= t('Raw lines from the Mosquitto broker\'s own log file, newest first, refreshing every 5 seconds. Persisted in SQLite and kept for') %> <strong><%= retentionDays %></strong> <%= t('days —') %>
+  <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
+  <strong><%= t('Level') %></strong> <%= t('is a best-effort guess from each line\'s wording (Mosquitto doesn\'t tag lines with a severity itself) — not a guarantee.') %>
 </p>
 
 <form method="get" action="/logs/mqtt" class="form-grid" style="margin-bottom:1rem; align-items:end;">
@@ -19,12 +17,12 @@
   %>
   <input type="hidden" name="range" value="<%= range %>">
   <div>
-    <label>Level</label>
+    <label><%= t('Level') %></label>
     <select name="level" data-auto-submit-form>
-      <option value="" <%= !query.level ? 'selected' : '' %>>All</option>
-      <option value="error" <%= query.level === 'error' ? 'selected' : '' %>>Error</option>
-      <option value="warning" <%= query.level === 'warning' ? 'selected' : '' %>>Warning</option>
-      <option value="info" <%= query.level === 'info' ? 'selected' : '' %>>Info</option>
+      <option value="" <%= !query.level ? 'selected' : '' %>><%= t('All') %></option>
+      <option value="error" <%= query.level === 'error' ? 'selected' : '' %>><%= t('Error') %></option>
+      <option value="warning" <%= query.level === 'warning' ? 'selected' : '' %>><%= t('Warning') %></option>
+      <option value="info" <%= query.level === 'info' ? 'selected' : '' %>><%= t('Info') %></option>
     </select>
   </div>
 </form>
@@ -33,12 +31,9 @@
   <% if (brokerOffline) { %>
   <div class="log-source-unavailable-notice">
     <div class="log-source-unavailable-notice-box">
-      <p style="margin:0 0 0.4rem; font-weight:600;">The MQTT broker isn't connected right now</p>
+      <p style="margin:0 0 0.4rem; font-weight:600;"><%= t('The MQTT broker isn\'t connected right now') %></p>
       <p class="hint" style="margin:0;">
-        LoxSuite's own connection to the broker is currently down, so no new log lines are coming
-        in &mdash; what's shown below is whatever was already recorded before that happened, not a
-        sign that nothing's going on. Check <a href="/settings/broker">Broker settings</a> or the
-        Mosquitto container itself.
+        <%= t('LoxSuite\'s own connection to the broker is currently down, so no new log lines are coming in — what\'s shown below is whatever was already recorded before that happened, not a sign that nothing\'s going on. Check') %> <a href="/settings/broker"><%= t('Broker settings') %></a> <%= t('or the Mosquitto container itself.') %>
       </p>
     </div>
   </div>
@@ -46,26 +41,26 @@
   <div class="table-toolbar">
     <div class="search-combo log-search-combo">
       <select class="log-search-field">
-        <option value="time">Time</option>
-        <option value="level">Level</option>
-        <option value="message" selected>Message</option>
+        <option value="time"><%= t('Time') %></option>
+        <option value="level"><%= t('Level') %></option>
+        <option value="message" selected><%= t('Message') %></option>
       </select>
       <div class="clearable-input-wrap">
-        <input type="text" class="log-search-query" placeholder="Filter…">
-        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+        <input type="text" class="log-search-query" placeholder="<%= t('Filter…') %>">
+        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
       </div>
     </div>
     <span class="log-selection-count hint" style="margin:0;"></span>
-    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label">Copy selection</span></button>
+    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label"><%= t('Copy selection') %></span></button>
     <% if (canEdit('logs_mqtt')) { %>
-    <a href="/logs/mqtt/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
+    <a href="/logs/mqtt/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> <%= t('Export .log') %></button></a>
     <% } %>
   </div>
 
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th data-filter-key="time">Time</th><th data-filter-key="level">Level</th><th data-filter-key="message">Message</th></tr>
+      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="<%= t('Select all') %>"></th><th data-filter-key="time"><%= t('Time') %></th><th data-filter-key="level"><%= t('Level') %></th><th data-filter-key="message"><%= t('Message') %></th></tr>
     </thead>
     <tbody>
       <% rows.forEach(r => { %>
@@ -78,7 +73,7 @@
         </tr>
       <% }) %>
       <% if (rows.length === 0) { %>
-        <tr><td colspan="4" class="empty">No log lines recorded yet.</td></tr>
+        <tr><td colspan="4" class="empty"><%= t('No log lines recorded yet.') %></td></tr>
       <% } %>
     </tbody>
   </table>

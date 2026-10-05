@@ -13,52 +13,47 @@
 </div>
 
 <p class="hint">
-  Generated fresh just now — <%= formatDateTime(report.generatedAt) %>. Usernames in every
-  structured field (Miniservers, connected devices, MQTT log lines) are partially masked (first +
-  last character only), and no passwords, tokens, or other secrets are ever included. One
-  exception: a System-log audit line (e.g. <em>"admin" created user "newuser".</em>) is free text
-  and can still name a real username in its own sentence — skim the Recent logs section below
-  before sharing if that matters to you.
+  <%= t('Generated fresh just now —') %> <%= formatDateTime(report.generatedAt) %><%= t('. Usernames in every structured field (Miniservers, connected devices, MQTT log lines) are partially masked (first + last character only), and no passwords, tokens, or other secrets are ever included. One exception: a System-log audit line (e.g.') %> <em><%= t('"admin" created user "newuser".') %></em><%= t(') is free text and can still name a real username in its own sentence — skim the Recent logs section below before sharing if that matters to you.') %>
 </p>
 
 <div class="row-actions" style="justify-content:flex-start; margin-bottom:1rem;">
-  <a class="inline" href="/admin/tech-report/download"><button type="button" class="btn-soft"><%- icon('download') %> Download JSON</button></a>
-  <a class="inline" href="/admin/tech-report"><button type="button" class="btn-soft"><%- icon('refresh') %> Regenerate</button></a>
+  <a class="inline" href="/admin/tech-report/download"><button type="button" class="btn-soft"><%- icon('download') %> <%= t('Download JSON') %></button></a>
+  <a class="inline" href="/admin/tech-report"><button type="button" class="btn-soft"><%- icon('refresh') %> <%= t('Regenerate') %></button></a>
 </div>
 
 <div class="card">
-  <h2>System</h2>
+  <h2><%= t('System') %></h2>
   <p class="hint">
-    <span style="display:block;">LoxSuite version: <strong style="color:var(--text);">v<%= report.system.loxsuiteVersion %></strong><% if (report.system.updateAvailable) { %> (v<%= report.system.latestKnownVersion %> available)<% } %></span>
-    <span style="display:block;">Database: <strong style="color:var(--text);"><%= report.system.dbBackend %></strong><% if (report.system.dbVersion) { %> (v<%= report.system.dbVersion %>)<% } %> — <%= report.system.dbLocation %></span>
-    <span style="display:block;">Node.js: <strong style="color:var(--text);"><%= report.system.nodeVersion %></strong></span>
-    <span style="display:block;">Platform: <strong style="color:var(--text);"><%= report.system.platform %></strong> (<%= report.system.hostname %>)</span>
-    <span style="display:block;">Gateway process uptime: <strong style="color:var(--text);"><%= formatDuration(report.system.processUptimeSeconds) %></strong></span>
+    <span style="display:block;"><%= t('LoxSuite version:') %> <strong style="color:var(--text);">v<%= report.system.loxsuiteVersion %></strong><% if (report.system.updateAvailable) { %> (v<%= report.system.latestKnownVersion %> <%= t('available)') %><% } %></span>
+    <span style="display:block;"><%= t('Database:') %> <strong style="color:var(--text);"><%= report.system.dbBackend %></strong><% if (report.system.dbVersion) { %> (v<%= report.system.dbVersion %>)<% } %> — <%= report.system.dbLocation %></span>
+    <span style="display:block;"><%= t('Node.js:') %> <strong style="color:var(--text);"><%= report.system.nodeVersion %></strong></span>
+    <span style="display:block;"><%= t('Platform:') %> <strong style="color:var(--text);"><%= report.system.platform %></strong> (<%= report.system.hostname %>)</span>
+    <span style="display:block;"><%= t('Gateway process uptime:') %> <strong style="color:var(--text);"><%= formatDuration(report.system.processUptimeSeconds) %></strong></span>
   </p>
 </div>
 
 <div class="card">
-  <h2>Config overview</h2>
+  <h2><%= t('Config overview') %></h2>
   <p class="hint">
-    <span style="display:block;">Miniservers: <strong style="color:var(--text);"><%= report.config.counts.miniservers %></strong></span>
-    <span style="display:block;">Loxone &rarr; MQTT mappings: <strong style="color:var(--text);"><%= report.config.counts.loxoneToMqttMappings %></strong></span>
-    <span style="display:block;">MQTT &rarr; Loxone mappings: <strong style="color:var(--text);"><%= report.config.counts.mqttToLoxoneMappings %></strong></span>
-    <span style="display:block;">Monitors: <strong style="color:var(--text);"><%= report.config.counts.monitors %></strong></span>
-    <span style="display:block;">Dashboards: <strong style="color:var(--text);"><%= report.config.counts.dashboards %></strong> (<%= report.config.counts.dashboardPanels %> panels)</span>
-    <span style="display:block;">Users: <strong style="color:var(--text);"><%= report.config.counts.users %></strong> across <%= report.config.counts.accessRoles %> Access Roles</span>
-    <span style="display:block;">Notification rules: <strong style="color:var(--text);"><%= report.config.counts.notificationRules %></strong></span>
+    <span style="display:block;"><%= t('Miniservers:') %> <strong style="color:var(--text);"><%= report.config.counts.miniservers %></strong></span>
+    <span style="display:block;"><%= t('Loxone → MQTT mappings:') %> <strong style="color:var(--text);"><%= report.config.counts.loxoneToMqttMappings %></strong></span>
+    <span style="display:block;"><%= t('MQTT → Loxone mappings:') %> <strong style="color:var(--text);"><%= report.config.counts.mqttToLoxoneMappings %></strong></span>
+    <span style="display:block;"><%= t('Monitors:') %> <strong style="color:var(--text);"><%= report.config.counts.monitors %></strong></span>
+    <span style="display:block;"><%= t('Dashboards:') %> <strong style="color:var(--text);"><%= report.config.counts.dashboards %></strong> (<%= report.config.counts.dashboardPanels %> <%= t('panels)') %></span>
+    <span style="display:block;"><%= t('Users:') %> <strong style="color:var(--text);"><%= report.config.counts.users %></strong> <%= t('across') %> <%= report.config.counts.accessRoles %> <%= t('Access Roles') %></span>
+    <span style="display:block;"><%= t('Notification rules:') %> <strong style="color:var(--text);"><%= report.config.counts.notificationRules %></strong></span>
   </p>
 
   <% if (report.config.miniservers.length) { %>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Name</th><th>Host</th><th>User</th><th>Configured status</th><th>Live connection</th><th>Firmware</th><th>Device health</th></tr>
+          <tr><th><%= t('Name') %></th><th><%= t('Host') %></th><th><%= t('User') %></th><th><%= t('Configured status') %></th><th><%= t('Live connection') %></th><th><%= t('Firmware') %></th><th><%= t('Device health') %></th></tr>
         </thead>
         <tbody>
           <% report.config.miniservers.forEach(ms => { %>
             <tr>
-              <td><%= ms.name %><% if (ms.isGatewayClient) { %> <span class="hint" style="margin:0;">(Client)</span><% } %></td>
+              <td><%= ms.name %><% if (ms.isGatewayClient) { %> <span class="hint" style="margin:0;"><%= t('(Client)') %></span><% } %></td>
               <td><%= ms.host %>:<%= ms.httpPort %><% if (ms.udpPort) { %> / udp <%= ms.udpPort %><% } %></td>
               <td><%= ms.username %></td>
               <td><%= ms.configuredStatus %><% if (ms.lastError) { %><br><span class="hint" style="margin:0;"><%= ms.lastError %></span><% } %></td>
@@ -66,8 +61,8 @@
               <td><%= ms.firmwareVersion || '-' %></td>
               <td>
                 <% if (ms.plcState || ms.cpuLoad != null || ms.heapStatus || ms.numTasks != null) { %>
-                  <span style="display:block;">PLC: <%= ms.plcState != null ? plcStateLabel(ms.plcState) : '-' %></span>
-                  <span class="hint" style="margin:0;">CPU <%= ms.cpuLoad != null ? ms.cpuLoad + '%' : '-' %>, heap <%= ms.heapStatus != null ? formatHeapStatus(ms.heapStatus) : '-' %><% if (ms.numTasks != null) { %>, <%= ms.numTasks %> tasks<% } %></span>
+                  <span style="display:block;"><%= t('PLC:') %> <%= ms.plcState != null ? plcStateLabel(ms.plcState) : '-' %></span>
+                  <span class="hint" style="margin:0;"><%= t('CPU') %> <%= ms.cpuLoad != null ? ms.cpuLoad + '%' : '-' %><%= t(', heap') %> <%= ms.heapStatus != null ? formatHeapStatus(ms.heapStatus) : '-' %><% if (ms.numTasks != null) { %>, <%= ms.numTasks %> <%= t('tasks') %><% } %></span>
                 <% } else { %>-<% } %>
               </td>
             </tr>
@@ -78,11 +73,11 @@
   <% } %>
 
   <% if (report.config.notificationRules.length) { %>
-    <p class="hint" style="margin-top:1rem;">Notification rules — the count above only says how many exist, not which ones or whether they're actually switched on:</p>
+    <p class="hint" style="margin-top:1rem;"><%= t('Notification rules — the count above only says how many exist, not which ones or whether they\'re actually switched on:') %></p>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Name</th><th>Trigger</th><th>Enabled</th><th>Channels</th></tr>
+          <tr><th><%= t('Name') %></th><th><%= t('Trigger') %></th><th><%= t('Enabled') %></th><th><%= t('Channels') %></th></tr>
         </thead>
         <tbody>
           <% report.config.notificationRules.forEach(r => { %>
@@ -92,7 +87,7 @@
               <td><span class="badge <%= r.enabled ? 'badge-ok' : 'badge-off' %>"><%= r.enabled ? 'Yes' : 'No' %></span></td>
               <td>
                 <% if (r.channelNames.length) { %><%= r.channelNames.join(', ') %>
-                <% } else if (r.deliversNowhere) { %><span class="badge badge-warning" title="Enabled but no channel selected — alerts show in the Notification Center but are never sent.">No channel</span>
+                <% } else if (r.deliversNowhere) { %><span class="badge badge-warning" title="<%= t('Enabled but no channel selected — alerts show in the Notification Center but are never sent.') %>"><%= t('No channel') %></span>
                 <% } else { %>-<% } %>
               </td>
             </tr>
@@ -104,35 +99,35 @@
 </div>
 
 <div class="card">
-  <h2>Backup status</h2>
+  <h2><%= t('Backup status') %></h2>
   <p class="hint">
-    <span style="display:block;">Scheduled backups: <strong style="color:var(--text);"><%= report.backup.enabled ? 'Enabled' : 'Disabled' %></strong><% if (report.backup.enabled && report.backup.scheduleCron) { %> (<%= report.backup.scheduleCron %>, keep <%= report.backup.retentionCount %>)<% } %></span>
-    <span style="display:block;">Last run: <strong style="color:var(--text);"><%= report.backup.lastRunAt ? formatDateTime(report.backup.lastRunAt) : 'never' %></strong><% if (report.backup.lastStatus) { %> — <%= report.backup.lastStatus %><% } %><% if (report.backup.lastError) { %><br><span class="hint" style="margin:0;"><%= report.backup.lastError %></span><% } %></span>
-    <span style="display:block;">Stored backups: <strong style="color:var(--text);"><%= report.backup.backupCount %></strong><% if (report.backup.mostRecentBackup) { %> — most recent <%= formatDateTime(report.backup.mostRecentBackup.createdAt) %><% } %></span>
+    <span style="display:block;"><%= t('Scheduled backups:') %> <strong style="color:var(--text);"><%= report.backup.enabled ? 'Enabled' : 'Disabled' %></strong><% if (report.backup.enabled && report.backup.scheduleCron) { %> (<%= report.backup.scheduleCron %><%= t(', keep') %> <%= report.backup.retentionCount %>)<% } %></span>
+    <span style="display:block;"><%= t('Last run:') %> <strong style="color:var(--text);"><%= report.backup.lastRunAt ? formatDateTime(report.backup.lastRunAt) : 'never' %></strong><% if (report.backup.lastStatus) { %> — <%= report.backup.lastStatus %><% } %><% if (report.backup.lastError) { %><br><span class="hint" style="margin:0;"><%= report.backup.lastError %></span><% } %></span>
+    <span style="display:block;"><%= t('Stored backups:') %> <strong style="color:var(--text);"><%= report.backup.backupCount %></strong><% if (report.backup.mostRecentBackup) { %> <%= t('— most recent') %> <%= formatDateTime(report.backup.mostRecentBackup.createdAt) %><% } %></span>
     <% if (report.backup.backupDirError) { %>
-      <span style="display:block; color:var(--danger, #d33);">Backup directory error: <%= report.backup.backupDirError %></span>
+      <span style="display:block; color:var(--danger, #d33);"><%= t('Backup directory error:') %> <%= report.backup.backupDirError %></span>
     <% } %>
     <% if (report.backup.rcloneEnabled) { %>
-      <span style="display:block;">Rclone remote: <strong style="color:var(--text);"><%= report.backup.rcloneRemote || '-' %></strong><% if (report.backup.rcloneLastRunAt) { %> — last run <%= formatDateTime(report.backup.rcloneLastRunAt) %> (<%= report.backup.rcloneLastStatus %>)<% } %></span>
+      <span style="display:block;"><%= t('Rclone remote:') %> <strong style="color:var(--text);"><%= report.backup.rcloneRemote || '-' %></strong><% if (report.backup.rcloneLastRunAt) { %> <%= t('— last run') %> <%= formatDateTime(report.backup.rcloneLastRunAt) %> (<%= report.backup.rcloneLastStatus %>)<% } %></span>
       <% if (report.backup.rcloneLastError) { %>
-        <span style="display:block; color:var(--danger, #d33);">Rclone error: <%= report.backup.rcloneLastError %></span>
+        <span style="display:block; color:var(--danger, #d33);"><%= t('Rclone error:') %> <%= report.backup.rcloneLastError %></span>
       <% } %>
     <% } %>
   </p>
 </div>
 
 <div class="card">
-  <h2>Database sequence health</h2>
+  <h2><%= t('Database sequence health') %></h2>
   <% if (!report.sequenceHealth.applicable) { %>
-    <p class="hint">Not applicable — SQLite has no separate id-sequence to fall out of sync.</p>
+    <p class="hint"><%= t('Not applicable — SQLite has no separate id-sequence to fall out of sync.') %></p>
   <% } else if (!report.sequenceHealth.issues.length) { %>
-    <p class="hint">All id-generators agree with their table's data. No action needed.</p>
+    <p class="hint"><%= t('All id-generators agree with their table\'s data. No action needed.') %></p>
   <% } else { %>
-    <p class="hint" style="color:var(--danger, #d33);">One or more tables have an id-generator that has fallen behind — the next insert into that table risks a primary-key collision.</p>
+    <p class="hint" style="color:var(--danger, #d33);"><%= t('One or more tables have an id-generator that has fallen behind — the next insert into that table risks a primary-key collision.') %></p>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Table</th><th>Highest row id</th><th>Next generated id</th></tr>
+          <tr><th><%= t('Table') %></th><th><%= t('Highest row id') %></th><th><%= t('Next generated id') %></th></tr>
         </thead>
         <tbody>
           <% report.sequenceHealth.issues.forEach(i => { %>
@@ -145,45 +140,45 @@
 </div>
 
 <div class="card">
-  <h2>Feature flags</h2>
+  <h2><%= t('Feature flags') %></h2>
   <p class="hint">
-    <span style="display:block;">Database backend: <strong style="color:var(--text);"><%= report.featureFlags.dbBackend %></strong></span>
-    <span style="display:block;">AI assistant: <strong style="color:var(--text);"><%= report.featureFlags.aiAssistantEnabled ? 'Enabled' : 'Disabled' %></strong><% if (report.featureFlags.aiAssistantEnabled) { %> (<%= report.featureFlags.aiProvider %> / <%= report.featureFlags.aiModel %><% if (report.featureFlags.aiEffort) { %>, effort <%= report.featureFlags.aiEffort %><% } %>)<% } %></span>
-    <span style="display:block;">SSO: <strong style="color:var(--text);"><%= report.featureFlags.ssoEnabled ? 'Enabled' : 'Disabled' %></strong><% if (report.featureFlags.ssoEnabled && report.featureFlags.localLoginDisabled) { %> (local login disabled)<% } %></span>
-    <span style="display:block;">TRUST_PROXY configured: <strong style="color:var(--text);"><%= report.featureFlags.trustProxyConfigured ? 'Yes' : 'No' %></strong></span>
+    <span style="display:block;"><%= t('Database backend:') %> <strong style="color:var(--text);"><%= report.featureFlags.dbBackend %></strong></span>
+    <span style="display:block;"><%= t('AI assistant:') %> <strong style="color:var(--text);"><%= report.featureFlags.aiAssistantEnabled ? 'Enabled' : 'Disabled' %></strong><% if (report.featureFlags.aiAssistantEnabled) { %> (<%= report.featureFlags.aiProvider %> / <%= report.featureFlags.aiModel %><% if (report.featureFlags.aiEffort) { %><%= t(', effort') %> <%= report.featureFlags.aiEffort %><% } %>)<% } %></span>
+    <span style="display:block;"><%= t('SSO:') %> <strong style="color:var(--text);"><%= report.featureFlags.ssoEnabled ? 'Enabled' : 'Disabled' %></strong><% if (report.featureFlags.ssoEnabled && report.featureFlags.localLoginDisabled) { %> <%= t('(local login disabled)') %><% } %></span>
+    <span style="display:block;"><%= t('TRUST_PROXY configured:') %> <strong style="color:var(--text);"><%= report.featureFlags.trustProxyConfigured ? 'Yes' : 'No' %></strong></span>
   </p>
 </div>
 
 <div class="card">
-  <h2>Live status</h2>
+  <h2><%= t('Live status') %></h2>
   <p class="hint">
-    <span style="display:block;">MQTT broker connection: <strong style="color:var(--text);"><%= report.live.mqtt.connected ? 'Connected' : 'Disconnected' %></strong><% if (report.live.mqtt.host) { %> (<%= report.live.mqtt.host %>:<%= report.live.mqtt.port %>)<% } %></span>
-    <span style="display:block;">Throughput (as seen by LoxSuite): <strong style="color:var(--text);"><%= report.live.mqtt.messagesPerSecond %> msg/s</strong>, <%= formatCount(report.live.mqtt.totalMessages) %> total, <%= formatCount(report.live.mqtt.topicsSeen) %> topics seen</span>
-    <span style="display:block;">Connected devices: <strong style="color:var(--text);"><%= report.live.connectedDeviceCount %></strong> of <%= report.live.devices.length %> known</span>
+    <span style="display:block;"><%= t('MQTT broker connection:') %> <strong style="color:var(--text);"><%= report.live.mqtt.connected ? 'Connected' : 'Disconnected' %></strong><% if (report.live.mqtt.host) { %> (<%= report.live.mqtt.host %>:<%= report.live.mqtt.port %>)<% } %></span>
+    <span style="display:block;"><%= t('Throughput (as seen by LoxSuite):') %> <strong style="color:var(--text);"><%= report.live.mqtt.messagesPerSecond %> <%= t('msg/s') %></strong>, <%= formatCount(report.live.mqtt.totalMessages) %> <%= t('total,') %> <%= formatCount(report.live.mqtt.topicsSeen) %> <%= t('topics seen') %></span>
+    <span style="display:block;"><%= t('Connected devices:') %> <strong style="color:var(--text);"><%= report.live.connectedDeviceCount %></strong> of <%= report.live.devices.length %> <%= t('known') %></span>
   </p>
 
   <% if (report.live.broker.version) { %>
     <p class="hint">
-      <span style="display:block;">Broker (<%= report.live.broker.version %>), up <strong style="color:var(--text);"><%= report.live.broker.uptimeSeconds != null ? formatDuration(report.live.broker.uptimeSeconds) : '-' %></strong> —
-        <strong style="color:var(--text);"><%= report.live.broker.clientsConnected != null ? report.live.broker.clientsConnected : '-' %></strong> clients connected
-        <% if (report.live.broker.clientsTotal != null) { %>(<%= report.live.broker.clientsTotal %> registered<% if (report.live.broker.clientsMaximum != null) { %>, <%= report.live.broker.clientsMaximum %> ever at once<% } %>)<% } %>
+      <span style="display:block;"><%= t('Broker (') %><%= report.live.broker.version %><%= t('), up') %> <strong style="color:var(--text);"><%= report.live.broker.uptimeSeconds != null ? formatDuration(report.live.broker.uptimeSeconds) : '-' %></strong> —
+        <strong style="color:var(--text);"><%= report.live.broker.clientsConnected != null ? report.live.broker.clientsConnected : '-' %></strong> <%= t('clients connected') %>
+        <% if (report.live.broker.clientsTotal != null) { %>(<%= report.live.broker.clientsTotal %> <%= t('registered') %><% if (report.live.broker.clientsMaximum != null) { %>, <%= report.live.broker.clientsMaximum %> <%= t('ever at once') %><% } %>)<% } %>
       </span>
-      <span style="display:block;">Broker throughput (its own count, not just what LoxSuite saw):
-        <strong style="color:var(--text);"><%= report.live.broker.messagesReceived != null ? formatCount(report.live.broker.messagesReceived) : '-' %></strong> received /
-        <strong style="color:var(--text);"><%= report.live.broker.messagesSent != null ? formatCount(report.live.broker.messagesSent) : '-' %></strong> sent
-        <% if (report.live.broker.bytesReceived != null && report.live.broker.bytesSent != null) { %>(<%= formatBytes(report.live.broker.bytesReceived) %> in / <%= formatBytes(report.live.broker.bytesSent) %> out)<% } %>
+      <span style="display:block;"><%= t('Broker throughput (its own count, not just what LoxSuite saw):') %>
+        <strong style="color:var(--text);"><%= report.live.broker.messagesReceived != null ? formatCount(report.live.broker.messagesReceived) : '-' %></strong> <%= t('received /') %>
+        <strong style="color:var(--text);"><%= report.live.broker.messagesSent != null ? formatCount(report.live.broker.messagesSent) : '-' %></strong> <%= t('sent') %>
+        <% if (report.live.broker.bytesReceived != null && report.live.broker.bytesSent != null) { %>(<%= formatBytes(report.live.broker.bytesReceived) %> <%= t('in /') %> <%= formatBytes(report.live.broker.bytesSent) %> <%= t('out)') %><% } %>
       </span>
-      <span style="display:block;"><%= report.live.broker.retainedMessageCount != null ? report.live.broker.retainedMessageCount : '-' %> retained messages held, <%= report.live.broker.subscriptionsCount != null ? report.live.broker.subscriptionsCount : '-' %> active subscriptions</span>
+      <span style="display:block;"><%= report.live.broker.retainedMessageCount != null ? report.live.broker.retainedMessageCount : '-' %> <%= t('retained messages held,') %> <%= report.live.broker.subscriptionsCount != null ? report.live.broker.subscriptionsCount : '-' %> <%= t('active subscriptions') %></span>
     </p>
   <% } else { %>
-    <p class="hint">Broker stats ($SYS/broker/#) not received yet — the broker publishes these every ~10s after the gateway (re)connects.</p>
+    <p class="hint"><%= t('Broker stats ($SYS/broker/#) not received yet — the broker publishes these every ~10s after the gateway (re)connects.') %></p>
   <% } %>
 
   <% if (report.live.devices.length) { %>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Device</th><th>User</th><th>Status</th><th>Since</th></tr>
+          <tr><th><%= t('Device') %></th><th><%= t('User') %></th><th><%= t('Status') %></th><th><%= t('Since') %></th></tr>
         </thead>
         <tbody>
           <% report.live.devices.forEach(d => { %>
@@ -201,11 +196,11 @@
 </div>
 
 <div class="card">
-  <h2>Recent logs <span class="hint" style="margin:0;">(System / MQTT / Loxone Commands, most recent <%= report.recentLogs.length %>)</span></h2>
+  <h2><%= t('Recent logs') %> <span class="hint" style="margin:0;"><%= t('(System / MQTT / Loxone Commands, most recent') %> <%= report.recentLogs.length %>)</span></h2>
   <div class="table-wrap" style="max-height:24rem; overflow-y:auto;">
     <table>
       <thead>
-        <tr><th>Time</th><th>Source</th><th>Line</th></tr>
+        <tr><th><%= t('Time') %></th><th><%= t('Source') %></th><th><%= t('Line') %></th></tr>
       </thead>
       <tbody>
         <% report.recentLogs.forEach(l => { %>

@@ -5,7 +5,7 @@
 <div class="tabs">
   <% /* canEdit, not canView — same reasoning as the sidebar's own Settings link (see head.ejs):
         nothing on this tab renders for a view-only grant, it's all edit controls. */ %>
-  <% if (canEdit('settings')) { %><a href="/settings/broker" class="<%= active === 'broker-settings' ? 'active' : '' %>">Broker connection</a><% } %>
-  <% if (canView('mqtt_users')) { %><a href="/mqtt-users" class="<%= active === 'mqtt-users' ? 'active' : '' %>">Users</a><% } %>
-  <% if (canView('mqtt_roles')) { %><a href="/mqtt-roles" class="<%= active === 'mqtt-roles' ? 'active' : '' %>">Roles</a><% } %>
+  <% if (canEdit('settings')) { %><a href="/settings/broker" class="<%= active === 'broker-settings' ? 'active' : '' %>"><%= t('Broker connection') %></a><% } %>
+  <% if (canView('mqtt_users')) { %><a href="/mqtt-users" class="<%= active === 'mqtt-users' ? 'active' : '' %>"><%= t('Users') %></a><% } %>
+  <% if (canView('mqtt_roles')) { %><a href="/mqtt-roles" class="<%= active === 'mqtt-roles' ? 'active' : '' %>"><%= t('Roles') %></a><% } %>
 </div>

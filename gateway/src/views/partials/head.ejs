@@ -14,7 +14,29 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="LoxSuite">
   <link rel="stylesheet" href="/style.css?v=<%= assetVersion %>">
+  <% if (typeof lang !== 'undefined' && lang !== 'en') { %>
+  <script src="/i18n/<%= lang %>.js?v=<%= typeof i18nVersion !== 'undefined' ? i18nVersion : assetVersion %>"></script>
+  <script src="/i18n.js?v=<%= assetVersion %>"></script>
+  <% } %>
   <script>
+    // Dates and numbers in the browser follow the user's language (nl -> nl-NL) and the clock setting
+    // (Administration > Languages, 24 h by default) instead of the browser's own locale: every
+    // toLocale*String call without an explicit locale gets it, and times get the hour cycle.
+    (function () {
+      var L = <%- JSON.stringify(typeof uiLocale !== 'undefined' ? uiLocale : 'en-GB') %>, H12 = <%- JSON.stringify(typeof clock12 !== 'undefined' && !!clock12) %>;
+      window.LS_LOCALE = L; window.LS_CLOCK12 = H12;
+      var fix = function (l) { return l === undefined || l === null || (Array.isArray(l) && !l.length) ? L : l; };
+      var hc = function (o) { o = Object.assign({}, o || {}); if (o.hour12 === undefined && o.hourCycle === undefined) o.hourCycle = H12 ? 'h12' : 'h23'; return o; };
+      var D = Date.prototype, ts = D.toLocaleTimeString, s = D.toLocaleString, ds = D.toLocaleDateString, n = Number.prototype.toLocaleString;
+      D.toLocaleTimeString = function (l, o) { return ts.call(this, fix(l), hc(o)); };
+      D.toLocaleString = function (l, o) { return s.call(this, fix(l), hc(o)); };
+      D.toLocaleDateString = function (l, o) { return ds.call(this, fix(l), o); };
+      Number.prototype.toLocaleString = function (l, o) { return n.call(this, fix(l), o); };
+      var DTF = Intl.DateTimeFormat;
+      var W = function (l, o) { o = Object.assign({}, o || {}); if (o.hour !== undefined && o.hour12 === undefined && o.hourCycle === undefined) o.hourCycle = H12 ? 'h12' : 'h23'; return new DTF(fix(l), o); };
+      W.prototype = DTF.prototype; W.supportedLocalesOf = DTF.supportedLocalesOf;
+      Intl.DateTimeFormat = W;
+    })();
     // Applied before first paint to avoid a flash of the wrong theme.
     (function () {
       var saved = localStorage.getItem('theme');
@@ -45,11 +67,11 @@
   <aside class="sidebar">
     <div class="brand">
       <span class="brand-icon"><%- icon('logo', { size: 18 }) %></span>
-      <span>LoxSuite</span>
+      <span><%= t('LoxSuite') %></span>
     </div>
     <% if (currentUser && currentUser.isAdmin && getSqliteImportStatus().available) { %>
       <a href="/setup/import" style="display:flex; align-items:center; gap:0.4rem; margin:0 0 0.75rem; padding:0.5rem 0.7rem; border-radius:var(--radius); background:var(--surface-alt); border:1px solid var(--danger); color:var(--danger); font-size:0.8rem; font-weight:500; text-decoration:none;">
-        <%- icon('refresh', { size: 13 }) %> Existing SQLite data found — import it
+        <%- icon('refresh', { size: 13 }) %> <%= t('Existing SQLite data found — import it') %>
       </a>
     <% } %>
     <%
@@ -200,27 +222,27 @@
       const versionStatus = getVersionStatus();
     %>
     <div class="sidebar-version">
-      <a href="https://github.com/DaveRutten/LoxSuite/releases" target="_blank" rel="noopener" class="sidebar-version-current" title="View releases on GitHub">v<%= versionStatus.currentVersion %></a>
+      <a href="https://github.com/DaveRutten/LoxSuite/releases" target="_blank" rel="noopener" class="sidebar-version-current" title="<%= t('View releases on GitHub') %>">v<%= versionStatus.currentVersion %></a>
       <% if (versionStatus.updateAvailable) { %>
         <a href="https://github.com/DaveRutten/LoxSuite/releases" target="_blank" rel="noopener"
            class="sidebar-version-update" title="Running v<%= versionStatus.currentVersion %> — v<%= versionStatus.latestVersion %> is available on GitHub">
-          <%- icon('refresh') %> v<%= versionStatus.latestVersion %> available
+          <%- icon('refresh') %> v<%= versionStatus.latestVersion %> <%= t('available') %>
         </a>
       <% } %>
     </div>
   </aside>
   <div class="content">
     <header class="topbar">
-      <button type="button" id="mobile-nav-toggle" class="icon-btn mobile-nav-toggle" title="Menu"><%- icon('menu') %></button>
+      <button type="button" id="mobile-nav-toggle" class="icon-btn mobile-nav-toggle" title="<%= t('Menu') %>"><%- icon('menu') %></button>
       <div class="topbar-title">
         <h1 id="page-title"><%= t(pageTitle) %></h1>
         <% if (typeof dashboardId !== 'undefined' && typeof canEditPanels !== 'undefined' && canEditPanels) { %>
-        <button type="button" id="dashboard-rename-trigger" class="icon-btn" title="Rename dashboard" aria-label="Rename dashboard"><%- icon('edit') %></button>
+        <button type="button" id="dashboard-rename-trigger" class="icon-btn" title="<%= t('Rename dashboard') %>" aria-label="<%= t('Rename dashboard') %>"><%- icon('edit') %></button>
         <form method="post" action="/dashboards/<%= dashboardId %>/rename" id="dashboard-rename-form" class="dashboard-rename-form" hidden>
           <input type="hidden" name="redirect_to" value="/dashboards/<%= dashboardId %>">
           <input type="text" name="name" value="<%= pageTitle %>" required>
-          <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
-          <button type="button" id="dashboard-rename-cancel" class="btn-soft">Cancel</button>
+          <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
+          <button type="button" id="dashboard-rename-cancel" class="btn-soft"><%= t('Cancel') %></button>
         </form>
         <script>
           // Standalone, not the shared [data-toggle-row] mechanism (tables.js) — that one only
@@ -276,7 +298,7 @@
           <% Object.keys(topbarRangeExtraParams).forEach(function (key) { %>
             <% if (topbarRangeExtraParams[key]) { %><input type="hidden" name="<%= key %>" value="<%= topbarRangeExtraParams[key] %>"><% } %>
           <% }) %>
-          <button type="submit" class="btn-soft range-go-btn">Go</button>
+          <button type="submit" class="btn-soft range-go-btn"><%= t('Go') %></button>
         </form>
         <% } %>
         <%
@@ -288,9 +310,9 @@
           // form (monitor-detail.ejs) — those stay as their own dedicated buttons right there, since
           // that's a drawer/inline form a user is actively filling in, not a quick sitewide toggle.
         %>
-        <button type="button" id="topbar-hints-toggle" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide help text under form fields sitewide" aria-label="Show or hide help text under form fields"><%- icon('lightbulb') %></button>
+        <button type="button" id="topbar-hints-toggle" class="icon-btn icon-btn-neutral hints-toggle-btn" title="<%= t('Show/hide help text under form fields sitewide') %>" aria-label="<%= t('Show or hide help text under form fields') %>"><%- icon('lightbulb') %></button>
         <% if (helpAnchor) { %>
-          <a class="topbar-help" href="/help#help-<%= helpAnchor %>" data-help-open data-help-anchor="help-<%= helpAnchor %>" title="Explain this page" aria-label="Help">
+          <a class="topbar-help" href="/help#help-<%= helpAnchor %>" data-help-open data-help-anchor="help-<%= helpAnchor %>" title="<%= t('Explain this page') %>" aria-label="<%= t('Help') %>">
             <%- icon('help') %>
           </a>
         <% } %>
@@ -299,31 +321,31 @@
           <span class="support-sparkle-precess support-sparkle-precess-1" aria-hidden="true"><span class="support-sparkle-ellipse"><span class="support-sparkle-orbit support-sparkle-orbit-1"><span class="support-sparkle support-sparkle-pink"></span></span></span></span>
           <span class="support-sparkle-precess support-sparkle-precess-2" aria-hidden="true"><span class="support-sparkle-ellipse"><span class="support-sparkle-orbit support-sparkle-orbit-2"><span class="support-sparkle support-sparkle-2 support-sparkle-purple"></span></span></span></span>
           <span class="support-sparkle support-sparkle-3 support-sparkle-blue" aria-hidden="true"></span>
-          <button type="button" id="support-open-btn" class="topbar-help topbar-support-btn" title="Support this project" aria-label="Support this project">
+          <button type="button" id="support-open-btn" class="topbar-help topbar-support-btn" title="<%= t('Support this project') %>" aria-label="<%= t('Support this project') %>">
             <%- icon('heart') %>
           </button>
         </span>
         <dialog id="support-dialog" class="update-changelog-dialog support-dialog">
-          <h2>Support LoxSuite</h2>
-          <p class="hint">LoxSuite is built and maintained by a solo developer. If it's made managing your Loxone/MQTT setup easier, here's how you can help keep it going.</p>
+          <h2><%= t('Support LoxSuite') %></h2>
+          <p class="hint"><%= t('LoxSuite is built and maintained by a solo developer. If it\'s made managing your Loxone/MQTT setup easier, here\'s how you can help keep it going.') %></p>
           <div class="support-dialog-links">
             <a href="https://github.com/DaveRutten/LoxSuite" target="_blank" rel="noopener" class="support-dialog-link">
               <%- icon('star') %>
               <span>
-                <strong>Star on GitHub</strong>
-                <small>Helps new people find LoxSuite and keeps me motivated.</small>
+                <strong><%= t('Star on GitHub') %></strong>
+                <small><%= t('Helps new people find LoxSuite and keeps me motivated.') %></small>
               </span>
             </a>
             <a href="https://paypal.me/LoxSuite" target="_blank" rel="noopener" class="support-dialog-link">
               <%- icon('heart') %>
               <span>
-                <strong>Donate via PayPal</strong>
-                <small>A one-time tip to fuel late-night coding sessions.</small>
+                <strong><%= t('Donate via PayPal') %></strong>
+                <small><%= t('A one-time tip to fuel late-night coding sessions.') %></small>
               </span>
             </a>
           </div>
           <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
-            <button type="button" class="btn-soft" id="support-dialog-close">Close</button>
+            <button type="button" class="btn-soft" id="support-dialog-close"><%= t('Close') %></button>
           </div>
         </dialog>
         <script>
@@ -338,7 +360,7 @@
         </script>
         <% if (currentUser) { %>
           <div class="notification-center">
-            <button type="button" id="notification-center-btn" class="notification-center-btn" title="Notifications" aria-label="Notifications">
+            <button type="button" id="notification-center-btn" class="notification-center-btn" title="<%= t('Notifications') %>" aria-label="<%= t('Notifications') %>">
               <%- icon('bell') %>
               <% if (unreadNotificationCount > 0) { %>
                 <span id="notification-center-badge" class="notification-center-badge"><%= unreadNotificationCount > 99 ? '99+' : unreadNotificationCount %></span>
@@ -348,9 +370,9 @@
               <div id="notification-center-list"><%- include('notification-center-items', { recentNotifications }) %></div>
               <div class="account-menu-divider"></div>
               <div class="notification-center-footer">
-                <button type="button" id="notification-center-dismiss-all" class="btn-soft" <%= recentNotifications.length === 0 ? 'disabled' : '' %>>Mark all read</button>
+                <button type="button" id="notification-center-dismiss-all" class="btn-soft" <%= recentNotifications.length === 0 ? 'disabled' : '' %>><%= t('Mark all read') %></button>
                 <% if (canView('logs_notifications')) { %>
-                  <a href="/logs/notifications" id="notification-center-view-all">View all</a>
+                  <a href="/logs/notifications" id="notification-center-view-all"><%= t('View all') %></a>
                 <% } %>
               </div>
             </div>
@@ -365,8 +387,8 @@
               <span class="account-menu-name"><%= currentUser.displayName || currentUser.username %></span>
             </button>
             <div id="account-menu-panel" class="account-menu-panel" hidden>
-              <a href="/profile" class="<%= active === 'profile' ? 'active' : '' %>">Profile</a>
-              <a href="/app" class="<%= active === 'app' ? 'active' : '' %>">App &amp; push</a>
+              <a href="/profile" class="<%= active === 'profile' ? 'active' : '' %>"><%= t('Profile') %></a>
+              <a href="/app" class="<%= active === 'app' ? 'active' : '' %>"><%= t('App & push') %></a>
               <% /* Settings has no meaningful read-only view — every field on it is an edit
                      control, nothing to look at without also being able to change it — so this
                      (and the page's own content, see settings-general.ejs) gates on edit, not
@@ -374,14 +396,14 @@
                      end: canView(true) but a blank page once there, since nothing on it renders
                      for anyone who can't also canEdit. */ %>
               <% if (canEdit('settings')) { %>
-                <a href="/settings" class="<%= active === 'settings' ? 'active' : '' %>">Settings</a>
+                <a href="/settings" class="<%= active === 'settings' ? 'active' : '' %>"><%= t('Settings') %></a>
               <% } %>
               <% if (currentUser.isAdmin) { %>
-                <a href="/admin/general" class="<%= active === 'admin' ? 'active' : '' %>">Administration</a>
+                <a href="/admin/general" class="<%= active === 'admin' ? 'active' : '' %>"><%= t('Administration') %></a>
               <% } %>
               <div class="account-menu-divider"></div>
               <form method="post" action="/logout">
-                <button type="submit"><%- icon('logout') %> Log out</button>
+                <button type="submit"><%- icon('logout') %> <%= t('Log out') %></button>
               </form>
             </div>
           </div>

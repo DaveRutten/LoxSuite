@@ -4,190 +4,175 @@
   <p class="error"><%= error %></p>
 <% } %>
 <% if (saved) { %>
-  <p class="hint" style="color: var(--success);">Saved.</p>
+  <p class="hint" style="color: var(--success);"><%= t('Saved.') %></p>
 <% } %>
 
 <% if (canEdit('settings')) { %>
 <form method="post" action="/settings" id="settings-form">
   <div class="card">
-    <h2>Display</h2>
+    <h2><%= t('Display') %></h2>
     <div class="settings-field">
-      <label>Timezone</label>
+      <label><%= t('Timezone') %></label>
       <select name="display_timezone">
         <% timezones.forEach(tz => { %>
           <option value="<%= tz %>" <%= tz === gatewaySettings.display_timezone ? 'selected' : '' %>><%= tz %></option>
         <% }) %>
       </select>
       <p class="hint">
-        Every date and time shown anywhere in LoxSuite is rendered in this timezone — an IANA name
-        like <code>Europe/Amsterdam</code> (not a fixed offset, so daylight saving is handled
-        automatically). Defaults to <code>UTC</code>, which is always correct but rarely what you
-        actually want to see.
+        <%= t('Every date and time shown anywhere in LoxSuite is rendered in this timezone — an IANA name like') %> <code>Europe/Amsterdam</code> <%= t('(not a fixed offset, so daylight saving is handled automatically). Defaults to') %> <code>UTC</code><%= t(', which is always correct but rarely what you actually want to see.') %>
       </p>
+    </div>
+    <div class="settings-field">
+      <label><%= t('Language') %></label>
+      <select name="default_language" data-no-i18n>
+        <% langOptions.forEach(l => { %><option value="<%= l.code %>" <%= l.code === defaultLanguage ? 'selected' : '' %>><%= l.name %></option><% }) %>
+      </select>
+      <p class="hint"><%= t('The language for everyone who did not choose one in their profile. Adding languages and translating: Administration > Languages.') %></p>
+    </div>
+    <div class="settings-field">
+      <label><%= t('Clock') %></label>
+      <select name="clock">
+        <option value="24" <%= clockSetting === '24' ? 'selected' : '' %>><%= t('24-hour (14:30)') %></option>
+        <option value="12" <%= clockSetting === '12' ? 'selected' : '' %>><%= t('12-hour (2:30 PM)') %></option>
+      </select>
+      <p class="hint"><%= t('How times are shown for everyone. Dates and numbers follow each user\'s language.') %></p>
     </div>
   </div>
 
   <div class="card">
-    <h2>Data retention</h2>
-    <p class="hint">How long history is kept before being purged automatically.</p>
+    <h2><%= t('Data retention') %></h2>
+    <p class="hint"><%= t('How long history is kept before being purged automatically.') %></p>
 
     <div class="settings-field-list">
       <div class="settings-field">
-        <label>Logs (days)</label>
+        <label><%= t('Logs (days)') %></label>
         <input type="number" name="log_retention_days" min="1" value="<%= gatewaySettings.log_retention_days %>">
         <p class="hint">
-          Raw log lines on the <a href="/logs">Logs</a> page (MQTT broker log, Loxone log, and the
-          System log) older than this are deleted automatically, once a day.
+          <%= t('Raw log lines on the') %> <a href="/logs"><%= t('Logs') %></a> <%= t('page (MQTT broker log, Loxone log, and the System log) older than this are deleted automatically, once a day.') %>
         </p>
       </div>
       <div class="settings-field">
-        <label>Monitor history (days)</label>
+        <label><%= t('Monitor history (days)') %></label>
         <input type="number" name="monitor_retention_days" min="1" value="<%= gatewaySettings.monitor_retention_days %>">
         <p class="hint">
-          Recorded readings on the <a href="/monitor">Monitor</a> page older than this are deleted
-          automatically — keeps the database from growing forever on monitors polled frequently.
+          <%= t('Recorded readings on the') %> <a href="/monitor"><%= t('Monitor') %></a> <%= t('page older than this are deleted automatically — keeps the database from growing forever on monitors polled frequently.') %>
         </p>
       </div>
       <label class="toggle-row">
         <input type="checkbox" name="monitor_chart_downsample_enabled" <%= gatewaySettings.monitor_chart_downsample_enabled ? 'checked' : '' %>>
         <span>
-          <strong>Downsample large chart series</strong>
+          <strong><%= t('Downsample large chart series') %></strong>
           <span class="hint">
-            A monitor with far more readings than a chart's own point budget (2000) otherwise shows
-            only its newest slice within the requested range, with nothing indicating older data in
-            that range even exists. On (recommended), it averages down to that budget instead, so
-            the chart always covers the full range you asked for. Off shows exact raw readings with
-            no averaging, at the cost of a fast-changing monitor's older history silently missing
-            from a wide range.
+            <%= t('A monitor with far more readings than a chart\'s own point budget (2000) otherwise shows only its newest slice within the requested range, with nothing indicating older data in that range even exists. On (recommended), it averages down to that budget instead, so the chart always covers the full range you asked for. Off shows exact raw readings with no averaging, at the cost of a fast-changing monitor\'s older history silently missing from a wide range.') %>
           </span>
         </span>
       </label>
       <div class="settings-field">
-        <label>Notification history (days)</label>
+        <label><%= t('Notification history (days)') %></label>
         <input type="number" name="notification_retention_days" min="1" value="<%= gatewaySettings.notification_retention_days %>">
         <p class="hint">
-          Entries on the <a href="/logs/notifications">Notifications</a> log older than this are
-          deleted automatically. Kept longer than raw logs by default — these are curated events,
-          not high-volume protocol lines.
+          <%= t('Entries on the') %> <a href="/logs/notifications"><%= t('Notifications') %></a> <%= t('log older than this are deleted automatically. Kept longer than raw logs by default — these are curated events, not high-volume protocol lines.') %>
         </p>
       </div>
       <div class="settings-field">
-        <label>Client Activity, after disconnect (hours)</label>
+        <label><%= t('Client Activity, after disconnect (hours)') %></label>
         <input type="number" name="client_retention_hours" min="1" value="<%= gatewaySettings.client_retention_hours %>">
         <p class="hint">
-          How long a disconnected MQTT client stays listed on
-          <a href="/incoming/clients">Client Activity</a> before being dropped from the list — each
-          removal is logged on the <a href="/logs/system">System</a> log. Clients that are still
-          actually connected are never affected by this.
+          <%= t('How long a disconnected MQTT client stays listed on') %>
+          <a href="/incoming/clients"><%= t('Client Activity') %></a> <%= t('before being dropped from the list — each removal is logged on the') %> <a href="/logs/system"><%= t('System') %></a> <%= t('log. Clients that are still actually connected are never affected by this.') %>
         </p>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <h2>Health monitoring</h2>
+    <h2><%= t('Health monitoring') %></h2>
     <div class="settings-field-list">
       <div class="settings-field">
-        <label>Heartbeat URL (dead-man's-switch)</label>
+        <label><%= t('Heartbeat URL (dead-man\'s-switch)') %></label>
         <input type="url" name="heartbeat_url" placeholder="https://hc-ping.com/your-uuid" value="<%= gatewaySettings.heartbeat_url || '' %>">
         <p class="hint">
-          LoxSuite can't tell you when LoxSuite itself is down &mdash; the thing that would send the
-          alert is what's gone. Instead it pings this URL on a schedule; point it at an external
-          watchdog (e.g. <a href="https://healthchecks.io" target="_blank" rel="noopener">healthchecks.io</a>
-          or an Uptime Kuma push monitor) that alerts <em>you</em> when the pings stop arriving.
-          Leave blank to turn the heartbeat off.
+          <%= t('LoxSuite can\'t tell you when LoxSuite itself is down — the thing that would send the alert is what\'s gone. Instead it pings this URL on a schedule; point it at an external watchdog (e.g.') %> <a href="https://healthchecks.io" target="_blank" rel="noopener"><%= t('healthchecks.io') %></a>
+          <%= t('or an Uptime Kuma push monitor) that alerts') %> <em>you</em> <%= t('when the pings stop arriving. Leave blank to turn the heartbeat off.') %>
         </p>
       </div>
       <div class="settings-field">
-        <label>Heartbeat interval (minutes)</label>
+        <label><%= t('Heartbeat interval (minutes)') %></label>
         <input type="number" name="heartbeat_interval_minutes" min="0" value="<%= gatewaySettings.heartbeat_interval_minutes %>">
         <p class="hint">
-          How often to ping the URL above. Set the watchdog's own "grace period" a little longer
-          than this so a single slow tick doesn't trip a false alarm. 0 (or a blank URL) turns the
-          heartbeat off. Takes effect on the next tick, no restart needed.
+          <%= t('How often to ping the URL above. Set the watchdog\'s own "grace period" a little longer than this so a single slow tick doesn\'t trip a false alarm. 0 (or a blank URL) turns the heartbeat off. Takes effect on the next tick, no restart needed.') %>
         </p>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <h2>Miniservers</h2>
+    <h2><%= t('Miniservers') %></h2>
     <div class="settings-field-list">
       <div class="settings-field">
-        <label>Check interval (seconds)</label>
+        <label><%= t('Check interval (seconds)') %></label>
         <input type="number" name="healthcheck_interval_seconds" min="10" value="<%= gatewaySettings.healthcheck_interval_seconds %>">
         <p class="hint">
-          How often every <a href="/miniservers">Miniserver</a> is re-checked for reachability,
-          firmware version, and diagnostics (CPU/heap/PLC state/etc). Takes effect on the very next
-          check, no restart needed. 10 seconds minimum — going much lower adds constant load on
-          every configured Miniserver for little benefit.
+          <%= t('How often every') %> <a href="/miniservers"><%= t('Miniserver') %></a> <%= t('is re-checked for reachability, firmware version, and diagnostics (CPU/heap/PLC state/etc). Takes effect on the very next check, no restart needed. 10 seconds minimum — going much lower adds constant load on every configured Miniserver for little benefit.') %>
         </p>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <h2>Loxone Live Data</h2>
+    <h2><%= t('Loxone Live Data') %></h2>
     <div class="settings-field">
-      <label>Hidden state names</label>
+      <label><%= t('Hidden state names') %></label>
       <div style="display:flex; gap:0.4rem; align-items:center; max-width:48rem; margin-bottom:0.5rem;">
-        <input type="text" id="live-data-hidden-state-add" list="live-data-state-name-options" placeholder="Search a state name…" style="flex:1;">
-        <button type="button" class="btn-soft" id="live-data-hidden-state-add-btn">Add</button>
+        <input type="text" id="live-data-hidden-state-add" list="live-data-state-name-options" placeholder="<%= t('Search a state name…') %>" style="flex:1;">
+        <button type="button" class="btn-soft" id="live-data-hidden-state-add-btn"><%= t('Add') %></button>
       </div>
       <datalist id="live-data-state-name-options"></datalist>
-      <textarea name="live_data_hidden_states" id="live-data-hidden-states-textarea" rows="4" style="font-family:monospace;" placeholder="jLocked"><%= (JSON.parse(gatewaySettings.live_data_hidden_states || '[]')).join('\n') %></textarea>
+      <textarea name="live_data_hidden_states" id="live-data-hidden-states-textarea" rows="4" style="font-family:monospace;" placeholder="<%= t('jLocked') %>"><%= (JSON.parse(gatewaySettings.live_data_hidden_states || '[]')).join('\n') %></textarea>
       <p class="hint">
-        One state name per line, exact match (case-insensitive) &mdash; e.g. <code>jLocked</code>.
-        Hides that state from every control that has it, on both
-        <a href="/live-data">Live Data</a> and Monitor's "pick a state" list. Useful for a state
-        that's repeated across dozens of otherwise-unrelated controls and reads as noise rather
-        than something you'd actually want to look at. The field above suggests real state names
-        seen across your configured Miniservers &mdash; type to search, then Add.
+        <%= t('One state name per line, exact match (case-insensitive) — e.g.') %> <code>jLocked</code><%= t('. Hides that state from every control that has it, on both') %>
+        <a href="/live-data"><%= t('Live Data') %></a> <%= t('and Monitor\'s "pick a state" list. Useful for a state that\'s repeated across dozens of otherwise-unrelated controls and reads as noise rather than something you\'d actually want to look at. The field above suggests real state names seen across your configured Miniservers — type to search, then Add.') %>
       </p>
     </div>
   </div>
 
   <div class="card">
-    <h2>Dashboards</h2>
+    <h2><%= t('Dashboards') %></h2>
     <div class="settings-field">
-      <label>Default decimals for "Current value" panels</label>
+      <label><%= t('Default decimals for "Current value" panels') %></label>
       <input type="number" name="default_panel_decimals" min="0" max="6" value="<%= gatewaySettings.default_panel_decimals %>">
       <p class="hint">
-        Used whenever a "Current value" panel doesn't set its own — override it per panel from
-        that panel's own Edit settings.
+        <%= t('Used whenever a "Current value" panel doesn\'t set its own — override it per panel from that panel\'s own Edit settings.') %>
       </p>
     </div>
   </div>
 
   <div class="card">
-    <h2>Features</h2>
+    <h2><%= t('Features') %></h2>
     <label class="toggle-row">
       <input type="checkbox" name="dashboard_suggestions_enabled" <%= gatewaySettings.dashboard_suggestions_enabled ? 'checked' : '' %>>
       <span>
-        <strong>Offer "Suggest dashboard" on <a href="/live-data">Live Data</a></strong>
+        <strong><%= t('Offer "Suggest dashboard" on') %> <a href="/live-data"><%= t('Live Data') %></a></strong>
         <span class="hint">
-          Lets you generate a starter personal dashboard for a room (lighting, climate, shading,
-          energy) straight from its structure, instead of adding monitors and panels one at a time.
+          <%= t('Lets you generate a starter personal dashboard for a room (lighting, climate, shading, energy) straight from its structure, instead of adding monitors and panels one at a time.') %>
         </span>
       </span>
     </label>
   </div>
 
   <div class="card">
-    <h2>Table preferences</h2>
+    <h2><%= t('Table preferences') %></h2>
     <div class="settings-field">
-      <label>Rows per page</label>
+      <label><%= t('Rows per page') %></label>
       <input type="number" name="table_page_size" value="<%= tablePageSize %>" min="5" max="500">
       <p class="hint">
-        Applies to every table with more rows than this, across the whole app. Your own
-        preference, not shared with other users — saved per-account even though every other
-        field on this page is a shared, gateway-wide setting.
+        <%= t('Applies to every table with more rows than this, across the whole app. Your own preference, not shared with other users — saved per-account even though every other field on this page is a shared, gateway-wide setting.') %>
       </p>
     </div>
   </div>
 
   <div>
-    <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+    <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
   </div>
 </form>
 <% } %>

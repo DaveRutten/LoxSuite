@@ -1,23 +1,17 @@
 <%- include('partials/head', { pageTitle: 'Live Data', active: 'live-data', refresh: 60, liveSwap: true }) %>
 
 <p class="hint">
-  Every control the selected Miniserver's structure file knows about, grouped by room and then by
-  category &mdash; the same grouping Loxone Config itself uses, so this works for any project, not
-  just this one's specific setup. Rooms, categories, and values are all only fetched once you
-  actually expand them &mdash; a structure file can list hundreds of controls, so reading all of
-  them up front just to open this page would mean hundreds of requests to the Miniserver, and
-  thousands of rows of HTML, before you've looked at any of it. Open values refresh automatically
-  every few seconds.
+  <%= t('Every control the selected Miniserver\'s structure file knows about, grouped by room and then by category — the same grouping Loxone Config itself uses, so this works for any project, not just this one\'s specific setup. Rooms, categories, and values are all only fetched once you actually expand them — a structure file can list hundreds of controls, so reading all of them up front just to open this page would mean hundreds of requests to the Miniserver, and thousands of rows of HTML, before you\'ve looked at any of it. Open values refresh automatically every few seconds.') %>
 </p>
 
 <% if (liveStatus) { %>
   <p class="hint" id="live-status-hint" style="margin-bottom:1.25rem;">
-    <strong>Live connection:</strong>
+    <strong><%= t('Live connection:') %></strong>
     <span class="badge badge-live <%= liveStatus.status === 'open' ? 'badge-ok' : liveStatus.status === 'connecting' ? 'badge-neutral' : liveStatus.status === 'auth_failed' ? 'badge-warning' : 'badge-off' %>">
       <%= liveStatus.status === 'open' ? 'Connected' : liveStatus.status === 'connecting' ? 'Connecting…' : liveStatus.status === 'auth_failed' ? 'Auth failed' : 'Not connected' %>
     </span>
     <span id="live-status-detail">
-      <% if (liveStatus.status === 'open') { %>&mdash; <%= liveStatus.valueCount %> values live<% } %>
+      <% if (liveStatus.status === 'open') { %>&mdash; <%= liveStatus.valueCount %> <%= t('values live') %><% } %>
       <% if (liveStatus.error) { %>&mdash; <%= liveStatus.error %><% } %>
     </span>
   </p>
@@ -39,7 +33,7 @@
 <% if (miniserverId && onlineMiniservers.length > 1) { %>
 <form method="get" action="/live-data" class="form-grid" style="max-width:20rem; margin-bottom:1.25rem;">
   <div>
-    <label>Miniserver</label>
+    <label><%= t('Miniserver') %></label>
     <select name="miniserver_id" onchange="this.form.submit()">
       <% onlineMiniservers.forEach(ms => { %>
         <option value="<%= ms.id %>" <%= ms.id === miniserverId ? 'selected' : '' %>><%= ms.name %></option>
@@ -50,9 +44,9 @@
 <% } %>
 
 <% if (miniservers.length === 0) { %>
-  <p class="hint">No Miniservers added yet &mdash; add one on the <a href="/miniservers">Miniservers</a> page first.</p>
+  <p class="hint"><%= t('No Miniservers added yet — add one on the') %> <a href="/miniservers"><%= t('Miniservers') %></a> <%= t('page first.') %></p>
 <% } else if (!error && rooms.length === 0) { %>
-  <p class="empty">This Miniserver's structure file has no controls with a readable state.</p>
+  <p class="empty"><%= t('This Miniserver\'s structure file has no controls with a readable state.') %></p>
 <% } %>
 
 <% if (miniserverId) { %>
@@ -66,16 +60,16 @@
   <% if (rooms.length > 0) { %>
   <div class="search-combo" style="max-width:100%;">
     <select id="live-data-filter-field">
-      <option value="room">Room</option>
-      <option value="control">Control / state (in opened rooms)</option>
+      <option value="room"><%= t('Room') %></option>
+      <option value="control"><%= t('Control / state (in opened rooms)') %></option>
     </select>
     <div class="clearable-input-wrap">
-      <input type="text" id="live-data-filter-query" placeholder="Filter…">
-      <button type="button" id="live-data-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+      <input type="text" id="live-data-filter-query" placeholder="<%= t('Filter…') %>">
+      <button type="button" id="live-data-filter-clear" class="icon-btn clearable-input-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
     </div>
   </div>
   <% } %>
-  <a href="/live-data?miniserver_id=<%= miniserverId %>&refresh=1"><button type="button" class="btn-soft" title="Re-read this Miniserver's structure file — picks up rooms/controls added in Loxone Config since the gateway last read it"><%- icon('refresh') %> Refresh</button></a>
+  <a href="/live-data?miniserver_id=<%= miniserverId %>&refresh=1"><button type="button" class="btn-soft" title="<%= t('Re-read this Miniserver\'s structure file — picks up rooms/controls added in Loxone Config since the gateway last read it') %>"><%- icon('refresh') %> <%= t('Refresh') %></button></a>
 </div>
 <% } %>
 
@@ -84,7 +78,7 @@
   <details class="add-panel live-data-room" data-room-uuid="<%= room.roomUuid %>" data-miniserver-id="<%= miniserverId %>">
     <summary>
       <%= room.name %>
-      <span class="hint live-data-room-summary-count" style="margin:0;">(<%= room.categoryCount %> categor<%= room.categoryCount === 1 ? 'y' : 'ies' %>, <%= room.controlCount %> control<%= room.controlCount === 1 ? '' : 's' %>)</span>
+      <span class="hint live-data-room-summary-count" style="margin:0;">(<%= room.categoryCount %> <%= t('categor') %><%= room.categoryCount === 1 ? 'y' : 'ies' %>, <%= room.controlCount %> <%= t('control') %><%= room.controlCount === 1 ? '' : 's' %>)</span>
       <%
         // Rides in the same right-aligned slot as Suggest dashboard just below (see
         // .live-data-inline-bulk in style.css) rather than its own standalone full-width bar —
@@ -94,16 +88,16 @@
       %>
       <span class="live-data-inline-bulk hint">
         <span class="live-data-bulk-count"></span>
-        <button type="button" class="primary live-data-bulk-widget" title="Add every selected control as a dashboard widget"><%- icon('plus') %> Widget selected</button>
-        <button type="button" class="primary live-data-bulk-monitor" title="Monitor every selected control"><%- icon('plus') %> Monitor selected</button>
-        <button type="button" class="btn-soft live-data-bulk-clear">Clear selection</button>
+        <button type="button" class="primary live-data-bulk-widget" title="<%= t('Add every selected control as a dashboard widget') %>"><%- icon('plus') %> <%= t('Widget selected') %></button>
+        <button type="button" class="primary live-data-bulk-monitor" title="<%= t('Monitor every selected control') %>"><%- icon('plus') %> <%= t('Monitor selected') %></button>
+        <button type="button" class="btn-soft live-data-bulk-clear"><%= t('Clear selection') %></button>
       </span>
       <% if (suggestionsEnabled) { %>
-        <button type="button" class="btn-soft suggest-dashboard-btn" title="Generate a starter dashboard for this room">Suggest dashboard</button>
+        <button type="button" class="btn-soft suggest-dashboard-btn" title="<%= t('Generate a starter dashboard for this room') %>"><%= t('Suggest dashboard') %></button>
       <% } %>
     </summary>
     <div class="add-panel-body live-data-room-body">
-      <p class="hint" style="margin:0;">Loading&hellip;</p>
+      <p class="hint" style="margin:0;"><%= t('Loading…') %></p>
     </div>
   </details>
   <% if (suggestionsEnabled) { %>

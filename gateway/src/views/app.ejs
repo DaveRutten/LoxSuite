@@ -1,48 +1,47 @@
 <%- include('partials/head', { pageTitle: 'App & push', active: 'app' }) %>
 
-<% if (saved === 'channel') { %><p class="hint" style="color: var(--success);">Channel "LoxSuite app (all devices)" is ready &mdash; pick it in a <a href="/admin/notifications">notification rule</a>.</p><% } %>
-<% if (saved === 'me') { %><p class="hint" style="color: var(--success);">Your personal notifications now arrive as push messages on your devices.</p><% } %>
+<% if (saved === 'channel') { %><p class="hint" style="color: var(--success);"><%= t('Channel "LoxSuite app (all devices)" is ready — pick it in a') %> <a href="/admin/notifications"><%= t('notification rule') %></a>.</p><% } %>
+<% if (saved === 'me') { %><p class="hint" style="color: var(--success);"><%= t('Your personal notifications now arrive as push messages on your devices.') %></p><% } %>
 
 <div class="card">
-  <h2 style="margin-top:0;">LoxSuite on your phone</h2>
+  <h2 style="margin-top:0;"><%= t('LoxSuite on your phone') %></h2>
   <div id="app-secure" class="hint" style="margin:0 0 0.6rem;"></div>
   <ol style="margin:0; padding-left:1.2rem; line-height:1.6;">
-    <li><strong>iPhone</strong>: open LoxSuite in Safari &rarr; Share &rarr; <em>Add to Home Screen</em>. Then open LoxSuite <em>from the home screen</em> and switch push on below (iOS 16.4 or newer).</li>
-    <li><strong>Android</strong>: open LoxSuite in Chrome &rarr; menu &rarr; <em>Install app</em> (or <em>Add to home screen</em>).</li>
-    <li>Switch push on for each device that should receive notifications.</li>
+    <li><strong><%= t('iPhone') %></strong><%= t(': open LoxSuite in Safari → Share →') %> <em><%= t('Add to Home Screen') %></em><%= t('. Then open LoxSuite') %> <em><%= t('from the home screen') %></em> <%= t('and switch push on below (iOS 16.4 or newer).') %></li>
+    <li><strong><%= t('Android') %></strong><%= t(': open LoxSuite in Chrome → menu →') %> <em><%= t('Install app') %></em> <%= t('(or') %> <em><%= t('Add to home screen') %></em>).</li>
+    <li><%= t('Switch push on for each device that should receive notifications.') %></li>
   </ol>
   <div class="btn-row" style="margin-top:0.9rem; flex-wrap:wrap;">
-    <button type="button" class="btn-edit" id="app-on"><%- icon('plus') %> Push on for this device</button>
-    <button type="button" class="btn-soft" id="app-off">Push off for this device</button>
-    <button type="button" class="btn-soft" id="app-test">Send a test</button>
+    <button type="button" class="btn-edit" id="app-on"><%- icon('plus') %> <%= t('Push on for this device') %></button>
+    <button type="button" class="btn-soft" id="app-off"><%= t('Push off for this device') %></button>
+    <button type="button" class="btn-soft" id="app-test"><%= t('Send a test') %></button>
   </div>
   <p class="hint" id="app-msg" style="margin:0.5rem 0 0;"></p>
   <% if (isAdminUser) { %>
   <details style="margin-top:0.8rem;">
-    <summary class="hint" style="cursor:pointer;">Push contact: <code><%= pushSubject %></code></summary>
-    <p class="hint" style="margin:0.4rem 0;">The push services (Apple, Google, Mozilla) want a contact with every message. Apple refuses made-up
-      addresses (error 403 <em>BadJwtToken</em>). LoxSuite uses the https address it is opened on; you can also enter your e-mail address.</p>
-    <div class="btn-row" style="align-items:flex-end;"><div><label>Contact</label><input type="text" id="app-subject" value="<%= pushSubject %>" placeholder="mailto:you@example.com"></div><button type="button" class="btn-soft" id="app-subject-save">Save</button></div>
+    <summary class="hint" style="cursor:pointer;"><%= t('Push contact:') %> <code><%= pushSubject %></code></summary>
+    <p class="hint" style="margin:0.4rem 0;"><%= t('The push services (Apple, Google, Mozilla) want a contact with every message. Apple refuses made-up addresses (error 403') %> <em><%= t('BadJwtToken') %></em><%= t('). LoxSuite uses the https address it is opened on; you can also enter your e-mail address.') %></p>
+    <div class="btn-row" style="align-items:flex-end;"><div><label><%= t('Contact') %></label><input type="text" id="app-subject" value="<%= pushSubject %>" placeholder="<%= t('mailto:you@example.com') %>"></div><button type="button" class="btn-soft" id="app-subject-save"><%= t('Save') %></button></div>
   </details>
   <% } %>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0;">Which notifications</h2>
-  <p class="hint">Push is a notification channel like Telegram or e-mail. Use it for the car reminders (<em>Car: plug in / swap reminders</em>, <em>Car: charging plan warnings</em>) and for anything else.</p>
+  <h2 style="margin-top:0;"><%= t('Which notifications') %></h2>
+  <p class="hint"><%= t('Push is a notification channel like Telegram or e-mail. Use it for the car reminders (') %><em><%= t('Car: plug in / swap reminders') %></em>, <em><%= t('Car: charging plan warnings') %></em><%= t(') and for anything else.') %></p>
   <div class="btn-row" style="flex-wrap:wrap;">
     <% if (isAdminUser) { %>
       <form method="post" action="/app/channel" style="margin:0;"><button type="submit" class="btn-soft" <%= channel ? 'disabled' : '' %>><%= channel ? 'Channel "' + channel.name + '" exists' : 'Create channel for all devices' %></button></form>
-      <a class="btn-soft" href="/admin/notifications?trigger_type=car_reminder" style="text-decoration:none;">Add a car reminder rule</a>
+      <a class="btn-soft" href="/admin/notifications?trigger_type=car_reminder" style="text-decoration:none;"><%= t('Add a car reminder rule') %></a>
     <% } %>
     <form method="post" action="/app/me" style="margin:0;"><button type="submit" class="btn-soft" <%= myPush ? 'disabled' : '' %>><%= myPush ? 'My notifications go to push' : 'Send my personal notifications as push' %></button></form>
   </div>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0;">Devices with push</h2>
-  <% if (!devices.length) { %><p class="hint" style="margin:0;">None yet.</p><% } else { %>
-    <table><thead><tr><th>User</th><th>Device</th><th>Since</th><th>Last problem</th></tr></thead><tbody>
+  <h2 style="margin-top:0;"><%= t('Devices with push') %></h2>
+  <% if (!devices.length) { %><p class="hint" style="margin:0;"><%= t('None yet.') %></p><% } else { %>
+    <table><thead><tr><th><%= t('User') %></th><th><%= t('Device') %></th><th><%= t('Since') %></th><th><%= t('Last problem') %></th></tr></thead><tbody>
       <% devices.forEach(d => { %><tr><td><%= d.username || '—' %></td><td class="hint"><%= (d.user_agent || '').replace(/\(.*?\)/g, '').slice(0, 60) %></td><td class="hint"><%= formatDateTime(d.created_at) %></td><td class="hint"><%= d.last_error || '' %></td></tr><% }) %>
     </tbody></table>
   <% } %>

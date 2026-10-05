@@ -1,28 +1,27 @@
 <%- include('partials/head', { pageTitle: 'Vehicle: ' + v.name, active: 'vehicles' }) %>
 
-<p><a href="/vehicles">&larr; All vehicles</a></p>
+<p><a href="/vehicles"><%= t('← All vehicles') %></a></p>
 <% if (error) { %><p class="error"><%= error %></p><% } %>
-<% if (saved) { %><p class="hint" style="color: var(--success);">Saved.</p><% } %>
+<% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
 
 <div class="card">
-  <h2 style="margin-top:0;">Now</h2>
-  <div id="veh-status"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+  <h2 style="margin-top:0;"><%= t('Now') %></h2>
+  <div id="veh-status"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
 </div>
 
 <% if (v.source_type !== 'none' && canEdit('monitor')) { %>
 <div class="card">
   <details>
-    <summary><strong>Use in Monitor, dashboards &amp; Loxone</strong></summary>
+    <summary><strong><%= t('Use in Monitor, dashboards & Loxone') %></strong></summary>
     <p class="hint">
-      LoxSuite publishes this car's values as retained MQTT topics (<code>loxsuite/vehicles/<%= v.id %>/&hellip;</code>, on change).
-      Add them as monitors, or map them to Loxone under Mappings.
+      <%= t('LoxSuite publishes this car\'s values as retained MQTT topics (') %><code>loxsuite/vehicles/<%= v.id %>/&hellip;</code><%= t(', on change). Add them as monitors, or map them to Loxone under Mappings.') %>
     </p>
     <div id="veh-monitor-picks" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:0.3rem 1rem;">
       <% Object.entries(topics).forEach(([k, t]) => { %>
         <label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" value="<%= k %>" <%= ['soc', 'plugged', 'home'].includes(k) ? 'checked' : '' %>> <%= topicLabels[k] %> <code class="hint" style="font-size:0.72rem;"><%= t %></code></label>
       <% }) %>
     </div>
-    <div class="btn-row" style="margin-top:0.6rem;"><button type="button" class="btn-soft" id="veh-monitor-btn"><%- icon('plus') %> Add to Monitor</button></div>
+    <div class="btn-row" style="margin-top:0.6rem;"><button type="button" class="btn-soft" id="veh-monitor-btn"><%- icon('plus') %> <%= t('Add to Monitor') %></button></div>
     <div id="veh-monitor-result" class="hint" style="margin-top:0.4rem;"></div>
   </details>
 </div>
@@ -33,11 +32,11 @@
   <form method="post" action="/vehicles/<%= v.id %>/update">
     <%- include('partials/vehicle-fields', { v, fields, presets }) %>
     <div class="btn-row" style="margin-top:0.9rem;">
-      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
     </div>
   </form>
-  <form method="post" action="/vehicles/<%= v.id %>/delete" style="margin-top:0.8rem;" onsubmit="return confirm('Delete this vehicle and its history?');">
-    <button type="submit" class="btn-soft"><%- icon('trash') %> Delete</button>
+  <form method="post" action="/vehicles/<%= v.id %>/delete" style="margin-top:0.8rem;" onsubmit="return confirm(<%= JSON.stringify(t('Delete this vehicle and its history?')) %>);">
+    <button type="submit" class="btn-soft"><%- icon('trash') %> <%= t('Delete') %></button>
   </form>
 </div>
 <% } %>
@@ -62,7 +61,7 @@
     var badge = h.status === 'ok' ? '<span style="color:var(--success); font-weight:600;" title="working">● <span class="hide-phone">working</span></span>'
       : h.status === 'failing' ? '<span style="color:var(--danger); font-weight:600;">● failing</span> <span class="hint">' + esc(h.detail) + '</span>'
       : '<span class="hint">● ' + esc(h.detail || 'not read yet') + '</span>';
-    var html = '<p style="margin:0 0 0.6rem;">' + esc(srcLabels[s.sourceType] || s.sourceType) + ': ' + badge + '</p>';
+    var html = '<p style="margin:0 0 0.6rem;">' + esc(srcLabels[s.sourceKind || s.sourceType] || s.sourceType) + ': ' + badge + '</p>';
     var soc = r.soc != null ? r.soc + '%' : '—';
     html += '<div style="display:flex; gap:0.7rem; flex-wrap:wrap;">' +
       tile('Battery', soc, r.energy_kwh != null ? r.energy_kwh + ' kWh' + (r.limit_soc != null ? ' · limit ' + r.limit_soc + '%' : '') : (r.limit_soc != null ? 'limit ' + r.limit_soc + '%' : '')) +
@@ -71,6 +70,20 @@
       tile('At home', yn(r.home, 'yes', 'no'), r.distance_m != null ? (r.distance_m < 2000 ? r.distance_m + ' m' : (r.distance_m / 1000).toFixed(1) + ' km') + ' from home' : (r.location ? esc(r.location) : '')) +
       tile('Odometer', r.odometer_km != null ? Math.round(r.odometer_km) + ' km' : '—', '') +
       '</div>';
+    if (s.sourceKind === 'skoda') {
+      var x = s.extra || {};
+      var bits = [];
+      if (x.chargeState) bits.push('Charging state: ' + esc(x.chargeState) + (x.chargePowerKw ? ' (' + x.chargePowerKw + ' kW)' : '') + (x.minutesToFull ? ' · ' + x.minutesToFull + ' min to full' : ''));
+      if (x.fuelPct != null) bits.push('Fuel: ' + x.fuelPct + '%');
+      if (x.climate && x.climate !== 'UNSUPPORTED') bits.push('Climate: ' + esc(x.climate));
+      if (s.rateRemaining != null) bits.push('Škoda requests left this hour: ' + s.rateRemaining);
+      if (s.keyExpiresAt) {
+        var days = Math.round((Date.parse(s.keyExpiresAt) - Date.now()) / 86400000);
+        bits.push('<span style="color:' + (days <= 14 ? 'var(--danger)' : 'inherit') + ';">API key valid until ' + esc(new Date(s.keyExpiresAt).toLocaleDateString()) + (days <= 14 ? ' — renew it in the MyŠkoda app' : '') + '</span>');
+      }
+      if ((x.errors || []).length) bits.push('Car reports: ' + x.errors.map(esc).join('; '));
+      if (bits.length) html += '<p class="hint" style="margin:0.6rem 0 0;">' + bits.join(' &middot; ') + '</p>';
+    }
     html += '<p class="hint" style="margin:0.6rem 0 0;">Data from the car: ' + esc(dt(s.sourceUpdatedAt)) + ' &middot; last read: ' + esc(dt(s.fetchedAt)) +
       ' &middot; alert after ' + s.staleAfterH + ' h without an update' + (s.staleAfterH === 0 ? ' (off)' : '') + '</p>';
     el.innerHTML = html;

@@ -112,6 +112,7 @@ module.exports = asyncHandler(async function loadUserContext(req, res, next) {
   req.lang = i18n.resolveLanguage(user.language);
   res.locals.lang = req.lang;
   res.locals.t = i18n.translator(req.lang);
+  res.locals.uiLocale = i18n.localeOf(req.lang);
   // Only queried for a user who could even see the widget at all (canView('ai_chat')) — the global
   // Administration > AI Assistant toggle is the SECOND, independent off switch (see the AI
   // Assistant feature's own "two independent switches" design): the widget must stay invisible for

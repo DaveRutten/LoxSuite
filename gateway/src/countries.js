@@ -78,8 +78,12 @@ function countryName(code) {
 }
 
 // Sorted by name for the picker UI — COUNTRIES itself stays code-ordered (easier to eyeball/diff).
-function listCountries() {
-  return COUNTRIES.map(([code, name]) => ({ code, name, flag: flagEmoji(code) })).sort((a, b) => a.name.localeCompare(b.name));
+// `locale` (e.g. 'nl-NL'): names in that language via Intl.DisplayNames, falling back to English.
+function listCountries(locale = null) {
+  let dn = null;
+  try { if (locale && !/^en\b/.test(locale)) dn = new Intl.DisplayNames([locale], { type: 'region' }); } catch { dn = null; }
+  const nameOf = (code, name) => { try { return (dn && dn.of(code)) || name; } catch { return name; } };
+  return COUNTRIES.map(([code, name]) => ({ code, name: nameOf(code, name), flag: flagEmoji(code) })).sort((a, b) => a.name.localeCompare(b.name, locale || 'en'));
 }
 
 module.exports = { countryName, flagEmoji, listCountries };

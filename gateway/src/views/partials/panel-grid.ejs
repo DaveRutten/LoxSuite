@@ -48,12 +48,12 @@
 <% if (typeof isFavorited !== 'undefined' || canEditPanels) { %>
 <div class="row-actions" style="margin-bottom:0.75rem;">
   <% if (canEditPanels) { %>
-  <button type="button" id="dash-add-panel-btn" class="btn-soft"><%- icon('plus') %> Add panel</button>
+  <button type="button" id="dash-add-panel-btn" class="btn-soft"><%- icon('plus') %> <%= t('Add panel') %></button>
   <form method="post" action="/dashboards/<%= dashboardId %>/panels" class="inline">
     <input type="hidden" name="panel_type" value="group_header">
     <input type="hidden" name="title" value="New group">
-    <button type="submit" class="btn-soft" title="Adds a full-width divider bar — every panel added afterwards lands in this group (its own separate mini-grid) until the next header, if there is one. The chevron on the header then collapses/expands everything currently in that group.">
-      <%- icon('plus') %> Add group
+    <button type="submit" class="btn-soft" title="<%= t('Adds a full-width divider bar — every panel added afterwards lands in this group (its own separate mini-grid) until the next header, if there is one. The chevron on the header then collapses/expands everything currently in that group.') %>">
+      <%- icon('plus') %> <%= t('Add group') %>
     </button>
   </form>
   <% } %>
@@ -67,11 +67,11 @@
     </form>
     <% } %>
     <% if (canEditPanels) { %>
-    <button type="button" id="dash-lock-panels-btn" class="btn-soft" aria-pressed="false" aria-label="Lock panels" title="Locked: panels can't be dragged, resized, or dropped into another group — everything else (opening a panel's own edit drawer, tapping a control inside it) still works. Defaults to locked on a phone/tablet-sized screen (an easy gesture to trigger by accident there) and unlocked everywhere else; remembered on this device from here on.">
+    <button type="button" id="dash-lock-panels-btn" class="btn-soft" aria-pressed="false" aria-label="<%= t('Lock panels') %>" title="<%= t('Locked: panels can\'t be dragged, resized, or dropped into another group — everything else (opening a panel\'s own edit drawer, tapping a control inside it) still works. Defaults to locked on a phone/tablet-sized screen (an easy gesture to trigger by accident there) and unlocked everywhere else; remembered on this device from here on.') %>">
       <%- icon('lock') %>
     </button>
     <% if (panels.length > 1) { %>
-    <button type="button" id="dash-auto-order-btn" class="btn-soft" aria-label="Auto order" title="Pack every group's panels tightly, closing up any gaps">
+    <button type="button" id="dash-auto-order-btn" class="btn-soft" aria-label="<%= t('Auto order') %>" title="<%= t('Pack every group\'s panels tightly, closing up any gaps') %>">
       <%- icon('grid') %>
     </button>
     <% } %>
@@ -86,20 +86,20 @@
     <form method="post" action="/dashboards/<%= dashboardId %>/panels">
       <div class="form-grid">
         <div>
-          <label>Panel type</label>
+          <label><%= t('Panel type') %></label>
           <select name="panel_type" id="panel-type-select">
-            <option value="chart">Chart</option>
-            <option value="table">Table</option>
-            <option value="value">Current value</option>
-            <option value="gauge">Gauge</option>
-            <option value="stat_delta">Stat with change</option>
-            <option value="threshold">Threshold indicator</option>
-            <option value="state_bar">State bar</option>
+            <option value="chart"><%= t('Chart') %></option>
+            <option value="table"><%= t('Table') %></option>
+            <option value="value"><%= t('Current value') %></option>
+            <option value="gauge"><%= t('Gauge') %></option>
+            <option value="stat_delta"><%= t('Stat with change') %></option>
+            <option value="threshold"><%= t('Threshold indicator') %></option>
+            <option value="state_bar"><%= t('State bar') %></option>
           </select>
         </div>
-        <div><label>Title (optional)</label><input type="text" name="title" placeholder="Leave blank to auto-generate one"></div>
+        <div><label><%= t('Title (optional)') %></label><input type="text" name="title" placeholder="<%= t('Leave blank to auto-generate one') %>"></div>
         <div id="panel-range-field">
-          <label>Range</label>
+          <label><%= t('Range') %></label>
           <%- rangeField('dashboard', { includeDashboardDefault: true }) %>
         </div>
         <%
@@ -111,9 +111,9 @@
           const addPanelDefaultGroupId = addPanelGroupHeaders.length ? addPanelGroupHeaders[addPanelGroupHeaders.length - 1].id : '';
         %>
         <div>
-          <label>Group</label>
+          <label><%= t('Group') %></label>
           <select name="target_group_id" id="add-panel-group-select">
-            <option value="" <%= addPanelDefaultGroupId === '' ? 'selected' : '' %>>— Ungrouped (top) —</option>
+            <option value="" <%= addPanelDefaultGroupId === '' ? 'selected' : '' %>><%= t('— Ungrouped (top) —') %></option>
             <% addPanelGroupHeaders.forEach(function (gp) { %>
             <option value="<%= gp.id %>" <%= addPanelDefaultGroupId === gp.id ? 'selected' : '' %>><%= gp.title || 'Group' %></option>
             <% }) %>
@@ -123,188 +123,188 @@
 
       <div class="form-grid" id="chart-fields" style="margin-top:0.85rem; display:none;">
         <div>
-          <label>Chart type</label>
+          <label><%= t('Chart type') %></label>
           <select name="chart_type" id="chart-type-select" class="chart-type-select">
-            <option value="line">Line</option>
-            <option value="bar_compare">Bar (compare)</option>
-            <option value="doughnut">Doughnut</option>
-            <option value="pie">Pie</option>
-            <option value="polar_area">Polar Area</option>
-            <option value="radar">Radar</option>
+            <option value="line"><%= t('Line') %></option>
+            <option value="bar_compare"><%= t('Bar (compare)') %></option>
+            <option value="doughnut"><%= t('Doughnut') %></option>
+            <option value="pie"><%= t('Pie') %></option>
+            <option value="polar_area"><%= t('Polar Area') %></option>
+            <option value="radar"><%= t('Radar') %></option>
           </select>
         </div>
         <div class="threshold-builder-details-wrap" style="grid-column:1/-1;">
           <details class="threshold-builder-details" open>
-            <summary>Legend</summary>
+            <summary><%= t('Legend') %></summary>
             <div class="form-grid">
               <div>
-                <label>Legend</label>
+                <label><%= t('Legend') %></label>
                 <select name="legend_position" id="legend-position-select" class="legend-position-select">
-                  <option value="auto" selected>Auto (only when &gt;1 monitor)</option>
-                  <option value="top">Top</option>
-                  <option value="bottom">Bottom</option>
-                  <option value="left">Left</option>
-                  <option value="right">Right</option>
-                  <option value="off">Off</option>
+                  <option value="auto" selected><%= t('Auto (only when >1 monitor)') %></option>
+                  <option value="top"><%= t('Top') %></option>
+                  <option value="bottom"><%= t('Bottom') %></option>
+                  <option value="left"><%= t('Left') %></option>
+                  <option value="right"><%= t('Right') %></option>
+                  <option value="off"><%= t('Off') %></option>
                 </select>
               </div>
-              <div data-chart-type-for="line" data-legend-for="on"><label>Legend alignment</label>
+              <div data-chart-type-for="line" data-legend-for="on"><label><%= t('Legend alignment') %></label>
                 <select name="legend_align">
-                  <option value="start" selected>Left</option>
-                  <option value="center">Center</option>
-                  <option value="end">Right</option>
+                  <option value="start" selected><%= t('Left') %></option>
+                  <option value="center"><%= t('Center') %></option>
+                  <option value="end"><%= t('Right') %></option>
                 </select>
               </div>
-              <div data-chart-type-for="line" data-legend-for="on"><label>Show min in legend</label><%- toggleSwitch('legend_show_min', false) %></div>
-              <div data-chart-type-for="line" data-legend-for="on"><label>Show max in legend</label><%- toggleSwitch('legend_show_max', false) %></div>
-              <div data-chart-type-for="line" data-legend-for="on"><label>Show average in legend</label><%- toggleSwitch('legend_show_avg', false) %></div>
-              <div data-chart-type-for="line" data-legend-for="on"><label>Show current value in legend</label><%- toggleSwitch('legend_show_current', false) %></div>
+              <div data-chart-type-for="line" data-legend-for="on"><label><%= t('Show min in legend') %></label><%- toggleSwitch('legend_show_min', false) %></div>
+              <div data-chart-type-for="line" data-legend-for="on"><label><%= t('Show max in legend') %></label><%- toggleSwitch('legend_show_max', false) %></div>
+              <div data-chart-type-for="line" data-legend-for="on"><label><%= t('Show average in legend') %></label><%- toggleSwitch('legend_show_avg', false) %></div>
+              <div data-chart-type-for="line" data-legend-for="on"><label><%= t('Show current value in legend') %></label><%- toggleSwitch('legend_show_current', false) %></div>
             </div>
           </details>
         </div>
-        <div data-chart-type-for="line"><label>Y-axis unit (optional)</label><%- unitField('unit_chart', '') %></div>
-        <div data-chart-type-for="line"><label>Stepped line</label>
+        <div data-chart-type-for="line"><label><%= t('Y-axis unit (optional)') %></label><%- unitField('unit_chart', '') %></div>
+        <div data-chart-type-for="line"><label><%= t('Stepped line') %></label>
           <select name="stepped_line">
-            <option value="">Off</option>
-            <option value="before">Before</option>
-            <option value="after">After</option>
-            <option value="middle">Middle</option>
+            <option value=""><%= t('Off') %></option>
+            <option value="before"><%= t('Before') %></option>
+            <option value="after"><%= t('After') %></option>
+            <option value="middle"><%= t('Middle') %></option>
           </select>
         </div>
-        <div data-chart-type-for="line"><label>Curve</label>
+        <div data-chart-type-for="line"><label><%= t('Curve') %></label>
           <select name="curve_tension">
-            <option value="0">Straight</option>
-            <option value="0.15" selected>Slight curve</option>
-            <option value="0.4">Smooth</option>
+            <option value="0"><%= t('Straight') %></option>
+            <option value="0.15" selected><%= t('Slight curve') %></option>
+            <option value="0.4"><%= t('Smooth') %></option>
           </select>
         </div>
-        <div data-chart-type-for="line"><label>Show points on line</label><%- toggleSwitch('show_points', false) %></div>
-        <div data-chart-type-for="line"><label>Fill area under line</label><%- toggleSwitch('fill_area', false) %></div>
-        <div><label>Animate on load</label><%- toggleSwitch('enable_animation', false) %></div>
-        <div data-chart-type-for="line"><label>Y-axis scale</label>
+        <div data-chart-type-for="line"><label><%= t('Show points on line') %></label><%- toggleSwitch('show_points', false) %></div>
+        <div data-chart-type-for="line"><label><%= t('Fill area under line') %></label><%- toggleSwitch('fill_area', false) %></div>
+        <div><label><%= t('Animate on load') %></label><%- toggleSwitch('enable_animation', false) %></div>
+        <div data-chart-type-for="line"><label><%= t('Y-axis scale') %></label>
           <select name="y_scale_type">
-            <option value="linear">Linear</option>
-            <option value="logarithmic">Logarithmic</option>
+            <option value="linear"><%= t('Linear') %></option>
+            <option value="logarithmic"><%= t('Logarithmic') %></option>
           </select>
         </div>
-        <div data-chart-type-for="line"><label>Y-axis min (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto"></div>
-        <div data-chart-type-for="line"><label>Y-axis max (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto"></div>
-        <div data-chart-type-for="line"><label>Zoom &amp; pan</label><%- toggleSwitch('enable_zoom', false) %></div>
+        <div data-chart-type-for="line"><label><%= t('Y-axis min (optional)') %></label><input type="number" name="y_min" step="any" placeholder="<%= t('Auto') %>"></div>
+        <div data-chart-type-for="line"><label><%= t('Y-axis max (optional)') %></label><input type="number" name="y_max" step="any" placeholder="<%= t('Auto') %>"></div>
+        <div data-chart-type-for="line"><label><%= t('Zoom & pan') %></label><%- toggleSwitch('enable_zoom', false) %></div>
         <div data-chart-type-for="line" style="grid-column:1/-1;"><%- thresholdField('chart_thresholds', []) %></div>
         <div data-chart-type-for="line" style="grid-column:1/-1;"><%- annotationField('chart_annotations', []) %></div>
       </div>
 
       <div class="form-grid" id="value-layout-field" style="margin-top:0.85rem; display:none;">
         <div>
-          <label>Layout</label>
+          <label><%= t('Layout') %></label>
           <select name="value_layout">
-            <option value="stacked">Stacked (one per line)</option>
-            <option value="row">Row (side by side)</option>
+            <option value="stacked"><%= t('Stacked (one per line)') %></option>
+            <option value="row"><%= t('Row (side by side)') %></option>
           </select>
         </div>
-        <div><label>Unit (optional)</label><%- unitField('unit_value', '') %></div>
-        <div><label>Hide name</label><%- toggleSwitch('hide_value_label', false) %></div>
+        <div><label><%= t('Unit (optional)') %></label><%- unitField('unit_value', '') %></div>
+        <div><label><%= t('Hide name') %></label><%- toggleSwitch('hide_value_label', false) %></div>
         <%- valueMappingField('value_labels', []) %>
         <%- thresholdField('value_thresholds', []) %>
       </div>
 
       <div class="form-grid" id="table-fields" style="margin-top:0.85rem; display:none;">
-        <div><label>Value scale (optional)</label><%- scaleField('scale_table', 1) %></div>
-        <div><label>Decimals (optional)</label><input type="number" name="decimals_table" min="0" max="6" placeholder="Default"></div>
+        <div><label><%= t('Value scale (optional)') %></label><%- scaleField('scale_table', 1) %></div>
+        <div><label><%= t('Decimals (optional)') %></label><input type="number" name="decimals_table" min="0" max="6" placeholder="<%= t('Default') %>"></div>
         <%- thresholdField('table_thresholds', []) %>
       </div>
 
       <div class="form-grid" id="gauge-fields" style="margin-top:0.85rem; display:none;">
-        <div><label>Style</label>
+        <div><label><%= t('Style') %></label>
           <select name="gauge_style" id="gauge-style-select">
-            <option value="bar">Bar</option>
-            <option value="radial">Round</option>
+            <option value="bar"><%= t('Bar') %></option>
+            <option value="radial"><%= t('Round') %></option>
           </select>
         </div>
-        <div data-gauge-style-for="radial"><label>Shape</label>
+        <div data-gauge-style-for="radial"><label><%= t('Shape') %></label>
           <select name="gauge_shape">
-            <option value="arc" selected>Arc</option>
-            <option value="circle">Full circle</option>
+            <option value="arc" selected><%= t('Arc') %></option>
+            <option value="circle"><%= t('Full circle') %></option>
           </select>
         </div>
-        <div><label>Minimum</label><input type="number" name="gauge_min" value="0" step="any"></div>
-        <div><label>Maximum</label><input type="number" name="gauge_max" value="100" step="any"></div>
-        <div><label>Unit (optional)</label><%- unitField('unit_gauge', '') %></div>
-        <div><label>Value scale (optional)</label><%- scaleField('scale_gauge', 1) %></div>
-        <div><label>Decimals (optional)</label><input type="number" name="decimals_gauge" min="0" max="6" placeholder="Default"></div>
-        <div><label>Threshold sections</label><%- toggleSwitch('gauge_sections', false) %></div>
-        <div data-gauge-sections-for="on"><label>Gradient sections</label><%- toggleSwitch('gauge_sections_gradient', false) %></div>
-        <div data-gauge-style-for="radial"><label>Needle</label><%- toggleSwitch('gauge_needle', false) %></div>
-        <div data-gauge-style-for="radial"><label>Trend line under value</label><%- toggleSwitch('gauge_sparkline', false) %></div>
-        <div data-gauge-style-for="radial" data-gauge-sparkline-for="on"><label>Neutral trend line color</label><%- toggleSwitch('gauge_sparkline_neutral', false) %></div>
+        <div><label><%= t('Minimum') %></label><input type="number" name="gauge_min" value="0" step="any"></div>
+        <div><label><%= t('Maximum') %></label><input type="number" name="gauge_max" value="100" step="any"></div>
+        <div><label><%= t('Unit (optional)') %></label><%- unitField('unit_gauge', '') %></div>
+        <div><label><%= t('Value scale (optional)') %></label><%- scaleField('scale_gauge', 1) %></div>
+        <div><label><%= t('Decimals (optional)') %></label><input type="number" name="decimals_gauge" min="0" max="6" placeholder="<%= t('Default') %>"></div>
+        <div><label><%= t('Threshold sections') %></label><%- toggleSwitch('gauge_sections', false) %></div>
+        <div data-gauge-sections-for="on"><label><%= t('Gradient sections') %></label><%- toggleSwitch('gauge_sections_gradient', false) %></div>
+        <div data-gauge-style-for="radial"><label><%= t('Needle') %></label><%- toggleSwitch('gauge_needle', false) %></div>
+        <div data-gauge-style-for="radial"><label><%= t('Trend line under value') %></label><%- toggleSwitch('gauge_sparkline', false) %></div>
+        <div data-gauge-style-for="radial" data-gauge-sparkline-for="on"><label><%= t('Neutral trend line color') %></label><%- toggleSwitch('gauge_sparkline_neutral', false) %></div>
         <%- thresholdField('gauge_thresholds', []) %>
-        <p class="hint" style="grid-column:1/-1; margin:0;">Check more than one monitor above to show several gauges side by side in this panel, all sharing this same range/unit/thresholds.</p>
+        <p class="hint" style="grid-column:1/-1; margin:0;"><%= t('Check more than one monitor above to show several gauges side by side in this panel, all sharing this same range/unit/thresholds.') %></p>
       </div>
 
       <div class="form-grid" id="stat-delta-fields" style="margin-top:0.85rem; display:none;">
-        <div><label>Unit (optional)</label><%- unitField('unit_stat_delta', '') %></div>
+        <div><label><%= t('Unit (optional)') %></label><%- unitField('unit_stat_delta', '') %></div>
         <div>
-          <label>Color the change when</label>
+          <label><%= t('Color the change when') %></label>
           <select name="direction">
-            <option value="neutral">Neutral (no color)</option>
-            <option value="up_good">Higher is better</option>
-            <option value="down_good">Lower is better</option>
+            <option value="neutral"><%= t('Neutral (no color)') %></option>
+            <option value="up_good"><%= t('Higher is better') %></option>
+            <option value="down_good"><%= t('Lower is better') %></option>
           </select>
         </div>
-        <div><label>Value scale (optional)</label><%- scaleField('scale_stat_delta', 1) %></div>
-        <div><label>Decimals (optional)</label><input type="number" name="decimals_stat_delta" min="0" max="6" placeholder="Default"></div>
+        <div><label><%= t('Value scale (optional)') %></label><%- scaleField('scale_stat_delta', 1) %></div>
+        <div><label><%= t('Decimals (optional)') %></label><input type="number" name="decimals_stat_delta" min="0" max="6" placeholder="<%= t('Default') %>"></div>
         <%- thresholdField('stat_delta_thresholds', []) %>
       </div>
 
       <div class="form-grid" id="threshold-fields" style="margin-top:0.85rem; display:none;">
         <div>
-          <label>Alert when value is</label>
+          <label><%= t('Alert when value is') %></label>
           <select name="threshold_operator">
-            <option value="gt">Above</option>
-            <option value="gte">Above or equal to</option>
-            <option value="lt">Below</option>
-            <option value="lte">Below or equal to</option>
+            <option value="gt"><%= t('Above') %></option>
+            <option value="gte"><%= t('Above or equal to') %></option>
+            <option value="lt"><%= t('Below') %></option>
+            <option value="lte"><%= t('Below or equal to') %></option>
           </select>
         </div>
-        <div><label>Threshold</label><input type="number" name="threshold_value" value="0" step="any"></div>
-        <div><label>Unit (optional)</label><%- unitField('unit_threshold', '') %></div>
-        <div><label>Value scale (optional)</label><%- scaleField('scale_threshold', 1) %></div>
-        <div><label>Decimals (optional)</label><input type="number" name="decimals_threshold" min="0" max="6" placeholder="Default"></div>
-        <p class="hint" style="grid-column:1/-1; margin:0;">The threshold above is compared against the value <em>after</em> scaling.</p>
-        <div><label>Label when normal</label><input type="text" name="label_ok" placeholder="Normal"></div>
-        <div><label>Label when alert</label><input type="text" name="label_alert" placeholder="Alert"></div>
+        <div><label><%= t('Threshold') %></label><input type="number" name="threshold_value" value="0" step="any"></div>
+        <div><label><%= t('Unit (optional)') %></label><%- unitField('unit_threshold', '') %></div>
+        <div><label><%= t('Value scale (optional)') %></label><%- scaleField('scale_threshold', 1) %></div>
+        <div><label><%= t('Decimals (optional)') %></label><input type="number" name="decimals_threshold" min="0" max="6" placeholder="<%= t('Default') %>"></div>
+        <p class="hint" style="grid-column:1/-1; margin:0;"><%= t('The threshold above is compared against the value') %> <em><%= t('after') %></em> <%= t('scaling.') %></p>
+        <div><label><%= t('Label when normal') %></label><input type="text" name="label_ok" placeholder="<%= t('Normal') %>"></div>
+        <div><label><%= t('Label when alert') %></label><input type="text" name="label_alert" placeholder="<%= t('Alert') %>"></div>
       </div>
 
       <div class="form-grid" id="state-bar-fields" style="margin-top:0.85rem; display:none;">
-        <div><label>Default color (unmapped values)</label><input type="color" class="single-color-input" name="state_bar_default_color" value="#8a93a6"></div>
+        <div><label><%= t('Default color (unmapped values)') %></label><input type="color" class="single-color-input" name="state_bar_default_color" value="#8a93a6"></div>
         <%- valueMappingField('state_bar_value_labels', []) %>
-        <p class="hint" style="grid-column:1/-1; margin:0;">Check more than one monitor above to stack several state bars in this one panel, one row per monitor.</p>
+        <p class="hint" style="grid-column:1/-1; margin:0;"><%= t('Check more than one monitor above to stack several state bars in this one panel, one row per monitor.') %></p>
       </div>
 
-      <p class="hint" style="margin-top:0.6rem;">New panels start at a default size &mdash; drag a panel's bottom-right corner afterwards to resize it.</p>
+      <p class="hint" style="margin-top:0.6rem;"><%= t('New panels start at a default size — drag a panel\'s bottom-right corner afterwards to resize it.') %></p>
 
       <details id="chart-series-settings" class="chart-series-settings threshold-builder-details" data-checklist-selector="#monitor-checklist" style="margin-top:0.85rem; display:none;">
-        <summary>Series settings (optional)</summary>
+        <summary><%= t('Series settings (optional)') %></summary>
         <div class="chart-series-rows"></div>
         <textarea class="chart-series-hidden" name="chart_series" hidden>{}</textarea>
-        <p class="hint" style="margin:0.4rem 0 0;">Appears once you've checked a monitor below — rename a series, give it its own unit/scale/decimals, or move it to the right-hand axis.</p>
+        <p class="hint" style="margin:0.4rem 0 0;"><%= t('Appears once you\'ve checked a monitor below — rename a series, give it its own unit/scale/decimals, or move it to the right-hand axis.') %></p>
       </details>
 
       <details id="value-series-settings" class="value-series-settings threshold-builder-details" data-checklist-selector="#monitor-checklist" style="margin-top:0.85rem; display:none;">
-        <summary>Per-value name, unit, scale &amp; decimals (optional)</summary>
+        <summary><%= t('Per-value name, unit, scale & decimals (optional)') %></summary>
         <div class="value-series-rows"></div>
         <textarea class="value-series-hidden" name="value_series" hidden>{}</textarea>
-        <p class="hint" style="margin:0.4rem 0 0;">Appears once you've checked a monitor below — rename a value, give it its own unit, or scale/round it independently from the others.</p>
+        <p class="hint" style="margin:0.4rem 0 0;"><%= t('Appears once you\'ve checked a monitor below — rename a value, give it its own unit, or scale/round it independently from the others.') %></p>
       </details>
 
       <div style="margin-top:0.85rem;" id="monitors-section">
         <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);">
-          Monitors
+          <%= t('Monitors') %>
         </label>
         <p class="hint" id="table-monitor-hint" style="display:none; margin:0 0 0.5rem;">
-          This panel type shows one monitor &mdash; if you check more than one, only the first is used.
+          <%= t('This panel type shows one monitor — if you check more than one, only the first is used.') %>
         </p>
-        <input type="text" id="monitor-filter" placeholder="Filter monitors&hellip;" style="max-width:20rem; margin-bottom:0.6rem; padding:0.5rem 0.6rem; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text);">
+        <input type="text" id="monitor-filter" placeholder="<%= t('Filter monitors…') %>" style="max-width:20rem; margin-bottom:0.6rem; padding:0.5rem 0.6rem; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text);">
         <div id="monitor-checklist" style="display:flex; flex-direction:column; gap:0.35rem; max-height:220px; overflow-y:auto; padding:0.6rem; border:1px solid var(--border); border-radius:8px;">
           <% monitors.forEach(m => { %>
             <label class="monitor-check-row" data-label="<%= m.label.toLowerCase() %>" style="display:flex; align-items:center; gap:0.5rem; font-size:0.87rem;">
@@ -313,13 +313,13 @@
             </label>
           <% }) %>
           <% if (monitors.length === 0) { %>
-            <p class="hint" style="margin:0;">No monitors yet &mdash; add one on the <a href="/monitor">Monitor</a> page first.</p>
+            <p class="hint" style="margin:0;"><%= t('No monitors yet — add one on the') %> <a href="/monitor"><%= t('Monitor') %></a> <%= t('page first.') %></p>
           <% } %>
         </div>
       </div>
 
       <div style="margin-top:0.9rem;">
-        <button type="submit" class="primary"><%- icon('plus') %> Add panel</button>
+        <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add panel') %></button>
       </div>
     </form>
   </div>
@@ -389,11 +389,11 @@
       <div class="grid-stack-item-content">
     <% } %>
     <div class="dash-panel<%= isGroupHeader ? ' dash-panel-group-header' : '' %>" data-id="<%= p.id %>" data-panel-type="<%= p.panel_type %>">
-      <% if (canEditPanels && !isGroupHeader) { %><span class="widget-drag-handle" title="Drag to reorder">&#8942;&#8942;</span><% } %>
-      <% if (canEditPanels && isGroupHeader) { %><span class="group-drag-handle" title="Drag to reorder this group">&#8942;&#8942;</span><% } %>
+      <% if (canEditPanels && !isGroupHeader) { %><span class="widget-drag-handle" title="<%= t('Drag to reorder') %>">&#8942;&#8942;</span><% } %>
+      <% if (canEditPanels && isGroupHeader) { %><span class="group-drag-handle" title="<%= t('Drag to reorder this group') %>">&#8942;&#8942;</span><% } %>
       <div class="dash-panel-head">
         <% if (isGroupHeader) { %>
-          <button type="button" class="icon-btn icon-btn-neutral group-header-toggle" title="Collapse/expand this group" aria-label="Collapse/expand this group">
+          <button type="button" class="icon-btn icon-btn-neutral group-header-toggle" title="<%= t('Collapse/expand this group') %>" aria-label="<%= t('Collapse/expand this group') %>">
             <span class="group-header-chevron"><%- icon('chevron') %></span>
           </button>
         <% } %>
@@ -405,12 +405,12 @@
         </div>
         <% if (canEditPanels) { %>
         <div class="row-actions">
-          <button type="button" class="icon-btn icon-btn-edit" title="Edit panel" data-toggle-row="panel-edit-<%= p.id %>"><%- icon('edit') %></button>
+          <button type="button" class="icon-btn icon-btn-edit" title="<%= t('Edit panel') %>" data-toggle-row="panel-edit-<%= p.id %>"><%- icon('edit') %></button>
           <form method="post" action="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/duplicate">
-            <button type="submit" class="icon-btn icon-btn-add" title="Duplicate panel"><%- icon('copy') %></button>
+            <button type="submit" class="icon-btn icon-btn-add" title="<%= t('Duplicate panel') %>"><%- icon('copy') %></button>
           </form>
-          <form method="post" action="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/delete" data-confirm="Remove this panel?">
-            <button type="submit" class="icon-btn icon-btn-danger" title="Delete panel"><%- icon('trash') %></button>
+          <form method="post" action="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/delete" data-confirm="<%= t('Remove this panel?') %>">
+            <button type="submit" class="icon-btn icon-btn-danger" title="<%= t('Delete panel') %>"><%- icon('trash') %></button>
           </form>
         </div>
         <% } %>
@@ -419,7 +419,7 @@
       <% if (canEditPanels) { %>
       <form id="panel-edit-<%= p.id %>" method="post" action="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/settings" class="form-grid panel-settings-form">
         <div class="panel-settings-form-head" style="grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; margin-bottom:0.3rem;">
-          <strong>Edit panel</strong>
+          <strong><%= t('Edit panel') %></strong>
           <div class="row-actions">
             <%
               // The star's color is a "just saved" flag, not "does a default exist" — it starts
@@ -436,30 +436,30 @@
               const panelDefaultsKey = p.panel_type === 'chart' ? 'chart:' + (p.config.chartType || 'line') : p.panel_type;
             %>
             <button type="button" class="icon-btn icon-btn-neutral" data-panel-default-kind="save" data-panel-default-url="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/save-as-default" title="Save this panel's appearance as the default for every &quot;<%= p.panel_type %>&quot; panel on THIS dashboard"><%- icon('star') %></button>
-            <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="Show/hide the help text under each field"><%- icon('lightbulb') %></button>
+            <button type="button" class="icon-btn icon-btn-neutral hints-toggle-btn" title="<%= t('Show/hide the help text under each field') %>"><%- icon('lightbulb') %></button>
             <% if (panelTypeDefaultsExist[panelDefaultsKey]) { %>
             <button type="button" class="icon-btn icon-btn-neutral" data-panel-default-kind="reset" data-panel-default-url="/dashboards/<%= dashboardId %>/panels/<%= p.id %>/reset-to-default" title="Apply the saved &quot;<%= p.panel_type %>&quot; default (this dashboard) to THIS panel"><%- icon('refresh') %></button>
             <% } %>
-            <button type="button" class="icon-btn icon-btn-danger" data-toggle-row="panel-edit-<%= p.id %>" title="Close" aria-label="Close"><%- icon('x') %></button>
+            <button type="button" class="icon-btn icon-btn-danger" data-toggle-row="panel-edit-<%= p.id %>" title="<%= t('Close') %>" aria-label="<%= t('Close') %>"><%- icon('x') %></button>
           </div>
         </div>
         <div>
-          <label>Panel type</label>
+          <label><%= t('Panel type') %></label>
           <select name="panel_type" class="panel-type-select">
-            <option value="chart" <%= p.panel_type === 'chart' ? 'selected' : '' %>>Chart</option>
-            <option value="table" <%= p.panel_type === 'table' ? 'selected' : '' %>>Table</option>
-            <option value="value" <%= p.panel_type === 'value' ? 'selected' : '' %>>Current value</option>
-            <option value="gauge" <%= p.panel_type === 'gauge' ? 'selected' : '' %>>Gauge</option>
-            <option value="stat_delta" <%= p.panel_type === 'stat_delta' ? 'selected' : '' %>>Stat with change</option>
-            <option value="threshold" <%= p.panel_type === 'threshold' ? 'selected' : '' %>>Threshold indicator</option>
-            <option value="state_bar" <%= p.panel_type === 'state_bar' ? 'selected' : '' %>>State bar</option>
-            <option value="group_header" <%= p.panel_type === 'group_header' ? 'selected' : '' %>>Group header</option>
+            <option value="chart" <%= p.panel_type === 'chart' ? 'selected' : '' %>><%= t('Chart') %></option>
+            <option value="table" <%= p.panel_type === 'table' ? 'selected' : '' %>><%= t('Table') %></option>
+            <option value="value" <%= p.panel_type === 'value' ? 'selected' : '' %>><%= t('Current value') %></option>
+            <option value="gauge" <%= p.panel_type === 'gauge' ? 'selected' : '' %>><%= t('Gauge') %></option>
+            <option value="stat_delta" <%= p.panel_type === 'stat_delta' ? 'selected' : '' %>><%= t('Stat with change') %></option>
+            <option value="threshold" <%= p.panel_type === 'threshold' ? 'selected' : '' %>><%= t('Threshold indicator') %></option>
+            <option value="state_bar" <%= p.panel_type === 'state_bar' ? 'selected' : '' %>><%= t('State bar') %></option>
+            <option value="group_header" <%= p.panel_type === 'group_header' ? 'selected' : '' %>><%= t('Group header') %></option>
           </select>
         </div>
-        <div><label>Title</label><input type="text" name="title" value="<%= p.title || '' %>" placeholder="Title"></div>
+        <div><label><%= t('Title') %></label><input type="text" name="title" value="<%= p.title || '' %>" placeholder="<%= t('Title') %>"></div>
         <div data-fields-for="group_header">
-          <label>Description (optional)</label>
-          <input type="text" name="description" value="<%= p.panel_type === 'group_header' ? (p.config.description || '') : '' %>" placeholder="Shown after the title as &quot;Title - description&quot;">
+          <label><%= t('Description (optional)') %></label>
+          <input type="text" name="description" value="<%= p.panel_type === 'group_header' ? (p.config.description || '') : '' %>" placeholder="<%= t('Shown after the title as "Title - description"') %>">
         </div>
         <%
           // Not part of this panel's own config — moving it to a different group is handled
@@ -468,16 +468,16 @@
           const editPanelGroupHeaders = panels.filter(gp => gp.panel_type === 'group_header' && gp.id !== p.id);
         %>
         <div data-fields-for="chart,table,value,gauge,stat_delta,threshold,state_bar">
-          <label>Group</label>
+          <label><%= t('Group') %></label>
           <select name="target_group_id" class="panel-edit-group-select" data-panel-id="<%= p.id %>">
-            <option value="">— Ungrouped (top) —</option>
+            <option value=""><%= t('— Ungrouped (top) —') %></option>
             <% editPanelGroupHeaders.forEach(function (gp) { %>
             <option value="<%= gp.id %>"><%= gp.title || 'Group' %></option>
             <% }) %>
           </select>
         </div>
         <div data-fields-for="chart,table,stat_delta,state_bar">
-          <label>Range</label>
+          <label><%= t('Range') %></label>
           <%- rangeField(p.range, { includeDashboardDefault: true }) %>
         </div>
 
@@ -499,85 +499,85 @@
           var chartType = p.panel_type === 'chart' ? (p.config.chartType || 'line') : 'line';
         %>
         <div class="panel-section" data-fields-for="chart">
-          <div class="panel-section-title">Appearance</div>
+          <div class="panel-section-title"><%= t('Appearance') %></div>
           <div>
-            <label>Chart type</label>
+            <label><%= t('Chart type') %></label>
             <select name="chart_type" class="chart-type-select">
-              <option value="line" <%= chartType === 'line' ? 'selected' : '' %>>Line</option>
-              <option value="bar_compare" <%= chartType === 'bar_compare' ? 'selected' : '' %>>Bar (compare)</option>
-              <option value="doughnut" <%= chartType === 'doughnut' ? 'selected' : '' %>>Doughnut</option>
-              <option value="pie" <%= chartType === 'pie' ? 'selected' : '' %>>Pie</option>
-              <option value="polar_area" <%= chartType === 'polar_area' ? 'selected' : '' %>>Polar Area</option>
-              <option value="radar" <%= chartType === 'radar' ? 'selected' : '' %>>Radar</option>
+              <option value="line" <%= chartType === 'line' ? 'selected' : '' %>><%= t('Line') %></option>
+              <option value="bar_compare" <%= chartType === 'bar_compare' ? 'selected' : '' %>><%= t('Bar (compare)') %></option>
+              <option value="doughnut" <%= chartType === 'doughnut' ? 'selected' : '' %>><%= t('Doughnut') %></option>
+              <option value="pie" <%= chartType === 'pie' ? 'selected' : '' %>><%= t('Pie') %></option>
+              <option value="polar_area" <%= chartType === 'polar_area' ? 'selected' : '' %>><%= t('Polar Area') %></option>
+              <option value="radar" <%= chartType === 'radar' ? 'selected' : '' %>><%= t('Radar') %></option>
             </select>
           </div>
           <% var legendAlign = p.panel_type === 'chart' ? (p.config.legendAlign || 'start') : 'start'; %>
           <div class="threshold-builder-details-wrap" style="grid-column:1/-1;">
             <details class="threshold-builder-details" open>
-              <summary>Legend</summary>
+              <summary><%= t('Legend') %></summary>
               <div class="form-grid">
                 <div>
-                  <label>Legend</label>
+                  <label><%= t('Legend') %></label>
                   <select name="legend_position" class="legend-position-select">
-                    <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>>Auto (only when &gt;1 monitor)</option>
-                    <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>>Top</option>
-                    <option value="bottom" <%= legendPos === 'bottom' ? 'selected' : '' %>>Bottom</option>
-                    <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>>Left</option>
-                    <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>>Right</option>
-                    <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>>Off</option>
+                    <option value="auto" <%= legendPos === 'auto' ? 'selected' : '' %>><%= t('Auto (only when >1 monitor)') %></option>
+                    <option value="top" <%= legendPos === 'top' ? 'selected' : '' %>><%= t('Top') %></option>
+                    <option value="bottom" <%= legendPos === 'bottom' ? 'selected' : '' %>><%= t('Bottom') %></option>
+                    <option value="left" <%= legendPos === 'left' ? 'selected' : '' %>><%= t('Left') %></option>
+                    <option value="right" <%= legendPos === 'right' ? 'selected' : '' %>><%= t('Right') %></option>
+                    <option value="off" <%= legendPos === 'off' ? 'selected' : '' %>><%= t('Off') %></option>
                   </select>
                 </div>
-                <div data-chart-type-for="line" data-legend-for="on"><label>Legend alignment</label>
+                <div data-chart-type-for="line" data-legend-for="on"><label><%= t('Legend alignment') %></label>
                   <select name="legend_align">
-                    <option value="start" <%= legendAlign === 'start' ? 'selected' : '' %>>Left</option>
-                    <option value="center" <%= legendAlign === 'center' ? 'selected' : '' %>>Center</option>
-                    <option value="end" <%= legendAlign === 'end' ? 'selected' : '' %>>Right</option>
+                    <option value="start" <%= legendAlign === 'start' ? 'selected' : '' %>><%= t('Left') %></option>
+                    <option value="center" <%= legendAlign === 'center' ? 'selected' : '' %>><%= t('Center') %></option>
+                    <option value="end" <%= legendAlign === 'end' ? 'selected' : '' %>><%= t('Right') %></option>
                   </select>
                 </div>
-                <div data-chart-type-for="line" data-legend-for="on"><label>Show min in legend</label><%- toggleSwitch('legend_show_min', p.panel_type === 'chart' && !!p.config.legendShowMin) %></div>
-                <div data-chart-type-for="line" data-legend-for="on"><label>Show max in legend</label><%- toggleSwitch('legend_show_max', p.panel_type === 'chart' && !!p.config.legendShowMax) %></div>
-                <div data-chart-type-for="line" data-legend-for="on"><label>Show average in legend</label><%- toggleSwitch('legend_show_avg', p.panel_type === 'chart' && !!p.config.legendShowAvg) %></div>
-                <div data-chart-type-for="line" data-legend-for="on"><label>Show current value in legend</label><%- toggleSwitch('legend_show_current', p.panel_type === 'chart' && !!p.config.legendShowCurrent) %></div>
+                <div data-chart-type-for="line" data-legend-for="on"><label><%= t('Show min in legend') %></label><%- toggleSwitch('legend_show_min', p.panel_type === 'chart' && !!p.config.legendShowMin) %></div>
+                <div data-chart-type-for="line" data-legend-for="on"><label><%= t('Show max in legend') %></label><%- toggleSwitch('legend_show_max', p.panel_type === 'chart' && !!p.config.legendShowMax) %></div>
+                <div data-chart-type-for="line" data-legend-for="on"><label><%= t('Show average in legend') %></label><%- toggleSwitch('legend_show_avg', p.panel_type === 'chart' && !!p.config.legendShowAvg) %></div>
+                <div data-chart-type-for="line" data-legend-for="on"><label><%= t('Show current value in legend') %></label><%- toggleSwitch('legend_show_current', p.panel_type === 'chart' && !!p.config.legendShowCurrent) %></div>
               </div>
             </details>
           </div>
-          <div data-chart-type-for="line" data-shared-override="unit"><label>Y-axis unit</label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
-          <div data-chart-type-for="line"><label>Stepped line</label>
+          <div data-chart-type-for="line" data-shared-override="unit"><label><%= t('Y-axis unit') %></label><%- unitField('unit_chart', p.panel_type === 'chart' ? (p.config.unit || '') : '') %></div>
+          <div data-chart-type-for="line"><label><%= t('Stepped line') %></label>
             <select name="stepped_line">
-              <option value="" <%= steppedVal === '' ? 'selected' : '' %>>Off</option>
-              <option value="before" <%= steppedVal === 'before' ? 'selected' : '' %>>Before</option>
-              <option value="after" <%= steppedVal === 'after' ? 'selected' : '' %>>After</option>
-              <option value="middle" <%= steppedVal === 'middle' ? 'selected' : '' %>>Middle</option>
+              <option value="" <%= steppedVal === '' ? 'selected' : '' %>><%= t('Off') %></option>
+              <option value="before" <%= steppedVal === 'before' ? 'selected' : '' %>><%= t('Before') %></option>
+              <option value="after" <%= steppedVal === 'after' ? 'selected' : '' %>><%= t('After') %></option>
+              <option value="middle" <%= steppedVal === 'middle' ? 'selected' : '' %>><%= t('Middle') %></option>
             </select>
           </div>
-          <div data-chart-type-for="line"><label>Curve</label>
+          <div data-chart-type-for="line"><label><%= t('Curve') %></label>
             <select name="curve_tension">
-              <option value="0" <%= curveTension == 0 ? 'selected' : '' %>>Straight</option>
-              <option value="0.15" <%= curveTension == 0.15 ? 'selected' : '' %>>Slight curve</option>
-              <option value="0.4" <%= curveTension == 0.4 ? 'selected' : '' %>>Smooth</option>
+              <option value="0" <%= curveTension == 0 ? 'selected' : '' %>><%= t('Straight') %></option>
+              <option value="0.15" <%= curveTension == 0.15 ? 'selected' : '' %>><%= t('Slight curve') %></option>
+              <option value="0.4" <%= curveTension == 0.4 ? 'selected' : '' %>><%= t('Smooth') %></option>
             </select>
           </div>
-          <div data-chart-type-for="line"><label>Show points on line</label><%- toggleSwitch('show_points', p.panel_type === 'chart' && !!p.config.points) %></div>
-          <div data-chart-type-for="line"><label>Fill area under line</label><%- toggleSwitch('fill_area', p.panel_type === 'chart' && !!p.config.fill) %></div>
-          <div><label>Animate on load</label><%- toggleSwitch('enable_animation', p.panel_type === 'chart' && !!p.config.animation) %></div>
+          <div data-chart-type-for="line"><label><%= t('Show points on line') %></label><%- toggleSwitch('show_points', p.panel_type === 'chart' && !!p.config.points) %></div>
+          <div data-chart-type-for="line"><label><%= t('Fill area under line') %></label><%- toggleSwitch('fill_area', p.panel_type === 'chart' && !!p.config.fill) %></div>
+          <div><label><%= t('Animate on load') %></label><%- toggleSwitch('enable_animation', p.panel_type === 'chart' && !!p.config.animation) %></div>
         </div>
         <div class="panel-section" data-fields-for="chart" data-chart-type-for="line">
-          <div class="panel-section-title">Y-axis</div>
+          <div class="panel-section-title"><%= t('Y-axis') %></div>
           <div>
-            <label>Scale</label>
+            <label><%= t('Scale') %></label>
             <select name="y_scale_type">
-              <option value="linear" <%= yScaleType === 'linear' ? 'selected' : '' %>>Linear</option>
-              <option value="logarithmic" <%= yScaleType === 'logarithmic' ? 'selected' : '' %>>Logarithmic</option>
+              <option value="linear" <%= yScaleType === 'linear' ? 'selected' : '' %>><%= t('Linear') %></option>
+              <option value="logarithmic" <%= yScaleType === 'logarithmic' ? 'selected' : '' %>><%= t('Logarithmic') %></option>
             </select>
           </div>
-          <div><label>Minimum, left axis (optional)</label><input type="number" name="y_min" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMin != null ? p.config.yMin : '' %>"></div>
-          <div><label>Maximum, left axis (optional)</label><input type="number" name="y_max" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMax != null ? p.config.yMax : '' %>"></div>
-          <div><label>Minimum, right axis (optional)</label><input type="number" name="y_min_right" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMinRight != null ? p.config.yMinRight : '' %>"></div>
-          <div><label>Maximum, right axis (optional)</label><input type="number" name="y_max_right" step="any" placeholder="Auto" value="<%= p.panel_type === 'chart' && p.config.yMaxRight != null ? p.config.yMaxRight : '' %>"></div>
+          <div><label><%= t('Minimum, left axis (optional)') %></label><input type="number" name="y_min" step="any" placeholder="<%= t('Auto') %>" value="<%= p.panel_type === 'chart' && p.config.yMin != null ? p.config.yMin : '' %>"></div>
+          <div><label><%= t('Maximum, left axis (optional)') %></label><input type="number" name="y_max" step="any" placeholder="<%= t('Auto') %>" value="<%= p.panel_type === 'chart' && p.config.yMax != null ? p.config.yMax : '' %>"></div>
+          <div><label><%= t('Minimum, right axis (optional)') %></label><input type="number" name="y_min_right" step="any" placeholder="<%= t('Auto') %>" value="<%= p.panel_type === 'chart' && p.config.yMinRight != null ? p.config.yMinRight : '' %>"></div>
+          <div><label><%= t('Maximum, right axis (optional)') %></label><input type="number" name="y_max_right" step="any" placeholder="<%= t('Auto') %>" value="<%= p.panel_type === 'chart' && p.config.yMaxRight != null ? p.config.yMaxRight : '' %>"></div>
         </div>
         <div class="panel-section" data-fields-for="chart" data-chart-type-for="line">
-          <div class="panel-section-title">Interaction</div>
-          <div><label>Zoom &amp; pan (scroll to zoom, drag to pan)</label><%- toggleSwitch('enable_zoom', p.panel_type === 'chart' && !!p.config.zoom) %></div>
+          <div class="panel-section-title"><%= t('Interaction') %></div>
+          <div><label><%= t('Zoom & pan (scroll to zoom, drag to pan)') %></label><%- toggleSwitch('enable_zoom', p.panel_type === 'chart' && !!p.config.zoom) %></div>
         </div>
         <div data-fields-for="chart" data-chart-type-for="line" style="grid-column:1/-1;">
           <%- thresholdField('chart_thresholds', p.panel_type === 'chart' ? p.config.thresholds : []) %>
@@ -587,16 +587,16 @@
         </div>
 
         <div class="panel-section" data-fields-for="value">
-          <div class="panel-section-title">Appearance</div>
+          <div class="panel-section-title"><%= t('Appearance') %></div>
           <div>
-            <label>Layout</label>
+            <label><%= t('Layout') %></label>
             <select name="value_layout">
-              <option value="stacked" <%= !(p.panel_type === 'value' && p.config.layout === 'row') ? 'selected' : '' %>>Stacked (one per line)</option>
-              <option value="row" <%= p.panel_type === 'value' && p.config.layout === 'row' ? 'selected' : '' %>>Row (side by side)</option>
+              <option value="stacked" <%= !(p.panel_type === 'value' && p.config.layout === 'row') ? 'selected' : '' %>><%= t('Stacked (one per line)') %></option>
+              <option value="row" <%= p.panel_type === 'value' && p.config.layout === 'row' ? 'selected' : '' %>><%= t('Row (side by side)') %></option>
             </select>
           </div>
-          <div data-shared-override="unit"><label>Unit</label><%- unitField('unit_value', p.panel_type === 'value' ? (p.config.unit || '') : '') %></div>
-          <div><label>Hide name</label><%- toggleSwitch('hide_value_label', p.panel_type === 'value' && !!p.config.hideLabel) %></div>
+          <div data-shared-override="unit"><label><%= t('Unit') %></label><%- unitField('unit_value', p.panel_type === 'value' ? (p.config.unit || '') : '') %></div>
+          <div><label><%= t('Hide name') %></label><%- toggleSwitch('hide_value_label', p.panel_type === 'value' && !!p.config.hideLabel) %></div>
         </div>
         <div data-fields-for="value" style="grid-column:1/-1;">
           <%- valueMappingField('value_labels', p.panel_type === 'value' ? p.config.valueLabels : []) %>
@@ -605,124 +605,124 @@
           <%- thresholdField('value_thresholds', p.panel_type === 'value' ? p.config.thresholds : []) %>
         </div>
         <details data-fields-for="value" class="value-series-settings threshold-builder-details" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;" <%= p.panel_type === 'value' && Object.keys(p.config.series || {}).length > 0 ? 'open' : '' %>>
-          <summary>Per-value name, unit, scale &amp; decimals</summary>
+          <summary><%= t('Per-value name, unit, scale & decimals') %></summary>
           <div class="value-series-rows"></div>
           <textarea class="value-series-hidden" name="value_series" hidden><%= p.panel_type === 'value' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
-          <p class="hint" style="margin:0.3rem 0 0;">Rename a value, give it its own unit, or scale/round it independently from the others &mdash; display only, doesn't rename the Monitor itself.</p>
+          <p class="hint" style="margin:0.3rem 0 0;"><%= t('Rename a value, give it its own unit, or scale/round it independently from the others — display only, doesn\'t rename the Monitor itself.') %></p>
         </details>
         <details data-fields-for="chart" class="chart-series-settings threshold-builder-details" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;" <%= p.panel_type === 'chart' && Object.keys(p.config.series || {}).length > 0 ? 'open' : '' %>>
-          <summary>Series settings</summary>
+          <summary><%= t('Series settings') %></summary>
           <div class="chart-series-rows"></div>
           <textarea class="chart-series-hidden" name="chart_series" hidden><%= p.panel_type === 'chart' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
-          <p class="hint" style="margin:0.3rem 0 0;">Rename a series, give it its own unit/scale/decimals/line style, or move it to the right-hand axis.</p>
+          <p class="hint" style="margin:0.3rem 0 0;"><%= t('Rename a series, give it its own unit/scale/decimals/line style, or move it to the right-hand axis.') %></p>
         </details>
 
         <div class="panel-section" data-fields-for="table">
-          <div class="panel-section-title">Appearance</div>
-          <div><label>Value scale</label><%- scaleField('scale_table', p.panel_type === 'table' && p.config.scale != null ? p.config.scale : 1) %></div>
-          <div><label>Decimals (optional)</label><input type="number" name="decimals_table" min="0" max="6" placeholder="Default" value="<%= p.panel_type === 'table' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
+          <div class="panel-section-title"><%= t('Appearance') %></div>
+          <div><label><%= t('Value scale') %></label><%- scaleField('scale_table', p.panel_type === 'table' && p.config.scale != null ? p.config.scale : 1) %></div>
+          <div><label><%= t('Decimals (optional)') %></label><input type="number" name="decimals_table" min="0" max="6" placeholder="<%= t('Default') %>" value="<%= p.panel_type === 'table' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
         </div>
         <div data-fields-for="table" style="grid-column:1/-1;">
           <%- thresholdField('table_thresholds', p.panel_type === 'table' ? p.config.thresholds : []) %>
         </div>
 
         <div class="panel-section" data-fields-for="gauge">
-          <div class="panel-section-title">Range</div>
-          <div><label>Style</label>
+          <div class="panel-section-title"><%= t('Range') %></div>
+          <div><label><%= t('Style') %></label>
             <select name="gauge_style" class="gauge-style-select">
-              <option value="bar" <%= !(p.panel_type === 'gauge' && p.config.style === 'radial') ? 'selected' : '' %>>Bar</option>
-              <option value="radial" <%= p.panel_type === 'gauge' && p.config.style === 'radial' ? 'selected' : '' %>>Round</option>
+              <option value="bar" <%= !(p.panel_type === 'gauge' && p.config.style === 'radial') ? 'selected' : '' %>><%= t('Bar') %></option>
+              <option value="radial" <%= p.panel_type === 'gauge' && p.config.style === 'radial' ? 'selected' : '' %>><%= t('Round') %></option>
             </select>
           </div>
-          <div data-gauge-style-for="radial"><label>Shape</label>
+          <div data-gauge-style-for="radial"><label><%= t('Shape') %></label>
             <select name="gauge_shape">
-              <option value="arc" <%= !(p.panel_type === 'gauge' && p.config.shape === 'circle') ? 'selected' : '' %>>Arc</option>
-              <option value="circle" <%= p.panel_type === 'gauge' && p.config.shape === 'circle' ? 'selected' : '' %>>Full circle</option>
+              <option value="arc" <%= !(p.panel_type === 'gauge' && p.config.shape === 'circle') ? 'selected' : '' %>><%= t('Arc') %></option>
+              <option value="circle" <%= p.panel_type === 'gauge' && p.config.shape === 'circle' ? 'selected' : '' %>><%= t('Full circle') %></option>
             </select>
           </div>
-          <div data-shared-override="min"><label>Minimum</label><input type="number" name="gauge_min" value="<%= p.panel_type === 'gauge' ? p.config.min : 0 %>" step="any"></div>
-          <div data-shared-override="max"><label>Maximum</label><input type="number" name="gauge_max" value="<%= p.panel_type === 'gauge' ? p.config.max : 100 %>" step="any"></div>
-          <div data-shared-override="unit"><label>Unit</label><%- unitField('unit_gauge', p.panel_type === 'gauge' ? (p.config.unit || '') : '') %></div>
-          <div><label>Value scale</label><%- scaleField('scale_gauge', p.panel_type === 'gauge' && p.config.scale != null ? p.config.scale : 1) %></div>
-          <div><label>Decimals (optional)</label><input type="number" name="decimals_gauge" min="0" max="6" placeholder="Default" value="<%= p.panel_type === 'gauge' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
-          <div><label>Threshold sections</label><%- toggleSwitch('gauge_sections', p.panel_type === 'gauge' && !!p.config.sections) %></div>
-          <div data-gauge-sections-for="on"><label>Gradient sections</label><%- toggleSwitch('gauge_sections_gradient', p.panel_type === 'gauge' && !!p.config.sectionsGradient) %></div>
-          <div data-gauge-style-for="radial"><label>Needle</label><%- toggleSwitch('gauge_needle', p.panel_type === 'gauge' && !!p.config.needle) %></div>
-          <div data-gauge-style-for="radial"><label>Trend line under value</label><%- toggleSwitch('gauge_sparkline', p.panel_type === 'gauge' && !!p.config.sparkline) %></div>
-          <div data-gauge-style-for="radial" data-gauge-sparkline-for="on"><label>Neutral trend line color</label><%- toggleSwitch('gauge_sparkline_neutral', p.panel_type === 'gauge' && p.config.sparklineColor === 'default') %></div>
+          <div data-shared-override="min"><label><%= t('Minimum') %></label><input type="number" name="gauge_min" value="<%= p.panel_type === 'gauge' ? p.config.min : 0 %>" step="any"></div>
+          <div data-shared-override="max"><label><%= t('Maximum') %></label><input type="number" name="gauge_max" value="<%= p.panel_type === 'gauge' ? p.config.max : 100 %>" step="any"></div>
+          <div data-shared-override="unit"><label><%= t('Unit') %></label><%- unitField('unit_gauge', p.panel_type === 'gauge' ? (p.config.unit || '') : '') %></div>
+          <div><label><%= t('Value scale') %></label><%- scaleField('scale_gauge', p.panel_type === 'gauge' && p.config.scale != null ? p.config.scale : 1) %></div>
+          <div><label><%= t('Decimals (optional)') %></label><input type="number" name="decimals_gauge" min="0" max="6" placeholder="<%= t('Default') %>" value="<%= p.panel_type === 'gauge' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
+          <div><label><%= t('Threshold sections') %></label><%- toggleSwitch('gauge_sections', p.panel_type === 'gauge' && !!p.config.sections) %></div>
+          <div data-gauge-sections-for="on"><label><%= t('Gradient sections') %></label><%- toggleSwitch('gauge_sections_gradient', p.panel_type === 'gauge' && !!p.config.sectionsGradient) %></div>
+          <div data-gauge-style-for="radial"><label><%= t('Needle') %></label><%- toggleSwitch('gauge_needle', p.panel_type === 'gauge' && !!p.config.needle) %></div>
+          <div data-gauge-style-for="radial"><label><%= t('Trend line under value') %></label><%- toggleSwitch('gauge_sparkline', p.panel_type === 'gauge' && !!p.config.sparkline) %></div>
+          <div data-gauge-style-for="radial" data-gauge-sparkline-for="on"><label><%= t('Neutral trend line color') %></label><%- toggleSwitch('gauge_sparkline_neutral', p.panel_type === 'gauge' && p.config.sparklineColor === 'default') %></div>
         </div>
         <div data-fields-for="gauge" data-shared-override="thresholds" style="grid-column:1/-1;">
           <%- thresholdField('gauge_thresholds', p.panel_type === 'gauge' ? p.config.thresholds : []) %>
-          <% if (p.panel_type === 'gauge') { %><p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor above to show several gauges side by side, all sharing this same style — range/unit/thresholds below can still be overridden per value.</p><% } %>
+          <% if (p.panel_type === 'gauge') { %><p class="hint" style="margin:0.4rem 0 0;"><%= t('Check more than one monitor above to show several gauges side by side, all sharing this same style — range/unit/thresholds below can still be overridden per value.') %></p><% } %>
         </div>
         <details data-fields-for="gauge" class="gauge-series-settings threshold-builder-details" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;" <%= p.panel_type === 'gauge' && Object.keys(p.config.series || {}).length > 0 ? 'open' : '' %>>
-          <summary>Per-value range, unit &amp; thresholds</summary>
+          <summary><%= t('Per-value range, unit & thresholds') %></summary>
           <div class="gauge-series-rows"></div>
           <textarea class="gauge-series-hidden" name="gauge_series" hidden><%= p.panel_type === 'gauge' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
-          <p class="hint" style="margin:0.3rem 0 0;">Give one value its own min/max, unit, and/or alert thresholds — e.g. Temperature at 0&ndash;40&deg;C, Humidity at 0&ndash;100% in the same panel. Blank leaves it on the panel's own range/unit/thresholds above.</p>
+          <p class="hint" style="margin:0.3rem 0 0;"><%= t('Give one value its own min/max, unit, and/or alert thresholds — e.g. Temperature at 0–40°C, Humidity at 0–100% in the same panel. Blank leaves it on the panel\'s own range/unit/thresholds above.') %></p>
         </details>
 
         <div class="panel-section" data-fields-for="stat_delta">
-          <div class="panel-section-title">Appearance</div>
-          <div><label>Unit</label><%- unitField('unit_stat_delta', p.panel_type === 'stat_delta' ? (p.config.unit || '') : '') %></div>
+          <div class="panel-section-title"><%= t('Appearance') %></div>
+          <div><label><%= t('Unit') %></label><%- unitField('unit_stat_delta', p.panel_type === 'stat_delta' ? (p.config.unit || '') : '') %></div>
           <div>
-            <label>Color the change when</label>
+            <label><%= t('Color the change when') %></label>
             <select name="direction">
-              <option value="neutral" <%= !(p.panel_type === 'stat_delta' && p.config.direction !== 'neutral') ? 'selected' : '' %>>Neutral (no color)</option>
-              <option value="up_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'up_good' ? 'selected' : '' %>>Higher is better</option>
-              <option value="down_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'down_good' ? 'selected' : '' %>>Lower is better</option>
+              <option value="neutral" <%= !(p.panel_type === 'stat_delta' && p.config.direction !== 'neutral') ? 'selected' : '' %>><%= t('Neutral (no color)') %></option>
+              <option value="up_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'up_good' ? 'selected' : '' %>><%= t('Higher is better') %></option>
+              <option value="down_good" <%= p.panel_type === 'stat_delta' && p.config.direction === 'down_good' ? 'selected' : '' %>><%= t('Lower is better') %></option>
             </select>
           </div>
-          <div><label>Value scale</label><%- scaleField('scale_stat_delta', p.panel_type === 'stat_delta' && p.config.scale != null ? p.config.scale : 1) %></div>
-          <div><label>Decimals (optional)</label><input type="number" name="decimals_stat_delta" min="0" max="6" placeholder="Default" value="<%= p.panel_type === 'stat_delta' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
+          <div><label><%= t('Value scale') %></label><%- scaleField('scale_stat_delta', p.panel_type === 'stat_delta' && p.config.scale != null ? p.config.scale : 1) %></div>
+          <div><label><%= t('Decimals (optional)') %></label><input type="number" name="decimals_stat_delta" min="0" max="6" placeholder="<%= t('Default') %>" value="<%= p.panel_type === 'stat_delta' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
         </div>
         <div data-fields-for="stat_delta" style="grid-column:1/-1;">
           <%- thresholdField('stat_delta_thresholds', p.panel_type === 'stat_delta' ? p.config.thresholds : []) %>
         </div>
 
         <div class="panel-section" data-fields-for="threshold">
-          <div class="panel-section-title">Condition</div>
+          <div class="panel-section-title"><%= t('Condition') %></div>
           <div>
-            <label>Alert when value is</label>
+            <label><%= t('Alert when value is') %></label>
             <select name="threshold_operator">
-              <option value="gt" <%= !(p.panel_type === 'threshold') || p.config.operator === 'gt' ? 'selected' : '' %>>Above</option>
-              <option value="gte" <%= p.panel_type === 'threshold' && p.config.operator === 'gte' ? 'selected' : '' %>>Above or equal to</option>
-              <option value="lt" <%= p.panel_type === 'threshold' && p.config.operator === 'lt' ? 'selected' : '' %>>Below</option>
-              <option value="lte" <%= p.panel_type === 'threshold' && p.config.operator === 'lte' ? 'selected' : '' %>>Below or equal to</option>
+              <option value="gt" <%= !(p.panel_type === 'threshold') || p.config.operator === 'gt' ? 'selected' : '' %>><%= t('Above') %></option>
+              <option value="gte" <%= p.panel_type === 'threshold' && p.config.operator === 'gte' ? 'selected' : '' %>><%= t('Above or equal to') %></option>
+              <option value="lt" <%= p.panel_type === 'threshold' && p.config.operator === 'lt' ? 'selected' : '' %>><%= t('Below') %></option>
+              <option value="lte" <%= p.panel_type === 'threshold' && p.config.operator === 'lte' ? 'selected' : '' %>><%= t('Below or equal to') %></option>
             </select>
           </div>
-          <div><label>Threshold</label><input type="number" name="threshold_value" value="<%= p.panel_type === 'threshold' ? p.config.value : 0 %>" step="any"></div>
-          <div><label>Unit</label><%- unitField('unit_threshold', p.panel_type === 'threshold' ? (p.config.unit || '') : '') %></div>
-          <div><label>Value scale</label><%- scaleField('scale_threshold', p.panel_type === 'threshold' && p.config.scale != null ? p.config.scale : 1) %></div>
-          <div><label>Decimals (optional)</label><input type="number" name="decimals_threshold" min="0" max="6" placeholder="Default" value="<%= p.panel_type === 'threshold' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
-          <p class="hint" style="grid-column:1/-1; margin:0;">The threshold above is compared against the value <em>after</em> scaling.</p>
+          <div><label><%= t('Threshold') %></label><input type="number" name="threshold_value" value="<%= p.panel_type === 'threshold' ? p.config.value : 0 %>" step="any"></div>
+          <div><label><%= t('Unit') %></label><%- unitField('unit_threshold', p.panel_type === 'threshold' ? (p.config.unit || '') : '') %></div>
+          <div><label><%= t('Value scale') %></label><%- scaleField('scale_threshold', p.panel_type === 'threshold' && p.config.scale != null ? p.config.scale : 1) %></div>
+          <div><label><%= t('Decimals (optional)') %></label><input type="number" name="decimals_threshold" min="0" max="6" placeholder="<%= t('Default') %>" value="<%= p.panel_type === 'threshold' && p.config.decimals != null ? p.config.decimals : '' %>"></div>
+          <p class="hint" style="grid-column:1/-1; margin:0;"><%= t('The threshold above is compared against the value') %> <em><%= t('after') %></em> <%= t('scaling.') %></p>
         </div>
         <div class="panel-section" data-fields-for="threshold">
-          <div class="panel-section-title">Labels</div>
-          <div><label>When normal</label><input type="text" name="label_ok" value="<%= p.panel_type === 'threshold' ? p.config.labelOk : 'Normal' %>"></div>
-          <div><label>When alert</label><input type="text" name="label_alert" value="<%= p.panel_type === 'threshold' ? p.config.labelAlert : 'Alert' %>"></div>
+          <div class="panel-section-title"><%= t('Labels') %></div>
+          <div><label><%= t('When normal') %></label><input type="text" name="label_ok" value="<%= p.panel_type === 'threshold' ? p.config.labelOk : 'Normal' %>"></div>
+          <div><label><%= t('When alert') %></label><input type="text" name="label_alert" value="<%= p.panel_type === 'threshold' ? p.config.labelAlert : 'Alert' %>"></div>
         </div>
         <div class="panel-section" data-fields-for="state_bar">
-          <div class="panel-section-title">State bar</div>
-          <div><label>Default color (unmapped values)</label><input type="color" class="single-color-input" name="state_bar_default_color" value="<%= p.panel_type === 'state_bar' && p.config.defaultColor ? p.config.defaultColor : '#8a93a6' %>"></div>
+          <div class="panel-section-title"><%= t('State bar') %></div>
+          <div><label><%= t('Default color (unmapped values)') %></label><input type="color" class="single-color-input" name="state_bar_default_color" value="<%= p.panel_type === 'state_bar' && p.config.defaultColor ? p.config.defaultColor : '#8a93a6' %>"></div>
         </div>
         <div data-fields-for="state_bar" data-shared-override="valueLabels" style="grid-column:1/-1;">
           <%- valueMappingField('state_bar_value_labels', p.panel_type === 'state_bar' ? p.config.valueLabels : []) %>
-          <p class="hint" style="margin:0.4rem 0 0;">Check more than one monitor below to stack several state bars in this one panel, one row per monitor — value names/colors below can still be overridden per monitor.</p>
+          <p class="hint" style="margin:0.4rem 0 0;"><%= t('Check more than one monitor below to stack several state bars in this one panel, one row per monitor — value names/colors below can still be overridden per monitor.') %></p>
         </div>
         <details data-fields-for="state_bar" class="state-bar-series-settings threshold-builder-details" data-checklist-selector=".panel-monitor-checklist" style="grid-column:1/-1;" <%= p.panel_type === 'state_bar' && Object.keys(p.config.series || {}).length > 0 ? 'open' : '' %>>
-          <summary>Per-monitor value names &amp; colors</summary>
+          <summary><%= t('Per-monitor value names & colors') %></summary>
           <div class="state-bar-series-rows"></div>
           <textarea class="state-bar-series-hidden" name="state_bar_series" hidden><%= p.panel_type === 'state_bar' ? JSON.stringify(p.config.series || {}) : '{}' %></textarea>
-          <p class="hint" style="margin:0.3rem 0 0;">Give one monitor its own value names/colors — e.g. a lock's 0/1 and a mode control's 1/2/3 in the same panel. Blank leaves it on the panel's own mapping above.</p>
+          <p class="hint" style="margin:0.3rem 0 0;"><%= t('Give one monitor its own value names/colors — e.g. a lock\'s 0/1 and a mode control\'s 1/2/3 in the same panel. Blank leaves it on the panel\'s own mapping above.') %></p>
         </details>
 
-        <div class="panel-section-title" data-fields-for="chart,table,value,gauge,stat_delta,threshold,state_bar" style="grid-column:1/-1;">Monitors</div>
+        <div class="panel-section-title" data-fields-for="chart,table,value,gauge,stat_delta,threshold,state_bar" style="grid-column:1/-1;"><%= t('Monitors') %></div>
         <div data-fields-for="chart,table,value,gauge,stat_delta,threshold,state_bar" style="grid-column:1/-1;">
           <p class="hint panel-single-monitor-hint" data-fields-for="table,stat_delta,threshold" style="display:none; margin:0 0 0.25rem; font-size:0.7rem;">
-            This panel type only uses the first checked monitor.
+            <%= t('This panel type only uses the first checked monitor.') %>
           </p>
-          <input type="text" class="panel-monitor-filter" placeholder="Filter monitors&hellip;" style="margin-bottom:0.25rem; width:100%;">
+          <input type="text" class="panel-monitor-filter" placeholder="<%= t('Filter monitors…') %>" style="margin-bottom:0.25rem; width:100%;">
           <div class="panel-monitor-checklist" style="display:flex; flex-direction:column; max-height:220px; overflow-y:auto; overflow-x:hidden; padding:0.2rem; border:1px solid var(--border); border-radius:6px;">
             <%
               // Already-checked monitors first — otherwise a panel with several monitors picked
@@ -738,11 +738,11 @@
               <label class="panel-monitor-check-row" data-label="<%= m.label.toLowerCase() %>" style="display:flex; align-items:center; gap:0.3rem; font-size:0.75rem; min-width:0; padding:0.05rem 0;">
                 <input type="checkbox" name="monitor_ids" value="<%= m.id %>" style="flex-shrink:0;" <%= p.monitors.some(pm => pm.id === m.id) ? 'checked' : '' %>>
                 <span style="flex:1; min-width:0; overflow-wrap:anywhere; line-height:1.2;"><%= m.label %></span>
-                <button type="button" class="icon-btn icon-btn-neutral panel-monitor-replace-btn" data-monitor-id="<%= m.id %>" title="Replace with another monitor, carrying over its Series settings/Threshold/Value overrides">⇄</button>
+                <button type="button" class="icon-btn icon-btn-neutral panel-monitor-replace-btn" data-monitor-id="<%= m.id %>" title="<%= t('Replace with another monitor, carrying over its Series settings/Threshold/Value overrides') %>">⇄</button>
               </label>
             <% }) %>
             <% if (monitors.length === 0) { %>
-              <p class="hint" style="margin:0;">No monitors yet.</p>
+              <p class="hint" style="margin:0;"><%= t('No monitors yet.') %></p>
             <% } %>
           </div>
         </div>
@@ -751,16 +751,16 @@
           // this file), so a button implying "nothing's saved until you click this" would just
           // contradict what's actually happening. This status text is the only save affordance.
         %>
-        <span class="hint panel-save-status" style="grid-column:1/-1; margin:0;">Saved</span>
+        <span class="hint panel-save-status" style="grid-column:1/-1; margin:0;"><%= t('Saved') %></span>
       </form>
-      <span class="panel-drawer-resize-handle" title="Drag to resize"></span>
+      <span class="panel-drawer-resize-handle" title="<%= t('Drag to resize') %>"></span>
       <% } %>
 
       <% if (isGroupHeader) { %>
         <!-- a group header has no body of its own — it's just the head bar above, acting as a
              full-width divider/collapse toggle for whatever panels follow it. -->
       <% } else if (p.monitors.length === 0) { %>
-        <p class="hint">No monitors left in this panel &mdash; they may have been deleted from the Monitor page. Remove this panel or add a new one.</p>
+        <p class="hint"><%= t('No monitors left in this panel — they may have been deleted from the Monitor page. Remove this panel or add a new one.') %></p>
       <% } else if (p.panel_type === 'chart') { %>
         <div class="chart-wrap">
           <div class="chart-canvas-inner">
@@ -793,13 +793,13 @@
       <% } else if (p.panel_type === 'table') { %>
         <div class="panel-table-scroll">
           <table class="panel-table">
-            <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
+            <thead><tr><th><%= t('Timestamp') %></th><th><%= t('Value') %></th></tr></thead>
             <tbody>
               <% p.rows.forEach(r => { %>
                 <tr><td><%= formatDateTime(r.recordedAt) %></td><td><span class="truncate" title="<%= r.displayValue %>" <% if (r.thresholdColor) { %>style="color: <%= r.thresholdColor %>; font-weight: 600;"<% } %>><%= r.displayValue %></span></td></tr>
               <% }) %>
               <% if (p.rows.length === 0) { %>
-                <tr><td colspan="2" class="empty">No readings in this range yet.</td></tr>
+                <tr><td colspan="2" class="empty"><%= t('No readings in this range yet.') %></td></tr>
               <% } %>
             </tbody>
           </table>
@@ -1062,7 +1062,7 @@
         <div class="stat-delta" data-live-id="panel-<%= p.id %>-body">
           <div class="stat-delta-value" <% if (p.thresholdColor) { %>style="color: <%= p.thresholdColor %>;"<% } %>><%= p.current ? p.current.displayValue : '-' %><%= p.effectiveUnit ? ' ' + p.effectiveUnit : '' %></div>
           <% if (p.delta === null) { %>
-            <p class="hint" style="margin:0;">No comparison reading yet.</p>
+            <p class="hint" style="margin:0;"><%= t('No comparison reading yet.') %></p>
           <% } else { %>
             <div class="stat-delta-change <%= deltaClass %>">
               <%- p.delta > 0 ? '&#9650;' : (p.delta < 0 ? '&#9660;' : '&#8212;') %> <%= p.displayDelta %><%= p.effectiveUnit ? ' ' + p.effectiveUnit : '' %>
@@ -1094,7 +1094,7 @@
               <% if (stateBarHasLabels) { %><div class="state-bar-label truncate" title="<%= bar.monitor.label %>"><%= bar.monitor.label %></div><% } %>
               <div class="state-bar-track">
                 <% if (bar.segments.length === 0) { %>
-                  <div class="state-bar-segment state-bar-segment-nodata" style="left:0; width:100%;" title="No data in this range"></div>
+                  <div class="state-bar-segment state-bar-segment-nodata" style="left:0; width:100%;" title="<%= t('No data in this range') %>"></div>
                 <% } else { %>
                   <% bar.segments.forEach(function (seg) { %>
                     <%
@@ -1146,7 +1146,7 @@
   </div>
   <% if (hasOpenGroupUnit) { %></div></div><% } %>
   <% if (panels.length === 0) { %>
-    <p class="hint">No panels yet<% if (canEditPanels) { %> &mdash; add one above<% } %>.</p>
+    <p class="hint"><%= t('No panels yet') %><% if (canEditPanels) { %> <%= t('— add one above') %><% } %>.</p>
   <% } %>
 </div>
 

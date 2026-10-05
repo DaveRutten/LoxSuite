@@ -14,7 +14,7 @@ const { reloadMqttMonitors } = require('../monitorCollector');
 const router = express.Router();
 
 const TYPES = ['bev', 'phev'];
-const SOURCES = ['none', 'mqtt', 'http', 'homey', 'homeassistant'];
+const SOURCES = ['none', 'mqtt', 'http', 'homey', 'homeassistant', 'skoda'];
 
 function num(v, { min = -Infinity, max = Infinity } = {}) {
   if (v === undefined || v === null || String(v).trim() === '') return null;
@@ -38,7 +38,7 @@ function parseForm(body) {
     reserve_pct: num(body.reserve_pct, { min: 0, max: 90 }) ?? (type === 'phev' ? 0 : 15),
     kwh_per_km: num(body.kwh_per_km, { min: 0.05, max: 1 }),
     fuel_l_per_100km: num(body.fuel_l_per_100km, { min: 0.5, max: 30 }),
-    source_type: sourceType,
+    source_type: sourceType === 'skoda' ? 'http' : sourceType, // Škoda = 'http' + provider (see vehicles.js)
     home_lat: num(body.home_lat, { min: -90, max: 90 }),
     home_lon: num(body.home_lon, { min: -180, max: 180 }),
     home_radius_m: num(body.home_radius_m, { min: 20, max: 5000 }) ?? 150,
@@ -86,6 +86,12 @@ function parseForm(body) {
       if (capability) cfg.fields[key] = { capability };
     }
     values.secret = String(body.homey_key || '');
+  } else if (sourceType === 'skoda') {
+    cfg.provider = 'skoda';
+    cfg.vin = String(body.skoda_vin || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!vehicles.VIN_RE.test(cfg.vin)) return { error: 'Fill in the 17-character VIN of the car (letters and digits, no I, O or Q).' };
+    cfg.interval_s = Math.max(interval ?? 600, 240); // Škoda allows 20 requests per hour per car
+    values.secret = String(body.skoda_key || '').trim();
   } else if (sourceType === 'homeassistant') {
     cfg.url = String(body.ha_url || '').trim();
     cfg.interval_s = interval ?? 300;
@@ -97,6 +103,7 @@ function parseForm(body) {
     values.secret = String(body.ha_token || '');
   }
   values.source_config = sourceType === 'none' ? null : JSON.stringify(cfg);
+  values.source_kind = sourceType;
   return { values };
 }
 
@@ -104,7 +111,7 @@ function parseForm(body) {
 // change (a Homey key is no use as Home Assistant token).
 function secretToStore(values, existing) {
   if (values.secret) return encrypt(values.secret);
-  if (existing && existing.source_type === values.source_type) return existing.secret;
+  if (existing && vehicles.sourceKind(existing) === (values.source_kind || values.source_type)) return existing.secret;
   return null;
 }
 
@@ -119,7 +126,7 @@ async function loadVehicle(id) {
 const DEFAULTS = { type: 'phev', enabled: 1, charge_limit_pct: 100, reserve_pct: 0, home_radius_m: 150, source_type: 'none', ocpp_report: 1 };
 
 function viewModel(v) {
-  return { ...v, config: vehicles.parseConfig(v), hasSecret: !!v.secret };
+  return { ...v, config: vehicles.parseConfig(v), hasSecret: !!v.secret, source_kind: vehicles.sourceKind(v) };
 }
 
 router.get('/', asyncHandler(async (req, res) => {

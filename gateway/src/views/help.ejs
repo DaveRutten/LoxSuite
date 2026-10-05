@@ -1,9 +1,7 @@
 <%- include('partials/head', { pageTitle: 'Help', active: 'help' }) %>
 
 <p class="hint">
-  A quick tour of everything this gateway can do, organized the same way as the sidebar. Click a
-  question to expand it, or click <strong>Help</strong> in any page's header (or the sidebar) for
-  the same content in a panel over whatever you're doing, no need to leave the page.
+  <%= t('A quick tour of everything this gateway can do, organized the same way as the sidebar. Click a question to expand it, or click') %> <strong><%= t('Help') %></strong> <%= t('in any page\'s header (or the sidebar) for the same content in a panel over whatever you\'re doing, no need to leave the page.') %>
 </p>
 
 <%- include('partials/help-content') %>

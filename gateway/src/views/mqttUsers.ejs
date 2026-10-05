@@ -8,33 +8,27 @@
 <% if (testResult) { %>
   <p class="hint" style="<%= testResult.ok ? 'color: var(--success);' : 'color: var(--danger);' %>">
     <% if (testResult.ok) { %>
-      Connection test for "<%= testResult.username %>" succeeded (<%= testResult.ms %> ms).
+      <%= t('Connection test for "') %><%= testResult.username %><%= t('" succeeded (') %><%= testResult.ms %> <%= t('ms).') %>
     <% } else { %>
-      Connection test for "<%= testResult.username %>" failed: <%= testResult.error %>
+      <%= t('Connection test for "') %><%= testResult.username %><%= t('" failed:') %> <%= testResult.error %>
     <% } %>
   </p>
 <% } %>
 
 <p class="hint">
-  Every device that connects to the broker (e.g. a Shelly) needs its own account here
-  &mdash; the broker does not allow anonymous clients. <strong>Last used</strong> comes from the
-  broker's own log and only covers activity since this gateway last started &mdash; a blank means
-  no connection has been seen yet in that window, not necessarily that the account has never
-  connected. <strong>Permissions</strong> shows what a user's role already grants (read-only here)
-  plus that one user's own extra permissions on top of it &mdash; for the rare case where one
-  device needs something beyond its role without changing that role for everyone else who has it.
+  <%= t('Every device that connects to the broker (e.g. a Shelly) needs its own account here — the broker does not allow anonymous clients.') %> <strong><%= t('Last used') %></strong> <%= t('comes from the broker\'s own log and only covers activity since this gateway last started — a blank means no connection has been seen yet in that window, not necessarily that the account has never connected.') %> <strong><%= t('Permissions') %></strong> <%= t('shows what a user\'s role already grants (read-only here) plus that one user\'s own extra permissions on top of it — for the rare case where one device needs something beyond its role without changing that role for everyone else who has it.') %>
 </p>
 
 <% if (canEdit('mqtt_users')) { %>
 <details class="add-panel">
-  <summary>Add user</summary>
+  <summary><%= t('Add user') %></summary>
   <div class="add-panel-body">
     <form method="post" action="/mqtt-users">
       <div class="form-grid">
-        <div><label>Username</label><input type="text" name="username" required></div>
-        <div><label>Password</label><input type="password" name="password" required></div>
+        <div><label><%= t('Username') %></label><input type="text" name="username" required></div>
+        <div><label><%= t('Password') %></label><input type="password" name="password" required></div>
         <div>
-          <label>Role</label>
+          <label><%= t('Role') %></label>
           <select name="rolename">
             <% roles.forEach(r => { %>
               <option value="<%= r %>" <%= r === 'client' ? 'selected' : '' %>><%= r %></option>
@@ -43,16 +37,15 @@
         </div>
         <% if (autoScopeDeviceRoles) { %>
         <div>
-          <label>Device topic prefix <span class="hint" style="margin:0;display:inline;">(optional)</span></label>
-          <input type="text" name="device_topic_prefix" placeholder="shellies/shellydimmer-Toilet">
+          <label><%= t('Device topic prefix') %> <span class="hint" style="margin:0;display:inline;"><%= t('(optional)') %></span></label>
+          <input type="text" name="device_topic_prefix" placeholder="<%= t('shellies/shellydimmer-Toilet') %>">
           <p class="hint">
-            Filled in, this creates (or reuses) a role scoped to just <code>&lt;prefix&gt;/#</code>
-            and assigns that instead of the Role picked above. Left blank, the Role above is used
-            as-is.
+            <%= t('Filled in, this creates (or reuses) a role scoped to just') %> <code>&lt;prefix&gt;/#</code>
+            <%= t('and assigns that instead of the Role picked above. Left blank, the Role above is used as-is.') %>
           </p>
         </div>
         <% } %>
-        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+        <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add') %></button>
       </div>
     </form>
   </div>
@@ -62,7 +55,7 @@
 <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Username</th><th>Roles</th><th>Active connections</th><th>Last used</th><th>Actions</th></tr>
+      <tr><th><%= t('Username') %></th><th><%= t('Roles') %></th><th><%= t('Active connections') %></th><th><%= t('Last used') %></th><th><%= t('Actions') %></th></tr>
     </thead>
     <tbody>
       <% clients.forEach(c => { %>
@@ -87,23 +80,23 @@
           <td><%= (c.connections || []).length %></td>
           <td>
             <% if (c.lastSeen && c.lastSeen.status === 'connected') { %>
-              <span class="badge badge-live badge-ok">Connected now</span>
+              <span class="badge badge-live badge-ok"><%= t('Connected now') %></span>
             <% } else if (c.lastSeen) { %>
               <span class="badge badge-neutral"><%= formatDateTime(c.lastSeen.at) %></span>
             <% } else { %>
-              <span class="badge badge-neutral">Not seen yet</span>
+              <span class="badge badge-neutral"><%= t('Not seen yet') %></span>
             <% } %>
           </td>
           <td>
             <div class="row-actions">
               <% if (!protectedUsernames.includes(c.username)) { %>
-                <button type="button" class="btn-edit" data-toggle-row="mqtt-perms-<%= c.username %>"><%- icon('edit') %> Permissions<% if (ownAcls.length) { %> (<%= ownAcls.length %>)<% } %></button>
+                <button type="button" class="btn-edit" data-toggle-row="mqtt-perms-<%= c.username %>"><%- icon('edit') %> <%= t('Permissions') %><% if (ownAcls.length) { %> (<%= ownAcls.length %>)<% } %></button>
               <% } %>
               <% if (!protectedUsernames.includes(c.username) && canEdit('mqtt_users')) { %>
-                <button type="submit" form="role-form-<%= c.username %>" class="btn-edit"><%- icon('edit') %> Save role</button>
-                <button type="button" class="btn-edit" data-toggle-row="mqtt-reset-pw-<%= c.username %>"><%- icon('edit') %> Reset password</button>
-                <form class="inline" method="post" action="/mqtt-users/<%= c.username %>/delete" data-confirm="Delete this user?">
-                  <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+                <button type="submit" form="role-form-<%= c.username %>" class="btn-edit"><%- icon('edit') %> <%= t('Save role') %></button>
+                <button type="button" class="btn-edit" data-toggle-row="mqtt-reset-pw-<%= c.username %>"><%- icon('edit') %> <%= t('Reset password') %></button>
+                <form class="inline" method="post" action="/mqtt-users/<%= c.username %>/delete" data-confirm="<%= t('Delete this user?') %>">
+                  <button type="submit" class="danger"><%- icon('trash') %> <%= t('Delete') %></button>
                 </form>
               <% } %>
             </div>
@@ -113,9 +106,9 @@
         <tr class="expand-row" id="mqtt-reset-pw-<%= c.username %>">
           <td colspan="5">
             <form method="post" action="/mqtt-users/<%= c.username %>/password" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
-              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">New password:</label>
+              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);"><%= t('New password:') %></label>
               <input type="password" name="password" required style="max-width:14rem;">
-              <button type="submit" class="btn-edit"><%- icon('edit') %> Set password</button>
+              <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Set password') %></button>
             </form>
           </td>
         </tr>
@@ -124,13 +117,13 @@
         <tr class="expand-row" id="mqtt-perms-<%= c.username %>">
           <td colspan="5">
             <p class="hint" style="margin-top:0;">
-              Inherited from <%= (c.baseRoles || []).map(r => r.rolename).join(', ') || 'its role' %> (read-only here — edit on
-              <a href="/mqtt-roles">MQTT Roles</a> if this should change for everyone with that role):
+              <%= t('Inherited from') %> <%= (c.baseRoles || []).map(r => r.rolename).join(', ') || 'its role' %> <%= t('(read-only here — edit on') %>
+              <a href="/mqtt-roles"><%= t('MQTT Roles') %></a> <%= t('if this should change for everyone with that role):') %>
             </p>
             <div class="table-wrap">
               <table class="acl-table">
                 <thead>
-                  <tr><th>ACL type</th><th>Topic filter</th><th>Allow</th><th>From role</th></tr>
+                  <tr><th><%= t('ACL type') %></th><th><%= t('Topic filter') %></th><th><%= t('Allow') %></th><th><%= t('From role') %></th></tr>
                 </thead>
                 <tbody>
                   <% inheritedAcls.forEach(acl => { %>
@@ -142,22 +135,19 @@
                     </tr>
                   <% }) %>
                   <% if (inheritedAcls.length === 0) { %>
-                    <tr><td colspan="4" class="empty">No ACLs inherited &mdash; this user's role currently grants no access.</td></tr>
+                    <tr><td colspan="4" class="empty"><%= t('No ACLs inherited — this user\'s role currently grants no access.') %></td></tr>
                   <% } %>
                 </tbody>
               </table>
             </div>
 
             <p class="hint">
-              This user's own extra permissions, on top of the above &mdash; only <%= c.username %> gets these.
-              A <strong>Deny</strong> above always wins over an <strong>Allow</strong> added here for the same
-              topic, so this can only grant access the role above stays silent on, never re-open something
-              the role explicitly denies:
+              <%= t('This user\'s own extra permissions, on top of the above — only') %> <%= c.username %> <%= t('gets these. A') %> <strong><%= t('Deny') %></strong> <%= t('above always wins over an') %> <strong><%= t('Allow') %></strong> <%= t('added here for the same topic, so this can only grant access the role above stays silent on, never re-open something the role explicitly denies:') %>
             </p>
             <div class="table-wrap">
               <table class="acl-table">
                 <thead>
-                  <tr><th>ACL type</th><th>Topic filter</th><th>Allow</th><th>Actions</th></tr>
+                  <tr><th><%= t('ACL type') %></th><th><%= t('Topic filter') %></th><th><%= t('Allow') %></th><th><%= t('Actions') %></th></tr>
                 </thead>
                 <tbody>
                   <% ownAcls.forEach((acl, i) => { %>
@@ -169,11 +159,11 @@
                       <td>
                         <% if (canEdit('mqtt_users')) { %>
                         <div class="row-actions">
-                          <button type="button" class="btn-edit" data-toggle-row="<%= editRowId %>"><%- icon('edit') %> Edit</button>
+                          <button type="button" class="btn-edit" data-toggle-row="<%= editRowId %>"><%- icon('edit') %> <%= t('Edit') %></button>
                           <form class="inline" method="post" action="/mqtt-users/<%= c.username %>/acls/delete">
                             <input type="hidden" name="acltype" value="<%= acl.acltype %>">
                             <input type="hidden" name="topic" value="<%= acl.topic %>">
-                            <button type="submit" class="danger"><%- icon('trash') %> Remove</button>
+                            <button type="submit" class="danger"><%- icon('trash') %> <%= t('Remove') %></button>
                           </form>
                         </div>
                         <% } %>
@@ -186,29 +176,29 @@
                           <input type="hidden" name="old_acltype" value="<%= acl.acltype %>">
                           <input type="hidden" name="old_topic" value="<%= acl.topic %>">
                           <div>
-                            <label>ACL type</label>
+                            <label><%= t('ACL type') %></label>
                             <select name="acltype">
-                              <% aclTypes.forEach(t => { %>
-                                <option value="<%= t %>" <%= t === acl.acltype ? 'selected' : '' %>><%= t %></option>
+                              <% aclTypes.forEach(tt => { %>
+                                <option value="<%= tt %>" <%= tt === acl.acltype ? 'selected' : '' %>><%= tt %></option>
                               <% }) %>
                             </select>
                           </div>
-                          <div><label>Topic filter</label><input type="text" name="topic" value="<%= acl.topic %>" required></div>
+                          <div><label><%= t('Topic filter') %></label><input type="text" name="topic" value="<%= acl.topic %>" required></div>
                           <div>
-                            <label>Effect</label>
+                            <label><%= t('Effect') %></label>
                             <select name="allow">
-                              <option value="1" <%= acl.allow ? 'selected' : '' %>>Allow</option>
-                              <option value="0" <%= !acl.allow ? 'selected' : '' %>>Deny</option>
+                              <option value="1" <%= acl.allow ? 'selected' : '' %>><%= t('Allow') %></option>
+                              <option value="0" <%= !acl.allow ? 'selected' : '' %>><%= t('Deny') %></option>
                             </select>
                           </div>
-                          <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+                          <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
                         </form>
                       </td>
                     </tr>
                     <% } %>
                   <% }) %>
                   <% if (ownAcls.length === 0) { %>
-                    <tr><td colspan="4" class="empty">No extra permissions yet.</td></tr>
+                    <tr><td colspan="4" class="empty"><%= t('No extra permissions yet.') %></td></tr>
                   <% } %>
                 </tbody>
               </table>
@@ -218,22 +208,22 @@
             <form method="post" action="/mqtt-users/<%= c.username %>/acls">
               <div class="form-grid">
                 <div>
-                  <label>ACL type</label>
+                  <label><%= t('ACL type') %></label>
                   <select name="acltype">
-                    <% aclTypes.forEach(t => { %>
-                      <option value="<%= t %>"><%= t %></option>
+                    <% aclTypes.forEach(tt => { %>
+                      <option value="<%= tt %>"><%= tt %></option>
                     <% }) %>
                   </select>
                 </div>
-                <div><label>Topic filter</label><input type="text" name="topic" placeholder="shared/broadcast/#" required></div>
+                <div><label><%= t('Topic filter') %></label><input type="text" name="topic" placeholder="<%= t('shared/broadcast/#') %>" required></div>
                 <div>
-                  <label>Effect</label>
+                  <label><%= t('Effect') %></label>
                   <select name="allow">
-                    <option value="1">Allow</option>
-                    <option value="0">Deny</option>
+                    <option value="1"><%= t('Allow') %></option>
+                    <option value="0"><%= t('Deny') %></option>
                   </select>
                 </div>
-                <button type="submit" class="primary"><%- icon('plus') %> Add permission</button>
+                <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add permission') %></button>
               </div>
             </form>
             <% } %>
@@ -242,7 +232,7 @@
         <% } %>
       <% }) %>
       <% if (clients.length === 0) { %>
-        <tr><td colspan="5" class="empty">No devices added yet.</td></tr>
+        <tr><td colspan="5" class="empty"><%= t('No devices added yet.') %></td></tr>
       <% } %>
     </tbody>
   </table>

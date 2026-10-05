@@ -18,7 +18,7 @@
   <div class="login-box" style="max-width:60rem;">
     <div class="brand">
       <span class="brand-icon"><%- icon('logo', { size: 18 }) %></span>
-      <span>LoxSuite setup</span>
+      <span><%= t('LoxSuite setup') %></span>
     </div>
 
     <%
@@ -53,51 +53,46 @@
       <% } %>
 
       <% if (step === 'welcome') { %>
-        <h2>Welcome</h2>
+        <h2><%= t('Welcome') %></h2>
         <p class="hint">
-          A quick guided setup — admin password, timezone, Miniserver, MQTT broker, SSO, backups,
-          and notifications. Everything here is also reachable individually later (Profile,
-          Settings, Miniservers, Administration), and this wizard itself stays reachable any time
-          from Administration &rarr; General &rarr; "Run setup wizard again", so nothing here is a
-          one-shot, locked-in decision.
+          <%= t('A quick guided setup — admin password, timezone, Miniserver, MQTT broker, SSO, backups, and notifications. Everything here is also reachable individually later (Profile, Settings, Miniservers, Administration), and this wizard itself stays reachable any time from Administration → General → "Run setup wizard again", so nothing here is a one-shot, locked-in decision.') %>
         </p>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
           <form method="post" action="/setup/skip">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-            <button type="submit" class="btn-soft">Skip setup entirely</button>
+            <button type="submit" class="btn-soft"><%= t('Skip setup entirely') %></button>
           </form>
           <%- skipForm('welcome', 'password', 'Get started', 'primary') %>
         </div>
       <% } %>
 
       <% if (step === 'password') { %>
-        <h2>Admin password</h2>
+        <h2><%= t('Admin password') %></h2>
         <p class="hint">
-          You're currently signed in with whatever <code>ADMIN_PASSWORD</code> was set in
-          <code>.env</code> at first boot — change it to something only you know, or leave both
-          fields blank to keep it as-is.
+          <%= t('You\'re currently signed in with whatever') %> <code>ADMIN_PASSWORD</code> <%= t('was set in') %>
+          <code>.env</code> <%= t('at first boot — change it to something only you know, or leave both fields blank to keep it as-is.') %>
         </p>
         <form method="post" action="/setup/password" id="password-form" class="form-grid">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <div><label>New password</label><input type="password" name="new_password" minlength="8" placeholder="Leave blank to keep the current one"></div>
-          <div><label>Confirm new password</label><input type="password" name="confirm_password" minlength="8"></div>
+          <div><label><%= t('New password') %></label><input type="password" name="new_password" minlength="8" placeholder="<%= t('Leave blank to keep the current one') %>"></div>
+          <div><label><%= t('Confirm new password') %></label><input type="password" name="confirm_password" minlength="8"></div>
         </form>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
           <%- skipForm('password', 'timezone') %>
-          <button type="submit" form="password-form" class="primary" style="width:auto; margin-top:0;">Continue</button>
+          <button type="submit" form="password-form" class="primary" style="width:auto; margin-top:0;"><%= t('Continue') %></button>
         </div>
       <% } %>
 
       <% if (step === 'timezone') { %>
-        <h2>Timezone</h2>
+        <h2><%= t('Timezone') %></h2>
         <p class="hint">
-          Every date and time shown anywhere in LoxSuite is rendered in this timezone. Defaults to
-          <code>UTC</code>, which is always correct but rarely what you actually want to see.
+          <%= t('Every date and time shown anywhere in LoxSuite is rendered in this timezone. Defaults to') %>
+          <code>UTC</code><%= t(', which is always correct but rarely what you actually want to see.') %>
         </p>
         <form method="post" action="/setup/timezone" id="timezone-form" class="form-grid">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <div>
-            <label>Timezone</label>
+            <label><%= t('Timezone') %></label>
             <select name="display_timezone">
               <% timezones.forEach(tz => { %>
                 <option value="<%= tz %>" <%= tz === gatewaySettings.display_timezone ? 'selected' : '' %>><%= tz %></option>
@@ -107,69 +102,62 @@
         </form>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
           <%- skipForm('timezone', 'miniserver') %>
-          <button type="submit" form="timezone-form" class="primary" style="width:auto; margin-top:0;">Continue</button>
+          <button type="submit" form="timezone-form" class="primary" style="width:auto; margin-top:0;"><%= t('Continue') %></button>
         </div>
       <% } %>
 
       <% if (step === 'miniserver') { %>
-        <h2>Add your first Miniserver</h2>
+        <h2><%= t('Add your first Miniserver') %></h2>
         <% if (miniserverCount > 0) { %>
-          <p class="hint">You already have <%= miniserverCount %> Miniserver<%= miniserverCount === 1 ? '' : 's' %> configured — nothing more needed here.</p>
+          <p class="hint"><%= t('You already have') %> <%= miniserverCount %> <%= t('Miniserver') %><%= miniserverCount === 1 ? '' : 's' %> <%= t('configured — nothing more needed here.') %></p>
         <% } else { %>
-        <p class="hint">Leave every field blank to skip this and add one later from the Miniservers page.</p>
+        <p class="hint"><%= t('Leave every field blank to skip this and add one later from the Miniservers page.') %></p>
         <form method="post" action="/setup/miniserver" id="miniserver-form">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <div class="form-grid">
-            <div><label>Name</label><input type="text" name="name"></div>
-            <div><label>Host / IP</label><input type="text" name="host"></div>
-            <div><label>HTTP port</label><input type="number" name="http_port" value="80"></div>
+            <div><label><%= t('Name') %></label><input type="text" name="name"></div>
+            <div><label><%= t('Host / IP') %></label><input type="text" name="host"></div>
+            <div><label><%= t('HTTP port') %></label><input type="number" name="http_port" value="80"></div>
             <div>
-              <label>HTTPS</label>
+              <label><%= t('HTTPS') %></label>
               <select name="use_https">
-                <option value="">No</option>
-                <option value="1">Yes (self-signed certificate allowed)</option>
+                <option value=""><%= t('No') %></option>
+                <option value="1"><%= t('Yes (self-signed certificate allowed)') %></option>
               </select>
             </div>
-            <div><label>Username</label><input type="text" name="username"></div>
-            <div><label>Password</label><input type="password" name="password"></div>
+            <div><label><%= t('Username') %></label><input type="text" name="username"></div>
+            <div><label><%= t('Password') %></label><input type="password" name="password"></div>
           </div>
 
-          <h3 style="margin-top:1.25rem;">Features (optional)</h3>
+          <h3 style="margin-top:1.25rem;"><%= t('Features (optional)') %></h3>
           <div class="form-grid">
-            <div><label>UDP port (optional)</label><input type="number" name="udp_port"></div>
+            <div><label><%= t('UDP port (optional)') %></label><input type="number" name="udp_port"></div>
             <div>
-              <label>External URL (optional)</label>
+              <label><%= t('External URL (optional)') %></label>
               <input type="text" name="external_url" placeholder="https://myhome.dyndns.org:8080">
             </div>
           </div>
           <p class="hint" style="margin-top:0.5rem;">
-            <strong>UDP port</strong> is the port <em>on the Miniserver itself</em> that Loxone
-            listens on for Virtual UDP Output commands sent by this gateway (configured in Loxone
-            Config's Virtual UDP Output, not here). <strong>External URL</strong> is used as a
-            fallback whenever the local Host/IP can't be reached &mdash; Monitor polling, Common
-            commands, log fetching and testing all try it automatically if the local address fails.
+            <strong><%= t('UDP port') %></strong> <%= t('is the port') %> <em><%= t('on the Miniserver itself') %></em> <%= t('that Loxone listens on for Virtual UDP Output commands sent by this gateway (configured in Loxone Config\'s Virtual UDP Output, not here).') %> <strong><%= t('External URL') %></strong> <%= t('is used as a fallback whenever the local Host/IP can\'t be reached — Monitor polling, Common commands, log fetching and testing all try it automatically if the local address fails.') %>
           </p>
 
-          <h3 style="margin-top:1.25rem;">Gateway Client setup (optional)</h3>
+          <h3 style="margin-top:1.25rem;"><%= t('Gateway Client setup (optional)') %></h3>
           <div class="form-grid">
             <div>
-              <label>This Miniserver is a Gateway</label>
+              <label><%= t('This Miniserver is a Gateway') %></label>
               <%- toggleSwitch('is_gateway', false, { id: 'ms-is-gateway' }) %>
             </div>
           </div>
           <p class="hint" style="margin-top:0.5rem;">
-            Turn this on if this Miniserver is a
-            <a href="https://www.loxone.com/enen/kb/gateway-client/" target="_blank" rel="noopener">Gateway</a>
-            managing one or more Client Miniservers that share its merged Loxone Config project.
-            Each Client below is added as its own Miniserver too, reusing this Gateway's own
-            Username/Password (Loxone requires identical credentials across the whole group) —
-            just give each one its own Name and Host/IP.
+            <%= t('Turn this on if this Miniserver is a') %>
+            <a href="https://www.loxone.com/enen/kb/gateway-client/" target="_blank" rel="noopener"><%= t('Gateway') %></a>
+            <%= t('managing one or more Client Miniservers that share its merged Loxone Config project. Each Client below is added as its own Miniserver too, reusing this Gateway\'s own Username/Password (Loxone requires identical credentials across the whole group) — just give each one its own Name and Host/IP.') %>
           </p>
           <div id="ms-clients-header" class="client-rows-header" hidden>
-            <div>Client Name</div><div>Host / IP</div><div>HTTP port</div><div>HTTPS</div><div></div>
+            <div><%= t('Client Name') %></div><div><%= t('Host / IP') %></div><div><%= t('HTTP port') %></div><div><%= t('HTTPS') %></div><div></div>
           </div>
           <div id="ms-clients-list"></div>
-          <button type="button" id="ms-client-row-btn" class="btn-soft" hidden><%- icon('plus') %> Add Client Miniserver</button>
+          <button type="button" id="ms-client-row-btn" class="btn-soft" hidden><%- icon('plus') %> <%= t('Add Client Miniserver') %></button>
           <input type="hidden" name="clients_json" id="ms-clients-json">
         </form>
         <% } %>
@@ -177,12 +165,12 @@
           <%- skipForm('miniserver', 'mqtt') %>
           <div class="btn-row">
             <% if (miniserverCount === 0) { %>
-              <button type="button" id="ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
+              <button type="button" id="ms-test-btn" class="btn-test"><%- icon('refresh') %> <%= t('Test') %></button>
             <% } %>
             <% if (miniserverCount > 0) { %>
               <%- skipForm('miniserver', 'mqtt', 'Continue', 'primary') %>
             <% } else { %>
-              <button type="submit" form="miniserver-form" class="primary" style="width:auto; margin-top:0;">Add &amp; continue</button>
+              <button type="submit" form="miniserver-form" class="primary" style="width:auto; margin-top:0;"><%= t('Add & continue') %></button>
             <% } %>
           </div>
         </div>
@@ -305,29 +293,26 @@
       <% } %>
 
       <% if (step === 'mqtt') { %>
-        <h2>MQTT Broker</h2>
+        <h2><%= t('MQTT Broker') %></h2>
         <p class="hint">
-          The bundled Mosquitto broker runs inside this same container — these are the connection
-          details the gateway itself uses, already filled in and working. You can also point this
-          at a different/external broker instead; the gateway then stops using the bundled process
-          for this connection.
+          <%= t('The bundled Mosquitto broker runs inside this same container — these are the connection details the gateway itself uses, already filled in and working. You can also point this at a different/external broker instead; the gateway then stops using the bundled process for this connection.') %>
         </p>
         <form method="post" action="/setup/mqtt" id="mqtt-form" class="form-grid">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <div><label>Host</label><input type="text" name="host" value="<%= mqttSettings.host %>" required></div>
-          <div><label>Port</label><input type="number" name="port" value="<%= mqttSettings.port %>" required></div>
+          <div><label><%= t('Host') %></label><input type="text" name="host" value="<%= mqttSettings.host %>" required></div>
+          <div><label><%= t('Port') %></label><input type="number" name="port" value="<%= mqttSettings.port %>" required></div>
           <div>
-            <label>TLS</label>
+            <label><%= t('TLS') %></label>
             <%- toggleSwitch('use_tls', mqttSettings.use_tls) %>
           </div>
-          <div><label>Username</label><input type="text" name="username" value="<%= mqttSettings.username || '' %>"></div>
-          <div><label>Password</label><input type="password" name="password" value="<%= mqttSettings.password || '' %>"></div>
+          <div><label><%= t('Username') %></label><input type="text" name="username" value="<%= mqttSettings.username || '' %>"></div>
+          <div><label><%= t('Password') %></label><input type="password" name="password" value="<%= mqttSettings.password || '' %>"></div>
         </form>
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
           <%- skipForm('mqtt', 'sso') %>
           <div class="btn-row">
-            <button type="button" id="mqtt-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
-            <button type="submit" form="mqtt-form" class="primary" style="width:auto; margin-top:0;">Save &amp; continue</button>
+            <button type="button" id="mqtt-test-btn" class="btn-test"><%- icon('refresh') %> <%= t('Test') %></button>
+            <button type="submit" form="mqtt-form" class="primary" style="width:auto; margin-top:0;"><%= t('Save & continue') %></button>
           </div>
         </div>
         <div id="mqtt-test-result" style="margin-top:0.6rem;"></div>
@@ -374,36 +359,34 @@
       <% } %>
 
       <% if (step === 'sso') { %>
-        <h2>Single Sign-On</h2>
+        <h2><%= t('Single Sign-On') %></h2>
         <p class="hint">
-          Optional &mdash; lets people log in with a self-hosted
-          <a href="https://pocket-id.org" target="_blank" rel="noopener">Pocket ID</a> instance,
-          alongside the username/password login you already have. Leave Enabled off to skip this
-          and set it up later from Administration.
+          <%= t('Optional — lets people log in with a self-hosted') %>
+          <a href="https://pocket-id.org" target="_blank" rel="noopener"><%= t('Pocket ID') %></a> <%= t('instance, alongside the username/password login you already have. Leave Enabled off to skip this and set it up later from Administration.') %>
         </p>
         <form method="post" action="/setup/sso" id="sso-form">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <div class="form-grid">
             <div>
-              <label>Enabled</label>
+              <label><%= t('Enabled') %></label>
               <%- toggleSwitch('enabled', sso.enabled, { id: 'sso-enabled-toggle' }) %>
             </div>
           </div>
           <div id="sso-properties" class="form-grid" style="margin-top:0.85rem; <%= sso.enabled ? '' : 'display:none;' %>">
             <div>
-              <label>Issuer URL</label>
+              <label><%= t('Issuer URL') %></label>
               <input type="text" name="issuer_url" value="<%= sso.issuer_url || '' %>" placeholder="https://pocket-id.example.com">
             </div>
             <div>
-              <label>Client ID</label>
+              <label><%= t('Client ID') %></label>
               <input type="text" name="client_id" value="<%= sso.client_id || '' %>">
             </div>
             <div>
-              <label>Client secret</label>
+              <label><%= t('Client secret') %></label>
               <input type="password" name="client_secret" placeholder="<%= sso.client_secret ? 'Leave blank to keep the current secret' : '' %>">
             </div>
             <div>
-              <label>Default Access Role for new SSO users</label>
+              <label><%= t('Default Access Role for new SSO users') %></label>
               <select name="default_role_id">
                 <option value="">-</option>
                 <% roles.forEach(r => { %>
@@ -426,60 +409,57 @@
         </script>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
           <%- skipForm('sso', 'backup') %>
-          <button type="submit" form="sso-form" class="primary" style="width:auto; margin-top:0;">Save &amp; continue</button>
+          <button type="submit" form="sso-form" class="primary" style="width:auto; margin-top:0;"><%= t('Save & continue') %></button>
         </div>
       <% } %>
 
       <% if (step === 'backup') { %>
-        <h2>Backups</h2>
+        <h2><%= t('Backups') %></h2>
         <p class="hint">
-          Optional &mdash; backs up the gateway's own database on a schedule, and/or additionally
-          copies every backup offsite via <a href="https://rclone.org" target="_blank" rel="noopener">rclone</a>.
-          Leave both Enabled toggles off to skip this and set it up later from Administration.
+          <%= t('Optional — backs up the gateway\'s own database on a schedule, and/or additionally copies every backup offsite via') %> <a href="https://rclone.org" target="_blank" rel="noopener"><%= t('rclone') %></a><%= t('. Leave both Enabled toggles off to skip this and set it up later from Administration.') %>
         </p>
         <form method="post" action="/setup/backup" id="backup-form">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <h3>Local schedule</h3>
+          <h3><%= t('Local schedule') %></h3>
           <div class="form-grid">
             <div>
-              <label>Enabled</label>
+              <label><%= t('Enabled') %></label>
               <%- toggleSwitch('enabled', backupSettings.enabled, { id: 'backup-enabled-toggle' }) %>
             </div>
           </div>
           <div id="backup-properties" class="form-grid" style="margin-top:0.85rem; <%= backupSettings.enabled ? '' : 'display:none;' %>">
             <div>
-              <label>Cron expression</label>
+              <label><%= t('Cron expression') %></label>
               <input type="text" name="schedule_cron" value="<%= backupSettings.schedule_cron %>" placeholder="0 3 * * *">
             </div>
             <div>
-              <label>Keep last</label>
+              <label><%= t('Keep last') %></label>
               <input type="number" name="retention_count" min="1" value="<%= backupSettings.retention_count %>">
             </div>
           </div>
           <p id="backup-cron-hint" class="hint" style="margin-top:0.5rem; <%= backupSettings.enabled ? '' : 'display:none;' %>">
-            Standard 5-field cron (minute hour day month weekday). <code>0 3 * * *</code> = every day at 03:00.
+            <%= t('Standard 5-field cron (minute hour day month weekday).') %> <code>0 3 * * *</code> <%= t('= every day at 03:00.') %>
           </p>
 
-          <h3 style="margin-top:1.25rem;">Offsite copy (rclone)</h3>
+          <h3 style="margin-top:1.25rem;"><%= t('Offsite copy (rclone)') %></h3>
           <div class="form-grid">
             <div>
-              <label>Enabled</label>
+              <label><%= t('Enabled') %></label>
               <%- toggleSwitch('rclone_enabled', backupSettings.rclone_enabled, { id: 'rclone-enabled-toggle' }) %>
             </div>
           </div>
           <div id="rclone-properties" style="<%= backupSettings.rclone_enabled ? '' : 'display:none;' %>">
             <div class="form-grid" style="margin-top:0.85rem;">
               <div>
-                <label>Remote</label>
-                <input type="text" name="rclone_remote" value="<%= backupSettings.rclone_remote || '' %>" placeholder="myremote:loxsuite-backups">
+                <label><%= t('Remote') %></label>
+                <input type="text" name="rclone_remote" value="<%= backupSettings.rclone_remote || '' %>" placeholder="<%= t('myremote:loxsuite-backups') %>">
               </div>
             </div>
             <div style="margin-top:0.85rem;">
-              <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);">rclone.conf contents</label>
+              <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);"><%= t('rclone.conf contents') %></label>
               <textarea name="rclone_config" rows="5" placeholder="[myremote]&#10;type = s3&#10;..." style="width:100%; font-family:'SF Mono', Consolas, monospace; font-size:0.82rem; padding:0.5rem 0.6rem; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text);"><%= backupSettings.rclone_config || '' %></textarea>
               <p class="hint" style="margin-top:0.35rem;">
-                Generated by running <code>rclone config</code> anywhere convenient and pasting the
-                result here. Test the connection any time from Administration &rarr; Backups once saved.
+                <%= t('Generated by running') %> <code>rclone config</code> <%= t('anywhere convenient and pasting the result here. Test the connection any time from Administration → Backups once saved.') %>
               </p>
             </div>
           </div>
@@ -506,27 +486,24 @@
         </script>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
           <%- skipForm('backup', 'notifications') %>
-          <button type="submit" form="backup-form" class="primary" style="width:auto; margin-top:0;">Save &amp; continue</button>
+          <button type="submit" form="backup-form" class="primary" style="width:auto; margin-top:0;"><%= t('Save & continue') %></button>
         </div>
       <% } %>
 
       <% if (step === 'notifications') { %>
-        <h2>Notifications</h2>
+        <h2><%= t('Notifications') %></h2>
         <p class="hint">
-          Optional &mdash; add a channel to send alerts to (Teams, Slack, Telegram, Email, or
-          anything else <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noopener">Apprise</a>
-          supports). Leave both fields blank to skip this. Alert rules (which Monitor, which
-          threshold, ...) are set up afterwards from Administration &rarr; Notifications, once you
-          have Monitors and Miniservers to point them at.
+          <%= t('Optional — add a channel to send alerts to (Teams, Slack, Telegram, Email, or anything else') %> <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noopener"><%= t('Apprise') %></a>
+          <%= t('supports). Leave both fields blank to skip this. Alert rules (which Monitor, which threshold, ...) are set up afterwards from Administration → Notifications, once you have Monitors and Miniservers to point them at.') %>
         </p>
         <% if (channelCount > 0) { %>
-          <p class="hint">You already have <%= channelCount %> channel<%= channelCount === 1 ? '' : 's' %> configured.</p>
+          <p class="hint"><%= t('You already have') %> <%= channelCount %> <%= t('channel') %><%= channelCount === 1 ? '' : 's' %> <%= t('configured.') %></p>
         <% } %>
         <form method="post" action="/setup/notifications" id="notifications-form">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <div class="form-grid">
-            <div><label>Name</label><input type="text" name="name" placeholder="e.g. Family Teams"></div>
-            <div><label>Apprise URL</label><input type="text" name="url" placeholder="msteams://TokenA/TokenB/TokenC/"></div>
+            <div><label><%= t('Name') %></label><input type="text" name="name" placeholder="<%= t('e.g. Family Teams') %>"></div>
+            <div><label><%= t('Apprise URL') %></label><input type="text" name="url" placeholder="<%= t('msteams://TokenA/TokenB/TokenC/') %>"></div>
           </div>
         </form>
         <script>
@@ -564,23 +541,21 @@
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-top:1.25rem;">
           <%- skipForm('notifications', 'done') %>
           <div class="btn-row">
-            <button type="button" id="notif-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
-            <button type="submit" form="notifications-form" class="primary" style="width:auto; margin-top:0;">Add &amp; continue</button>
+            <button type="button" id="notif-test-btn" class="btn-test"><%- icon('refresh') %> <%= t('Test') %></button>
+            <button type="submit" form="notifications-form" class="primary" style="width:auto; margin-top:0;"><%= t('Add & continue') %></button>
           </div>
         </div>
         <div id="notif-test-result" style="margin-top:0.6rem;"></div>
       <% } %>
 
       <% if (step === 'done') { %>
-        <h2>All set</h2>
+        <h2><%= t('All set') %></h2>
         <p class="hint">
-          You can fine-tune everything you just set up, and dig into Notification rules (which
-          Monitor, which threshold, ...), any time from Administration. Run this wizard again any
-          time from Administration &rarr; General.
+          <%= t('You can fine-tune everything you just set up, and dig into Notification rules (which Monitor, which threshold, ...), any time from Administration. Run this wizard again any time from Administration → General.') %>
         </p>
         <form method="post" action="/setup/finish">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <button type="submit" class="primary" style="width:100%;"><%- icon('check') %> Go to Dashboard</button>
+          <button type="submit" class="primary" style="width:100%;"><%- icon('check') %> <%= t('Go to Dashboard') %></button>
         </form>
       <% } %>
     </div>

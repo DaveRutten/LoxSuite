@@ -1,11 +1,9 @@
 <%- include('partials/head', { pageTitle: 'Logs', active: 'logs-notifications', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/notifications', topbarRangeValue: range, topbarRangeExtra: { q: query.q, severity: query.severity, category: query.category } }) %>
 
 <p class="hint">
-  Every notification fired by a rule (<a href="/admin/notifications">Notifications settings</a>) or
-  a monitor's own threshold ladder marked "Notify" &mdash; one entry per event, independent of how
-  many channels it was sent to or whether delivery succeeded. Persisted in SQLite and kept for
-  <strong><%= retentionDays %></strong> days &mdash;
-  <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
+  <%= t('Every notification fired by a rule (') %><a href="/admin/notifications"><%= t('Notifications settings') %></a><%= t(') or a monitor\'s own threshold ladder marked "Notify" — one entry per event, independent of how many channels it was sent to or whether delivery succeeded. Persisted in SQLite and kept for') %>
+  <strong><%= retentionDays %></strong> <%= t('days —') %>
+  <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
 </p>
 
 <form method="get" action="/logs/notifications" class="form-grid" style="margin-bottom:1rem; align-items:end;">
@@ -19,18 +17,18 @@
   %>
   <input type="hidden" name="range" value="<%= range %>">
   <div>
-    <label>Severity</label>
+    <label><%= t('Severity') %></label>
     <select name="severity" data-auto-submit-form>
-      <option value="">Any</option>
-      <option value="info" <%= query.severity === 'info' ? 'selected' : '' %>>Info</option>
-      <option value="warning" <%= query.severity === 'warning' ? 'selected' : '' %>>Warning</option>
-      <option value="critical" <%= query.severity === 'critical' ? 'selected' : '' %>>Critical</option>
+      <option value=""><%= t('Any') %></option>
+      <option value="info" <%= query.severity === 'info' ? 'selected' : '' %>><%= t('Info') %></option>
+      <option value="warning" <%= query.severity === 'warning' ? 'selected' : '' %>><%= t('Warning') %></option>
+      <option value="critical" <%= query.severity === 'critical' ? 'selected' : '' %>><%= t('Critical') %></option>
     </select>
   </div>
   <div>
-    <label>Category</label>
+    <label><%= t('Category') %></label>
     <select name="category" data-auto-submit-form>
-      <option value="">Any</option>
+      <option value=""><%= t('Any') %></option>
       <% categories.forEach(c => { %>
         <option value="<%= c.key %>" <%= query.category === c.key ? 'selected' : '' %>><%= c.label %></option>
       <% }) %>
@@ -42,22 +40,22 @@
   <div class="table-toolbar">
     <div class="search-combo log-search-combo">
       <select class="log-search-field">
-        <option value="time">Time</option>
-        <option value="severity">Severity</option>
-        <option value="category">Category</option>
-        <option value="title">Title</option>
-        <option value="message" selected>Message</option>
-        <option value="source">Source</option>
+        <option value="time"><%= t('Time') %></option>
+        <option value="severity"><%= t('Severity') %></option>
+        <option value="category"><%= t('Category') %></option>
+        <option value="title"><%= t('Title') %></option>
+        <option value="message" selected><%= t('Message') %></option>
+        <option value="source"><%= t('Source') %></option>
       </select>
       <div class="clearable-input-wrap">
-        <input type="text" class="log-search-query" placeholder="Filter…">
-        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+        <input type="text" class="log-search-query" placeholder="<%= t('Filter…') %>">
+        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
       </div>
     </div>
     <span class="log-selection-count hint" style="margin:0;"></span>
-    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label">Copy selection</span></button>
+    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label"><%= t('Copy selection') %></span></button>
     <% if (canEdit('logs_notifications')) { %>
-    <a href="/logs/notifications/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button></a>
+    <a href="/logs/notifications/export.txt"><button type="button" class="btn-soft"><%- icon('copy') %> <%= t('Export .log') %></button></a>
     <% } %>
   </div>
 
@@ -65,8 +63,8 @@
   <table>
     <thead>
       <tr>
-        <th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th>
-        <th data-filter-key="time">Time</th><th data-filter-key="severity">Severity</th><th data-filter-key="category">Category</th><th data-filter-key="title">Title</th><th data-filter-key="message">Message</th><th data-filter-key="source">Source</th>
+        <th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="<%= t('Select all') %>"></th>
+        <th data-filter-key="time"><%= t('Time') %></th><th data-filter-key="severity"><%= t('Severity') %></th><th data-filter-key="category"><%= t('Category') %></th><th data-filter-key="title"><%= t('Title') %></th><th data-filter-key="message"><%= t('Message') %></th><th data-filter-key="source"><%= t('Source') %></th>
       </tr>
     </thead>
     <tbody>
@@ -83,7 +81,7 @@
         </tr>
       <% }) %>
       <% if (rows.length === 0) { %>
-        <tr><td colspan="7" class="empty">No notifications recorded yet.</td></tr>
+        <tr><td colspan="7" class="empty"><%= t('No notifications recorded yet.') %></td></tr>
       <% } %>
     </tbody>
   </table>

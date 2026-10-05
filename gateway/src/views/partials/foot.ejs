@@ -11,14 +11,14 @@
 <div id="help-backdrop" class="help-backdrop"></div>
 <aside id="help-drawer" class="help-drawer">
   <div class="help-drawer-head">
-    <h2 style="margin:0;">Help</h2>
-    <button type="button" id="help-drawer-close" class="icon-btn" title="Close">&times;</button>
+    <h2 style="margin:0;"><%= t('Help') %></h2>
+    <button type="button" id="help-drawer-close" class="icon-btn" title="<%= t('Close') %>">&times;</button>
   </div>
   <div class="help-drawer-body">
     <%- include('help-content') %>
   </div>
 </aside>
-<span class="help-drawer-resize-handle" title="Drag to resize"></span>
+<span class="help-drawer-resize-handle" title="<%= t('Drag to resize') %>"></span>
 
 <%- include('ai-chat-widget') %>
 
@@ -1242,7 +1242,7 @@
   })();
 </script>
 <% if (typeof currentUser !== 'undefined' && currentUser) { %>
-<nav class="mobile-tabbar" aria-label="Quick navigation">
+<nav class="mobile-tabbar" aria-label="<%= t('Quick navigation') %>">
   <a href="/"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><%= t('Home') %></a>
   <% if (canView('charging')) { %>
   <% if (typeof moduleOn !== 'function' || moduleOn('charging')) { %><a href="/planner"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><%= t('Charging') %></a><% } %>

@@ -7,8 +7,10 @@
 //   2. Source readers — 'mqtt' (latest value of a topic as already seen by mqttClient's '#'
 //      subscription, so no extra broker connection), 'http' (poll any JSON URL) and 'homey' (a
 //      device's capabilities from a Homey Pro's local Web API), 'homeassistant' (entity states and
-//      attributes from Home Assistant's REST API). Each returns { raw, updatedAt }. Node-RED and
-//      similar tools publish to the LoxSuite broker and use 'mqtt'.
+//      attributes from Home Assistant's REST API), and 'skoda' (the official MyŠkoda Public API: an
+//      API key made in the MyŠkoda app, max. 20 requests per hour per car — stored as source_type
+//      'http' with source_config.provider = 'skoda', so no schema change was needed). Each returns
+//      { raw, updatedAt }. Node-RED and similar tools publish to the LoxSuite broker and use 'mqtt'.
 //   3. A small runtime — every enabled vehicle is read on a fixed tick (MQTT every tick, HTTP/Homey
 //      at their own poll interval), the latest reading kept in memory and on the vehicle row,
 //      history written to vehicle_readings, and the values published as retained MQTT topics
@@ -235,7 +237,20 @@ function secretOf(vehicle) {
 // instead of after the (default 5 min) poll interval. A cloud HTTP source keeps its own interval.
 const FAST_POLL_S = 60;
 const LOCAL_SOURCES = new Set(['homey', 'homeassistant']);
+// The kind of source as the user sees it: 'skoda' is stored as source_type 'http' + provider.
+function sourceKind(vehicle, cfg = parseConfig(vehicle)) {
+  return vehicle?.source_type === 'http' && cfg.provider === 'skoda' ? 'skoda' : (vehicle?.source_type || 'none');
+}
+
+// Škoda allows 20 requests per hour per car (failed ones count too): normally every 10 min, every
+// 4 min (15/h) while the car is plugged in or the Wallbox has a car, never more often than that.
+const SKODA_MIN_S = 240;
 function pollIntervalS(vehicle, cfg = parseConfig(vehicle), { fast = false } = {}) {
+  if (sourceKind(vehicle, cfg) === 'skoda') {
+    const own = Number(cfg.interval_s);
+    const base = Number.isFinite(own) && own >= SKODA_MIN_S ? Math.min(own, 86400) : 600;
+    return fast ? SKODA_MIN_S : base;
+  }
   const n = Number(cfg.interval_s);
   const base = Number.isFinite(n) && n >= 60 ? Math.min(n, 86400) : 300;
   return fast && LOCAL_SOURCES.has(vehicle?.source_type) ? Math.min(base, FAST_POLL_S) : base;
@@ -410,6 +425,91 @@ async function readHa(cfg, token) {
   return result;
 }
 
+// ---- Škoda (official MyŠkoda Public API, https://public.api.connect.skoda-auto.cz/docs)
+
+const SKODA_API = 'https://public.api.connect.skoda-auto.cz';
+const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
+
+// Pure: the API's vehicle object -> raw fields (+ the newest carCapturedTimestamp).
+function parseSkoda(body) {
+  const v = body?.vehicle || {};
+  const ch = v.charging || {};
+  const st = ch.status || {};
+  const fuel = v.fuelStatus || {};
+  const ranges = [fuel.primaryEngineRange, fuel.secondaryEngineRange].filter(Boolean);
+  const elec = ranges.find((r) => r.engineType === 'ELECTRIC') || null;
+  const combustion = ranges.find((r) => r.engineType && r.engineType !== 'ELECTRIC') || null;
+  const soc = st.battery?.stateOfChargeInPercent ?? elec?.currentSoCInPercent ?? null;
+  const rangeM = st.battery?.remainingCruisingRangeInMeters;
+  const raw = {
+    soc,
+    range_km: rangeM !== undefined && rangeM !== null ? Math.round(rangeM / 1000) : (elec?.remainingRangeInKm ?? null),
+    total_range_km: fuel.totalRangeInKm ?? null,
+    plugged: st.plugConnectionState ? st.plugConnectionState === 'CONNECTED' : null,
+    charging: st.state ? st.state === 'CHARGING' : null,
+    limit_soc: ch.settings?.targetStateOfChargeInPercent ?? null,
+    odometer_km: v.odometer?.mileageInKm ?? null,
+    latitude: v.parkingPosition?.gpsCoordinates?.latitude ?? null,
+    longitude: v.parkingPosition?.gpsCoordinates?.longitude ?? null,
+    location: v.parkingPosition?.state === 'IN_MOTION' ? 'driving' : (v.parkingPosition?.formattedAddress || null),
+  };
+  const stamps = [v.status, fuel, v.odometer, ch, v.airConditioning, v.parkingPosition].map((x) => x?.carCapturedTimestamp).filter(Boolean).sort();
+  const extra = {
+    chargeState: st.state || null, chargePowerKw: st.chargePowerInKw ?? null, minutesToFull: st.remainingTimeToFullyChargedInMinutes ?? null,
+    fuelPct: combustion?.currentFuelLevelInPercent ?? null, climate: v.airConditioning?.state || null, name: v.name || null, plate: v.licensePlate || null,
+    errors: (body?.errors || []).map((e) => e.description || e.type).filter(Boolean),
+  };
+  return { raw, updatedAt: stamps.length ? stamps[stamps.length - 1] : null, extra };
+}
+
+// Problem types of the API -> a sentence for the page and notifications.
+function skodaProblem(status, problem) {
+  const type = String(problem?.type || '').split('/').pop();
+  const msgs = {
+    'api-key-expired': 'The Škoda API key has expired — create a new one in the MyŠkoda app and paste it here.',
+    'api-key-not-authorized': 'The Škoda API key is not valid for this car (VIN) — check the VIN, or create a key for this car in the MyŠkoda app.',
+    'operation-not-authorized': 'The Škoda API key does not allow this.',
+    'rate-limit-exceeded': 'Škoda rate limit reached (20 requests per hour per car) — LoxSuite waits and tries again.',
+    'vehicle-not-accepting-requests': 'The car is not accepting requests right now (e.g. deep sleep or no connection).',
+  };
+  if (msgs[type]) return msgs[type];
+  if (status === 401) return 'The Škoda API key was refused — check the key.';
+  if (status === 404) return 'Škoda does not know this VIN for this API key.';
+  return `Škoda API answered HTTP ${status}${problem?.detail ? `: ${String(problem.detail).slice(0, 120)}` : ''}`;
+}
+
+async function readSkoda(cfg, apiKey, { fetchFn = fetch } = {}) {
+  const vin = String(cfg.vin || '').trim().toUpperCase();
+  if (!VIN_RE.test(vin)) throw new Error('Fill in the 17-character VIN of the car.');
+  if (!apiKey) throw new Error('No Škoda API key set.');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetchFn(`${SKODA_API}/api/v1/vehicles/${encodeURIComponent(vin)}`, { headers: { Accept: 'application/json', 'X-API-Key': apiKey }, signal: ctrl.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error(`No answer within ${HTTP_TIMEOUT_MS / 1000} s.`);
+    throw new Error(`Cannot reach ${new URL(SKODA_API).host} (${err.cause?.code || err.message}).`);
+  } finally { clearTimeout(timer); }
+  const header = (n) => (res.headers && res.headers.get ? res.headers.get(n) : null);
+  const meta = {
+    keyExpiresAt: header('X-API-Key-Expires-At'),
+    rateRemaining: header('RateLimit-Remaining') !== null ? Number(header('RateLimit-Remaining')) : null,
+    retryAfterS: header('Retry-After') !== null ? Number(header('Retry-After')) || null : null,
+  };
+  const text = await res.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch { body = null; }
+  if (!res.ok) {
+    const err = new Error(skodaProblem(res.status, body));
+    err.meta = { ...meta, retryAfterS: meta.retryAfterS || (res.status === 429 ? 900 : null) };
+    throw err;
+  }
+  if (!body?.vehicle) throw new Error('Unexpected answer from the Škoda API.');
+  const parsed = parseSkoda(body);
+  return { raw: parsed.raw, updatedAt: parsed.updatedAt || new Date().toISOString(), extra: parsed.extra, meta, body };
+}
+
 // One read of a vehicle's source, normalised. Never throws: errors come back as { error }.
 async function readVehicle(vehicle, { getTopicValue } = {}) {
   const cfg = parseConfig(vehicle);
@@ -422,6 +522,8 @@ async function readVehicle(vehicle, { getTopicValue } = {}) {
         const why = result.missing.length ? `No message seen yet on ${result.missing.slice(0, 3).join(', ')}${result.missing.length > 3 ? '…' : ''}.` : 'No topics mapped.';
         return { ok: false, error: why, raw: {}, reading: null };
       }
+    } else if (sourceKind(vehicle, cfg) === 'skoda') {
+      result = await readSkoda(cfg, secretOf(vehicle));
     } else if (vehicle.source_type === 'http') {
       result = await readHttp(cfg, secretOf(vehicle));
     } else if (vehicle.source_type === 'homey') {
@@ -431,9 +533,9 @@ async function readVehicle(vehicle, { getTopicValue } = {}) {
     } else {
       return { ok: false, error: 'No data source.', raw: {}, reading: null };
     }
-    return { ok: true, raw: result.raw, reading: normalizeReading(result.raw, vehicle), sourceUpdatedAt: result.updatedAt, body: result.body, missing: result.missing || [] };
+    return { ok: true, raw: result.raw, reading: normalizeReading(result.raw, vehicle), sourceUpdatedAt: result.updatedAt, body: result.body, missing: result.missing || [], extra: result.extra || null, meta: result.meta || null };
   } catch (err) {
-    return { ok: false, error: err.message, raw: {}, reading: null };
+    return { ok: false, error: err.message, raw: {}, reading: null, meta: err.meta || null };
   }
 }
 
@@ -534,7 +636,7 @@ async function storeReading(vehicle, result, nowMs) {
   publishReading(vehicle.id, next);
 }
 
-const SOURCE_LABELS = { mqtt: 'MQTT', http: 'HTTP', homey: 'Homey', homeassistant: 'Home Assistant', none: 'none' };
+const SOURCE_LABELS = { mqtt: 'MQTT', http: 'HTTP', homey: 'Homey', homeassistant: 'Home Assistant', skoda: 'Škoda', none: 'none' };
 const MQTT_GRACE_MS = 10 * 60 * 1000;
 
 function staleAfterH(cfg) {
@@ -579,7 +681,7 @@ async function reportHealth(vehicle, st, nowMs) {
   st.reportedHealth = h.status;
   try {
     const { checkVehicleSourceStatus } = require('./notifications');
-    await checkVehicleSourceStatus(vehicle, h.status, h.detail, SOURCE_LABELS[vehicle.source_type] || vehicle.source_type);
+    await checkVehicleSourceStatus(vehicle, h.status, h.detail, SOURCE_LABELS[sourceKind(vehicle)] || vehicle.source_type);
   } catch (err) {
     console.error(`[vehicles] notification for ${vehicle.name} failed: ${err.message}`);
   }
@@ -602,6 +704,11 @@ async function tick() {
       st.nextPollAt = nowMs + pollIntervalS(v, parseConfig(v), { fast }) * 1000;
       state.set(v.id, st);
       const result = await readVehicle(v);
+      if (result.meta) {
+        st.meta = { ...(st.meta || {}), ...Object.fromEntries(Object.entries(result.meta).filter(([, x]) => x !== null && x !== undefined)) };
+        if (result.meta.retryAfterS) st.nextPollAt = Math.max(st.nextPollAt || 0, nowMs + result.meta.retryAfterS * 1000);
+      }
+      if (result.extra) st.extra = result.extra;
       if (result.ok) {
         st.failCount = 0;
         st.errorSince = null;
@@ -650,6 +757,11 @@ function getVehicleStatus(vehicle) {
     fetchedAt: st?.fetchedAt || vehicle.last_reading_at || null,
     sourceUpdatedAt: st?.sourceUpdatedAt || stored?.source_updated_at || null,
     live: !!st?.reading,
+    sourceKind: sourceKind(vehicle),
+    extra: st?.extra || null,
+    keyExpiresAt: st?.meta?.keyExpiresAt || null,
+    rateRemaining: st?.meta?.rateRemaining ?? null,
+    nextPollAt: st?.nextPollAt ? new Date(st.nextPollAt).toISOString() : null,
     health: st?.health || (vehicle.source_type === 'none' ? null : { status: 'unknown', detail: 'not read yet' }),
     staleAfterH: staleAfterH(parseConfig(vehicle)),
   };
@@ -685,6 +797,11 @@ module.exports = {
   sourceHealth,
   staleAfterH,
   SOURCE_LABELS,
+  sourceKind,
+  parseSkoda,
+  readSkoda,
+  skodaProblem,
+  VIN_RE,
   guessHomeyFields,
   parseHeaderLines,
   parseConfig,

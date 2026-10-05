@@ -7,7 +7,7 @@
     <div style="display:flex; flex-wrap:wrap; gap:0.8rem; align-items:flex-end;">
       <form method="get" action="/translations" style="margin:0;">
         <label><%= t('Language') %></label>
-        <select name="lang" onchange="this.form.submit()"><% langs.forEach(l => { %><option value="<%= l.code %>" <%= l.code === lang ? 'selected' : '' %>><%= l.name %><%= l.enabled ? '' : ' (' + t('off') + ')' %></option><% }) %></select>
+        <select name="lang" onchange="this.form.submit()" data-no-i18n><% langs.forEach(l => { %><option value="<%= l.code %>" <%= l.code === lang ? 'selected' : '' %>><%= l.name %><%= l.enabled ? '' : ' (' + t('off') + ')' %></option><% }) %></select>
       </form>
       <div style="flex:1; min-width:180px;"><label><%= t('Search') %></label><input type="search" id="tr-search" placeholder="<%= t('English or translation') %>"></div>
       <div><label><%= t('Module') %></label><select id="tr-module"><option value=""><%= t('All') %></option><% progress.modules.forEach(p => { %><option value="<%= p.module %>"><%= p.label %></option><% }) %></select></div>
@@ -26,8 +26,8 @@
   </div>
 
   <div class="card">
-    <table class="table" id="tr-table">
-      <thead><tr><th style="width:45%;">English</th><th><%= (langs.find(l => l.code === lang) || {}).name %></th></tr></thead>
+    <table class="table" id="tr-table" data-no-i18n>
+      <thead><tr><th style="width:45%;"><%= t('English') %></th><th><%= (langs.find(l => l.code === lang) || {}).name %></th></tr></thead>
       <tbody>
         <% entries.forEach(e => { %>
           <tr data-module="<%= e.module %>" data-key="<%= e.key %>" data-done="<%= e.text ? 1 : 0 %>">

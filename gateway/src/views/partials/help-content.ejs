@@ -1,783 +1,497 @@
-<h2>Dashboard</h2>
+<h2><%= t('Dashboard') %></h2>
 
 <details class="add-panel" id="help-dashboard">
-  <summary>What am I looking at on the Dashboard?</summary>
+  <summary><%= t('What am I looking at on the Dashboard?') %></summary>
   <div class="add-panel-body">
-    <p>Four things, top to bottom:</p>
+    <p><%= t('Four things, top to bottom:') %></p>
     <ul>
-      <li><strong>Status cards</strong> &mdash; whether the gateway is connected to the MQTT broker, and how many
-        mappings are currently active in each direction.</li>
-      <li><strong>Panels</strong> &mdash; the same 6 panel types as <a href="/dashboards">My Dashboards</a>
-        (chart, table, current value, gauge, stat with change, threshold indicator), except this board is
-        <strong>shared</strong>: everyone who logs in sees and (depending on their Access Role's
-        <code>dashboard</code> permission) can edit the same one. Add one here, or pin a topic straight from
-        the "Widget" button on the <a href="/incoming/messages">Live Messages</a> page (which creates a
-        monitor for that topic automatically if one doesn't exist yet). Drag a panel's handle to reorder it
-        or its corner to resize it, exactly like on My Dashboards.</li>
-      <li><strong>Load</strong> &mdash; messages/sec (10s average), total messages since the gateway started, how
-        many unique topics have been seen, and how many MQTT clients are currently connected.</li>
-      <li><strong>Miniservers</strong> &mdash; the same online/offline status shown on the
-        <a href="/miniservers">Miniservers</a> page, plus the last successful call and last error per server.</li>
+      <li><strong><%= t('Status cards') %></strong> <%= t('— whether the gateway is connected to the MQTT broker, and how many mappings are currently active in each direction.') %></li>
+      <li><strong><%= t('Panels') %></strong> <%= t('— the same 6 panel types as') %> <a href="/dashboards"><%= t('My Dashboards') %></a>
+        <%= t('(chart, table, current value, gauge, stat with change, threshold indicator), except this board is') %>
+        <strong><%= t('shared') %></strong><%= t(': everyone who logs in sees and (depending on their Access Role\'s') %>
+        <code>dashboard</code> <%= t('permission) can edit the same one. Add one here, or pin a topic straight from the "Widget" button on the') %> <a href="/incoming/messages"><%= t('Live Messages') %></a> <%= t('page (which creates a monitor for that topic automatically if one doesn\'t exist yet). Drag a panel\'s handle to reorder it or its corner to resize it, exactly like on My Dashboards.') %></li>
+      <li><strong><%= t('Load') %></strong> <%= t('— messages/sec (10s average), total messages since the gateway started, how many unique topics have been seen, and how many MQTT clients are currently connected.') %></li>
+      <li><strong><%= t('Miniservers') %></strong> <%= t('— the same online/offline status shown on the') %>
+        <a href="/miniservers"><%= t('Miniservers') %></a> <%= t('page, plus the last successful call and last error per server.') %></li>
     </ul>
-    <p>The page auto-refreshes every 5 seconds.</p>
-    <p><a href="/">Open Dashboard &rarr;</a></p>
+    <p><%= t('The page auto-refreshes every 5 seconds.') %></p>
+    <p><a href="/"><%= t('Open Dashboard →') %></a></p>
   </div>
 </details>
 
-<h2>Monitor</h2>
+<h2><%= t('Monitor') %></h2>
 
 <details class="add-panel" id="help-monitor">
-  <summary>Monitor &mdash; how do I track a value over time?</summary>
+  <summary><%= t('Monitor — how do I track a value over time?') %></summary>
   <div class="add-panel-body">
-    <p>Add a monitor from one of two sources:</p>
+    <p><%= t('Add a monitor from one of two sources:') %></p>
     <ul>
-      <li><strong>MQTT topic</strong> &mdash; pick any topic the gateway has seen (or add it directly from
-        Live Traffic's "Monitor" button). Every message on that exact topic is recorded.</li>
-      <li><strong>Loxone (direct, polled)</strong> &mdash; pick a Miniserver, then a control/state from its
-        structure export (<code>LoxAPP3.json</code>) &mdash; the same file used for the Miniservers page, but
-        here it also lists ordinary controls (sensors, lights, etc.), not just Virtual Inputs. The gateway then
-        polls that value's live reading (<code>/jdev/sps/io/&lt;uuid&gt;</code>) on the interval you pick (5s to
-        5 minutes). This is deliberate polling at a fixed cadence, not the websocket push feed
-        <a href="/live-data">Live Data</a> uses &mdash; fine for a value you're recording into a chart every
-        few seconds, but see the Live Data answer above if you want a browse-everything, always-current
-        view instead.</li>
+      <li><strong><%= t('MQTT topic') %></strong> <%= t('— pick any topic the gateway has seen (or add it directly from Live Traffic\'s "Monitor" button). Every message on that exact topic is recorded.') %></li>
+      <li><strong><%= t('Loxone (direct, polled)') %></strong> <%= t('— pick a Miniserver, then a control/state from its structure export (') %><code>LoxAPP3.json</code><%= t(') — the same file used for the Miniservers page, but here it also lists ordinary controls (sensors, lights, etc.), not just Virtual Inputs. The gateway then polls that value\'s live reading (') %><code>/jdev/sps/io/&lt;uuid&gt;</code><%= t(') on the interval you pick (5s to 5 minutes). This is deliberate polling at a fixed cadence, not the websocket push feed') %>
+        <a href="/live-data"><%= t('Live Data') %></a> <%= t('uses — fine for a value you\'re recording into a chart every few seconds, but see the Live Data answer above if you want a browse-everything, always-current view instead.') %></li>
     </ul>
     <p>
-      Every reading is stored in SQLite, so it survives a gateway restart. Old readings are purged
-      automatically after the configured <strong>retention</strong> (in days, editable on the Monitor page) to
-      keep the database from growing forever.
+      <%= t('Every reading is stored in SQLite, so it survives a gateway restart. Old readings are purged automatically after the configured') %> <strong><%= t('retention') %></strong> <%= t('(in days, editable on the Monitor page) to keep the database from growing forever.') %>
     </p>
     <p>
-      Opening a monitor shows a line chart (only for monitors that have recorded at least one numeric value)
-      plus the full raw-values table, both filterable by time range. <strong>Export CSV</strong> downloads the
-      currently selected range as a plain <code>timestamp,value</code> file that opens in Excel or any
-      spreadsheet/analysis tool.
+      <%= t('Opening a monitor shows a line chart (only for monitors that have recorded at least one numeric value) plus the full raw-values table, both filterable by time range.') %> <strong><%= t('Export CSV') %></strong> <%= t('downloads the currently selected range as a plain') %> <code>timestamp,value</code> <%= t('file that opens in Excel or any spreadsheet/analysis tool.') %>
     </p>
-    <p><a href="/monitor">Open Monitor &rarr;</a></p>
+    <p><a href="/monitor"><%= t('Open Monitor →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-dashboards">
-  <summary>My Dashboards &mdash; how is this different from the home Dashboard?</summary>
+  <summary><%= t('My Dashboards — how is this different from the home Dashboard?') %></summary>
   <div class="add-panel-body">
     <p>
-      Same panels, different scope. The home <strong>Dashboard</strong> (first item in the sidebar) is
-      one board <strong>shared</strong> by everyone who logs in, editable only by Access Roles with the
-      <code>dashboard</code> permission's edit checkbox. <strong>My Dashboards</strong> is
-      <strong>personal</strong> to your account &mdash; you can create any number of named dashboards,
-      always editable by you regardless of Access Role, since they're yours alone. Both are built from
-      the same <strong>panels</strong> pulling from your monitors on the <a href="/monitor">Monitor</a>
-      page.
+      <%= t('Same panels, different scope. The home') %> <strong><%= t('Dashboard') %></strong> <%= t('(first item in the sidebar) is one board') %> <strong><%= t('shared') %></strong> <%= t('by everyone who logs in, editable only by Access Roles with the') %>
+      <code>dashboard</code> <%= t('permission\'s edit checkbox.') %> <strong><%= t('My Dashboards') %></strong> is
+      <strong><%= t('personal') %></strong> <%= t('to your account — you can create any number of named dashboards, always editable by you regardless of Access Role, since they\'re yours alone. Both are built from the same') %> <strong><%= t('panels') %></strong> <%= t('pulling from your monitors on the') %> <a href="/monitor"><%= t('Monitor') %></a>
+      <%= t('page.') %>
     </p>
-    <p>Six panel types &mdash; chart and current-value panels can hold several monitors at once for
-      comparison; the rest are single-monitor (a gauge, a delta, or a threshold badge is inherently one
-      number):</p>
+    <p><%= t('Six panel types — chart and current-value panels can hold several monitors at once for comparison; the rest are single-monitor (a gauge, a delta, or a threshold badge is inherently one number):') %></p>
     <ul>
-      <li><strong>Chart</strong> &mdash; a line chart. Pick more than one monitor to overlay them on the
-        same chart for comparison (e.g. two rooms' temperatures).</li>
-      <li><strong>Table</strong> &mdash; the raw values for one monitor. Deliberately single-monitor:
-        comparing several independently-sampled time series in one flat table would need aligning their
-        timestamps, which a chart already does visually without that complexity.</li>
-      <li><strong>Current value</strong> &mdash; a compact tile listing the latest reading for one or more
-        monitors. Choose a <strong>stacked</strong> (one per line) or <strong>row</strong> (side by side)
-        layout.</li>
-      <li><strong>Gauge</strong> &mdash; a fill-bar meter against a min/max range you set, with an
-        optional unit label.</li>
-      <li><strong>Stat with change</strong> &mdash; the current value plus how much it's changed since
-        the start of the panel's selected time range, with an up/down arrow. Optionally color the change
-        once you tell it whether higher or lower is "better" &mdash; left neutral, it's shown without
-        color since the app can't know that on its own.</li>
-      <li><strong>Threshold indicator</strong> &mdash; a colored badge that flips between a normal and an
-        alert label (both of which you can customize) once the value crosses a limit you configure
-        (above/below, inclusive or not).</li>
+      <li><strong><%= t('Chart') %></strong> <%= t('— a line chart. Pick more than one monitor to overlay them on the same chart for comparison (e.g. two rooms\' temperatures).') %></li>
+      <li><strong><%= t('Table') %></strong> <%= t('— the raw values for one monitor. Deliberately single-monitor: comparing several independently-sampled time series in one flat table would need aligning their timestamps, which a chart already does visually without that complexity.') %></li>
+      <li><strong><%= t('Current value') %></strong> <%= t('— a compact tile listing the latest reading for one or more monitors. Choose a') %> <strong><%= t('stacked') %></strong> <%= t('(one per line) or') %> <strong>row</strong> <%= t('(side by side) layout.') %></li>
+      <li><strong><%= t('Gauge') %></strong> <%= t('— a fill-bar meter against a min/max range you set, with an optional unit label.') %></li>
+      <li><strong><%= t('Stat with change') %></strong> <%= t('— the current value plus how much it\'s changed since the start of the panel\'s selected time range, with an up/down arrow. Optionally color the change once you tell it whether higher or lower is "better" — left neutral, it\'s shown without color since the app can\'t know that on its own.') %></li>
+      <li><strong><%= t('Threshold indicator') %></strong> <%= t('— a colored badge that flips between a normal and an alert label (both of which you can customize) once the value crosses a limit you configure (above/below, inclusive or not).') %></li>
     </ul>
     <p>
-      Drag a panel by its handle (top-left) to reorder it, and drag its bottom-right corner to resize it —
-      both width and height snap to a 12-column grid, so a size means the same thing regardless of window
-      width. Deleting a monitor from the Monitor page removes it from any panel that used it; a panel left
-      with no monitors shows a hint instead of an empty chart.
+      <%= t('Drag a panel by its handle (top-left) to reorder it, and drag its bottom-right corner to resize it — both width and height snap to a 12-column grid, so a size means the same thing regardless of window width. Deleting a monitor from the Monitor page removes it from any panel that used it; a panel left with no monitors shows a hint instead of an empty chart.') %>
     </p>
-    <img class="help-img" src="/images/help/panel-grid.png" alt="A row of dashboard panels, each with a drag handle top-left, an edit/delete icon top-right, and a resize handle bottom-right.">
+    <img class="help-img" src="/images/help/panel-grid.png" alt="<%= t('A row of dashboard panels, each with a drag handle top-left, an edit/delete icon top-right, and a resize handle bottom-right.') %>">
     <p>
-      The <strong>Add panel</strong> form's fields change based on the panel type you pick — a gauge asks
-      for a min/max range and unit, for example, while a threshold indicator asks for a comparison and
-      alert labels instead:
+      <%= t('The') %> <strong><%= t('Add panel') %></strong> <%= t('form\'s fields change based on the panel type you pick — a gauge asks for a min/max range and unit, for example, while a threshold indicator asks for a comparison and alert labels instead:') %>
     </p>
-    <img class="help-img" src="/images/help/add-panel-gauge.png" alt="The Add panel form with panel type set to Gauge, showing its minimum, maximum, and unit fields plus the monitor picklist.">
+    <img class="help-img" src="/images/help/add-panel-gauge.png" alt="<%= t('The Add panel form with panel type set to Gauge, showing its minimum, maximum, and unit fields plus the monitor picklist.') %>">
     <p>
-      Once you've got more than one panel, <strong>Auto order</strong> (above the grid) resizes every
-      one to fit its own content — a value tile with ten monitors gets taller, a compact gauge stays
-      small — then packs them left-to-right with the fewest gaps. It's a one-shot layout pass, not a
-      live constraint: drag a panel afterwards and it stays wherever you put it.
+      <%= t('Once you\'ve got more than one panel,') %> <strong><%= t('Auto order') %></strong> <%= t('(above the grid) resizes every one to fit its own content — a value tile with ten monitors gets taller, a compact gauge stays small — then packs them left-to-right with the fewest gaps. It\'s a one-shot layout pass, not a live constraint: drag a panel afterwards and it stays wherever you put it.') %>
     </p>
     <p>
-      The star button on a dashboard (both here and at the top of the dashboard itself) pins it into
-      the sidebar under <strong>Monitor &rarr; Favorite Dashboards</strong>, itself its own collapsible
-      section — a shortcut to the boards you actually check often, without digging through this list
-      first. It follows access: unfavorite happens automatically (silently, nothing to clean up) if a
-      dashboard you'd starred is later un-shared with you.
+      <%= t('The star button on a dashboard (both here and at the top of the dashboard itself) pins it into the sidebar under') %> <strong><%= t('Monitor → Favorite Dashboards') %></strong><%= t(', itself its own collapsible section — a shortcut to the boards you actually check often, without digging through this list first. It follows access: unfavorite happens automatically (silently, nothing to clean up) if a dashboard you\'d starred is later un-shared with you.') %>
     </p>
     <p>
-      A <strong>Chart</strong> panel's own Edit drawer has the most to it, grouped into labeled
-      sections:
+      A <strong><%= t('Chart') %></strong> <%= t('panel\'s own Edit drawer has the most to it, grouped into labeled sections:') %>
     </p>
     <ul>
-      <li><strong>Appearance</strong> &mdash; legend position, Y-axis unit, <strong>Stepped line</strong>
-        (right-angle steps instead of a straight slope between readings — reads better for something
-        that only ever changes in discrete jumps, like a mode number), <strong>Show points</strong>
-        (draws a dot at every actual reading, useful when they're sparse enough that the line alone
-        doesn't make each one obvious), and <strong>Fill area under line</strong> (a translucent fill
-        down to zero, one shade per series so overlapping fills stay legible).</li>
-      <li><strong>Y-axis</strong> &mdash; <strong>Linear</strong> (the default) or
-        <strong>Logarithmic</strong> scale, plus an optional fixed <strong>Minimum</strong>/<strong>Maximum</strong>
-        (left blank, either end auto-scales to the data as before). A logarithmic axis can't plot zero
-        or negative readings — those points are just skipped, not an error.</li>
-      <li><strong>Interaction</strong> &mdash; <strong>Zoom &amp; pan</strong>: once on, scroll (or
-        pinch) over the chart to zoom in/out and drag to pan sideways, bounded to the panel's own
-        selected range (you can't pan past its edges into data it never loaded).</li>
-      <li><strong>Thresholds &amp; colors</strong> &mdash; a value/color ladder every panel type
-        shares: a reading is colored using the highest threshold it meets or exceeds (e.g. 1&rarr;orange,
-        2&rarr;red means a reading of 1.5 shows orange, 2.5 shows red). A chart also gets a
-        <strong>Style</strong> per row on top of that: <strong>Line</strong> (a dashed horizontal line
-        at that value) or <strong>Band</strong> (a filled zone from that value up to the next threshold
-        above it, or to the top of the chart if it's the highest one — handy for shading
-        "normal"/"warning"/"critical" ranges at a glance).</li>
-      <li><strong>Annotations</strong> &mdash; a labeled vertical line at a fixed point in time you
-        pick (e.g. "heating turned on"), independent of the value-based thresholds above.</li>
-      <li><strong>Series settings</strong> &mdash; per monitor on the chart: rename it, give it its
-        own unit/scale/decimals, move it to the right-hand axis, and now a <strong>Style</strong>
-        (Solid, Solid (thick), Dashed, or Dotted) so two overlapping lines stay tellable apart even in
-        black and white.</li>
+      <li><strong><%= t('Appearance') %></strong> <%= t('— legend position, Y-axis unit,') %> <strong><%= t('Stepped line') %></strong>
+        <%= t('(right-angle steps instead of a straight slope between readings — reads better for something that only ever changes in discrete jumps, like a mode number),') %> <strong><%= t('Show points') %></strong>
+        <%= t('(draws a dot at every actual reading, useful when they\'re sparse enough that the line alone doesn\'t make each one obvious), and') %> <strong><%= t('Fill area under line') %></strong> <%= t('(a translucent fill down to zero, one shade per series so overlapping fills stay legible).') %></li>
+      <li><strong><%= t('Y-axis') %></strong> &mdash; <strong><%= t('Linear') %></strong> <%= t('(the default) or') %>
+        <strong><%= t('Logarithmic') %></strong> <%= t('scale, plus an optional fixed') %> <strong><%= t('Minimum') %></strong>/<strong><%= t('Maximum') %></strong>
+        <%= t('(left blank, either end auto-scales to the data as before). A logarithmic axis can\'t plot zero or negative readings — those points are just skipped, not an error.') %></li>
+      <li><strong><%= t('Interaction') %></strong> &mdash; <strong><%= t('Zoom & pan') %></strong><%= t(': once on, scroll (or pinch) over the chart to zoom in/out and drag to pan sideways, bounded to the panel\'s own selected range (you can\'t pan past its edges into data it never loaded).') %></li>
+      <li><strong><%= t('Thresholds & colors') %></strong> <%= t('— a value/color ladder every panel type shares: a reading is colored using the highest threshold it meets or exceeds (e.g. 1→orange, 2→red means a reading of 1.5 shows orange, 2.5 shows red). A chart also gets a') %>
+        <strong><%= t('Style') %></strong> <%= t('per row on top of that:') %> <strong><%= t('Line') %></strong> <%= t('(a dashed horizontal line at that value) or') %> <strong><%= t('Band') %></strong> <%= t('(a filled zone from that value up to the next threshold above it, or to the top of the chart if it\'s the highest one — handy for shading "normal"/"warning"/"critical" ranges at a glance).') %></li>
+      <li><strong><%= t('Annotations') %></strong> <%= t('— a labeled vertical line at a fixed point in time you pick (e.g. "heating turned on"), independent of the value-based thresholds above.') %></li>
+      <li><strong><%= t('Series settings') %></strong> <%= t('— per monitor on the chart: rename it, give it its own unit/scale/decimals, move it to the right-hand axis, and now a') %> <strong><%= t('Style') %></strong>
+        <%= t('(Solid, Solid (thick), Dashed, or Dotted) so two overlapping lines stay tellable apart even in black and white.') %></li>
     </ul>
     <p>
-      Every other panel type's Edit drawer got the same labeled-section treatment (Appearance, Range,
-      Condition, Labels, ...) so the same kind of setting always lives under the same heading
-      regardless of panel type — the fields themselves are unchanged, just organized.
+      <%= t('Every other panel type\'s Edit drawer got the same labeled-section treatment (Appearance, Range, Condition, Labels, ...) so the same kind of setting always lives under the same heading regardless of panel type — the fields themselves are unchanged, just organized.') %>
     </p>
-    <p><a href="/dashboards">Open My Dashboards &rarr;</a></p>
+    <p><a href="/dashboards"><%= t('Open My Dashboards →') %></a></p>
   </div>
 </details>
 
-<h2>Loxone</h2>
+<h2><%= t('Loxone') %></h2>
 
 <details class="add-panel" id="help-miniservers">
-  <summary>Miniservers &mdash; what do I fill in, and what is "Test now"?</summary>
+  <summary><%= t('Miniservers — what do I fill in, and what is "Test now"?') %></summary>
   <div class="add-panel-body">
     <p>
-      Add one entry per physical Loxone Miniserver: a name, its host/IP, the HTTP port for Virtual
-      Inputs (switch on <strong>HTTPS</strong> if the Miniserver only serves TLS, e.g. with a
-      self-signed certificate &mdash; the gateway won't reject it for that), an optional UDP port,
-      and a webservice username/password with rights to call Virtual Inputs.
+      <%= t('Add one entry per physical Loxone Miniserver: a name, its host/IP, the HTTP port for Virtual Inputs (switch on') %> <strong><%= t('HTTPS') %></strong> <%= t('if the Miniserver only serves TLS, e.g. with a self-signed certificate — the gateway won\'t reject it for that), an optional UDP port, and a webservice username/password with rights to call Virtual Inputs.') %>
     </p>
     <p>
-      The gateway pings every Miniserver's HTTP endpoint once a minute in the background and shows
-      an Online/Offline/Unknown badge — and now also right after you add one, so it never sits on
-      "Unknown" until the next scheduled check. <strong>Test now</strong> (in the table) triggers
-      that same check immediately and also reports <strong>Live data (websocket)</strong> &mdash;
-      whether the persistent real-time connection used by <a href="/live-data">Live Data</a> is
-      currently up. Any HTTP response (even 401/404) counts as "online" for the Local/External
-      checks &mdash; only a network-level failure (timeout, connection refused, DNS) counts as offline.
-      The Add and Edit forms each have their own <strong>Test</strong> button too, for trying
-      host/port/credentials before (Add) or as currently saved (Edit) — the Edit one tests what's
-      already saved, not unsaved edits still in the form, so save first if you just changed them.
+      <%= t('The gateway pings every Miniserver\'s HTTP endpoint once a minute in the background and shows an Online/Offline/Unknown badge — and now also right after you add one, so it never sits on "Unknown" until the next scheduled check.') %> <strong><%= t('Test now') %></strong> <%= t('(in the table) triggers that same check immediately and also reports') %> <strong><%= t('Live data (websocket)') %></strong> <%= t('— whether the persistent real-time connection used by') %> <a href="/live-data"><%= t('Live Data') %></a> <%= t('is currently up. Any HTTP response (even 401/404) counts as "online" for the Local/External checks — only a network-level failure (timeout, connection refused, DNS) counts as offline. The Add and Edit forms each have their own') %> <strong><%= t('Test') %></strong> <%= t('button too, for trying host/port/credentials before (Add) or as currently saved (Edit) — the Edit one tests what\'s already saved, not unsaved edits still in the form, so save first if you just changed them.') %>
     </p>
     <p>
-      Editing a Miniserver never shows its stored password back to you &mdash; leave the password field
-      blank to keep the existing one, or type a new one to change it.
+      <%= t('Editing a Miniserver never shows its stored password back to you — leave the password field blank to keep the existing one, or type a new one to change it.') %>
     </p>
     <p>
-      <strong>External URL</strong> (optional) is a full base address &mdash; e.g. a DynDNS hostname with
-      port, or a Loxone DNS/Cloud address &mdash; reachable from outside the local network. Every HTTP call
-      this gateway makes to that Miniserver (Virtual Inputs, Monitor polling, structure lookups, Common
-      commands, the <a href="/logs">Logs</a> page, and "Test now" above) tries the local Host/IP first and
-      only falls back to this address if the local one fails at the network level, so the same Miniserver
-      stays configured for both on-site and remote use without switching anything.
+      <strong><%= t('External URL') %></strong> <%= t('(optional) is a full base address — e.g. a DynDNS hostname with port, or a Loxone DNS/Cloud address — reachable from outside the local network. Every HTTP call this gateway makes to that Miniserver (Virtual Inputs, Monitor polling, structure lookups, Common commands, the') %> <a href="/logs"><%= t('Logs') %></a> <%= t('page, and "Test now" above) tries the local Host/IP first and only falls back to this address if the local one fails at the network level, so the same Miniserver stays configured for both on-site and remote use without switching anything.') %>
     </p>
     <p class="hint" style="margin-bottom:0;">
-      There is no way to look up a Miniserver's Virtual Input names automatically. Virtual Inputs are
-      pure programming blocks in Loxone Config and don't appear in the Miniserver's structure export
-      (<code>LoxAPP3.json</code>) &mdash; this was tested against a real Miniserver with 365 controls and zero
-      Virtual Inputs in the export. Type the name yourself, exactly as configured in Loxone Config.
+      <%= t('There is no way to look up a Miniserver\'s Virtual Input names automatically. Virtual Inputs are pure programming blocks in Loxone Config and don\'t appear in the Miniserver\'s structure export (') %><code>LoxAPP3.json</code><%= t(') — this was tested against a real Miniserver with 365 controls and zero Virtual Inputs in the export. Type the name yourself, exactly as configured in Loxone Config.') %>
     </p>
-    <p><a href="/miniservers">Open Miniservers &rarr;</a></p>
+    <p><a href="/miniservers"><%= t('Open Miniservers →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-hardware">
-  <summary>Hardware &mdash; where does this data come from?</summary>
+  <summary><%= t('Hardware — where does this data come from?') %></summary>
   <div class="add-panel-body">
     <p>
-      Every Air/Tree/1-Wire device, Extension, third-party Plugin device, and Audioserver zone each
-      Miniserver's own <code>/data/status</code> endpoint reports &mdash; the same inventory Loxone
-      Config itself shows you. Polled every 5 minutes in the background (hardware status changes far
-      less often than a log), so this can lag a few minutes behind Loxone Config.
+      <%= t('Every Air/Tree/1-Wire device, Extension, third-party Plugin device, and Audioserver zone each Miniserver\'s own') %> <code>/data/status</code> <%= t('endpoint reports — the same inventory Loxone Config itself shows you. Polled every 5 minutes in the background (hardware status changes far less often than a log), so this can lag a few minutes behind Loxone Config.') %>
     </p>
     <p>
-      <strong>Battery</strong> and <strong>weak</strong> come straight from the Miniserver's own
-      judgment (<code>BattWeak</code>/<code>BatTooWeakForUpdate</code>), not a threshold this app
-      invented. An unpopulated Extension/Tree slot (a spare relay port never wired to anything) is
-      left out entirely rather than shown as permanently "offline."
+      <strong><%= t('Battery') %></strong> and <strong><%= t('weak') %></strong> <%= t('come straight from the Miniserver\'s own judgment (') %><code>BattWeak</code>/<code>BatTooWeakForUpdate</code><%= t('), not a threshold this app invented. An unpopulated Extension/Tree slot (a spare relay port never wired to anything) is left out entirely rather than shown as permanently "offline."') %>
     </p>
     <p>
-      Every battery-weak, firmware-changed, and online/offline transition is written to the
-      <a href="/logs/loxone">Loxone Miniservers log</a> automatically, whether or not you've set up
-      an alert for it — logging and alerting are separate here. Set up <strong>Loxone device battery
-      weak</strong>, <strong>Loxone device firmware changed</strong>, and <strong>Loxone device
-      online/offline</strong> rules on <a href="/admin/notifications">Notifications</a> to also be
-      actively notified (each with its own configurable severity) instead of having to check either
-      page yourself.
+      <%= t('Every battery-weak, firmware-changed, and online/offline transition is written to the') %>
+      <a href="/logs/loxone"><%= t('Loxone Miniservers log') %></a> <%= t('automatically, whether or not you\'ve set up an alert for it — logging and alerting are separate here. Set up') %> <strong><%= t('Loxone device battery weak') %></strong>, <strong><%= t('Loxone device firmware changed') %></strong><%= t(', and') %> <strong><%= t('Loxone device online/offline') %></strong> <%= t('rules on') %> <a href="/admin/notifications"><%= t('Notifications') %></a> <%= t('to also be actively notified (each with its own configurable severity) instead of having to check either page yourself.') %>
     </p>
-    <p><a href="/hardware">Open Hardware &rarr;</a></p>
+    <p><a href="/hardware"><%= t('Open Hardware →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-live-data">
-  <summary>Live Data (Loxone) &mdash; why did values used to show "(unreadable)"?</summary>
+  <summary><%= t('Live Data (Loxone) — why did values used to show "(unreadable)"?') %></summary>
   <div class="add-panel-body">
     <p>
-      Browse every control the selected Miniserver's structure file knows about, grouped by room and
-      then by category &mdash; the same grouping Loxone Config itself uses, so this works for any
-      project, not just this one's specific setup. Rooms, categories, and values are only fetched once
-      you actually expand them.
+      <%= t('Browse every control the selected Miniserver\'s structure file knows about, grouped by room and then by category — the same grouping Loxone Config itself uses, so this works for any project, not just this one\'s specific setup. Rooms, categories, and values are only fetched once you actually expand them.') %>
     </p>
     <p>
-      Values come from a persistent <strong>websocket</strong> connection to the Miniserver (the same
-      real-time push feed Node-RED's Loxone nodes and the official app use), not one-off HTTP polling
-      &mdash; measured against a real installation, the plain HTTP <code>/jdev/sps/io/&lt;uuid&gt;</code>
-      endpoint only answers for a small slice of a control's states (roughly 8% here); the rest
-      (sub-states like <code>active</code>, <code>numOpen</code>, <code>lockedUntil</code>) simply have
-      no HTTP-pollable equivalent at all and used to show as "(unreadable)". The websocket feed covers
-      nearly all of them, and updates automatically every few seconds while a category is open. The
-      "Live connection" line at the top of the page, and <strong>Test now</strong> on the
-      <a href="/miniservers">Miniservers</a> page, both show whether that connection is currently up.
+      <%= t('Values come from a persistent') %> <strong><%= t('websocket') %></strong> <%= t('connection to the Miniserver (the same real-time push feed Node-RED\'s Loxone nodes and the official app use), not one-off HTTP polling — measured against a real installation, the plain HTTP') %> <code>/jdev/sps/io/&lt;uuid&gt;</code>
+      <%= t('endpoint only answers for a small slice of a control\'s states (roughly 8% here); the rest (sub-states like') %> <code>active</code>, <code>numOpen</code>, <code>lockedUntil</code><%= t(') simply have no HTTP-pollable equivalent at all and used to show as "(unreadable)". The websocket feed covers nearly all of them, and updates automatically every few seconds while a category is open. The "Live connection" line at the top of the page, and') %> <strong><%= t('Test now') %></strong> <%= t('on the') %>
+      <a href="/miniservers"><%= t('Miniservers') %></a> <%= t('page, both show whether that connection is currently up.') %>
     </p>
-    <p><a href="/live-data">Open Live Data &rarr;</a></p>
+    <p><a href="/live-data"><%= t('Open Live Data →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-mqtt-to-loxone">
-  <summary>MQTT &rarr; Loxone &mdash; how does a message reach the Miniserver?</summary>
+  <summary><%= t('MQTT → Loxone — how does a message reach the Miniserver?') %></summary>
   <div class="add-panel-body">
     <p>
-      Each mapping subscribes to one MQTT topic (wildcards <code>+</code> and <code>#</code> are supported) and,
-      whenever a message arrives, calls a Virtual Input on the chosen Miniserver &mdash; either as an HTTP
-      request (<code>/dev/sps/io/&lt;target&gt;/&lt;value&gt;</code>) or as a UDP datagram, depending on the
-      transport you pick.
+      <%= t('Each mapping subscribes to one MQTT topic (wildcards') %> <code>+</code> and <code>#</code> <%= t('are supported) and, whenever a message arrives, calls a Virtual Input on the chosen Miniserver — either as an HTTP request (') %><code>/dev/sps/io/&lt;target&gt;/&lt;value&gt;</code><%= t(') or as a UDP datagram, depending on the transport you pick.') %>
     </p>
-    <p>Before the value is sent, one of these transforms is applied:</p>
+    <p><%= t('Before the value is sent, one of these transforms is applied:') %></p>
     <ul>
-      <li><strong>Pass through unchanged</strong> &mdash; send the raw payload as-is.</li>
-      <li><strong>on/off &rarr; 1/0</strong> &mdash; for topics that publish text.</li>
-      <li><strong>JSON path</strong> &mdash; pull a single field out of a JSON payload (e.g. a Shelly power
-        reading nested a few levels deep).</li>
-      <li><strong>Translation table</strong> &mdash; a free-form lookup table you manage per mapping (via its
-        "Translations" link) that maps arbitrary incoming values to arbitrary output values, e.g.
-        <code>False &rarr; 0</code>, <code>open &rarr; 1</code>. Use this for anything the other transforms
-        don't cover.</li>
+      <li><strong><%= t('Pass through unchanged') %></strong> <%= t('— send the raw payload as-is.') %></li>
+      <li><strong><%= t('on/off → 1/0') %></strong> <%= t('— for topics that publish text.') %></li>
+      <li><strong><%= t('JSON path') %></strong> <%= t('— pull a single field out of a JSON payload (e.g. a Shelly power reading nested a few levels deep).') %></li>
+      <li><strong><%= t('Translation table') %></strong> <%= t('— a free-form lookup table you manage per mapping (via its "Translations" link) that maps arbitrary incoming values to arbitrary output values, e.g.') %>
+        <code>False &rarr; 0</code>, <code>open &rarr; 1</code><%= t('. Use this for anything the other transforms don\'t cover.') %></li>
     </ul>
     <p>
-      <strong>Minimum interval (ms)</strong> throttles a mapping so a fast-changing sensor can't flood the
-      Miniserver &mdash; messages arriving sooner than the interval since the last forwarded one are
-      dropped.
+      <strong><%= t('Minimum interval (ms)') %></strong> <%= t('throttles a mapping so a fast-changing sensor can\'t flood the Miniserver — messages arriving sooner than the interval since the last forwarded one are dropped.') %>
     </p>
-    <p><a href="/mappings/mqtt-to-loxone">Open MQTT &rarr; Loxone &rarr;</a></p>
+    <p><a href="/mappings/mqtt-to-loxone"><%= t('Open MQTT → Loxone →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-loxone-to-mqtt">
-  <summary>Loxone &rarr; MQTT &mdash; how do I wire this into Loxone Config?</summary>
+  <summary><%= t('Loxone → MQTT — how do I wire this into Loxone Config?') %></summary>
   <div class="add-panel-body">
-    <p>Each mapping gets a random token and publishes to one MQTT topic. Two transports:</p>
+    <p><%= t('Each mapping gets a random token and publishes to one MQTT topic. Two transports:') %></p>
     <ul>
-      <li><strong>HTTP</strong> &mdash; the mapping's row shows a ready-to-use callback URL
-        (<code>http://&lt;gateway-host&gt;:5582/api/loxone-in/&lt;token&gt;?value=\v</code>). Paste it into a
-        Virtual Output's HTTP command in Loxone Config; Loxone replaces <code>\v</code> with the actual
-        value on every call. This endpoint intentionally has no login &mdash; the Miniserver can't hold a
-        session, so the token itself is the secret.</li>
-      <li><strong>UDP</strong> &mdash; send <code>&lt;token&gt;=\v</code> as a Virtual UDP Output to the gateway
-        on the port shown (11884 by default, see <code>LOXONE_UDP_PORT</code>).</li>
+      <li><strong><%= t('HTTP') %></strong> <%= t('— the mapping\'s row shows a ready-to-use callback URL (') %><code>http://&lt;gateway-host&gt;:5582/api/loxone-in/&lt;token&gt;?value=\v</code><%= t('). Paste it into a Virtual Output\'s HTTP command in Loxone Config; Loxone replaces') %> <code>\v</code> <%= t('with the actual value on every call. This endpoint intentionally has no login — the Miniserver can\'t hold a session, so the token itself is the secret.') %></li>
+      <li><strong><%= t('UDP') %></strong> <%= t('— send') %> <code>&lt;token&gt;=\v</code> <%= t('as a Virtual UDP Output to the gateway on the port shown (11884 by default, see') %> <code>LOXONE_UDP_PORT</code>).</li>
     </ul>
     <p>
-      A <strong>translation table</strong> value transform is available here too, for when Loxone sends
-      something a device doesn't understand directly (e.g. Loxone sends <code>1</code>/<code>0</code>, but a
-      Shelly relay wants the text <code>on</code>/<code>off</code>).
+      A <strong><%= t('translation table') %></strong> <%= t('value transform is available here too, for when Loxone sends something a device doesn\'t understand directly (e.g. Loxone sends') %> <code>1</code>/<code>0</code><%= t(', but a Shelly relay wants the text') %> <code>on</code>/<code>off</code>).
     </p>
     <p>
-      <strong>Test</strong> on each row lets you publish a value straight to the topic without touching
-      Loxone at all &mdash; useful for confirming a device reacts correctly before wiring up the real Virtual
-      Output. It runs through the exact same value transform a real call would.
+      <strong><%= t('Test') %></strong> <%= t('on each row lets you publish a value straight to the topic without touching Loxone at all — useful for confirming a device reacts correctly before wiring up the real Virtual Output. It runs through the exact same value transform a real call would.') %>
     </p>
-    <p><a href="/mappings/loxone-to-mqtt">Open Loxone &rarr; MQTT &rarr;</a></p>
+    <p><a href="/mappings/loxone-to-mqtt"><%= t('Open Loxone → MQTT →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-commands">
-  <summary>Common commands &mdash; what is this builder for?</summary>
+  <summary><%= t('Common commands — what is this builder for?') %></summary>
   <div class="add-panel-body">
     <p>
-      A reference and topic-builder for devices with well-known MQTT command topics (currently Shelly
-      Gen1: relay, roller, and light channels). Pick a device &mdash; from every device the broker has
-      actually seen traffic for, across all known types &mdash; and its device type fills in
-      automatically; correct it manually if it guessed wrong or the device hasn't been seen yet. Then
-      pick a command and channel number, and it composes the topic for you. From there,
-      <strong>Use in mapping</strong> jumps straight to a pre-filled Loxone &rarr; MQTT mapping.
+      <%= t('A reference and topic-builder for devices with well-known MQTT command topics (currently Shelly Gen1: relay, roller, and light channels). Pick a device — from every device the broker has actually seen traffic for, across all known types — and its device type fills in automatically; correct it manually if it guessed wrong or the device hasn\'t been seen yet. Then pick a command and channel number, and it composes the topic for you. From there,') %>
+      <strong><%= t('Use in mapping') %></strong> <%= t('jumps straight to a pre-filled Loxone → MQTT mapping.') %>
     </p>
     <p>
-      On <a href="/incoming/clients">Client Activity</a>, devices that look like a Shelly show a
-      "Suggest commands" shortcut that opens this builder with the device already selected.
+      <%= t('On') %> <a href="/incoming/clients"><%= t('Client Activity') %></a><%= t(', devices that look like a Shelly show a "Suggest commands" shortcut that opens this builder with the device already selected.') %>
     </p>
-    <p><a href="/mappings/commands">Open Common commands &rarr;</a></p>
+    <p><a href="/mappings/commands"><%= t('Open Common commands →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-transformations">
-  <summary>Transformations &mdash; what does this overview show?</summary>
+  <summary><%= t('Transformations — what does this overview show?') %></summary>
   <div class="add-panel-body">
     <p>
-      Every mapping (in either direction) that uses the "Translation table" value transform, in one place,
-      with a count of how many entries each translation table has and a shortcut to manage them. Handy once
-      you have more than a couple of translation tables scattered across the two mapping pages.
+      <%= t('Every mapping (in either direction) that uses the "Translation table" value transform, in one place, with a count of how many entries each translation table has and a shortcut to manage them. Handy once you have more than a couple of translation tables scattered across the two mapping pages.') %>
     </p>
-    <p><a href="/transformations">Open Transformations &rarr;</a></p>
+    <p><a href="/transformations"><%= t('Open Transformations →') %></a></p>
   </div>
 </details>
 
-<h2>MQTT Broker</h2>
+<h2><%= t('MQTT Broker') %></h2>
 
 <details class="add-panel" id="help-incoming">
-  <summary>Live Data (MQTT) &mdash; Live Messages vs. Client Activity?</summary>
+  <summary><%= t('Live Data (MQTT) — Live Messages vs. Client Activity?') %></summary>
   <div class="add-panel-body">
-    <p>Two sub-pages, both refreshing every 5 seconds and both in-memory only (cleared on a gateway restart):</p>
+    <p><%= t('Two sub-pages, both refreshing every 5 seconds and both in-memory only (cleared on a gateway restart):') %></p>
     <ul>
-      <li><strong>Live Messages</strong> &mdash; one row per topic seen, showing its actual and previous value,
-        a message count, and a ready-to-copy <strong>Command Recognition</strong> string
-        (<code>MQTT:\i&lt;topic&gt;=\i\v</code>) for a Loxone Virtual UDP Input's
-        "Command Recognition" field. <strong>Map</strong> jumps to a pre-filled MQTT &rarr; Loxone mapping for
-        that topic, <strong>Widget</strong> pins its value on the Dashboard.</li>
-      <li><strong>Client Activity</strong> &mdash; which MQTT clients are connected or have been, with a
-        "Suggest commands" shortcut for Shelly-like client IDs. Disconnected entries are auto-removed after a
-        configurable number of hours (default 24) &mdash; each removal is logged on the
-        <a href="/logs/system">System</a> log, since this list itself doesn't survive a restart.</li>
+      <li><strong><%= t('Live Messages') %></strong> <%= t('— one row per topic seen, showing its actual and previous value, a message count, and a ready-to-copy') %> <strong><%= t('Command Recognition') %></strong> <%= t('string (') %><code>MQTT:\i&lt;topic&gt;=\i\v</code><%= t(') for a Loxone Virtual UDP Input\'s "Command Recognition" field.') %> <strong><%= t('Map') %></strong> <%= t('jumps to a pre-filled MQTT → Loxone mapping for that topic,') %> <strong><%= t('Widget') %></strong> <%= t('pins its value on the Dashboard.') %></li>
+      <li><strong><%= t('Client Activity') %></strong> <%= t('— which MQTT clients are connected or have been, with a "Suggest commands" shortcut for Shelly-like client IDs. Disconnected entries are auto-removed after a configurable number of hours (default 24) — each removal is logged on the') %>
+        <a href="/logs/system"><%= t('System') %></a> <%= t('log, since this list itself doesn\'t survive a restart.') %></li>
     </ul>
-    <p><strong>Clear list</strong> on Live Messages empties that view entirely. On Client Activity it only
-      drops <em>disconnected</em> entries &mdash; a client that's still actually connected stays listed, since
-      it won't send a new "connected" event just because the view was cleared.</p>
-    <p><a href="/incoming/messages">Open Live Data &rarr;</a></p>
+    <p><strong><%= t('Clear list') %></strong> <%= t('on Live Messages empties that view entirely. On Client Activity it only drops') %> <em><%= t('disconnected') %></em> <%= t('entries — a client that\'s still actually connected stays listed, since it won\'t send a new "connected" event just because the view was cleared.') %></p>
+    <p><a href="/incoming/messages"><%= t('Open Live Data →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-logs">
-  <summary>Logs &mdash; real log files, not monitored values</summary>
+  <summary><%= t('Logs — real log files, not monitored values') %></summary>
   <div class="add-panel-body">
     <p>
-      Different from <a href="/monitor">Monitor</a>: this fetches and displays actual
-      <strong>log files</strong>, not a tracked value's history. Four tabs, all live (refreshing every 5
-      seconds) plus a persisted history you can page back through and export:
+      <%= t('Different from') %> <a href="/monitor"><%= t('Monitor') %></a><%= t(': this fetches and displays actual') %>
+      <strong><%= t('log files') %></strong><%= t(', not a tracked value\'s history. Four tabs, all live (refreshing every 5 seconds) plus a persisted history you can page back through and export:') %>
     </p>
     <ul>
-      <li><strong>MQTT broker</strong> &mdash; the raw Mosquitto broker log file, tailed the same way the
-        <a href="/incoming/clients">Client Activity</a> page already reads it for connect/disconnect
-        events, except every line is kept here, not just the ones that indicate a client connecting or
-        disconnecting.</li>
-      <li><strong>Loxone Miniservers</strong> &mdash; each configured Miniserver's own system log
-        (<code>def.log</code>), fetched over the same HTTP connection used for everything else Loxone-related
-        (falling back to its <strong>External URL</strong> on the <a href="/miniservers">Miniservers</a> page
-        if the local address can't be reached). There's no push channel for this on the Loxone side, so the
-        gateway polls once a minute and only stores newly appended lines &mdash; if more than one Miniserver is
-        configured, a dropdown filters to just one.</li>
-      <li><strong>Loxone commands</strong> &mdash; every Virtual Output command this gateway receives from
-        Loxone (UDP or HTTP), one row per attempt: when it arrived, which client sent it (the matching
-        <a href="/miniservers">Miniserver's</a> name when its Host matches the sender's IP, otherwise the
-        bare IP), the MQTT topic it targeted, the value transition (<strong>From value</strong> &rarr;
-        <strong>To value</strong>, tracked per topic since this gateway last restarted), and whether it was
-        accepted (published to MQTT) or rejected (malformed message, no matching
-        <a href="/mappings/loxone-to-mqtt">Loxone &rarr; MQTT mapping</a>, or the MQTT broker being
-        unreachable). The first place to check when a Virtual Output works from the mapping page's own
-        Test button but not from the real Miniserver &mdash; if nothing shows up here at all, the command
-        isn't reaching this gateway (network/firewall), not a mapping problem.</li>
-      <li><strong>System</strong> &mdash; this gateway's own housekeeping events, e.g. a disconnected MQTT
-        client getting auto-removed from <a href="/incoming/clients">Client Activity</a>.</li>
+      <li><strong><%= t('MQTT broker') %></strong> <%= t('— the raw Mosquitto broker log file, tailed the same way the') %>
+        <a href="/incoming/clients"><%= t('Client Activity') %></a> <%= t('page already reads it for connect/disconnect events, except every line is kept here, not just the ones that indicate a client connecting or disconnecting.') %></li>
+      <li><strong><%= t('Loxone Miniservers') %></strong> <%= t('— each configured Miniserver\'s own system log (') %><code>def.log</code><%= t('), fetched over the same HTTP connection used for everything else Loxone-related (falling back to its') %> <strong><%= t('External URL') %></strong> <%= t('on the') %> <a href="/miniservers"><%= t('Miniservers') %></a> <%= t('page if the local address can\'t be reached). There\'s no push channel for this on the Loxone side, so the gateway polls once a minute and only stores newly appended lines — if more than one Miniserver is configured, a dropdown filters to just one.') %></li>
+      <li><strong><%= t('Loxone commands') %></strong> <%= t('— every Virtual Output command this gateway receives from Loxone (UDP or HTTP), one row per attempt: when it arrived, which client sent it (the matching') %>
+        <a href="/miniservers"><%= t('Miniserver\'s') %></a> <%= t('name when its Host matches the sender\'s IP, otherwise the bare IP), the MQTT topic it targeted, the value transition (') %><strong><%= t('From value') %></strong> &rarr;
+        <strong><%= t('To value') %></strong><%= t(', tracked per topic since this gateway last restarted), and whether it was accepted (published to MQTT) or rejected (malformed message, no matching') %>
+        <a href="/mappings/loxone-to-mqtt"><%= t('Loxone → MQTT mapping') %></a><%= t(', or the MQTT broker being unreachable). The first place to check when a Virtual Output works from the mapping page\'s own Test button but not from the real Miniserver — if nothing shows up here at all, the command isn\'t reaching this gateway (network/firewall), not a mapping problem.') %></li>
+      <li><strong><%= t('System') %></strong> <%= t('— this gateway\'s own housekeeping events, e.g. a disconnected MQTT client getting auto-removed from') %> <a href="/incoming/clients"><%= t('Client Activity') %></a>.</li>
     </ul>
     <p>
-      Each line gets a <strong>Level</strong> badge (info/warning/error) &mdash; a best-effort guess
-      from the line's own wording, since neither Mosquitto nor Loxone tags lines with a real severity.
-      Treat it as a scanning aid, not a guarantee.
+      <%= t('Each line gets a') %> <strong><%= t('Level') %></strong> <%= t('badge (info/warning/error) — a best-effort guess from the line\'s own wording, since neither Mosquitto nor Loxone tags lines with a real severity. Treat it as a scanning aid, not a guarantee.') %>
     </p>
     <p>
-      All four are persisted in SQLite and purged automatically after the configured
-      <strong>retention</strong> (in days, editable from <a href="/settings">Settings</a>) so the
-      database doesn't grow forever. <strong>Export .log</strong> downloads everything currently
-      retained as a plain-text file (unfiltered, always the full retained history).
+      <%= t('All four are persisted in SQLite and purged automatically after the configured') %>
+      <strong><%= t('retention') %></strong> <%= t('(in days, editable from') %> <a href="/settings"><%= t('Settings') %></a><%= t(') so the database doesn\'t grow forever.') %> <strong><%= t('Export .log') %></strong> <%= t('downloads everything currently retained as a plain-text file (unfiltered, always the full retained history).') %>
     </p>
     <p>
-      Every tab has a filter bar above the table: <strong>From</strong>/<strong>To</strong> narrow to a
-      date/time range, <strong>Level</strong> narrows to just info, warning, or error lines, and
-      <strong>Contains</strong> does a plain substring search over the line text. Filters combine (all
-      apply at once), stay in the URL so a filtered view can be bookmarked or shared, and survive the
-      auto-refresh. The table still shows at most 1000 lines even when filtered.
+      <%= t('Every tab has a filter bar above the table:') %> <strong><%= t('From') %></strong>/<strong><%= t('To') %></strong> <%= t('narrow to a date/time range,') %> <strong><%= t('Level') %></strong> <%= t('narrows to just info, warning, or error lines, and') %>
+      <strong><%= t('Contains') %></strong> <%= t('does a plain substring search over the line text. Filters combine (all apply at once), stay in the URL so a filtered view can be bookmarked or shared, and survive the auto-refresh. The table still shows at most 1000 lines even when filtered.') %>
     </p>
     <p>
-      Each tab is its own permission, separately from every other page in the app: an Access Role can
-      be trusted with, say, the System log without also seeing the MQTT broker log — and
-      <strong>viewing</strong> a tab is separate from <strong>downloading</strong> it, so a role can be
-      allowed to read a log on-screen without being able to export the full file. See Administration
-      &rarr; Access Roles' own "Logs" table.
+      <%= t('Each tab is its own permission, separately from every other page in the app: an Access Role can be trusted with, say, the System log without also seeing the MQTT broker log — and') %>
+      <strong><%= t('viewing') %></strong> <%= t('a tab is separate from') %> <strong><%= t('downloading') %></strong> <%= t('it, so a role can be allowed to read a log on-screen without being able to export the full file. See Administration → Access Roles\' own "Logs" table.') %>
     </p>
     <p>
-      Select rows with their checkbox (Shift/Ctrl-click extends the selection across a range, same as
-      a file manager) or by clicking anywhere on the row, then <strong>Copy selection</strong> copies
-      the visible columns of every selected row to the clipboard, tab-separated per column — ready to
-      paste into a spreadsheet or a chat message without needing to Export first. The auto-refresh
-      pauses for as long as anything is selected, so it can't be swapped out from under you mid-copy.
+      <%= t('Select rows with their checkbox (Shift/Ctrl-click extends the selection across a range, same as a file manager) or by clicking anywhere on the row, then') %> <strong><%= t('Copy selection') %></strong> <%= t('copies the visible columns of every selected row to the clipboard, tab-separated per column — ready to paste into a spreadsheet or a chat message without needing to Export first. The auto-refresh pauses for as long as anything is selected, so it can\'t be swapped out from under you mid-copy.') %>
     </p>
-    <p><a href="/logs">Open Logs &rarr;</a></p>
+    <p><a href="/logs"><%= t('Open Logs →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-mqtt-users">
-  <summary>Users &mdash; how do I add a new device's MQTT account?</summary>
+  <summary><%= t('Users — how do I add a new device\'s MQTT account?') %></summary>
   <div class="add-panel-body">
     <p>
-      Every device that connects to the broker needs its own account (the broker rejects anonymous
-      connections). Add a username/password and a role here &mdash; no broker restart needed, changes take
-      effect immediately. This is backed by Mosquitto's <strong>dynamic-security</strong> plugin rather than
-      a classic password file, specifically so the web UI can manage accounts live.
+      <%= t('Every device that connects to the broker needs its own account (the broker rejects anonymous connections). Add a username/password and a role here — no broker restart needed, changes take effect immediately. This is backed by Mosquitto\'s') %> <strong><%= t('dynamic-security') %></strong> <%= t('plugin rather than a classic password file, specifically so the web UI can manage accounts live.') %>
     </p>
     <p>
-      Change a device's role right in the table (saves immediately), or use the pencil icon next to
-      Delete to set a new password without recreating the account.
+      <%= t('Change a device\'s role right in the table (saves immediately), or use the pencil icon next to Delete to set a new password without recreating the account.') %>
     </p>
     <p>
-      Adding an account (or resetting a password) immediately tries an actual MQTT connection with
-      those exact credentials and reports success/failure right on the page — the only moment this
-      is possible at all, since the broker never hands the plaintext password back afterward, so
-      there's no separate "test" button for an already-existing account.
+      <%= t('Adding an account (or resetting a password) immediately tries an actual MQTT connection with those exact credentials and reports success/failure right on the page — the only moment this is possible at all, since the broker never hands the plaintext password back afterward, so there\'s no separate "test" button for an already-existing account.') %>
     </p>
-    <p>The gateway's own account (<code>gateway</code> by default) can't be edited or deleted from here
-      &mdash; changing its password or role here would desync it from the credentials configured on the
-      <a href="/settings/broker">Broker connection</a> page and lock the gateway itself out of the broker.</p>
-    <p><a href="/mqtt-users">Open Users &rarr;</a></p>
+    <p><%= t('The gateway\'s own account (') %><code>gateway</code> <%= t('by default) can\'t be edited or deleted from here — changing its password or role here would desync it from the credentials configured on the') %>
+      <a href="/settings/broker"><%= t('Broker connection') %></a> <%= t('page and lock the gateway itself out of the broker.') %></p>
+    <p><a href="/mqtt-users"><%= t('Open Users →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-mqtt-roles">
-  <summary>Roles &mdash; what's the difference between a role and a user?</summary>
+  <summary><%= t('Roles — what\'s the difference between a role and a user?') %></summary>
   <div class="add-panel-body">
     <p>
-      A role is a named set of ACL rules (publish/subscribe permissions on topic patterns); a user is
-      assigned one or more roles. Out of the box there's a <code>client</code> role with full publish/subscribe
-      on every topic (<code>#</code>) &mdash; simple, since per-device topic restrictions weren't a requirement
-      here &mdash; and the built-in <code>admin</code> role Mosquitto itself uses.
+      <%= t('A role is a named set of ACL rules (publish/subscribe permissions on topic patterns); a user is assigned one or more roles. Out of the box there\'s a') %> <code>client</code> <%= t('role with full publish/subscribe on every topic (') %><code>#</code><%= t(') — simple, since per-device topic restrictions weren\'t a requirement here — and the built-in') %> <code>admin</code> <%= t('role Mosquitto itself uses.') %>
     </p>
     <p>
-      <code>admin</code> and <code>client</code> can't be <em>deleted</em> (the gateway's bootstrap and every
-      device account depend on them), but their ACL rules can still be edited like any other role &mdash; useful
-      if you do want to lock a role down later.
+      <code>admin</code> and <code>client</code> <%= t('can\'t be') %> <em><%= t('deleted') %></em> <%= t('(the gateway\'s bootstrap and every device account depend on them), but their ACL rules can still be edited like any other role — useful if you do want to lock a role down later.') %>
     </p>
-    <p>Each role is its own collapsible section with its own ACL table (here, <code>client</code> expanded):</p>
-    <img class="help-img" src="/images/help/mqtt-role-acl.png" alt="The MQTT Roles page with the built-in client role expanded, showing its four ACL rules all allowing the # topic wildcard.">
-    <p><a href="/mqtt-roles">Open Roles &rarr;</a></p>
+    <p><%= t('Each role is its own collapsible section with its own ACL table (here,') %> <code>client</code> <%= t('expanded):') %></p>
+    <img class="help-img" src="/images/help/mqtt-role-acl.png" alt="<%= t('The MQTT Roles page with the built-in client role expanded, showing its four ACL rules all allowing the # topic wildcard.') %>">
+    <p><a href="/mqtt-roles"><%= t('Open Roles →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-settings">
-  <summary>Settings &mdash; broker connection and auto-create</summary>
+  <summary><%= t('Settings — broker connection and auto-create') %></summary>
   <div class="add-panel-body">
     <p>
-      <strong>Broker connection</strong> is what the gateway itself uses to connect to MQTT (host, port,
-      username, password, TLS). It defaults to the bundled Mosquitto container, but can point at any
-      external broker. Saving reconnects immediately. The <code>MQTT_URL</code>/<code>MQTT_USERNAME</code>/
-      <code>MQTT_PASSWORD</code> environment variables only seed this setting on the very first start.
+      <strong><%= t('Broker connection') %></strong> <%= t('is what the gateway itself uses to connect to MQTT (host, port, username, password, TLS). It defaults to the bundled Mosquitto container, but can point at any external broker. Saving reconnects immediately. The') %> <code>MQTT_URL</code>/<code>MQTT_USERNAME</code>/
+      <code>MQTT_PASSWORD</code> <%= t('environment variables only seed this setting on the very first start.') %>
     </p>
     <p>
-      <strong>Auto-create Loxone &rarr; MQTT mappings</strong> is off by default. When enabled, a call to
-      <code>/api/loxone-in/&lt;anything&gt;</code> that doesn't match an existing token is treated as a
-      literal MQTT topic and a new passthrough mapping is created for it on the spot, instead of returning
-      404. This is convenient for quickly wiring up Loxone without pre-creating every mapping by hand, but
-      it means any string reaching that endpoint becomes a real topic &mdash; leave it off unless you
-      specifically want that behavior.
+      <strong><%= t('Auto-create Loxone → MQTT mappings') %></strong> <%= t('is off by default. When enabled, a call to') %>
+      <code>/api/loxone-in/&lt;anything&gt;</code> <%= t('that doesn\'t match an existing token is treated as a literal MQTT topic and a new passthrough mapping is created for it on the spot, instead of returning 404. This is convenient for quickly wiring up Loxone without pre-creating every mapping by hand, but it means any string reaching that endpoint becomes a real topic — leave it off unless you specifically want that behavior.') %>
     </p>
-    <p><a href="/settings/broker">Open Broker connection &rarr;</a></p>
+    <p><a href="/settings/broker"><%= t('Open Broker connection →') %></a></p>
   </div>
 </details>
 
-<h2>Settings</h2>
+<h2><%= t('Settings') %></h2>
 
 <details class="add-panel" id="help-settings-general">
-  <summary>Settings &mdash; data retention and features</summary>
+  <summary><%= t('Settings — data retention and features') %></summary>
   <div class="add-panel-body">
     <p>
-      Reached from the account menu (top right). General, gateway-wide housekeeping — separate from
-      <a href="/settings/broker">Broker connection</a>, which is an MQTT-specific admin setting under
-      Administration instead.
+      <%= t('Reached from the account menu (top right). General, gateway-wide housekeeping — separate from') %>
+      <a href="/settings/broker"><%= t('Broker connection') %></a><%= t(', which is an MQTT-specific admin setting under Administration instead.') %>
     </p>
-    <p><strong>Data retention</strong> — three independent purge timers, all run automatically once
-      a day:</p>
+    <p><strong><%= t('Data retention') %></strong> <%= t('— three independent purge timers, all run automatically once a day:') %></p>
     <ul>
-      <li><strong>Logs (days)</strong> &mdash; raw lines on the <a href="/logs">Logs</a> page (MQTT,
-        Loxone, and System tabs).</li>
-      <li><strong>Monitor history (days)</strong> &mdash; recorded readings on the
-        <a href="/monitor">Monitor</a> page.</li>
-      <li><strong>Client Activity, after disconnect (hours)</strong> &mdash; how long a disconnected
-        MQTT client stays listed on <a href="/incoming/clients">Client Activity</a> before being
-        dropped (logged on the <a href="/logs/system">System</a> log); still-connected clients are
-        never affected.</li>
+      <li><strong><%= t('Logs (days)') %></strong> <%= t('— raw lines on the') %> <a href="/logs"><%= t('Logs') %></a> <%= t('page (MQTT, Loxone, and System tabs).') %></li>
+      <li><strong><%= t('Monitor history (days)') %></strong> <%= t('— recorded readings on the') %>
+        <a href="/monitor"><%= t('Monitor') %></a> <%= t('page.') %></li>
+      <li><strong><%= t('Client Activity, after disconnect (hours)') %></strong> <%= t('— how long a disconnected MQTT client stays listed on') %> <a href="/incoming/clients"><%= t('Client Activity') %></a> <%= t('before being dropped (logged on the') %> <a href="/logs/system"><%= t('System') %></a> <%= t('log); still-connected clients are never affected.') %></li>
     </ul>
-    <p><strong>Features</strong> currently has one toggle: whether "Suggest dashboard" is offered on
-      <a href="/live-data">Live Data</a> at all. Turning it off just hides the button — it doesn't
-      remove any dashboard already created from a suggestion.</p>
-    <p><a href="/settings">Open Settings &rarr;</a></p>
+    <p><strong><%= t('Features') %></strong> <%= t('currently has one toggle: whether "Suggest dashboard" is offered on') %>
+      <a href="/live-data"><%= t('Live Data') %></a> <%= t('at all. Turning it off just hides the button — it doesn\'t remove any dashboard already created from a suggestion.') %></p>
+    <p><a href="/settings"><%= t('Open Settings →') %></a></p>
   </div>
 </details>
 
-<h2>Administration</h2>
+<h2><%= t('Administration') %></h2>
 
 <details class="add-panel" id="help-profile">
-  <summary>Profile &mdash; what's here?</summary>
+  <summary><%= t('Profile — what\'s here?') %></summary>
   <div class="add-panel-body">
     <p>
-      Your own account, in two tabs. <strong>Account</strong>: avatar, name, email, Access Role, and
-      how you sign in. Pocket ID (SSO) accounts get their avatar/name/email from Pocket ID
-      automatically, refreshed on every login; local (username/password) accounts can set a display
-      name and email themselves and change their password here. SSO accounts have no local password
-      to change &mdash; that's managed by Pocket ID instead.
+      <%= t('Your own account, in two tabs.') %> <strong><%= t('Account') %></strong><%= t(': avatar, name, email, Access Role, and how you sign in. Pocket ID (SSO) accounts get their avatar/name/email from Pocket ID automatically, refreshed on every login; local (username/password) accounts can set a display name and email themselves and change their password here. SSO accounts have no local password to change — that\'s managed by Pocket ID instead.') %>
     </p>
     <p>
-      <strong>Notifications</strong> is your own, personal alerting — entirely self-service, no
-      admin involvement required — on top of whatever an administrator already set up on the
-      <a href="/help#help-admin-notifications" data-help-open data-help-anchor="help-admin-notifications">Notifications admin page</a>:
+      <strong><%= t('Notifications') %></strong> <%= t('is your own, personal alerting — entirely self-service, no admin involvement required — on top of whatever an administrator already set up on the') %>
+      <a href="/help#help-admin-notifications" data-help-open data-help-anchor="help-admin-notifications"><%= t('Notifications admin page') %></a>:
     </p>
     <ul>
-      <li><strong>My channel</strong> &mdash; one <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener">Apprise</a>
-        URL of your own (e.g. a personal Pushover or Telegram target), entirely separate from any
-        channel an admin configured. <strong>Send test</strong> confirms it actually works before you
-        rely on it.</li>
-      <li><strong>My rules</strong> &mdash; your own trigger conditions (a Monitor crossing a
-        threshold, a Miniserver or MQTT client going online/offline, a backup failing), the same four
-        trigger types the admin page offers, always delivered to your channel above. No separate
-        on/off subscription step like the ones below need &mdash; a rule you create is always yours to
-        receive.</li>
-      <li><strong>Subscriptions</strong> &mdash; every enabled rule an administrator has already
-        created, each with its own on/off switch: turn one on and its notifications also land on your
-        channel above, on top of whichever admin-configured channel(s) it already sends to. There's
-        nothing to subscribe to if no admin-wide rules exist yet — an admin has to create at least one
-        first (your own rules above don't need this).</li>
+      <li><strong><%= t('My channel') %></strong> <%= t('— one') %> <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener"><%= t('Apprise') %></a>
+        <%= t('URL of your own (e.g. a personal Pushover or Telegram target), entirely separate from any channel an admin configured.') %> <strong><%= t('Send test') %></strong> <%= t('confirms it actually works before you rely on it.') %></li>
+      <li><strong><%= t('My rules') %></strong> <%= t('— your own trigger conditions (a Monitor crossing a threshold, a Miniserver or MQTT client going online/offline, a backup failing), the same four trigger types the admin page offers, always delivered to your channel above. No separate on/off subscription step like the ones below need — a rule you create is always yours to receive.') %></li>
+      <li><strong><%= t('Subscriptions') %></strong> <%= t('— every enabled rule an administrator has already created, each with its own on/off switch: turn one on and its notifications also land on your channel above, on top of whichever admin-configured channel(s) it already sends to. There\'s nothing to subscribe to if no admin-wide rules exist yet — an admin has to create at least one first (your own rules above don\'t need this).') %></li>
     </ul>
-    <p><a href="/profile">Open Profile &rarr;</a></p>
+    <p><a href="/profile"><%= t('Open Profile →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-admin">
-  <summary>Administration &mdash; General, Users, Access Roles, Backups, Notifications, and Security</summary>
+  <summary><%= t('Administration — General, Users, Access Roles, Backups, Notifications, and Security') %></summary>
   <div class="add-panel-body">
-    <p>Visible only to users whose Access Role has <strong>Administrator</strong> checked. Six tabs:</p>
+    <p><%= t('Visible only to users whose Access Role has') %> <strong><%= t('Administrator') %></strong> <%= t('checked. Six tabs:') %></p>
     <ul>
-      <li><strong>General</strong> &mdash; re-run the guided first-run setup wizard any time; see
-        "Is there a guided first-run setup?" above.</li>
-      <li><strong>Users</strong> &mdash; every web UI account (not to be confused with
-        <a href="/mqtt-users">MQTT Users</a>, which is about IoT devices connecting to the broker, a
-        completely different thing). Add a local account, change anyone's Access Role, reset a local
-        user's password, or delete an account.</li>
-      <li><strong>Access Roles</strong> &mdash; named permission sets. Each role has a fixed matrix: one
-        <strong>view</strong>/<strong>edit</strong> pair per page in the app (Monitor, Miniservers, MQTT
-        Users, Settings, and so on), plus a separate <strong>view</strong>/<strong>download</strong> pair
-        per individual log on the <a href="/logs">Logs</a> page, so a role can be trusted with one log
-        (e.g. System) without the others. An <strong>Administrator</strong> role bypasses the matrix entirely
-        and always has full access, including to this page &mdash; that flag is separate from the matrix
-        specifically so a role can never accidentally grant itself more power through it. Hiding a nav
-        item or button a role can't use is a convenience; the actual enforcement happens on the server
-        for every request, matrix or not.</li>
-      <li><strong>Backups</strong> &mdash; back up the gateway's own database, optionally together with the
-        MQTT broker's own config (dynamic-security.json <em>and</em> mosquitto.conf), into one downloadable
-        <code>.zip</code>, additionally copied offsite via <a href="https://rclone.org" target="_blank" rel="noopener">rclone</a>
-        if configured. Runs on a cron schedule you set, on demand via <strong>Backup now</strong>, or both.
-        See below.</li>
-      <li><strong>Notifications</strong> &mdash; alerts to Teams, Slack, Telegram, Email, or anything else
-        <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener">Apprise</a> supports, for
-        a Monitor crossing a threshold, a Miniserver or MQTT client going online/offline, or a backup
-        failing. See below.</li>
-      <li><strong>Security</strong> &mdash; the login page's rate limit (max attempts and time window), and
-        Single Sign-On: connect a self-hosted Pocket ID instance so people can log in with it alongside
-        the existing username/password login (SSO doesn't replace it). The first time someone signs in
-        via Pocket ID, an account is created for them automatically with whatever Access Role you set as
-        the default here &mdash; pick something limited unless you want every new SSO user starting out
-        as an administrator. When creating the OIDC client on the Pocket ID side, the page shows the
-        exact <strong>Callback URL</strong> to register
-        (<code>&lt;gateway-host&gt;/auth/sso/callback</code>); if you also want LoxSuite to show up as a
-        launchable app on the Pocket ID home screen, set its <strong>Client Launch URL</strong> &mdash;
-        labeled <strong>User URL</strong> in some Pocket ID versions &mdash; to the gateway's own address
-        (<code>http://&lt;gateway-host&gt;:5582/</code>).</li>
+      <li><strong><%= t('General') %></strong> <%= t('— re-run the guided first-run setup wizard any time; see "Is there a guided first-run setup?" above.') %></li>
+      <li><strong><%= t('Users') %></strong> <%= t('— every web UI account (not to be confused with') %>
+        <a href="/mqtt-users"><%= t('MQTT Users') %></a><%= t(', which is about IoT devices connecting to the broker, a completely different thing). Add a local account, change anyone\'s Access Role, reset a local user\'s password, or delete an account.') %></li>
+      <li><strong><%= t('Access Roles') %></strong> <%= t('— named permission sets. Each role has a fixed matrix: one') %>
+        <strong><%= t('view') %></strong>/<strong><%= t('edit') %></strong> <%= t('pair per page in the app (Monitor, Miniservers, MQTT Users, Settings, and so on), plus a separate') %> <strong><%= t('view') %></strong>/<strong><%= t('download') %></strong> <%= t('pair per individual log on the') %> <a href="/logs"><%= t('Logs') %></a> <%= t('page, so a role can be trusted with one log (e.g. System) without the others. An') %> <strong><%= t('Administrator') %></strong> <%= t('role bypasses the matrix entirely and always has full access, including to this page — that flag is separate from the matrix specifically so a role can never accidentally grant itself more power through it. Hiding a nav item or button a role can\'t use is a convenience; the actual enforcement happens on the server for every request, matrix or not.') %></li>
+      <li><strong><%= t('Backups') %></strong> <%= t('— back up the gateway\'s own database, optionally together with the MQTT broker\'s own config (dynamic-security.json') %> <em>and</em> <%= t('mosquitto.conf), into one downloadable') %>
+        <code>.zip</code><%= t(', additionally copied offsite via') %> <a href="https://rclone.org" target="_blank" rel="noopener"><%= t('rclone') %></a>
+        <%= t('if configured. Runs on a cron schedule you set, on demand via') %> <strong><%= t('Backup now') %></strong><%= t(', or both. See below.') %></li>
+      <li><strong><%= t('Notifications') %></strong> <%= t('— alerts to Teams, Slack, Telegram, Email, or anything else') %>
+        <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener"><%= t('Apprise') %></a> <%= t('supports, for a Monitor crossing a threshold, a Miniserver or MQTT client going online/offline, or a backup failing. See below.') %></li>
+      <li><strong><%= t('Security') %></strong> <%= t('— the login page\'s rate limit (max attempts and time window), and Single Sign-On: connect a self-hosted Pocket ID instance so people can log in with it alongside the existing username/password login (SSO doesn\'t replace it). The first time someone signs in via Pocket ID, an account is created for them automatically with whatever Access Role you set as the default here — pick something limited unless you want every new SSO user starting out as an administrator. When creating the OIDC client on the Pocket ID side, the page shows the exact') %> <strong><%= t('Callback URL') %></strong> <%= t('to register (') %><code>&lt;gateway-host&gt;/auth/sso/callback</code><%= t('); if you also want LoxSuite to show up as a launchable app on the Pocket ID home screen, set its') %> <strong><%= t('Client Launch URL') %></strong> <%= t('— labeled') %> <strong><%= t('User URL') %></strong> <%= t('in some Pocket ID versions — to the gateway\'s own address (') %><code>http://&lt;gateway-host&gt;:5582/</code>).</li>
     </ul>
     <p class="hint" style="margin-bottom:0;">
-      The gateway always keeps at least one administrator: deleting, demoting, or reassigning the last
-      remaining admin account is blocked with an error instead of silently locking everyone out.
+      <%= t('The gateway always keeps at least one administrator: deleting, demoting, or reassigning the last remaining admin account is blocked with an error instead of silently locking everyone out.') %>
     </p>
-    <p><a href="/admin/general">Open Administration &rarr;</a></p>
+    <p><a href="/admin/general"><%= t('Open Administration →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-admin-backup">
-  <summary>Backups &mdash; what exactly gets backed up, and how does restore work?</summary>
+  <summary><%= t('Backups — what exactly gets backed up, and how does restore work?') %></summary>
   <div class="add-panel-body">
-    <p>Each backup is one <code>.zip</code> containing:</p>
+    <p><%= t('Each backup is one') %> <code>.zip</code> <%= t('containing:') %></p>
     <ul>
-      <li><strong>gateway.db</strong> &mdash; always included. Users, Access Roles, Miniservers, both
-        mapping directions, Monitor history, Dashboards/panels, and Settings: everything this app itself
-        manages. Taken as a consistent online snapshot (SQLite's own backup API), so it's safe to run
-        while the gateway keeps handling traffic.</li>
-      <li><strong>dynamic-security.json</strong> and <strong>mosquitto.conf</strong> &mdash; optional (one
-        "Include MQTT config" checkbox in the schedule settings covers both). Mosquitto's own files for
-        MQTT Users/Roles/ACLs and the broker's listener/persistence/logging config. Only available if this
-        container can see them (the <code>./mosquitto/config:/mosquitto/config</code> volume in
-        <code>docker-compose.yml</code>); the page tells you if it can't.</li>
+      <li><strong><%= t('gateway.db') %></strong> <%= t('— always included. Users, Access Roles, Miniservers, both mapping directions, Monitor history, Dashboards/panels, and Settings: everything this app itself manages. Taken as a consistent online snapshot (SQLite\'s own backup API), so it\'s safe to run while the gateway keeps handling traffic.') %></li>
+      <li><strong><%= t('dynamic-security.json') %></strong> and <strong><%= t('mosquitto.conf') %></strong> <%= t('— optional (one "Include MQTT config" checkbox in the schedule settings covers both). Mosquitto\'s own files for MQTT Users/Roles/ACLs and the broker\'s listener/persistence/logging config. Only available if this container can see them (the') %> <code>./mosquitto/config:/mosquitto/config</code> <%= t('volume in') %>
+        <code>docker-compose.yml</code><%= t('); the page tells you if it can\'t.') %></li>
     </ul>
     <p>
-      <strong>Schedule</strong> uses a standard 5-field cron expression (e.g. <code>0 3 * * *</code> for
-      every day at 03:00). <strong>Keep last</strong> automatically deletes older backups beyond that
-      count, so this can run indefinitely without slowly filling the disk.
+      <strong><%= t('Schedule') %></strong> <%= t('uses a standard 5-field cron expression (e.g.') %> <code>0 3 * * *</code> <%= t('for every day at 03:00).') %> <strong><%= t('Keep last') %></strong> <%= t('automatically deletes older backups beyond that count, so this can run indefinitely without slowly filling the disk.') %>
     </p>
     <p>
-      <strong>Offsite copy (rclone)</strong> additionally pushes every backup zip (scheduled or manual) to
-      a remote of your choice — any of the 70+ storage backends
-      <a href="https://rclone.org" target="_blank" rel="noopener">rclone</a> supports (S3, Backblaze,
-      Google Drive, SFTP, ...). Paste the contents of an <code>rclone.conf</code> (generated by running
-      <code>rclone config</code> anywhere convenient) plus the remote path, e.g.
-      <code>myremote:loxsuite-backups</code>, and use <strong>Test connection</strong> to confirm it's
-      reachable before relying on it. This only ever <strong>adds</strong> to the remote — it never
-      deletes anything there, so pruning old offsite copies is entirely up to your own remote-side
-      lifecycle rules, independent of the local <strong>Keep last</strong> count above.
+      <strong><%= t('Offsite copy (rclone)') %></strong> <%= t('additionally pushes every backup zip (scheduled or manual) to a remote of your choice — any of the 70+ storage backends') %>
+      <a href="https://rclone.org" target="_blank" rel="noopener"><%= t('rclone') %></a> <%= t('supports (S3, Backblaze, Google Drive, SFTP, ...). Paste the contents of an') %> <code>rclone.conf</code> <%= t('(generated by running') %>
+      <code>rclone config</code> <%= t('anywhere convenient) plus the remote path, e.g.') %>
+      <code>myremote:loxsuite-backups</code><%= t(', and use') %> <strong><%= t('Test connection') %></strong> <%= t('to confirm it\'s reachable before relying on it. This only ever') %> <strong><%= t('adds') %></strong> <%= t('to the remote — it never deletes anything there, so pruning old offsite copies is entirely up to your own remote-side lifecycle rules, independent of the local') %> <strong><%= t('Keep last') %></strong> <%= t('count above.') %>
     </p>
     <p>
-      <strong>Restore never applies immediately</strong> &mdash; on upload, the enclosed database is
-      validated (opened and integrity-checked) before anything happens. If it's a MQTT config restore too,
-      those files are written to disk right away, but Mosquitto only reads them at its own startup and
-      otherwise trusts its own in-memory state, so it has no effect until Mosquitto restarts. The gateway's own
-      database similarly can't be swapped out from under the connection it's already using while running.
-      Both halves take effect only after you restart the container &mdash; <code>docker compose restart
-      loxsuite</code> restarts Mosquitto and the gateway together, since they run inside the same
-      container.
+      <strong><%= t('Restore never applies immediately') %></strong> <%= t('— on upload, the enclosed database is validated (opened and integrity-checked) before anything happens. If it\'s a MQTT config restore too, those files are written to disk right away, but Mosquitto only reads them at its own startup and otherwise trusts its own in-memory state, so it has no effect until Mosquitto restarts. The gateway\'s own database similarly can\'t be swapped out from under the connection it\'s already using while running. Both halves take effect only after you restart the container —') %> <code>docker compose restart
+      loxsuite</code> <%= t('restarts Mosquitto and the gateway together, since they run inside the same container.') %>
     </p>
-    <p><a href="/admin/backup">Open Backups &rarr;</a></p>
+    <p><a href="/admin/backup"><%= t('Open Backups →') %></a></p>
   </div>
 </details>
 
 <details class="add-panel" id="help-admin-notifications">
-  <summary>Notifications &mdash; how do Channels and Rules work together?</summary>
+  <summary><%= t('Notifications — how do Channels and Rules work together?') %></summary>
   <div class="add-panel-body">
     <p>
-      Two separate lists, deliberately kept apart: <strong>Channels</strong> are "where" (a name plus
-      one <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener">Apprise</a> URL,
-      e.g. <code>msteams://TokenA/TokenB/TokenC/</code>, <code>slack://TokenA/TokenB/TokenC/Channel</code>,
-      <code>tgram://bottoken/ChatID</code>, or <code>mailtos://user:pass@smtp.example.com?to=you@example.com</code>
-      &mdash; built by following Apprise's own docs for the service you want, not something this page
-      constructs from separate host/token fields itself), and <strong>Rules</strong> are "when" (which
-      event) and "to which channels". A rule can send to several channels at once, and a channel can be
-      reused by several rules — use <strong>Send test</strong> on a channel to confirm the URL actually
-      works before relying on it in a rule.
+      <%= t('Two separate lists, deliberately kept apart:') %> <strong><%= t('Channels') %></strong> <%= t('are "where" (a name plus one') %> <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener"><%= t('Apprise') %></a> <%= t('URL, e.g.') %> <code>msteams://TokenA/TokenB/TokenC/</code>, <code>slack://TokenA/TokenB/TokenC/Channel</code>,
+      <code>tgram://bottoken/ChatID</code><%= t(', or') %> <code>mailtos://user:pass@smtp.example.com?to=you@example.com</code>
+      <%= t('— built by following Apprise\'s own docs for the service you want, not something this page constructs from separate host/token fields itself), and') %> <strong><%= t('Rules') %></strong> <%= t('are "when" (which event) and "to which channels". A rule can send to several channels at once, and a channel can be reused by several rules — use') %> <strong><%= t('Send test') %></strong> <%= t('on a channel to confirm the URL actually works before relying on it in a rule.') %>
     </p>
-    <p>Four trigger types, each with its own extra fields:</p>
+    <p><%= t('Four trigger types, each with its own extra fields:') %></p>
     <ul>
-      <li><strong>Monitor threshold breached</strong> &mdash; pick a <a href="/monitor">Monitor</a> and a
-        condition (&gt;, &ge;, &lt;, &le;, =) against a value. Fires once when a new reading first
-        crosses the line, not again on every subsequent reading while it stays crossed — optionally also
-        once more when it goes back to normal ("Also notify on recovery").</li>
-      <li><strong>Miniserver online/offline</strong> &mdash; a specific <a href="/miniservers">Miniserver</a>
-        or "Any", firing on every online&harr;offline transition the regular background check (or "Test
-        now") finds.</li>
-      <li><strong>MQTT client online/offline</strong> &mdash; a specific username or "Any", firing on every
-        connect/disconnect seen on <a href="/incoming/clients">Client Activity</a>. A gateway restart
-        replays its whole broker-log history internally to rebuild "who's currently connected" but never
-        re-fires notifications for that replayed history — only genuinely new connects/disconnects from
-        that point on.</li>
-      <li><strong>Backup failed</strong> &mdash; no extra fields; fires on any failed backup (scheduled,
-        manual, or the offsite rclone copy specifically), each failure its own notification.</li>
+      <li><strong><%= t('Monitor threshold breached') %></strong> <%= t('— pick a') %> <a href="/monitor"><%= t('Monitor') %></a> <%= t('and a condition (>, ≥, <, ≤, =) against a value. Fires once when a new reading first crosses the line, not again on every subsequent reading while it stays crossed — optionally also once more when it goes back to normal ("Also notify on recovery").') %></li>
+      <li><strong><%= t('Miniserver online/offline') %></strong> <%= t('— a specific') %> <a href="/miniservers"><%= t('Miniserver') %></a>
+        <%= t('or "Any", firing on every online↔offline transition the regular background check (or "Test now") finds.') %></li>
+      <li><strong><%= t('MQTT client online/offline') %></strong> <%= t('— a specific username or "Any", firing on every connect/disconnect seen on') %> <a href="/incoming/clients"><%= t('Client Activity') %></a><%= t('. A gateway restart replays its whole broker-log history internally to rebuild "who\'s currently connected" but never re-fires notifications for that replayed history — only genuinely new connects/disconnects from that point on.') %></li>
+      <li><strong><%= t('Backup failed') %></strong> <%= t('— no extra fields; fires on any failed backup (scheduled, manual, or the offsite rclone copy specifically), each failure its own notification.') %></li>
     </ul>
     <p>
-      Every user also has their own, entirely independent notifications, set from the Notifications
-      tab on their own
-      <a href="/help#help-profile" data-help-open data-help-anchor="help-profile">Profile page</a>,
-      needing no involvement from here at all: their own personal
-      <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener">Apprise</a> channel,
-      their own rules (the same four trigger types above, but private to them), and the option to
-      subscribe to any of the admin-wide rules here too, on top of whatever channels a rule already
-      sends to above.
+      <%= t('Every user also has their own, entirely independent notifications, set from the Notifications tab on their own') %>
+      <a href="/help#help-profile" data-help-open data-help-anchor="help-profile"><%= t('Profile page') %></a><%= t(', needing no involvement from here at all: their own personal') %>
+      <a href="https://github.com/caronc/apprise" target="_blank" rel="noopener"><%= t('Apprise') %></a> <%= t('channel, their own rules (the same four trigger types above, but private to them), and the option to subscribe to any of the admin-wide rules here too, on top of whatever channels a rule already sends to above.') %>
     </p>
-    <p><a href="/admin/notifications">Open Notifications &rarr;</a></p>
+    <p><a href="/admin/notifications"><%= t('Open Notifications →') %></a></p>
   </div>
 </details>
 
-<h2>Other things worth knowing</h2>
+<h2><%= t('Other things worth knowing') %></h2>
 
 <details class="add-panel">
-  <summary>Can I change how often a page auto-refreshes, or turn it off?</summary>
+  <summary><%= t('Can I change how often a page auto-refreshes, or turn it off?') %></summary>
   <div class="add-panel-body">
     <p>
-      Every auto-refreshing page (Dashboard, Live Data, Client Activity, the four Logs tabs) has a
-      small bordered control at the top right, next to Help: an interval dropdown (5s/10s/30s/60s, or
-      "Custom&hellip;" for any number of seconds) and a pause/resume button. Both are remembered per
-      page, per browser (not shared across devices), so pausing the MQTT broker log doesn't also pause
-      Live Data.
+      <%= t('Every auto-refreshing page (Dashboard, Live Data, Client Activity, the four Logs tabs) has a small bordered control at the top right, next to Help: an interval dropdown (5s/10s/30s/60s, or "Custom…" for any number of seconds) and a pause/resume button. Both are remembered per page, per browser (not shared across devices), so pausing the MQTT broker log doesn\'t also pause Live Data.') %>
     </p>
   </div>
 </details>
 
 <details class="add-panel">
-  <summary>Is there a guided first-run setup?</summary>
+  <summary><%= t('Is there a guided first-run setup?') %></summary>
   <div class="add-panel-body">
     <p>
-      Yes &mdash; an Administrator is walked through it automatically right after their very first
-      login (admin password, timezone, Miniserver, MQTT broker, SSO, backups, notifications), but
-      only once, install-wide. It stays reachable any time afterward from
-      <a href="/admin/general">Administration &rarr; General</a> &rarr; "Run setup wizard again"
-      &mdash; running it again doesn't undo anything already configured, it just walks through the
-      same steps with whatever's currently set pre-filled.
+      <%= t('Yes — an Administrator is walked through it automatically right after their very first login (admin password, timezone, Miniserver, MQTT broker, SSO, backups, notifications), but only once, install-wide. It stays reachable any time afterward from') %>
+      <a href="/admin/general"><%= t('Administration → General') %></a> <%= t('→ "Run setup wizard again" — running it again doesn\'t undo anything already configured, it just walks through the same steps with whatever\'s currently set pre-filled.') %>
     </p>
   </div>
 </details>
 
 <details class="add-panel">
-  <summary>Can I customize tables &mdash; column order, hiding columns?</summary>
+  <summary><%= t('Can I customize tables — column order, hiding columns?') %></summary>
   <div class="add-panel-body">
     <p>
-      Yes. Drag a column header to reorder it, and use the <strong>Columns</strong> button above a table to
-      show/hide columns. This is remembered per logged-in user (stored server-side, not in the browser), so
-      it follows you across devices and browsers.
+      <%= t('Yes. Drag a column header to reorder it, and use the') %> <strong><%= t('Columns') %></strong> <%= t('button above a table to show/hide columns. This is remembered per logged-in user (stored server-side, not in the browser), so it follows you across devices and browsers.') %>
     </p>
-    <img class="help-img" src="/images/help/columns-menu.png" alt="The Columns button open above a table, showing a checklist to show or hide each column.">
+    <img class="help-img" src="/images/help/columns-menu.png" alt="<%= t('The Columns button open above a table, showing a checklist to show or hide each column.') %>">
   </div>
 </details>
 
 <details class="add-panel">
-  <summary>What does "Remember me" do on the login page?</summary>
+  <summary><%= t('What does "Remember me" do on the login page?') %></summary>
   <div class="add-panel-body">
     <p>
-      Without it, your session ends when you close the browser. With it, the login is kept for 30 days.
-      Sessions are stored in the same SQLite database as everything else, so a "remembered" login also
-      survives a gateway restart or redeploy &mdash; it isn't just a longer-lived cookie on top of an
-      in-memory session.
+      <%= t('Without it, your session ends when you close the browser. With it, the login is kept for 30 days. Sessions are stored in the same SQLite database as everything else, so a "remembered" login also survives a gateway restart or redeploy — it isn\'t just a longer-lived cookie on top of an in-memory session.') %>
     </p>
   </div>
 </details>
 
 <details class="add-panel">
-  <summary>Light/dark theme?</summary>
+  <summary><%= t('Light/dark theme?') %></summary>
   <div class="add-panel-body">
-    <p>Use the theme toggle button in the sidebar. Your choice is remembered in the browser (not per-user on
-      the server), and the page applies it before first paint so there's no flash of the wrong theme.</p>
+    <p><%= t('Use the theme toggle button in the sidebar. Your choice is remembered in the browser (not per-user on the server), and the page applies it before first paint so there\'s no flash of the wrong theme.') %></p>
   </div>
 </details>
 
 <details class="add-panel">
-  <summary>Known limitations</summary>
+  <summary><%= t('Known limitations') %></summary>
   <div class="add-panel-body">
     <ul>
-      <li>No autocomplete for Virtual Input names &mdash; see the Miniservers answer above for why.</li>
-      <li>MQTT device accounts all share one <code>client</code> role with access to every topic; there's no
-        per-device topic restriction out of the box (you can build one yourself under
-        <a href="/mqtt-roles">Roles</a> if you need it).</li>
-      <li>Loxone-direct monitors (see the Monitor answer above) are polling-based, not a websocket push
-        subscription &mdash; readings only land on the configured interval, not the instant Loxone's own value
-        changes.</li>
+      <li><%= t('No autocomplete for Virtual Input names — see the Miniservers answer above for why.') %></li>
+      <li><%= t('MQTT device accounts all share one') %> <code>client</code> <%= t('role with access to every topic; there\'s no per-device topic restriction out of the box (you can build one yourself under') %>
+        <a href="/mqtt-roles"><%= t('Roles') %></a> <%= t('if you need it).') %></li>
+      <li><%= t('Loxone-direct monitors (see the Monitor answer above) are polling-based, not a websocket push subscription — readings only land on the configured interval, not the instant Loxone\'s own value changes.') %></li>
     </ul>
   </div>
 </details>

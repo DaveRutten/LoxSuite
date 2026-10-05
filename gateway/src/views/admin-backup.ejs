@@ -18,36 +18,26 @@
 
 <% if (restored) { %>
   <p class="hint" style="background:var(--warning-soft); color:var(--warning); padding:0.75rem 1rem; border-radius:8px; margin-bottom:1.25rem;">
-    <strong>Restore staged, not applied yet.</strong> The uploaded database passed its integrity check and is
-    queued to replace the live one on next start.<% if (restored.mqttConfigRestored) { %> The MQTT broker's
-    users/roles/ACLs were written to its config file directly, but Mosquitto only reads that file at its own
-    startup.<% } %> Restart to apply: <code>docker compose restart <%= restored.restartTargets.join(' ') %></code>
+    <strong><%= t('Restore staged, not applied yet.') %></strong> <%= t('The uploaded database passed its integrity check and is queued to replace the live one on next start.') %><% if (restored.mqttConfigRestored) { %> <%= t('The MQTT broker\'s users/roles/ACLs were written to its config file directly, but Mosquitto only reads that file at its own startup.') %><% } %> <%= t('Restart to apply:') %> <code>docker compose restart <%= restored.restartTargets.join(' ') %></code>
   </p>
 <% } %>
 
 <p class="hint">
-  Backs up the gateway's own database (users, mappings, monitors, dashboards, settings) and,
-  optionally, the MQTT broker's own config &mdash; both its dynamic-security file (users/roles/ACLs)
-  and <code>mosquitto.conf</code> itself (listener, persistence, logging, any custom tuning) &mdash;
-  into one downloadable <code>.zip</code>. Restoring always requires restarting the affected
-  container(s) &mdash; neither half can be swapped into a running process safely.
+  <%= t('Backs up the gateway\'s own database (users, mappings, monitors, dashboards, settings) and, optionally, the MQTT broker\'s own config — both its dynamic-security file (users/roles/ACLs) and') %> <code>mosquitto.conf</code> <%= t('itself (listener, persistence, logging, any custom tuning) — into one downloadable') %> <code>.zip</code><%= t('. Restoring always requires restarting the affected container(s) — neither half can be swapped into a running process safely.') %>
   <% if (dbInfo.backend === 'postgres') { %>
-    The database half is a <code>pg_dump</code> archive here (PostgreSQL backend) rather than a
-    <code>gateway.db</code> file &mdash; a backup only restores into another install running the
-    same backend; see Administration &gt; General for what this install is currently set to.
+    <%= t('The database half is a') %> <code>pg_dump</code> <%= t('archive here (PostgreSQL backend) rather than a') %>
+    <code>gateway.db</code> <%= t('file — a backup only restores into another install running the same backend; see Administration > General for what this install is currently set to.') %>
   <% } else if (dbInfo.backend === 'mysql') { %>
-    The database half is a <code>mysqldump</code> SQL script here (MySQL/MariaDB backend) rather
-    than a <code>gateway.db</code> file &mdash; a backup only restores into another install running
-    the same backend; see Administration &gt; General for what this install is currently set to.
+    <%= t('The database half is a') %> <code>mysqldump</code> <%= t('SQL script here (MySQL/MariaDB backend) rather than a') %> <code>gateway.db</code> <%= t('file — a backup only restores into another install running the same backend; see Administration > General for what this install is currently set to.') %>
   <% } %>
 </p>
 
 <div class="card">
-  <h2>Schedule</h2>
+  <h2><%= t('Schedule') %></h2>
   <form id="backup-schedule-form" method="post" action="/admin/backup/settings">
     <div class="form-grid">
       <div>
-        <label>Enabled</label>
+        <label><%= t('Enabled') %></label>
         <%- toggleSwitch('enabled', settings.enabled, { id: 'backup-enabled-toggle' }) %>
       </div>
     </div>
@@ -57,28 +47,27 @@
     %>
     <div id="backup-properties" class="form-grid" style="margin-top:0.85rem; <%= settings.enabled ? '' : 'display:none;' %>">
       <div>
-        <label>Cron expression</label>
+        <label><%= t('Cron expression') %></label>
         <input type="text" name="schedule_cron" value="<%= settings.schedule_cron %>" placeholder="0 3 * * *">
       </div>
       <div>
-        <label>Keep last</label>
+        <label><%= t('Keep last') %></label>
         <input type="number" name="retention_count" min="1" value="<%= settings.retention_count %>">
       </div>
       <div>
-        <label>Include MQTT config</label>
+        <label><%= t('Include MQTT config') %></label>
         <%- toggleSwitch('include_mqtt_config', settings.include_mqtt_config, { disabled: !mqttConfigMounted }) %>
       </div>
     </div>
   </form>
   <div id="backup-save-row" style="margin-top:0.9rem; <%= settings.enabled ? '' : 'display:none;' %>">
-    <button type="submit" form="backup-schedule-form" class="btn-edit"><%- icon('edit') %> Save schedule</button>
+    <button type="submit" form="backup-schedule-form" class="btn-edit"><%- icon('edit') %> <%= t('Save schedule') %></button>
   </div>
   <p id="backup-cron-hint" class="hint" style="margin-top:0.6rem; <%= settings.enabled ? '' : 'display:none;' %>">
-    Standard 5-field cron (minute hour day month weekday), evaluated in the gateway container's own
-    timezone. <code>0 3 * * *</code> = every day at 03:00.
+    <%= t('Standard 5-field cron (minute hour day month weekday), evaluated in the gateway container\'s own timezone.') %> <code>0 3 * * *</code> <%= t('= every day at 03:00.') %>
     <% if (!mqttConfigMounted) { %>
-      MQTT config isn't reachable from this container right now &mdash; check the
-      <code>./mosquitto/config:/mosquitto/config</code> volume in <code>docker-compose.yml</code>.
+      <%= t('MQTT config isn\'t reachable from this container right now — check the') %>
+      <code>./mosquitto/config:/mosquitto/config</code> <%= t('volume in') %> <code>docker-compose.yml</code>.
     <% } %>
   </p>
   <script>
@@ -99,40 +88,38 @@
   </script>
   <p class="hint" style="margin-top:0.6rem; margin-bottom:0;">
     <% if (settings.last_run_at) { %>
-      Last run: <%= formatDateTime(settings.last_run_at) %> &mdash;
+      <%= t('Last run:') %> <%= formatDateTime(settings.last_run_at) %> &mdash;
       <span class="badge <%= settings.last_status === 'ok' ? 'badge-ok' : 'badge-off' %>"><%= settings.last_status %></span>
       <% if (settings.last_error) { %><span class="hint"><%= settings.last_error %></span><% } %>
     <% } else { %>
-      No scheduled or manual run yet.
+      <%= t('No scheduled or manual run yet.') %>
     <% } %>
   </p>
 </div>
 
 <div class="card">
-  <h2>Manual backup</h2>
+  <h2><%= t('Manual backup') %></h2>
   <form method="post" action="/admin/backup/run">
-    <button type="submit" class="primary"><%- icon('plus') %> Backup now</button>
+    <button type="submit" class="primary"><%- icon('plus') %> <%= t('Backup now') %></button>
   </form>
 </div>
 
 <div class="card">
-  <h2>Offsite copy (rclone)</h2>
+  <h2><%= t('Offsite copy (rclone)') %></h2>
   <p class="hint">
-    Every backup (scheduled or manual) is additionally copied to a remote of your choice via
-    <a href="https://rclone.org" target="_blank" rel="noopener">rclone</a> &mdash; any of the 70+
-    storage backends it supports (S3, Backblaze, Google Drive, SFTP, ...). This only ever
-    <strong>adds</strong> to the remote, never deletes anything there &mdash; pruning old offsite
-    copies is entirely up to your own remote-side lifecycle rules.
+    <%= t('Every backup (scheduled or manual) is additionally copied to a remote of your choice via') %>
+    <a href="https://rclone.org" target="_blank" rel="noopener"><%= t('rclone') %></a> <%= t('— any of the 70+ storage backends it supports (S3, Backblaze, Google Drive, SFTP, ...). This only ever') %>
+    <strong><%= t('adds') %></strong> <%= t('to the remote, never deletes anything there — pruning old offsite copies is entirely up to your own remote-side lifecycle rules.') %>
   </p>
   <% if (rcloneTestResult) { %>
     <p class="hint" style="<%= rcloneTestResult.ok ? 'color: var(--success);' : 'color: var(--danger);' %>">
-      <% if (rcloneTestResult.ok) { %>Connection test succeeded.<% } else { %>Connection test failed: <%= rcloneTestResult.error %><% } %>
+      <% if (rcloneTestResult.ok) { %><%= t('Connection test succeeded.') %><% } else { %><%= t('Connection test failed:') %> <%= rcloneTestResult.error %><% } %>
     </p>
   <% } %>
   <form id="rclone-settings-form" method="post" action="/admin/backup/rclone/settings">
     <div class="form-grid">
       <div>
-        <label>Enabled</label>
+        <label><%= t('Enabled') %></label>
         <%- toggleSwitch('rclone_enabled', settings.rclone_enabled, { id: 'rclone-enabled-toggle' }) %>
       </div>
     </div>
@@ -144,13 +131,13 @@
     <div id="rclone-properties" style="<%= settings.rclone_enabled ? '' : 'display:none;' %>">
       <div class="form-grid" style="margin-top:0.85rem;">
         <div>
-          <label>Set up via</label>
+          <label><%= t('Set up via') %></label>
           <select id="rclone-backend-select">
-            <option value="custom">Paste rclone.conf directly</option>
-            <option value="s3">S3-compatible (AWS S3, MinIO, Wasabi, ...)</option>
-            <option value="sftp">SFTP</option>
-            <option value="webdav">WebDAV (Nextcloud, ownCloud, ...)</option>
-            <option value="b2">Backblaze B2</option>
+            <option value="custom"><%= t('Paste rclone.conf directly') %></option>
+            <option value="s3"><%= t('S3-compatible (AWS S3, MinIO, Wasabi, ...)') %></option>
+            <option value="sftp"><%= t('SFTP') %></option>
+            <option value="webdav"><%= t('WebDAV (Nextcloud, ownCloud, ...)') %></option>
+            <option value="b2"><%= t('Backblaze B2') %></option>
           </select>
         </div>
       </div>
@@ -158,18 +145,15 @@
       <div class="rclone-backend-fields" data-backend="custom">
         <div class="form-grid" style="margin-top:0.85rem;">
           <div>
-            <label>Remote</label>
-            <input type="text" name="rclone_remote" value="<%= settings.rclone_remote || '' %>" placeholder="myremote:loxsuite-backups">
+            <label><%= t('Remote') %></label>
+            <input type="text" name="rclone_remote" value="<%= settings.rclone_remote || '' %>" placeholder="<%= t('myremote:loxsuite-backups') %>">
           </div>
         </div>
         <div style="margin-top:0.85rem;">
-          <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);">rclone.conf contents</label>
+          <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.3rem; color:var(--text-muted);"><%= t('rclone.conf contents') %></label>
           <textarea name="rclone_config" rows="6" placeholder="[myremote]&#10;type = s3&#10;..." style="width:100%; max-width:40rem; font-family:'SF Mono', Consolas, monospace; font-size:0.82rem; padding:0.5rem 0.6rem; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text);"><%= settings.rclone_config || '' %></textarea>
           <p class="hint" style="margin-top:0.35rem;">
-            Generated by running <code>rclone config</code> anywhere convenient (your own machine,
-            another server) and pasting the result here, or filled in for you by one of the
-            backends above &mdash; kept in the database, written out to a throwaway temp file only
-            for the moment each upload/test actually runs.
+            <%= t('Generated by running') %> <code>rclone config</code> <%= t('anywhere convenient (your own machine, another server) and pasting the result here, or filled in for you by one of the backends above — kept in the database, written out to a throwaway temp file only for the moment each upload/test actually runs.') %>
           </p>
         </div>
       </div>
@@ -188,84 +172,81 @@
       <div class="rclone-backend-fields" data-backend="s3" hidden>
     <form method="post" action="/admin/backup/rclone/build-config" class="form-grid" style="margin-top:0.85rem;">
       <input type="hidden" name="backend_type" value="s3">
-      <div><label>Remote name</label><input type="text" name="remote_name" placeholder="myremote" required></div>
+      <div><label><%= t('Remote name') %></label><input type="text" name="remote_name" placeholder="<%= t('myremote') %>" required></div>
       <div>
-        <label>Provider</label>
+        <label><%= t('Provider') %></label>
         <select name="provider">
-          <option value="AWS">AWS S3</option>
-          <option value="Minio">MinIO</option>
-          <option value="Wasabi">Wasabi</option>
-          <option value="DigitalOcean">DigitalOcean Spaces</option>
-          <option value="Cloudflare">Cloudflare R2</option>
-          <option value="Other" selected>Other S3-compatible</option>
+          <option value="AWS"><%= t('AWS S3') %></option>
+          <option value="Minio"><%= t('MinIO') %></option>
+          <option value="Wasabi"><%= t('Wasabi') %></option>
+          <option value="DigitalOcean"><%= t('DigitalOcean Spaces') %></option>
+          <option value="Cloudflare"><%= t('Cloudflare R2') %></option>
+          <option value="Other" selected><%= t('Other S3-compatible') %></option>
         </select>
       </div>
-      <div><label>Access key ID</label><input type="text" name="access_key_id" required></div>
-      <div><label>Secret access key</label><input type="password" name="secret_access_key" required></div>
-      <div><label>Endpoint</label><input type="text" name="endpoint" placeholder="e.g. s3.us-west-002.backblazeb2.com &mdash; not needed for plain AWS S3"></div>
-      <div><label>Region (optional)</label><input type="text" name="region"></div>
-      <div><label>Bucket / path</label><input type="text" name="remote_path" placeholder="my-bucket/loxsuite-backups" required></div>
-      <div style="align-self:end;"><button type="submit" class="primary"><%- icon('plus') %> Generate &amp; save</button></div>
+      <div><label><%= t('Access key ID') %></label><input type="text" name="access_key_id" required></div>
+      <div><label><%= t('Secret access key') %></label><input type="password" name="secret_access_key" required></div>
+      <div><label><%= t('Endpoint') %></label><input type="text" name="endpoint" placeholder="<%= t('e.g. s3.us-west-002.backblazeb2.com — not needed for plain AWS S3') %>"></div>
+      <div><label><%= t('Region (optional)') %></label><input type="text" name="region"></div>
+      <div><label><%= t('Bucket / path') %></label><input type="text" name="remote_path" placeholder="<%= t('my-bucket/loxsuite-backups') %>" required></div>
+      <div style="align-self:end;"><button type="submit" class="primary"><%- icon('plus') %> <%= t('Generate & save') %></button></div>
     </form>
     <p class="hint" style="margin-top:0.5rem;">
-      The secret access key is stored as plain text in rclone.conf (rclone's own convention for
-      this field, same as if you'd typed it via <code>rclone config</code> yourself) &mdash; kept
-      encrypted at rest in this app's own database either way.
+      <%= t('The secret access key is stored as plain text in rclone.conf (rclone\'s own convention for this field, same as if you\'d typed it via') %> <code>rclone config</code> <%= t('yourself) — kept encrypted at rest in this app\'s own database either way.') %>
     </p>
   </div>
 
   <div class="rclone-backend-fields" data-backend="sftp" hidden>
     <form method="post" action="/admin/backup/rclone/build-config" class="form-grid" style="margin-top:0.85rem;">
       <input type="hidden" name="backend_type" value="sftp">
-      <div><label>Remote name</label><input type="text" name="remote_name" placeholder="myremote" required></div>
-      <div><label>Host</label><input type="text" name="host" placeholder="backup.example.com" required></div>
-      <div><label>Port</label><input type="number" name="port" value="22"></div>
-      <div><label>Username</label><input type="text" name="user" required></div>
-      <div><label>Password</label><input type="password" name="pass" required></div>
-      <div><label>Remote path</label><input type="text" name="remote_path" placeholder="/backups/loxsuite" required></div>
-      <div style="align-self:end;"><button type="submit" class="primary"><%- icon('plus') %> Generate &amp; save</button></div>
+      <div><label><%= t('Remote name') %></label><input type="text" name="remote_name" placeholder="<%= t('myremote') %>" required></div>
+      <div><label><%= t('Host') %></label><input type="text" name="host" placeholder="<%= t('backup.example.com') %>" required></div>
+      <div><label><%= t('Port') %></label><input type="number" name="port" value="22"></div>
+      <div><label><%= t('Username') %></label><input type="text" name="user" required></div>
+      <div><label><%= t('Password') %></label><input type="password" name="pass" required></div>
+      <div><label><%= t('Remote path') %></label><input type="text" name="remote_path" placeholder="/backups/loxsuite" required></div>
+      <div style="align-self:end;"><button type="submit" class="primary"><%- icon('plus') %> <%= t('Generate & save') %></button></div>
     </form>
     <p class="hint" style="margin-top:0.5rem;">
-      Password auth only &mdash; the password is stored obscured (via rclone's own
-      <code>rclone obscure</code>), not plain text. For SSH-key auth, use "Paste rclone.conf
-      directly" above instead.
+      <%= t('Password auth only — the password is stored obscured (via rclone\'s own') %>
+      <code>rclone obscure</code><%= t('), not plain text. For SSH-key auth, use "Paste rclone.conf directly" above instead.') %>
     </p>
   </div>
 
   <div class="rclone-backend-fields" data-backend="webdav" hidden>
     <form method="post" action="/admin/backup/rclone/build-config" class="form-grid" style="margin-top:0.85rem;">
       <input type="hidden" name="backend_type" value="webdav">
-      <div><label>Remote name</label><input type="text" name="remote_name" placeholder="myremote" required></div>
-      <div><label>URL</label><input type="text" name="url" placeholder="https://cloud.example.com/remote.php/dav/files/USERNAME/" required></div>
+      <div><label><%= t('Remote name') %></label><input type="text" name="remote_name" placeholder="<%= t('myremote') %>" required></div>
+      <div><label><%= t('URL') %></label><input type="text" name="url" placeholder="https://cloud.example.com/remote.php/dav/files/USERNAME/" required></div>
       <div>
-        <label>Vendor</label>
+        <label><%= t('Vendor') %></label>
         <select name="vendor">
-          <option value="nextcloud">Nextcloud</option>
-          <option value="owncloud">ownCloud</option>
-          <option value="other">Other</option>
+          <option value="nextcloud"><%= t('Nextcloud') %></option>
+          <option value="owncloud"><%= t('ownCloud') %></option>
+          <option value="other"><%= t('Other') %></option>
         </select>
       </div>
-      <div><label>Username</label><input type="text" name="user" required></div>
-      <div><label>Password</label><input type="password" name="pass" required></div>
-      <div><label>Folder (optional)</label><input type="text" name="remote_path" placeholder="loxsuite-backups"></div>
-      <div style="align-self:end;"><button type="submit" class="primary"><%- icon('plus') %> Generate &amp; save</button></div>
+      <div><label><%= t('Username') %></label><input type="text" name="user" required></div>
+      <div><label><%= t('Password') %></label><input type="password" name="pass" required></div>
+      <div><label><%= t('Folder (optional)') %></label><input type="text" name="remote_path" placeholder="<%= t('loxsuite-backups') %>"></div>
+      <div style="align-self:end;"><button type="submit" class="primary"><%- icon('plus') %> <%= t('Generate & save') %></button></div>
     </form>
     <p class="hint" style="margin-top:0.5rem;">
-      The password is stored obscured (via rclone's own <code>rclone obscure</code>), not plain text.
+      <%= t('The password is stored obscured (via rclone\'s own') %> <code>rclone obscure</code><%= t('), not plain text.') %>
     </p>
   </div>
 
   <div class="rclone-backend-fields" data-backend="b2" hidden>
     <form method="post" action="/admin/backup/rclone/build-config" class="form-grid" style="margin-top:0.85rem;">
       <input type="hidden" name="backend_type" value="b2">
-      <div><label>Remote name</label><input type="text" name="remote_name" placeholder="myremote" required></div>
-      <div><label>Account ID (Key ID)</label><input type="text" name="account" required></div>
-      <div><label>Application key</label><input type="password" name="key" required></div>
-      <div><label>Bucket / path</label><input type="text" name="remote_path" placeholder="my-bucket/loxsuite-backups" required></div>
-      <div style="align-self:end;"><button type="submit" class="primary"><%- icon('plus') %> Generate &amp; save</button></div>
+      <div><label><%= t('Remote name') %></label><input type="text" name="remote_name" placeholder="<%= t('myremote') %>" required></div>
+      <div><label><%= t('Account ID (Key ID)') %></label><input type="text" name="account" required></div>
+      <div><label><%= t('Application key') %></label><input type="password" name="key" required></div>
+      <div><label><%= t('Bucket / path') %></label><input type="text" name="remote_path" placeholder="<%= t('my-bucket/loxsuite-backups') %>" required></div>
+      <div style="align-self:end;"><button type="submit" class="primary"><%- icon('plus') %> <%= t('Generate & save') %></button></div>
     </form>
     <p class="hint" style="margin-top:0.5rem;">
-      Uses Backblaze's own native API (<a href="https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys" target="_blank" rel="noopener">Application Keys</a>), not B2's S3-compatible endpoint.
+      <%= t('Uses Backblaze\'s own native API (') %><a href="https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys" target="_blank" rel="noopener"><%= t('Application Keys') %></a><%= t('), not B2\'s S3-compatible endpoint.') %>
     </p>
   </div>
   </div>
@@ -284,22 +265,21 @@
     })();
   </script>
   <div id="rclone-save-row" class="btn-row" style="margin-top:0.9rem; display:<%= settings.rclone_enabled ? 'flex' : 'none' %>;">
-    <button type="submit" form="rclone-settings-form" class="btn-edit"><%- icon('edit') %> Save</button>
+    <button type="submit" form="rclone-settings-form" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
     <form method="post" action="/admin/backup/rclone/test" style="margin:0;">
-      <button type="submit" class="btn-test"><%- icon('refresh') %> Test connection</button>
+      <button type="submit" class="btn-test"><%- icon('refresh') %> <%= t('Test connection') %></button>
     </form>
   </div>
   <p id="rclone-test-hint" class="hint" style="margin-top:0.6rem; <%= settings.rclone_enabled ? '' : 'display:none;' %>">
-    Test always uses the currently <strong>saved</strong> settings above &mdash; save first if you
-    just changed the remote or config.
+    <%= t('Test always uses the currently') %> <strong><%= t('saved') %></strong> <%= t('settings above — save first if you just changed the remote or config.') %>
   </p>
   <p class="hint" style="margin-top:0.6rem; margin-bottom:0;">
     <% if (settings.rclone_last_run_at) { %>
-      Last offsite copy: <%= formatDateTime(settings.rclone_last_run_at) %> &mdash;
+      <%= t('Last offsite copy:') %> <%= formatDateTime(settings.rclone_last_run_at) %> &mdash;
       <span class="badge <%= settings.rclone_last_status === 'ok' ? 'badge-ok' : 'badge-off' %>"><%= settings.rclone_last_status %></span>
       <% if (settings.rclone_last_error) { %><span class="hint"><%= settings.rclone_last_error %></span><% } %>
     <% } else { %>
-      No offsite copy has run yet.
+      <%= t('No offsite copy has run yet.') %>
     <% } %>
   </p>
   <script>
@@ -325,7 +305,7 @@
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="columns-menu columns-menu-inline" id="backup-columns-menu">
-      <button type="button" class="btn-soft" id="backup-columns-btn"><%- icon('columns') %> Columns</button>
+      <button type="button" class="btn-soft" id="backup-columns-btn"><%- icon('columns') %> <%= t('Columns') %></button>
       <div class="columns-menu-panel" id="backup-columns-panel" hidden></div>
     </div>
   </div>
@@ -342,16 +322,14 @@
 }))) %></script>
 
 <details class="add-panel">
-  <summary>Restore from a backup</summary>
+  <summary><%= t('Restore from a backup') %></summary>
   <div class="add-panel-body">
     <p class="hint">
-      Uploading and validating a backup does <strong>not</strong> touch the live database &mdash; it's staged
-      and only takes effect after the container(s) shown above are restarted. Choose the moment
-      deliberately; this replaces current data.
+      <%= t('Uploading and validating a backup does') %> <strong>not</strong> <%= t('touch the live database — it\'s staged and only takes effect after the container(s) shown above are restarted. Choose the moment deliberately; this replaces current data.') %>
     </p>
     <form method="post" action="/admin/backup/restore" enctype="multipart/form-data" class="form-grid">
-      <div><label>Backup file (.zip)</label><input type="file" name="file" accept=".zip" required></div>
-      <button type="submit" class="primary"><%- icon('upload') %> Upload &amp; stage restore</button>
+      <div><label><%= t('Backup file (.zip)') %></label><input type="file" name="file" accept=".zip" required></div>
+      <button type="submit" class="primary"><%- icon('upload') %> <%= t('Upload & stage restore') %></button>
     </form>
   </div>
 </details>

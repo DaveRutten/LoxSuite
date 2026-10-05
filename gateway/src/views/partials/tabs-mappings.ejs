@@ -3,8 +3,8 @@
   // partials/head.ejs) — locals: active. canView comes from res.locals, always in scope.
 %>
 <div class="tabs">
-  <% if (canView('mqtt_to_loxone')) { %><a href="/mappings/mqtt-to-loxone" class="<%= active === 'mqtt-to-loxone' ? 'active' : '' %>">MQTT &rarr; Loxone</a><% } %>
-  <% if (canView('loxone_to_mqtt')) { %><a href="/mappings/loxone-to-mqtt" class="<%= active === 'loxone-to-mqtt' ? 'active' : '' %>">Loxone &rarr; MQTT</a><% } %>
-  <% if (canView('commands')) { %><a href="/mappings/commands" class="<%= active === 'commands' ? 'active' : '' %>">Common commands</a><% } %>
-  <% if (canView('transformations')) { %><a href="/transformations" class="<%= active === 'transformations' ? 'active' : '' %>">Transformations</a><% } %>
+  <% if (canView('mqtt_to_loxone')) { %><a href="/mappings/mqtt-to-loxone" class="<%= active === 'mqtt-to-loxone' ? 'active' : '' %>"><%= t('MQTT → Loxone') %></a><% } %>
+  <% if (canView('loxone_to_mqtt')) { %><a href="/mappings/loxone-to-mqtt" class="<%= active === 'loxone-to-mqtt' ? 'active' : '' %>"><%= t('Loxone → MQTT') %></a><% } %>
+  <% if (canView('commands')) { %><a href="/mappings/commands" class="<%= active === 'commands' ? 'active' : '' %>"><%= t('Common commands') %></a><% } %>
+  <% if (canView('transformations')) { %><a href="/transformations" class="<%= active === 'transformations' ? 'active' : '' %>"><%= t('Transformations') %></a><% } %>
 </div>

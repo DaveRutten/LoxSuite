@@ -1,31 +1,29 @@
 <%- include('partials/head', { pageTitle: 'Charge log', active: 'chargelog' }) %>
 
 <p class="hint">
-  Every charging session is recorded here automatically: what the Wallbox did, what LoxSuite sent to the virtual inputs and
-  what the car reported. LoxSuite checks per session whether the control works. You can test at any moment and look at the
-  result later &mdash; no need to watch.
-  <a href="/planner#settings">&larr; Smart charging</a>
+  <%= t('Every charging session is recorded here automatically: what the Wallbox did, what LoxSuite sent to the virtual inputs and what the car reported. LoxSuite checks per session whether the control works. You can test at any moment and look at the result later — no need to watch.') %>
+  <a href="/planner#settings"><%= t('← Smart charging') %></a>
 </p>
 
 <details class="card" style="padding-bottom:0.6rem;">
-  <summary style="cursor:pointer; font-weight:600;">How to test the Wallbox control</summary>
+  <summary style="cursor:pointer; font-weight:600;"><%= t('How to test the Wallbox control') %></summary>
   <ol class="hint" style="margin:0.5rem 0 0; padding-left:1.2rem; line-height:1.6;">
-    <li>Under <a href="/planner#settings">Smart charging &rarr; Output</a>, send <strong>0</strong> with <em>Send test value</em> (Output can stay on <em>Advise</em>).</li>
-    <li>Plug the car in (battery not full) and leave it at 0 for at least <strong>10 minutes</strong>: it should not charge and the car should just wait.</li>
-    <li>Send <strong>6</strong>: it should start within 2 minutes at about 6 kW.</li>
-    <li>Send <strong>0</strong>: it should stop within a minute. Then send the value you want to charge at, or switch Output to <em>Live</em> once everything passed.</li>
+    <li><%= t('Under') %> <a href="/planner#settings"><%= t('Smart charging → Output') %></a><%= t(', send') %> <strong>0</strong> <%= t('with') %> <em><%= t('Send test value') %></em> <%= t('(Output can stay on') %> <em><%= t('Advise') %></em>).</li>
+    <li><%= t('Plug the car in (battery not full) and leave it at 0 for at least') %> <strong><%= t('10 minutes') %></strong><%= t(': it should not charge and the car should just wait.') %></li>
+    <li><%= t('Send') %> <strong>6</strong><%= t(': it should start within 2 minutes at about 6 kW.') %></li>
+    <li><%= t('Send') %> <strong>0</strong><%= t(': it should stop within a minute. Then send the value you want to charge at, or switch Output to') %> <em><%= t('Live') %></em> <%= t('once everything passed.') %></li>
   </ol>
 </details>
 
 <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr)); gap:1rem; align-items:start;">
   <div class="card" style="margin:0;">
-    <h2 style="margin-top:0;">Sessions</h2>
-    <div id="cl-list"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
-    <h3 style="margin:1rem 0 0.3rem; font-size:0.95rem;">Sent without a car connected</h3>
+    <h2 style="margin-top:0;"><%= t('Sessions') %></h2>
+    <div id="cl-list"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
+    <h3 style="margin:1rem 0 0.3rem; font-size:0.95rem;"><%= t('Sent without a car connected') %></h3>
     <div id="cl-idle" class="hint" style="margin:0;"></div>
   </div>
   <div class="card" style="margin:0; grid-column: span 2; min-width:0;" id="cl-detail-card">
-    <div id="cl-detail"><p class="hint" style="margin:0;">Choose a session.</p></div>
+    <div id="cl-detail"><p class="hint" style="margin:0;"><%= t('Choose a session.') %></p></div>
   </div>
 </div>
 

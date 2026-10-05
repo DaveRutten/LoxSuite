@@ -1,9 +1,7 @@
 <%- include('partials/head', { pageTitle: 'Driving & costs', active: 'driving' }) %>
 
 <p class="hint">
-  How the car is driven and what it costs, from its own odometer and battery percentage (Wallbox &gt; Vehicles). The
-  electric consumption is learned from the battery drop per km on stretches where the battery didn't run empty; LoxSuite
-  plans with it unless you set a consumption yourself. <span id="dr-meta"></span>
+  <%= t('How the car is driven and what it costs, from its own odometer and battery percentage (Wallbox > Vehicles). The electric consumption is learned from the battery drop per km on stretches where the battery didn\'t run empty; LoxSuite plans with it unless you set a consumption yourself.') %> <span id="dr-meta"></span>
 </p>
 
 <% if (cars.length > 1) { %>
@@ -15,30 +13,30 @@
 <div id="dr-warn"></div>
 
 <div class="card">
-  <div id="dr-tiles" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr)); gap:0.8rem;"><p class="hint" style="margin:0;">Loading&hellip;</p></div>
+  <div id="dr-tiles" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr)); gap:0.8rem;"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
 </div>
 
 <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr)); gap:1rem;">
   <div class="card">
-    <h2 style="margin-top:0;">Km per month</h2>
+    <h2 style="margin-top:0;"><%= t('Km per month') %></h2>
     <div id="dr-km"></div>
   </div>
   <div class="card">
-    <h2 style="margin-top:0;">Consumption per month</h2>
-    <p class="hint" style="margin:0 0 0.4rem;">kWh per 100 km on electricity &mdash; usually higher in winter (heating, cold battery).</p>
+    <h2 style="margin-top:0;"><%= t('Consumption per month') %></h2>
+    <p class="hint" style="margin:0 0 0.4rem;"><%= t('kWh per 100 km on electricity — usually higher in winter (heating, cold battery).') %></p>
     <div id="dr-cons"></div>
   </div>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0;">Per month</h2>
-  <div style="overflow-x:auto;"><table id="dr-months"><tbody><tr><td class="hint">Loading&hellip;</td></tr></tbody></table></div>
+  <h2 style="margin-top:0;"><%= t('Per month') %></h2>
+  <div style="overflow-x:auto;"><table id="dr-months"><tbody><tr><td class="hint"><%= t('Loading…') %></td></tr></tbody></table></div>
   <p class="hint" id="dr-cost-note" style="margin:0.5rem 0 0; font-size:0.8rem;"></p>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0;">Recent trips</h2>
-  <div style="overflow-x:auto;"><table id="dr-trips"><tbody><tr><td class="hint">Loading&hellip;</td></tr></tbody></table></div>
+  <h2 style="margin-top:0;"><%= t('Recent trips') %></h2>
+  <div style="overflow-x:auto;"><table id="dr-trips"><tbody><tr><td class="hint"><%= t('Loading…') %></td></tr></tbody></table></div>
 </div>
 
 <script>

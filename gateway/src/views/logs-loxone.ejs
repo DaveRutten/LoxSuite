@@ -1,31 +1,27 @@
 <%- include('partials/head', { pageTitle: 'Logs', active: 'logs-loxone', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/loxone', topbarRangeValue: range, topbarRangeExtra: { q: query.q, level: query.level, miniserver_id: miniserverId } }) %>
 
 <p class="hint">
-  Real log lines fetched from each Miniserver's own <code>def.log</code>, newest first, refreshing
-  every 5 seconds. The gateway polls each Miniserver every minute (there's no push channel for this on
-  the Loxone side) and persists only newly appended lines. Kept for
-  <strong><%= retentionDays %></strong> days &mdash;
-  <% if (canEdit('settings')) { %><a href="/settings">change that in Settings</a><% } else { %>change that in Settings<% } %>.
-  <strong>Level</strong> is a best-effort guess from each line's wording, not a guarantee.
+  <%= t('Real log lines fetched from each Miniserver\'s own') %> <code>def.log</code><%= t(', newest first, refreshing every 5 seconds. The gateway polls each Miniserver every minute (there\'s no push channel for this on the Loxone side) and persists only newly appended lines. Kept for') %>
+  <strong><%= retentionDays %></strong> <%= t('days —') %>
+  <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
+  <strong><%= t('Level') %></strong> <%= t('is a best-effort guess from each line\'s wording, not a guarantee.') %>
 </p>
 
 <% if (brokenMiniservers && brokenMiniservers.length > 0) { %>
   <p class="hint" style="margin-bottom:1rem; padding:0.6rem 0.9rem; border-radius:var(--radius); background:var(--warning-soft); color:var(--warning); border:1px solid var(--warning);">
     <strong><%= brokenMiniservers.map(m => m.name).join(', ') %></strong>
-    <%= brokenMiniservers.length === 1 ? "hasn't" : "haven't" %> been able to read
-    <%= brokenMiniservers.length === 1 ? 'its' : 'their' %> Logbook recently &mdash; rows below may
-    look sparse for <%= brokenMiniservers.length === 1 ? 'it' : 'those' %> specifically, not
-    because nothing happened. Pick <%= brokenMiniservers.length === 1 ? 'it' : 'one of them' %>
-    from the Miniserver filter below for details.
+    <%= brokenMiniservers.length === 1 ? "hasn't" : "haven't" %> <%= t('been able to read') %>
+    <%= brokenMiniservers.length === 1 ? 'its' : 'their' %> <%= t('Logbook recently — rows below may look sparse for') %> <%= brokenMiniservers.length === 1 ? 'it' : 'those' %> <%= t('specifically, not because nothing happened. Pick') %> <%= brokenMiniservers.length === 1 ? 'it' : 'one of them' %>
+    <%= t('from the Miniserver filter below for details.') %>
   </p>
 <% } %>
 
 <form method="get" action="/logs/loxone" class="form-grid" style="margin-bottom:1rem; align-items:end;">
   <% if (miniservers.length > 1) { %>
   <div>
-    <label>Miniserver</label>
+    <label><%= t('Miniserver') %></label>
     <select name="miniserver_id" data-auto-submit-form>
-      <option value="">All Miniservers</option>
+      <option value=""><%= t('All Miniservers') %></option>
       <% miniservers.forEach(ms => { %>
         <option value="<%= ms.id %>" <%= miniserverId === ms.id ? 'selected' : '' %>><%= ms.name %></option>
       <% }) %>
@@ -43,12 +39,12 @@
   %>
   <input type="hidden" name="range" value="<%= range %>">
   <div>
-    <label>Level</label>
+    <label><%= t('Level') %></label>
     <select name="level" data-auto-submit-form>
-      <option value="" <%= !query.level ? 'selected' : '' %>>All</option>
-      <option value="error" <%= query.level === 'error' ? 'selected' : '' %>>Error</option>
-      <option value="warning" <%= query.level === 'warning' ? 'selected' : '' %>>Warning</option>
-      <option value="info" <%= query.level === 'info' ? 'selected' : '' %>>Info</option>
+      <option value="" <%= !query.level ? 'selected' : '' %>><%= t('All') %></option>
+      <option value="error" <%= query.level === 'error' ? 'selected' : '' %>><%= t('Error') %></option>
+      <option value="warning" <%= query.level === 'warning' ? 'selected' : '' %>><%= t('Warning') %></option>
+      <option value="info" <%= query.level === 'info' ? 'selected' : '' %>><%= t('Info') %></option>
     </select>
   </div>
 </form>
@@ -58,17 +54,14 @@
   <div class="log-source-unavailable-notice">
     <div class="log-source-unavailable-notice-box">
       <% if (miniserverId) { %>
-        <p style="margin:0 0 0.4rem; font-weight:600;">This Miniserver's Logbook isn't accessible</p>
+        <p style="margin:0 0 0.4rem; font-weight:600;"><%= t('This Miniserver\'s Logbook isn\'t accessible') %></p>
         <p class="hint" style="margin:0 0 0.5rem;">
-          The Loxone user account this Miniserver is configured with doesn't appear to have
-          permission to read its Logbook, even though other requests to it are working.
+          <%= t('The Loxone user account this Miniserver is configured with doesn\'t appear to have permission to read its Logbook, even though other requests to it are working.') %>
         </p>
       <% } else { %>
-        <p style="margin:0 0 0.4rem; font-weight:600;">No configured Miniserver's Logbook is accessible right now</p>
+        <p style="margin:0 0 0.4rem; font-weight:600;"><%= t('No configured Miniserver\'s Logbook is accessible right now') %></p>
         <p class="hint" style="margin:0 0 0.5rem;">
-          Every Miniserver LoxSuite knows about is failing to fetch its Logbook &mdash; most
-          commonly a Loxone user account without permission to read it, even when other requests
-          still work fine.
+          <%= t('Every Miniserver LoxSuite knows about is failing to fetch its Logbook — most commonly a Loxone user account without permission to read it, even when other requests still work fine.') %>
         </p>
       <% } %>
       <pre class="log-source-unavailable-error"><%= logbookError %></pre>
@@ -78,21 +71,21 @@
   <div class="table-toolbar">
     <div class="search-combo log-search-combo">
       <select class="log-search-field">
-        <option value="time">Time</option>
-        <% if (miniservers.length > 1) { %><option value="miniserver">Miniserver</option><% } %>
-        <option value="level">Level</option>
-        <option value="message" selected>Message</option>
+        <option value="time"><%= t('Time') %></option>
+        <% if (miniservers.length > 1) { %><option value="miniserver"><%= t('Miniserver') %></option><% } %>
+        <option value="level"><%= t('Level') %></option>
+        <option value="message" selected><%= t('Message') %></option>
       </select>
       <div class="clearable-input-wrap">
-        <input type="text" class="log-search-query" placeholder="Filter…">
-        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+        <input type="text" class="log-search-query" placeholder="<%= t('Filter…') %>">
+        <button type="button" class="icon-btn clearable-input-clear log-search-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
       </div>
     </div>
     <span class="log-selection-count hint" style="margin:0;"></span>
-    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label">Copy selection</span></button>
+    <button type="button" class="btn-soft log-copy-selection" disabled><%- icon('copy') %> <span class="btn-label"><%= t('Copy selection') %></span></button>
     <% if (canEdit('logs_loxone')) { %>
     <a href="/logs/loxone/export.txt<%= miniserverId ? '?miniserver_id=' + miniserverId : '' %>">
-      <button type="button" class="btn-soft"><%- icon('copy') %> Export .log</button>
+      <button type="button" class="btn-soft"><%- icon('copy') %> <%= t('Export .log') %></button>
     </a>
     <% } %>
   </div>
@@ -100,7 +93,7 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="Select all"></th><th data-filter-key="time">Time</th><% if (miniservers.length > 1) { %><th data-filter-key="miniserver">Miniserver</th><% } %><th data-filter-key="level">Level</th><th data-filter-key="message">Message</th></tr>
+      <tr><th class="col-select" data-no-controls><input type="checkbox" class="log-select-all" title="<%= t('Select all') %>"></th><th data-filter-key="time"><%= t('Time') %></th><% if (miniservers.length > 1) { %><th data-filter-key="miniserver"><%= t('Miniserver') %></th><% } %><th data-filter-key="level"><%= t('Level') %></th><th data-filter-key="message"><%= t('Message') %></th></tr>
     </thead>
     <tbody>
       <% rows.forEach(r => { %>
@@ -114,7 +107,7 @@
         </tr>
       <% }) %>
       <% if (rows.length === 0) { %>
-        <tr><td colspan="<%= miniservers.length > 1 ? 5 : 4 %>" class="empty">No log lines recorded yet &mdash; make sure a Miniserver is configured and reachable.</td></tr>
+        <tr><td colspan="<%= miniservers.length > 1 ? 5 : 4 %>" class="empty"><%= t('No log lines recorded yet — make sure a Miniserver is configured and reachable.') %></td></tr>
       <% } %>
     </tbody>
   </table>

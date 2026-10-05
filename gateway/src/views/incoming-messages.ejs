@@ -1,28 +1,27 @@
 <%- include('partials/head', { pageTitle: 'Live Data', active: 'incoming', refresh: 5, liveSwap: true }) %>
 
 <p class="hint">
-  <strong><%= topics.length %> topic<%= topics.length === 1 ? '' : 's' %></strong> seen since the gateway
-  started. Refreshes every 5 seconds, one row per topic, most recently updated on top &mdash; the
-  <strong>Previous value</strong> column shows what changed. In-memory only, so this clears on a gateway restart.
+  <strong><%= topics.length %> <%= t('topic') %><%= topics.length === 1 ? '' : 's' %></strong> <%= t('seen since the gateway started. Refreshes every 5 seconds, one row per topic, most recently updated on top — the') %>
+  <strong><%= t('Previous value') %></strong> <%= t('column shows what changed. In-memory only, so this clears on a gateway restart.') %>
 </p>
 
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="search-combo">
       <select id="live-filter-field">
-        <option value="0">Topic</option>
-        <option value="1">Actual value</option>
-        <option value="2">Previous value</option>
-        <option value="5">Command Recognition</option>
+        <option value="0"><%= t('Topic') %></option>
+        <option value="1"><%= t('Actual value') %></option>
+        <option value="2"><%= t('Previous value') %></option>
+        <option value="5"><%= t('Command Recognition') %></option>
       </select>
       <div class="clearable-input-wrap">
-        <input type="text" id="live-filter-query" placeholder="Filter…">
-        <button type="button" id="live-filter-clear" class="icon-btn clearable-input-clear" title="Clear filter" aria-label="Clear filter" hidden>&times;</button>
+        <input type="text" id="live-filter-query" placeholder="<%= t('Filter…') %>">
+        <button type="button" id="live-filter-clear" class="icon-btn clearable-input-clear" title="<%= t('Clear filter') %>" aria-label="<%= t('Clear filter') %>" hidden>&times;</button>
       </div>
     </div>
     <% if (canEdit('incoming')) { %>
-    <form method="post" action="/incoming/messages/clear" data-confirm="Clear the live message list? It will start filling up again from the next message." style="margin:0;">
-      <button type="submit" class="danger"><%- icon('trash') %> Clear list</button>
+    <form method="post" action="/incoming/messages/clear" data-confirm="<%= t('Clear the live message list? It will start filling up again from the next message.') %>" style="margin:0;">
+      <button type="submit" class="danger"><%- icon('trash') %> <%= t('Clear list') %></button>
     </form>
     <% } %>
   </div>
@@ -30,10 +29,10 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Topic</th><th>Actual value</th><th>Previous value</th><th>Count</th><th>Last seen</th><th>Command Recognition (UDP)</th><th>Status</th><th>Actions</th></tr>
+      <tr><th><%= t('Topic') %></th><th><%= t('Actual value') %></th><th><%= t('Previous value') %></th><th><%= t('Count') %></th><th><%= t('Last seen') %></th><th><%= t('Command Recognition (UDP)') %></th><th><%= t('Status') %></th><th><%= t('Actions') %></th></tr>
     </thead>
     <tbody>
-      <% topics.forEach(t => { %>
+      <% topics.forEach(tt => { %>
         <tr>
           <%
             // Deliberately no max-width:none override here (an earlier version of this row had
@@ -44,15 +43,15 @@
             // free-form column on this page already uses, keeps the whole table fitting by
             // default instead — the full topic is still one hover away via the title tooltip.
           %>
-          <td><code class="truncate" title="<%= t.topic %>"><%= t.topic %></code></td>
-          <td><strong class="truncate" title="<%= t.value %>"><%= t.value %></strong></td>
+          <td><code class="truncate" title="<%= tt.topic %>"><%= tt.topic %></code></td>
+          <td><strong class="truncate" title="<%= tt.value %>"><%= tt.value %></strong></td>
           <td>
-            <% if (t.previousValue === null) { %>-<% } else { %>
-              <span class="truncate" title="<%= t.previousValue %>"><%= t.previousValue %></span>
+            <% if (tt.previousValue === null) { %>-<% } else { %>
+              <span class="truncate" title="<%= tt.previousValue %>"><%= tt.previousValue %></span>
             <% } %>
           </td>
-          <td title="<%= t.count %>"><%= formatCount(t.count) %></td>
-          <td><%= formatDateTime(t.lastSeen) %></td>
+          <td title="<%= tt.count %>"><%= formatCount(tt.count) %></td>
+          <td><%= formatDateTime(tt.lastSeen) %></td>
           <td>
             <div style="display:flex; align-items:center; justify-content:space-between; gap:0.35rem;">
               <%
@@ -62,40 +61,40 @@
                 // still lets it fill whatever room the Copy button next to it leaves, just never
                 // past that cap.
               %>
-              <code class="recognition-string" style="flex:1; min-width:0;" title="<%= t.recognition %>"><%= t.recognition %></code>
-              <button type="button" class="copy-btn btn-soft" style="flex-shrink:0;" data-copy="<%= t.recognition %>" title="Copy Command Recognition string"><%- icon('copy') %> <span class="btn-label">Copy</span></button>
+              <code class="recognition-string" style="flex:1; min-width:0;" title="<%= tt.recognition %>"><%= tt.recognition %></code>
+              <button type="button" class="copy-btn btn-soft" style="flex-shrink:0;" data-copy="<%= tt.recognition %>" title="<%= t('Copy Command Recognition string') %>"><%- icon('copy') %> <span class="btn-label"><%= t('Copy') %></span></button>
             </div>
           </td>
           <td>
-            <% if (t.retained) { %><span class="badge badge-neutral" style="margin:0 0.2rem 0.2rem 0;" title="The broker is still holding this as the topic's retained message — could be an old value replayed on subscribe, not necessarily a just-happened publish">Retained</span><% } %>
-            <% if (mappedTopics.includes(t.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;">Mapped</span><% } %>
-            <% if (monitoredTopics.includes(t.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;">Monitored</span><% } %>
-            <% if (widgetedTopics.includes(t.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;">Widget</span><% } %>
+            <% if (tt.retained) { %><span class="badge badge-neutral" style="margin:0 0.2rem 0.2rem 0;" title="<%= t('The broker is still holding this as the topic\'s retained message — could be an old value replayed on subscribe, not necessarily a just-happened publish') %>"><%= t('Retained') %></span><% } %>
+            <% if (mappedTopics.includes(tt.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;"><%= t('Mapped') %></span><% } %>
+            <% if (monitoredTopics.includes(tt.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;"><%= t('Monitored') %></span><% } %>
+            <% if (widgetedTopics.includes(tt.topic)) { %><span class="badge badge-purple" style="margin:0 0.2rem 0.2rem 0;"><%= t('Widget') %></span><% } %>
           </td>
           <td>
             <div class="row-actions">
               <% if (canEdit('mqtt_to_loxone')) { %>
-              <a class="inline" href="/mappings/mqtt-to-loxone?topic=<%= encodeURIComponent(t.topic) %>" title="Use this topic in a new MQTT&nbsp;&rarr;&nbsp;Loxone mapping"><button type="button" class="primary"><%- icon('link') %> Map</button></a>
+              <a class="inline" href="/mappings/mqtt-to-loxone?topic=<%= encodeURIComponent(tt.topic) %>" title="<%= t('Use this topic in a new MQTT → Loxone mapping') %>"><button type="button" class="primary"><%- icon('link') %> <%= t('Map') %></button></a>
               <% } %>
               <% if (canEdit('dashboard')) { %>
-              <% var topicWidgeted = widgetedTopics.includes(t.topic); %>
+              <% var topicWidgeted = widgetedTopics.includes(tt.topic); %>
               <form class="inline" method="post" action="/dashboards/quick-add-topic">
-                <input type="hidden" name="topic" value="<%= t.topic %>">
+                <input type="hidden" name="topic" value="<%= tt.topic %>">
                 <button type="submit" class="primary" <%= topicWidgeted ? 'disabled' : '' %> title="<%= topicWidgeted ? 'Already pinned on the Dashboard' : 'Pin this topic\'s value on the Dashboard — gets an auto-generated name' %>"><%- icon('plus') %> <%= topicWidgeted ? 'On Dashboard' : 'Widget' %></button>
               </form>
               <% } %>
               <% if (canEdit('monitor')) { %>
-              <% var topicMonitored = monitoredTopics.includes(t.topic); %>
+              <% var topicMonitored = monitoredTopics.includes(tt.topic); %>
               <form class="inline" method="post" action="/monitor">
                 <input type="hidden" name="source_type" value="mqtt">
-                <input type="hidden" name="topic" value="<%= t.topic %>">
+                <input type="hidden" name="topic" value="<%= tt.topic %>">
                 <button type="submit" class="primary" <%= topicMonitored ? 'disabled' : '' %> title="<%= topicMonitored ? 'Already being monitored' : 'Start recording this topic\'s history on the Monitor page' %>"><%- icon('plus') %> <%= topicMonitored ? 'Monitored' : 'Monitor' %></button>
               </form>
               <% } %>
-              <% if (t.retained && canEdit('incoming')) { %>
-              <form class="inline" method="post" action="/incoming/messages/clear-retained" data-confirm="Clear the retained value the broker is holding for this exact topic? Any future subscriber (a new mapping, a new monitor, ...) will no longer see this old value replayed to it. This does not stop the device from publishing a fresh retained value again later.">
-                <input type="hidden" name="topic" value="<%= t.topic %>">
-                <button type="submit" class="danger" title="Purge the broker's own retained copy of this topic's value"><%- icon('trash') %> Clear retained</button>
+              <% if (tt.retained && canEdit('incoming')) { %>
+              <form class="inline" method="post" action="/incoming/messages/clear-retained" data-confirm="<%= t('Clear the retained value the broker is holding for this exact topic? Any future subscriber (a new mapping, a new monitor, ...) will no longer see this old value replayed to it. This does not stop the device from publishing a fresh retained value again later.') %>">
+                <input type="hidden" name="topic" value="<%= tt.topic %>">
+                <button type="submit" class="danger" title="<%= t('Purge the broker\'s own retained copy of this topic\'s value') %>"><%- icon('trash') %> <%= t('Clear retained') %></button>
               </form>
               <% } %>
             </div>
@@ -103,7 +102,7 @@
         </tr>
       <% }) %>
       <% if (topics.length === 0) { %>
-        <tr><td colspan="7" class="empty">No topics seen since the gateway started.</td></tr>
+        <tr><td colspan="7" class="empty"><%= t('No topics seen since the gateway started.') %></td></tr>
       <% } %>
     </tbody>
   </table>

@@ -3,16 +3,16 @@
 <%- include('partials/tabs-mappings', { active: 'transformations' }) %>
 
 <p class="hint">
-  All mappings using a translation table, from both directions. Use
-  <a href="/mappings/mqtt-to-loxone">MQTT &rarr; Loxone</a> or <a href="/mappings/loxone-to-mqtt">Loxone &rarr; MQTT</a>
-  to create a new mapping and pick "Translation table" as its value transform.
+  <%= t('All mappings using a translation table, from both directions. Use') %>
+  <a href="/mappings/mqtt-to-loxone"><%= t('MQTT → Loxone') %></a> or <a href="/mappings/loxone-to-mqtt"><%= t('Loxone → MQTT') %></a>
+  <%= t('to create a new mapping and pick "Translation table" as its value transform.') %>
 </p>
 
-<h2>MQTT &rarr; Loxone</h2>
+<h2><%= t('MQTT → Loxone') %></h2>
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="columns-menu columns-menu-inline" id="tf-m2l-columns-menu">
-      <button type="button" class="btn-soft" id="tf-m2l-columns-btn"><%- icon('columns') %> Columns</button>
+      <button type="button" class="btn-soft" id="tf-m2l-columns-btn"><%- icon('columns') %> <%= t('Columns') %></button>
       <div class="columns-menu-panel" id="tf-m2l-columns-panel" hidden></div>
     </div>
   </div>
@@ -21,11 +21,11 @@
   </div>
 </div>
 
-<h2>Loxone &rarr; MQTT</h2>
+<h2><%= t('Loxone → MQTT') %></h2>
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="columns-menu columns-menu-inline" id="tf-l2m-columns-menu">
-      <button type="button" class="btn-soft" id="tf-l2m-columns-btn"><%- icon('columns') %> Columns</button>
+      <button type="button" class="btn-soft" id="tf-l2m-columns-btn"><%- icon('columns') %> <%= t('Columns') %></button>
       <div class="columns-menu-panel" id="tf-l2m-columns-panel" hidden></div>
     </div>
   </div>

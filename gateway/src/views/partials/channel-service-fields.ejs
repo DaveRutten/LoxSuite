@@ -8,63 +8,59 @@
   // route only ever sees the same plain `url` field it always has.
 %>
 <div class="channel-fields" data-service="custom" style="margin-top:0.85rem;">
-  <label>Apprise URL</label>
-  <input type="text" name="url" class="channel-url-input" value="<%= url %>" placeholder="msteams://TokenA/TokenB/TokenC/" required>
+  <label><%= t('Apprise URL') %></label>
+  <input type="text" name="url" class="channel-url-input" value="<%= url %>" placeholder="<%= t('msteams://TokenA/TokenB/TokenC/') %>" required>
 </div>
 
 <div class="channel-fields" data-service="email" hidden style="margin-top:0.85rem;">
   <div class="form-grid">
-    <div><label>SMTP host</label><input type="text" data-field="host" placeholder="smtp.example.com"></div>
-    <div><label>Port</label><input type="number" data-field="port" placeholder="587"></div>
-    <div><label>Username</label><input type="text" data-field="user"></div>
-    <div><label>Password</label><input type="password" data-field="pass"></div>
-    <div><label>From (optional)</label><input type="text" data-field="from" placeholder="loxsuite@example.com"></div>
-    <div><label>To</label><input type="text" data-field="to" placeholder="you@example.com"></div>
+    <div><label><%= t('SMTP host') %></label><input type="text" data-field="host" placeholder="<%= t('smtp.example.com') %>"></div>
+    <div><label><%= t('Port') %></label><input type="number" data-field="port" placeholder="587"></div>
+    <div><label><%= t('Username') %></label><input type="text" data-field="user"></div>
+    <div><label><%= t('Password') %></label><input type="password" data-field="pass"></div>
+    <div><label><%= t('From (optional)') %></label><input type="text" data-field="from" placeholder="<%= t('loxsuite@example.com') %>"></div>
+    <div><label><%= t('To') %></label><input type="text" data-field="to" placeholder="<%= t('you@example.com') %>"></div>
   </div>
   <label class="toggle-row" style="margin-top:0.5rem; display:flex; align-items:center; gap:0.4rem; font-size:0.87rem;">
-    <input type="checkbox" data-field="ssl" checked> <span>Use SSL/TLS</span>
+    <input type="checkbox" data-field="ssl" checked> <span><%= t('Use SSL/TLS') %></span>
   </label>
 </div>
 
 <div class="channel-fields" data-service="telegram" hidden style="margin-top:0.85rem;">
   <div class="form-grid">
-    <div><label>Bot token</label><input type="text" data-field="token" placeholder="123456789:AA..."></div>
-    <div><label>Chat ID(s)</label><input type="text" data-field="chatIds" placeholder="123456789, -100987654321"></div>
+    <div><label><%= t('Bot token') %></label><input type="text" data-field="token" placeholder="<%= t('123456789:AA...') %>"></div>
+    <div><label><%= t('Chat ID(s)') %></label><input type="text" data-field="chatIds" placeholder="123456789, -100987654321"></div>
   </div>
   <p class="hint" style="margin-top:0.35rem;">
-    Message <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> to create
-    a bot and get its token. To find a chat ID: message your new bot once, then visit
-    <code>https://api.telegram.org/bot&lt;token&gt;/getUpdates</code> in a browser and read the
-    <code>"chat":{"id":...}</code> value back out. Multiple chat IDs go comma-separated.
+    <%= t('Message') %> <a href="https://t.me/BotFather" target="_blank" rel="noopener"><%= t('@BotFather') %></a> <%= t('to create a bot and get its token. To find a chat ID: message your new bot once, then visit') %>
+    <code>https://api.telegram.org/bot&lt;token&gt;/getUpdates</code> <%= t('in a browser and read the') %>
+    <code>"chat":{"id":...}</code> <%= t('value back out. Multiple chat IDs go comma-separated.') %>
   </p>
 </div>
 
 <div class="channel-fields" data-service="slack" hidden style="margin-top:0.85rem;">
   <div class="form-grid">
-    <div><label>Incoming Webhook URL</label><input type="text" data-field="webhookUrl" placeholder="https://hooks.slack.com/services/..."></div>
-    <div><label>Channel override (optional)</label><input type="text" data-field="channel" placeholder="#general"></div>
+    <div><label><%= t('Incoming Webhook URL') %></label><input type="text" data-field="webhookUrl" placeholder="https://hooks.slack.com/services/..."></div>
+    <div><label><%= t('Channel override (optional)') %></label><input type="text" data-field="channel" placeholder="#general"></div>
   </div>
   <p class="hint" style="margin-top:0.35rem;">
-    In Slack: <strong>Apps &rarr; Incoming Webhooks &rarr; Add New Webhook to Workspace</strong>,
-    then paste the URL it gives you here.
+    <%= t('In Slack:') %> <strong><%= t('Apps → Incoming Webhooks → Add New Webhook to Workspace') %></strong><%= t(', then paste the URL it gives you here.') %>
   </p>
 </div>
 
 <div class="channel-fields" data-service="teams" hidden style="margin-top:0.85rem;">
-  <div class="form-grid"><div><label>Incoming Webhook URL</label><input type="text" data-field="webhookUrl" placeholder="https://*.webhook.office.com/webhookb2/..."></div></div>
+  <div class="form-grid"><div><label><%= t('Incoming Webhook URL') %></label><input type="text" data-field="webhookUrl" placeholder="https://*.webhook.office.com/webhookb2/..."></div></div>
   <p class="hint" style="margin-top:0.35rem;">
-    In Teams: channel &rarr; <strong>Connectors &rarr; Incoming Webhook</strong>, then paste the URL
-    it gives you here. Microsoft has changed this webhook format before &mdash; if it isn't
-    recognized, switch Service to Custom above and paste the raw
-    <a href="https://github.com/caronc/apprise/wiki/Notify_msteams" target="_blank" rel="noopener">Apprise msteams:// URL</a> instead.
+    <%= t('In Teams: channel →') %> <strong><%= t('Connectors → Incoming Webhook') %></strong><%= t(', then paste the URL it gives you here. Microsoft has changed this webhook format before — if it isn\'t recognized, switch Service to Custom above and paste the raw') %>
+    <a href="https://github.com/caronc/apprise/wiki/Notify_msteams" target="_blank" rel="noopener"><%= t('Apprise msteams:// URL') %></a> <%= t('instead.') %>
   </p>
 </div>
 
 <div class="channel-fields" data-service="discord" hidden style="margin-top:0.85rem;">
-  <div class="form-grid"><div><label>Webhook URL</label><input type="text" data-field="webhookUrl" placeholder="https://discord.com/api/webhooks/..."></div></div>
+  <div class="form-grid"><div><label><%= t('Webhook URL') %></label><input type="text" data-field="webhookUrl" placeholder="https://discord.com/api/webhooks/..."></div></div>
   <p class="hint" style="margin-top:0.35rem;">
-    In Discord: channel settings &rarr; <strong>Integrations &rarr; Webhooks &rarr; New Webhook</strong>
-    (or an existing one) &rarr; Copy Webhook URL, then paste it here.
+    <%= t('In Discord: channel settings →') %> <strong><%= t('Integrations → Webhooks → New Webhook') %></strong>
+    <%= t('(or an existing one) → Copy Webhook URL, then paste it here.') %>
   </p>
 </div>
 

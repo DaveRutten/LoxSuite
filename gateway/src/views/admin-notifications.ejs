@@ -17,42 +17,41 @@
 <% } %>
 
 <p class="hint">
-  Sends alerts for a Monitor crossing a threshold, a Miniserver or MQTT client going online/offline,
-  or a backup failing &mdash; to Teams, Slack, Telegram, Email, or anything else
-  <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noopener">Apprise</a>
-  supports, via a rule per event you care about and the channel(s) it should go to.
+  <%= t('Sends alerts for a Monitor crossing a threshold, a Miniserver or MQTT client going online/offline, or a backup failing — to Teams, Slack, Telegram, Email, or anything else') %>
+  <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noopener"><%= t('Apprise') %></a>
+  <%= t('supports, via a rule per event you care about and the channel(s) it should go to.') %>
 </p>
 
 <div class="card">
-  <h2>Channels</h2>
+  <h2><%= t('Channels') %></h2>
   <p class="hint">
-    Each channel is a name plus one <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noopener">Apprise URL</a>
-    &mdash; built by following Apprise's own docs for the service you want (e.g.
+    <%= t('Each channel is a name plus one') %> <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noopener"><%= t('Apprise URL') %></a>
+    <%= t('— built by following Apprise\'s own docs for the service you want (e.g.') %>
     <code>msteams://TokenA/TokenB/TokenC/</code>, <code>slack://TokenA/TokenB/TokenC/Channel</code>,
     <code>tgram://bottoken/ChatID</code>, <code>mailtos://user:pass@smtp.example.com?to=you@example.com</code>).
   </p>
 
   <details class="add-panel">
-    <summary>Add channel</summary>
+    <summary><%= t('Add channel') %></summary>
     <div class="add-panel-body">
       <form method="post" action="/admin/notifications/channels" class="channel-form">
         <div class="form-grid">
-          <div><label>Name</label><input type="text" name="name" placeholder="e.g. Family Teams" required></div>
+          <div><label><%= t('Name') %></label><input type="text" name="name" placeholder="<%= t('e.g. Family Teams') %>" required></div>
           <div>
-            <label>Service</label>
+            <label><%= t('Service') %></label>
             <select class="channel-service-select">
-              <option value="custom">Custom (Apprise URL)</option>
-              <option value="email">Email (SMTP)</option>
-              <option value="telegram">Telegram</option>
-              <option value="slack">Slack</option>
-              <option value="teams">Microsoft Teams</option>
-              <option value="discord">Discord</option>
+              <option value="custom"><%= t('Custom (Apprise URL)') %></option>
+              <option value="email"><%= t('Email (SMTP)') %></option>
+              <option value="telegram"><%= t('Telegram') %></option>
+              <option value="slack"><%= t('Slack') %></option>
+              <option value="teams"><%= t('Microsoft Teams') %></option>
+              <option value="discord"><%= t('Discord') %></option>
             </select>
           </div>
         </div>
         <%- include('partials/channel-service-fields', { url: '' }) %>
         <div style="margin-top:0.9rem;">
-          <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+          <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add') %></button>
         </div>
       </form>
     </div>
@@ -60,7 +59,7 @@
 
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Name</th><th>URL</th><th>Enabled</th><th>Actions</th></tr></thead>
+      <thead><tr><th><%= t('Name') %></th><th><%= t('URL') %></th><th><%= t('Enabled') %></th><th><%= t('Actions') %></th></tr></thead>
       <tbody>
         <% channels.forEach(c => { %>
           <tr>
@@ -70,15 +69,15 @@
             <td>
               <div class="row-actions">
                 <form class="inline" method="post" action="/admin/notifications/channels/<%= c.id %>/test">
-                  <button type="submit" class="btn-test"><%- icon('refresh') %> Send test</button>
+                  <button type="submit" class="btn-test"><%- icon('refresh') %> <%= t('Send test') %></button>
                 </form>
-                <button type="button" class="btn-edit" data-toggle-row="channel-edit-<%= c.id %>"><%- icon('edit') %> Edit</button>
-                <form class="inline" method="post" action="/admin/notifications/channels/<%= c.id %>/delete" data-confirm="Delete this channel? Any rule using it will just stop sending through it.">
-                  <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+                <button type="button" class="btn-edit" data-toggle-row="channel-edit-<%= c.id %>"><%- icon('edit') %> <%= t('Edit') %></button>
+                <form class="inline" method="post" action="/admin/notifications/channels/<%= c.id %>/delete" data-confirm="<%= t('Delete this channel? Any rule using it will just stop sending through it.') %>">
+                  <button type="submit" class="danger"><%- icon('trash') %> <%= t('Delete') %></button>
                 </form>
                 <% if (testResult && testResult.channelId === c.id) { %>
                   <span class="hint" style="margin:0; <%= testResult.ok ? 'color: var(--success);' : 'color: var(--danger);' %>">
-                    <% if (testResult.ok) { %>Test message sent.<% } else { %>Test failed: <%= testResult.error %><% } %>
+                    <% if (testResult.ok) { %><%= t('Test message sent.') %><% } else { %><%= t('Test failed:') %> <%= testResult.error %><% } %>
                   </span>
                 <% } %>
               </div>
@@ -88,33 +87,33 @@
             <td colspan="4">
               <form method="post" action="/admin/notifications/channels/<%= c.id %>/update" class="channel-form">
                 <div class="form-grid">
-                  <div><label>Name</label><input type="text" name="name" value="<%= c.name %>" required></div>
+                  <div><label><%= t('Name') %></label><input type="text" name="name" value="<%= c.name %>" required></div>
                   <div>
-                    <label>Service</label>
+                    <label><%= t('Service') %></label>
                     <select class="channel-service-select">
-                      <option value="custom">Custom (Apprise URL)</option>
-                      <option value="email">Email (SMTP)</option>
-                      <option value="telegram">Telegram</option>
-                      <option value="slack">Slack</option>
-                      <option value="teams">Microsoft Teams</option>
-                      <option value="discord">Discord</option>
+                      <option value="custom"><%= t('Custom (Apprise URL)') %></option>
+                      <option value="email"><%= t('Email (SMTP)') %></option>
+                      <option value="telegram"><%= t('Telegram') %></option>
+                      <option value="slack"><%= t('Slack') %></option>
+                      <option value="teams"><%= t('Microsoft Teams') %></option>
+                      <option value="discord"><%= t('Discord') %></option>
                     </select>
                   </div>
                   <div>
-                    <label>Enabled</label>
+                    <label><%= t('Enabled') %></label>
                     <%- toggleSwitch('enabled', c.enabled) %>
                   </div>
                 </div>
                 <%- include('partials/channel-service-fields', { url: c.url }) %>
                 <div style="margin-top:0.6rem;">
-                  <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+                  <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
                 </div>
               </form>
             </td>
           </tr>
         <% }) %>
         <% if (channels.length === 0) { %>
-          <tr><td colspan="4" class="empty">No channels yet &mdash; add one above.</td></tr>
+          <tr><td colspan="4" class="empty"><%= t('No channels yet — add one above.') %></td></tr>
         <% } %>
       </tbody>
     </table>
@@ -122,52 +121,52 @@
 </div>
 
 <div class="card">
-  <h2>Rules</h2>
+  <h2><%= t('Rules') %></h2>
 
   <details class="add-panel" <%= presetTrigger ? 'open' : '' %>>
-    <summary>Add rule</summary>
+    <summary><%= t('Add rule') %></summary>
     <div class="add-panel-body">
       <form method="post" action="/admin/notifications/rules" class="rule-form">
         <div class="form-grid">
-          <div><label>Name</label><input type="text" name="name" placeholder="e.g. Freezer too warm" required></div>
+          <div><label><%= t('Name') %></label><input type="text" name="name" placeholder="<%= t('e.g. Freezer too warm') %>" required></div>
           <div>
-            <label>Trigger</label>
+            <label><%= t('Trigger') %></label>
             <select name="trigger_type" class="rule-trigger-select">
-              <% triggerTypes.filter(t => !t.off).forEach(t => { %><option value="<%= t.key %>" <%= t.key === presetTrigger ? 'selected' : '' %>><%= t.label %></option><% }) %>
+              <% triggerTypes.filter(tt => !tt.off).forEach(tt => { %><option value="<%= tt.key %>" <%= tt.key === presetTrigger ? 'selected' : '' %>><%= tt.label %></option><% }) %>
             </select>
           </div>
         </div>
 
         <div class="form-grid rule-fields" data-for="monitor_threshold" style="margin-top:0.85rem;">
           <div>
-            <label>Monitor</label>
+            <label><%= t('Monitor') %></label>
             <select name="monitor_id">
-              <option value="">Choose a monitor&hellip;</option>
+              <option value=""><%= t('Choose a monitor…') %></option>
               <% monitors.forEach(m => { %><option value="<%= m.id %>"><%= m.label %></option><% }) %>
             </select>
           </div>
           <div>
-            <label>Condition</label>
+            <label><%= t('Condition') %></label>
             <select name="operator">
-              <option value="gt">&gt; (greater than)</option>
-              <option value="gte">&ge; (at least)</option>
-              <option value="lt">&lt; (less than)</option>
-              <option value="lte">&le; (at most)</option>
-              <option value="eq">= (equals)</option>
+              <option value="gt"><%= t('> (greater than)') %></option>
+              <option value="gte"><%= t('≥ (at least)') %></option>
+              <option value="lt"><%= t('< (less than)') %></option>
+              <option value="lte"><%= t('≤ (at most)') %></option>
+              <option value="eq"><%= t('= (equals)') %></option>
             </select>
           </div>
-          <div><label>Value</label><input type="number" step="any" name="threshold_value"></div>
+          <div><label><%= t('Value') %></label><input type="number" step="any" name="threshold_value"></div>
         </div>
         <label class="toggle-row rule-fields" data-for="monitor_threshold" style="margin-top:0.5rem;">
           <input type="checkbox" name="notify_on_recover">
-          <span><strong>Also notify on recovery</strong><span class="hint">Send a second message once the value is back within range, not just when it first crosses the line.</span></span>
+          <span><strong><%= t('Also notify on recovery') %></strong><span class="hint"><%= t('Send a second message once the value is back within range, not just when it first crosses the line.') %></span></span>
         </label>
 
         <div class="form-grid rule-fields" data-for="miniserver_status" style="margin-top:0.85rem;">
           <div>
-            <label>Miniserver</label>
+            <label><%= t('Miniserver') %></label>
             <select name="miniserver_id">
-              <option value="">Any Miniserver</option>
+              <option value=""><%= t('Any Miniserver') %></option>
               <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
             </select>
           </div>
@@ -175,9 +174,9 @@
 
         <div class="form-grid rule-fields" data-for="firmware_changed" style="margin-top:0.85rem;">
           <div>
-            <label>Miniserver</label>
+            <label><%= t('Miniserver') %></label>
             <select name="firmware_miniserver_id">
-              <option value="">Any Miniserver</option>
+              <option value=""><%= t('Any Miniserver') %></option>
               <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
             </select>
           </div>
@@ -185,90 +184,87 @@
 
         <div class="form-grid rule-fields" data-for="gateway_client_firmware_mismatch" style="margin-top:0.85rem;">
           <div>
-            <label>Gateway (blank = any Gateway with Clients)</label>
+            <label><%= t('Gateway (blank = any Gateway with Clients)') %></label>
             <select name="gateway_mismatch_miniserver_id">
-              <option value="">Any Gateway</option>
+              <option value=""><%= t('Any Gateway') %></option>
               <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
             </select>
           </div>
           <div>
-            <label>Severity</label>
+            <label><%= t('Severity') %></label>
             <select name="gateway_mismatch_severity">
-              <option value="info">Info</option>
-              <option value="warning" selected>Warning</option>
-              <option value="critical">Critical</option>
+              <option value="info"><%= t('Info') %></option>
+              <option value="warning" selected><%= t('Warning') %></option>
+              <option value="critical"><%= t('Critical') %></option>
             </select>
           </div>
         </div>
         <p class="hint rule-fields" data-for="gateway_client_firmware_mismatch" style="margin-top:0.35rem;">
-          Fires when a Gateway Miniserver's own firmware differs from one of its Client
-          Miniservers' &mdash; both sides need to be confirmed <strong>Running</strong> (not
-          mid-boot/mid-update) for this to fire, so a routine restart on either one doesn't
-          misfire it.
+          <%= t('Fires when a Gateway Miniserver\'s own firmware differs from one of its Client Miniservers\' — both sides need to be confirmed') %> <strong><%= t('Running') %></strong> <%= t('(not mid-boot/mid-update) for this to fire, so a routine restart on either one doesn\'t misfire it.') %>
         </p>
 
         <div class="form-grid rule-fields" data-for="mqtt_client_status" style="margin-top:0.85rem;">
-          <div><label>MQTT username (blank = any client)</label><input type="text" name="mqtt_username" placeholder="e.g. shelly-livingroom"></div>
+          <div><label><%= t('MQTT username (blank = any client)') %></label><input type="text" name="mqtt_username" placeholder="<%= t('e.g. shelly-livingroom') %>"></div>
         </div>
 
         <div class="form-grid rule-fields" data-for="battery_weak" style="margin-top:0.85rem;">
           <div>
-            <label>Miniserver</label>
+            <label><%= t('Miniserver') %></label>
             <select name="battery_miniserver_id">
-              <option value="">Any Miniserver</option>
+              <option value=""><%= t('Any Miniserver') %></option>
               <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
             </select>
           </div>
           <div>
-            <label>Severity</label>
+            <label><%= t('Severity') %></label>
             <select name="battery_severity">
-              <option value="info">Info</option>
-              <option value="warning" selected>Warning</option>
-              <option value="critical">Critical</option>
+              <option value="info"><%= t('Info') %></option>
+              <option value="warning" selected><%= t('Warning') %></option>
+              <option value="critical"><%= t('Critical') %></option>
             </select>
           </div>
         </div>
 
         <div class="form-grid rule-fields" data-for="device_firmware_changed" style="margin-top:0.85rem;">
           <div>
-            <label>Miniserver</label>
+            <label><%= t('Miniserver') %></label>
             <select name="device_firmware_miniserver_id">
-              <option value="">Any Miniserver</option>
+              <option value=""><%= t('Any Miniserver') %></option>
               <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
             </select>
           </div>
           <div>
-            <label>Severity</label>
+            <label><%= t('Severity') %></label>
             <select name="device_firmware_severity">
-              <option value="info" selected>Info</option>
-              <option value="warning">Warning</option>
-              <option value="critical">Critical</option>
+              <option value="info" selected><%= t('Info') %></option>
+              <option value="warning"><%= t('Warning') %></option>
+              <option value="critical"><%= t('Critical') %></option>
             </select>
           </div>
         </div>
 
         <div class="form-grid rule-fields" data-for="device_offline" style="margin-top:0.85rem;">
           <div>
-            <label>Miniserver</label>
+            <label><%= t('Miniserver') %></label>
             <select name="device_offline_miniserver_id">
-              <option value="">Any Miniserver</option>
+              <option value=""><%= t('Any Miniserver') %></option>
               <% miniservers.forEach(ms => { %><option value="<%= ms.id %>"><%= ms.name %></option><% }) %>
             </select>
           </div>
           <div>
-            <label>Severity (offline only &mdash; back online is always "Info")</label>
+            <label><%= t('Severity (offline only — back online is always "Info")') %></label>
             <select name="device_offline_severity">
-              <option value="info">Info</option>
-              <option value="warning" selected>Warning</option>
-              <option value="critical">Critical</option>
+              <option value="info"><%= t('Info') %></option>
+              <option value="warning" selected><%= t('Warning') %></option>
+              <option value="critical"><%= t('Critical') %></option>
             </select>
           </div>
         </div>
 
         <div style="margin-top:0.9rem;">
-          <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.4rem; color:var(--text-muted);">Send via</label>
+          <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.4rem; color:var(--text-muted);"><%= t('Send via') %></label>
           <% if (channels.length === 0) { %>
-            <p class="hint" style="margin:0;">No channels yet &mdash; add one above first.</p>
+            <p class="hint" style="margin:0;"><%= t('No channels yet — add one above first.') %></p>
           <% } %>
           <% channels.forEach(c => { %>
             <label style="display:inline-flex; align-items:center; gap:0.3rem; margin:0 1rem 0.4rem 0; font-size:0.87rem;">
@@ -278,7 +274,7 @@
         </div>
 
         <div style="margin-top:0.9rem;">
-          <button type="submit" class="primary"><%- icon('plus') %> Add rule</button>
+          <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add rule') %></button>
         </div>
       </form>
     </div>
@@ -286,10 +282,10 @@
 
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Name</th><th>Trigger</th><th>Channels</th><th>Last sent</th><th>Enabled</th><th>Actions</th></tr></thead>
+      <thead><tr><th><%= t('Name') %></th><th><%= t('Trigger') %></th><th><%= t('Channels') %></th><th><%= t('Last sent') %></th><th><%= t('Enabled') %></th><th><%= t('Actions') %></th></tr></thead>
       <tbody>
         <% rules.forEach(r => { %>
-          <% const triggerLabel = (triggerTypes.find(t => t.key === r.trigger_type) || {}).label || r.trigger_type; %>
+          <% const triggerLabel = (triggerTypes.find(tt => tt.key === r.trigger_type) || {}).label || r.trigger_type; %>
           <tr>
             <td><%= r.name %></td>
             <td><%= triggerLabel %></td>
@@ -297,12 +293,12 @@
               <% if (r.channels.length) { %>
                 <%= r.channels.map(c => c.name).join(', ') %>
               <% } else if (r.enabled) { %>
-                <span class="badge badge-warning" title="This rule is enabled but has no channel selected under &quot;Send via&quot;, so its alerts only appear in the Notification Center and aren't sent anywhere. Edit the rule and tick a channel.">No channel</span>
+                <span class="badge badge-warning" title="<%= t('This rule is enabled but has no channel selected under "Send via", so its alerts only appear in the Notification Center and aren\'t sent anywhere. Edit the rule and tick a channel.') %>"><%= t('No channel') %></span>
               <% } else { %>-<% } %>
             </td>
             <td>
               <% if (r.last_error) { %>
-                <span class="badge badge-warning" title="<%= r.last_error %>">Last send failed<% if (r.last_error_at) { %> &middot; <%= formatDateTime(r.last_error_at) %><% } %></span>
+                <span class="badge badge-warning" title="<%= r.last_error %>"><%= t('Last send failed') %><% if (r.last_error_at) { %> &middot; <%= formatDateTime(r.last_error_at) %><% } %></span>
               <% } else if (r.last_sent_at) { %>
                 <%= formatDateTime(r.last_sent_at) %>
               <% } else { %>-<% } %>
@@ -310,9 +306,9 @@
             <td><span class="badge <%= r.enabled ? 'badge-ok' : 'badge-neutral' %>"><%= r.enabled ? 'Yes' : 'No' %></span></td>
             <td>
               <div class="row-actions">
-                <button type="button" class="btn-edit" data-toggle-row="rule-edit-<%= r.id %>"><%- icon('edit') %> Edit</button>
-                <form class="inline" method="post" action="/admin/notifications/rules/<%= r.id %>/delete" data-confirm="Delete this rule?">
-                  <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+                <button type="button" class="btn-edit" data-toggle-row="rule-edit-<%= r.id %>"><%- icon('edit') %> <%= t('Edit') %></button>
+                <form class="inline" method="post" action="/admin/notifications/rules/<%= r.id %>/delete" data-confirm="<%= t('Delete this rule?') %>">
+                  <button type="submit" class="danger"><%- icon('trash') %> <%= t('Delete') %></button>
                 </form>
               </div>
             </td>
@@ -321,49 +317,49 @@
             <td colspan="6">
               <form method="post" action="/admin/notifications/rules/<%= r.id %>/update" class="rule-form">
                 <div class="form-grid">
-                  <div><label>Name</label><input type="text" name="name" value="<%= r.name %>" required></div>
+                  <div><label><%= t('Name') %></label><input type="text" name="name" value="<%= r.name %>" required></div>
                   <div>
-                    <label>Trigger</label>
+                    <label><%= t('Trigger') %></label>
                     <select name="trigger_type" class="rule-trigger-select">
-                      <% triggerTypes.filter(t => !t.off || t.key === r.trigger_type).forEach(t => { %><option value="<%= t.key %>" <%= t.key === r.trigger_type ? 'selected' : '' %>><%= t.label %></option><% }) %>
+                      <% triggerTypes.filter(tt => !tt.off || tt.key === r.trigger_type).forEach(tt => { %><option value="<%= tt.key %>" <%= tt.key === r.trigger_type ? 'selected' : '' %>><%= tt.label %></option><% }) %>
                     </select>
                   </div>
                   <div>
-                    <label>Enabled</label>
+                    <label><%= t('Enabled') %></label>
                     <%- toggleSwitch('enabled', r.enabled) %>
                   </div>
                 </div>
 
                 <div class="form-grid rule-fields" data-for="monitor_threshold" style="margin-top:0.85rem;">
                   <div>
-                    <label>Monitor</label>
+                    <label><%= t('Monitor') %></label>
                     <select name="monitor_id">
-                      <option value="">Choose a monitor&hellip;</option>
+                      <option value=""><%= t('Choose a monitor…') %></option>
                       <% monitors.forEach(m => { %><option value="<%= m.id %>" <%= r.config.monitor_id === m.id ? 'selected' : '' %>><%= m.label %></option><% }) %>
                     </select>
                   </div>
                   <div>
-                    <label>Condition</label>
+                    <label><%= t('Condition') %></label>
                     <select name="operator">
-                      <option value="gt" <%= r.config.operator === 'gt' ? 'selected' : '' %>>&gt; (greater than)</option>
-                      <option value="gte" <%= r.config.operator === 'gte' ? 'selected' : '' %>>&ge; (at least)</option>
-                      <option value="lt" <%= r.config.operator === 'lt' ? 'selected' : '' %>>&lt; (less than)</option>
-                      <option value="lte" <%= r.config.operator === 'lte' ? 'selected' : '' %>>&le; (at most)</option>
-                      <option value="eq" <%= r.config.operator === 'eq' ? 'selected' : '' %>>= (equals)</option>
+                      <option value="gt" <%= r.config.operator === 'gt' ? 'selected' : '' %>><%= t('> (greater than)') %></option>
+                      <option value="gte" <%= r.config.operator === 'gte' ? 'selected' : '' %>><%= t('≥ (at least)') %></option>
+                      <option value="lt" <%= r.config.operator === 'lt' ? 'selected' : '' %>><%= t('< (less than)') %></option>
+                      <option value="lte" <%= r.config.operator === 'lte' ? 'selected' : '' %>><%= t('≤ (at most)') %></option>
+                      <option value="eq" <%= r.config.operator === 'eq' ? 'selected' : '' %>><%= t('= (equals)') %></option>
                     </select>
                   </div>
-                  <div><label>Value</label><input type="number" step="any" name="threshold_value" value="<%= r.config.value ?? '' %>"></div>
+                  <div><label><%= t('Value') %></label><input type="number" step="any" name="threshold_value" value="<%= r.config.value ?? '' %>"></div>
                 </div>
                 <label class="toggle-row rule-fields" data-for="monitor_threshold" style="margin-top:0.5rem;">
                   <input type="checkbox" name="notify_on_recover" <%= r.config.notify_on_recover ? 'checked' : '' %>>
-                  <span><strong>Also notify on recovery</strong></span>
+                  <span><strong><%= t('Also notify on recovery') %></strong></span>
                 </label>
 
                 <div class="form-grid rule-fields" data-for="miniserver_status" style="margin-top:0.85rem;">
                   <div>
-                    <label>Miniserver</label>
+                    <label><%= t('Miniserver') %></label>
                     <select name="miniserver_id">
-                      <option value="">Any Miniserver</option>
+                      <option value=""><%= t('Any Miniserver') %></option>
                       <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
                     </select>
                   </div>
@@ -371,9 +367,9 @@
 
                 <div class="form-grid rule-fields" data-for="firmware_changed" style="margin-top:0.85rem;">
                   <div>
-                    <label>Miniserver</label>
+                    <label><%= t('Miniserver') %></label>
                     <select name="firmware_miniserver_id">
-                      <option value="">Any Miniserver</option>
+                      <option value=""><%= t('Any Miniserver') %></option>
                       <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
                     </select>
                   </div>
@@ -381,91 +377,90 @@
 
                 <div class="form-grid rule-fields" data-for="gateway_client_firmware_mismatch" style="margin-top:0.85rem;">
                   <div>
-                    <label>Gateway (blank = any Gateway with Clients)</label>
+                    <label><%= t('Gateway (blank = any Gateway with Clients)') %></label>
                     <select name="gateway_mismatch_miniserver_id">
-                      <option value="">Any Gateway</option>
+                      <option value=""><%= t('Any Gateway') %></option>
                       <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
                     </select>
                   </div>
                   <div>
-                    <label>Severity</label>
+                    <label><%= t('Severity') %></label>
                     <% const gatewayMismatchSeverity = r.config.severity || 'warning'; %>
                     <select name="gateway_mismatch_severity">
-                      <option value="info" <%= gatewayMismatchSeverity === 'info' ? 'selected' : '' %>>Info</option>
-                      <option value="warning" <%= gatewayMismatchSeverity === 'warning' ? 'selected' : '' %>>Warning</option>
-                      <option value="critical" <%= gatewayMismatchSeverity === 'critical' ? 'selected' : '' %>>Critical</option>
+                      <option value="info" <%= gatewayMismatchSeverity === 'info' ? 'selected' : '' %>><%= t('Info') %></option>
+                      <option value="warning" <%= gatewayMismatchSeverity === 'warning' ? 'selected' : '' %>><%= t('Warning') %></option>
+                      <option value="critical" <%= gatewayMismatchSeverity === 'critical' ? 'selected' : '' %>><%= t('Critical') %></option>
                     </select>
                   </div>
                 </div>
                 <p class="hint rule-fields" data-for="gateway_client_firmware_mismatch" style="margin-top:0.35rem;">
-                  Fires when a Gateway Miniserver's own firmware differs from one of its Client
-                  Miniservers' &mdash; both sides need to be confirmed <strong>Running</strong>
-                  (not mid-boot/mid-update) for this to fire.
+                  <%= t('Fires when a Gateway Miniserver\'s own firmware differs from one of its Client Miniservers\' — both sides need to be confirmed') %> <strong><%= t('Running') %></strong>
+                  <%= t('(not mid-boot/mid-update) for this to fire.') %>
                 </p>
 
                 <div class="form-grid rule-fields" data-for="mqtt_client_status" style="margin-top:0.85rem;">
-                  <div><label>MQTT username (blank = any client)</label><input type="text" name="mqtt_username" value="<%= r.config.username || '' %>"></div>
+                  <div><label><%= t('MQTT username (blank = any client)') %></label><input type="text" name="mqtt_username" value="<%= r.config.username || '' %>"></div>
                 </div>
 
                 <div class="form-grid rule-fields" data-for="battery_weak" style="margin-top:0.85rem;">
                   <div>
-                    <label>Miniserver</label>
+                    <label><%= t('Miniserver') %></label>
                     <select name="battery_miniserver_id">
-                      <option value="">Any Miniserver</option>
+                      <option value=""><%= t('Any Miniserver') %></option>
                       <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
                     </select>
                   </div>
                   <div>
-                    <label>Severity</label>
+                    <label><%= t('Severity') %></label>
                     <% const batterySeverity = r.config.severity || 'warning'; %>
                     <select name="battery_severity">
-                      <option value="info" <%= batterySeverity === 'info' ? 'selected' : '' %>>Info</option>
-                      <option value="warning" <%= batterySeverity === 'warning' ? 'selected' : '' %>>Warning</option>
-                      <option value="critical" <%= batterySeverity === 'critical' ? 'selected' : '' %>>Critical</option>
+                      <option value="info" <%= batterySeverity === 'info' ? 'selected' : '' %>><%= t('Info') %></option>
+                      <option value="warning" <%= batterySeverity === 'warning' ? 'selected' : '' %>><%= t('Warning') %></option>
+                      <option value="critical" <%= batterySeverity === 'critical' ? 'selected' : '' %>><%= t('Critical') %></option>
                     </select>
                   </div>
                 </div>
 
                 <div class="form-grid rule-fields" data-for="device_firmware_changed" style="margin-top:0.85rem;">
                   <div>
-                    <label>Miniserver</label>
+                    <label><%= t('Miniserver') %></label>
                     <select name="device_firmware_miniserver_id">
-                      <option value="">Any Miniserver</option>
+                      <option value=""><%= t('Any Miniserver') %></option>
                       <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
                     </select>
                   </div>
                   <div>
-                    <label>Severity</label>
+                    <label><%= t('Severity') %></label>
                     <% const firmwareSeverity = r.config.severity || 'info'; %>
                     <select name="device_firmware_severity">
-                      <option value="info" <%= firmwareSeverity === 'info' ? 'selected' : '' %>>Info</option>
-                      <option value="warning" <%= firmwareSeverity === 'warning' ? 'selected' : '' %>>Warning</option>
-                      <option value="critical" <%= firmwareSeverity === 'critical' ? 'selected' : '' %>>Critical</option>
+                      <option value="info" <%= firmwareSeverity === 'info' ? 'selected' : '' %>><%= t('Info') %></option>
+                      <option value="warning" <%= firmwareSeverity === 'warning' ? 'selected' : '' %>><%= t('Warning') %></option>
+                      <option value="critical" <%= firmwareSeverity === 'critical' ? 'selected' : '' %>><%= t('Critical') %></option>
                     </select>
                   </div>
                 </div>
 
                 <div class="form-grid rule-fields" data-for="device_offline" style="margin-top:0.85rem;">
                   <div>
-                    <label>Miniserver</label>
+                    <label><%= t('Miniserver') %></label>
                     <select name="device_offline_miniserver_id">
-                      <option value="">Any Miniserver</option>
+                      <option value=""><%= t('Any Miniserver') %></option>
                       <% miniservers.forEach(ms => { %><option value="<%= ms.id %>" <%= r.config.miniserver_id === ms.id ? 'selected' : '' %>><%= ms.name %></option><% }) %>
                     </select>
                   </div>
                   <div>
-                    <label>Severity (offline only &mdash; back online is always "Info")</label>
+                    <label><%= t('Severity (offline only — back online is always "Info")') %></label>
                     <% const offlineSeverity = r.config.severity || 'warning'; %>
                     <select name="device_offline_severity">
-                      <option value="info" <%= offlineSeverity === 'info' ? 'selected' : '' %>>Info</option>
-                      <option value="warning" <%= offlineSeverity === 'warning' ? 'selected' : '' %>>Warning</option>
-                      <option value="critical" <%= offlineSeverity === 'critical' ? 'selected' : '' %>>Critical</option>
+                      <option value="info" <%= offlineSeverity === 'info' ? 'selected' : '' %>><%= t('Info') %></option>
+                      <option value="warning" <%= offlineSeverity === 'warning' ? 'selected' : '' %>><%= t('Warning') %></option>
+                      <option value="critical" <%= offlineSeverity === 'critical' ? 'selected' : '' %>><%= t('Critical') %></option>
                     </select>
                   </div>
                 </div>
 
                 <div style="margin-top:0.9rem;">
-                  <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.4rem; color:var(--text-muted);">Send via</label>
+                  <label style="display:block; font-size:0.78rem; font-weight:500; margin-bottom:0.4rem; color:var(--text-muted);"><%= t('Send via') %></label>
                   <% channels.forEach(c => { %>
                     <label style="display:inline-flex; align-items:center; gap:0.3rem; margin:0 1rem 0.4rem 0; font-size:0.87rem;">
                       <input type="checkbox" name="channel_ids" value="<%= c.id %>" <%= r.channelIds.includes(c.id) ? 'checked' : '' %>> <%= c.name %>
@@ -474,14 +469,14 @@
                 </div>
 
                 <div style="margin-top:0.6rem;">
-                  <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+                  <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
                 </div>
               </form>
             </td>
           </tr>
         <% }) %>
         <% if (rules.length === 0) { %>
-          <tr><td colspan="5" class="empty">No rules yet &mdash; add one above.</td></tr>
+          <tr><td colspan="5" class="empty"><%= t('No rules yet — add one above.') %></td></tr>
         <% } %>
       </tbody>
     </table>
@@ -489,43 +484,37 @@
 </div>
 
 <div class="card">
-  <h2>Message templates</h2>
+  <h2><%= t('Message templates') %></h2>
   <p class="hint">
-    Override the title/body a trigger type sends — otherwise every one keeps its own built-in
-    wording. <code>{{title}}</code>/<code>{{message}}</code>/<code>{{severity}}</code> plus each
-    trigger's own fields (listed under it below) are available as placeholders in either field. A
-    custom body fully replaces the auto-listed fields below the message — reference whichever ones
-    you want by name instead. Leave both blank to reset a trigger back to its default.
+    <%= t('Override the title/body a trigger type sends — otherwise every one keeps its own built-in wording.') %> <code>{{title}}</code>/<code>{{message}}</code>/<code>{{severity}}</code> <%= t('plus each trigger\'s own fields (listed under it below) are available as placeholders in either field. A custom body fully replaces the auto-listed fields below the message — reference whichever ones you want by name instead. Leave both blank to reset a trigger back to its default.') %>
   </p>
   <form method="post" action="/admin/notifications/templates">
-    <% triggerTypes.forEach(t => { %>
-      <% var sample = templatePreviewSamples[t.key]; var saved = templates[t.key] || {}; %>
+    <% triggerTypes.forEach(tt => { %>
+      <% var sample = templatePreviewSamples[tt.key]; var saved = templates[tt.key] || {}; %>
       <details class="add-panel" <%= (saved.title || saved.body) ? 'open' : '' %>>
-        <summary><%= t.label %></summary>
+        <summary><%= tt.label %></summary>
         <div class="add-panel-body">
           <div class="form-grid">
             <div style="grid-column:1/-1;">
-              <label>Title template</label>
-              <input type="text" name="template_title_<%= t.key %>" class="template-title-input" data-trigger="<%= t.key %>"
+              <label><%= t('Title template') %></label>
+              <input type="text" name="template_title_<%= tt.key %>" class="template-title-input" data-trigger="<%= tt.key %>"
                 placeholder="<%= sample.title %>" value="<%= saved.title || '' %>">
             </div>
             <div style="grid-column:1/-1;">
-              <label>Body template</label>
-              <textarea name="template_body_<%= t.key %>" class="template-body-input" data-trigger="<%= t.key %>" rows="3"
+              <label><%= t('Body template') %></label>
+              <textarea name="template_body_<%= tt.key %>" class="template-body-input" data-trigger="<%= tt.key %>" rows="3"
                 placeholder="<%= sample.message %>"><%= saved.body || '' %></textarea>
             </div>
             <p class="hint" style="grid-column:1/-1; margin:0;">
-              Available: <code>{{title}}</code> <code>{{message}}</code> <code>{{severity}}</code>
+              <%= t('Available:') %> <code>{{title}}</code> <code>{{message}}</code> <code>{{severity}}</code>
               <% sample.fields.forEach(f => { %><code>{{<%= f.label %>}}</code> <% }) %>
             </p>
             <p class="hint" style="grid-column:1/-1; margin:0;">
-              Type <code>{{</code> in either field for an autocomplete menu of the placeholders
-              above, or <code>/</code> for a menu of formatting snippets (bold/italic/code) and an
-              emoji picker &mdash; both filter as you keep typing, arrow keys + Enter to pick.
+              <%= t('Type') %> <code>{{</code> <%= t('in either field for an autocomplete menu of the placeholders above, or') %> <code>/</code> <%= t('for a menu of formatting snippets (bold/italic/code) and an emoji picker — both filter as you keep typing, arrow keys + Enter to pick.') %>
             </p>
             <div style="grid-column:1/-1;">
-              <div class="hint" style="margin:0 0 0.25rem;">Preview (as sent to Telegram, with example data):</div>
-              <div class="template-preview" data-trigger="<%= t.key %>" style="border:1px solid var(--border); border-radius:8px; padding:0.75rem 0.9rem; background:var(--surface-alt); font-size:0.85rem; white-space:pre-wrap; overflow-wrap:anywhere;"></div>
+              <div class="hint" style="margin:0 0 0.25rem;"><%= t('Preview (as sent to Telegram, with example data):') %></div>
+              <div class="template-preview" data-trigger="<%= tt.key %>" style="border:1px solid var(--border); border-radius:8px; padding:0.75rem 0.9rem; background:var(--surface-alt); font-size:0.85rem; white-space:pre-wrap; overflow-wrap:anywhere;"></div>
             </div>
             <%
               // Not a real nested <form> — this whole card is already inside the "Save templates"
@@ -538,20 +527,20 @@
             <div style="grid-column:1/-1; display:flex; align-items:center; gap:0.5rem;">
               <select class="template-test-channel" style="max-width:20rem;" <%= channels.length === 0 ? 'disabled' : '' %>>
                 <% if (channels.length === 0) { %>
-                  <option value="">No channels configured</option>
+                  <option value=""><%= t('No channels configured') %></option>
                 <% } else { %>
                   <% channels.forEach(c => { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
                 <% } %>
               </select>
-              <button type="button" class="btn-test template-test-send" data-trigger="<%= t.key %>" <%= channels.length === 0 ? 'disabled' : '' %>><%- icon('link') %> Send test</button>
-              <span class="hint template-test-result" data-trigger="<%= t.key %>" style="margin:0;"></span>
+              <button type="button" class="btn-test template-test-send" data-trigger="<%= tt.key %>" <%= channels.length === 0 ? 'disabled' : '' %>><%- icon('link') %> <%= t('Send test') %></button>
+              <span class="hint template-test-result" data-trigger="<%= tt.key %>" style="margin:0;"></span>
             </div>
           </div>
         </div>
       </details>
     <% }) %>
     <div style="margin-top:0.85rem;">
-      <button type="submit" class="btn-edit"><%- icon('edit') %> Save templates</button>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save templates') %></button>
     </div>
   </form>
 </div>

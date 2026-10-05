@@ -6,76 +6,67 @@
   <p class="error"><%= error %></p>
 <% } %>
 <% if (saved) { %>
-  <p class="hint" style="color: var(--success);">Saved.</p>
+  <p class="hint" style="color: var(--success);"><%= t('Saved.') %></p>
 <% } %>
 
 <div class="card" id="mqtt-broker-card">
   <h2>
-    MQTT Broker
+    <%= t('MQTT Broker') %>
     <span class="badge badge-live <%= mqttConnected ? 'badge-ok' : 'badge-off' %>" style="vertical-align:middle; margin-left:0.5rem;">
       <%= mqttConnected ? 'Connected' : 'Not connected' %>
     </span>
   </h2>
   <p class="hint">
-    The bundled Mosquitto broker runs inside this same container and listens internally on
-    <code>127.0.0.1:1883</code>. You can also point this at a different/external broker &mdash;
-    the gateway will then stop using the bundled Mosquitto process for this connection.
+    <%= t('The bundled Mosquitto broker runs inside this same container and listens internally on') %>
+    <code>127.0.0.1:1883</code><%= t('. You can also point this at a different/external broker — the gateway will then stop using the bundled Mosquitto process for this connection.') %>
   </p>
   <% if (canEdit('settings')) { %>
   <form method="post" action="/settings/broker">
     <div class="form-grid">
       <div>
-        <label>Host</label>
+        <label><%= t('Host') %></label>
         <input type="text" name="host" value="<%= settings.host %>" required>
       </div>
       <div>
-        <label>Port</label>
+        <label><%= t('Port') %></label>
         <input type="number" name="port" value="<%= settings.port %>" required>
       </div>
       <div>
-        <label>TLS</label>
+        <label><%= t('TLS') %></label>
         <%- toggleSwitch('use_tls', settings.use_tls) %>
       </div>
     </div>
     <div class="form-grid" style="margin-top:0.85rem;">
       <div>
-        <label>Username</label>
+        <label><%= t('Username') %></label>
         <input type="text" name="username" value="<%= settings.username || '' %>">
       </div>
       <div>
-        <label>Password</label>
+        <label><%= t('Password') %></label>
         <input type="password" name="password" value="<%= settings.password || '' %>">
       </div>
     </div>
 
-    <h2 style="margin-top:1.5rem;">Features</h2>
+    <h2 style="margin-top:1.5rem;"><%= t('Features') %></h2>
     <div class="settings-field">
-      <label>Loxone &rarr; MQTT auto-create</label>
+      <label><%= t('Loxone → MQTT auto-create') %></label>
       <%- toggleSwitch('auto_create_enabled', gatewaySettings.auto_create_loxone_mappings) %>
       <p class="hint">
-        Off by default: an unrecognised token/topic sent from Loxone (HTTP or UDP) is rejected (404
-        or a log warning). On, the gateway creates a new passthrough mapping on the fly instead —
-        useful if you'd rather send topics directly from Loxone without pre-registering each one
-        here first, but a typo in Loxone Config will then silently create a stray mapping instead
-        of failing loudly.
+        <%= t('Off by default: an unrecognised token/topic sent from Loxone (HTTP or UDP) is rejected (404 or a log warning). On, the gateway creates a new passthrough mapping on the fly instead — useful if you\'d rather send topics directly from Loxone without pre-registering each one here first, but a typo in Loxone Config will then silently create a stray mapping instead of failing loudly.') %>
       </p>
     </div>
 
     <div class="settings-field">
-      <label>Per-device MQTT roles</label>
+      <label><%= t('Per-device MQTT roles') %></label>
       <%- toggleSwitch('auto_scope_device_roles_enabled', gatewaySettings.auto_scope_device_roles) %>
       <p class="hint">
-        Off by default: every new device account on <strong>Users (MQTT accounts)</strong> gets the
-        shared <code>client</code> role, with publish/subscribe on every topic. On, that page's Add
-        form gains a "Device topic prefix" field — filling it in creates a role scoped to just
-        <code>&lt;prefix&gt;/#</code> and assigns that instead, so a compromised device credential
-        can't read or write topics belonging to any other device. Leaving the prefix blank still
-        falls back to picking a role from the list, same as when this is off.
+        <%= t('Off by default: every new device account on') %> <strong><%= t('Users (MQTT accounts)') %></strong> <%= t('gets the shared') %> <code>client</code> <%= t('role, with publish/subscribe on every topic. On, that page\'s Add form gains a "Device topic prefix" field — filling it in creates a role scoped to just') %>
+        <code>&lt;prefix&gt;/#</code> <%= t('and assigns that instead, so a compromised device credential can\'t read or write topics belonging to any other device. Leaving the prefix blank still falls back to picking a role from the list, same as when this is off.') %>
       </p>
     </div>
 
     <div style="margin-top:0.9rem; display:flex; justify-content:flex-end;">
-      <button type="submit" class="btn-edit"><%- icon('edit') %> Save &amp; reconnect</button>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save & reconnect') %></button>
     </div>
   </form>
   <% } %>

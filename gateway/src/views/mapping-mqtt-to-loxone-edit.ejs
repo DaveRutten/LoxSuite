@@ -9,11 +9,11 @@
   <form method="post" action="/mappings/mqtt-to-loxone/<%= mapping.id %>/update">
     <div class="form-grid">
       <div>
-        <label>MQTT topic</label>
+        <label><%= t('MQTT topic') %></label>
         <input type="text" name="mqtt_topic" value="<%= mapping.mqtt_topic %>" required>
       </div>
       <div>
-        <label>Miniserver</label>
+        <label><%= t('Miniserver') %></label>
         <select name="miniserver_id" required>
           <% miniservers.forEach(ms => { %>
             <option value="<%= ms.id %>" <%= ms.id === mapping.miniserver_id ? 'selected' : '' %>><%= ms.name %></option>
@@ -21,44 +21,44 @@
         </select>
       </div>
       <div>
-        <label>Transport</label>
+        <label><%= t('Transport') %></label>
         <select name="transport">
-          <option value="http" <%= mapping.transport === 'http' ? 'selected' : '' %>>HTTP (Virtual Input)</option>
-          <option value="udp" <%= mapping.transport === 'udp' ? 'selected' : '' %>>UDP (Virtual Input)</option>
+          <option value="http" <%= mapping.transport === 'http' ? 'selected' : '' %>><%= t('HTTP (Virtual Input)') %></option>
+          <option value="udp" <%= mapping.transport === 'udp' ? 'selected' : '' %>><%= t('UDP (Virtual Input)') %></option>
         </select>
       </div>
       <div>
-        <label>Virtual input name <span class="hint" style="margin:0;display:inline;">(UDP: documentation only, not sent)</span></label>
+        <label><%= t('Virtual input name') %> <span class="hint" style="margin:0;display:inline;"><%= t('(UDP: documentation only, not sent)') %></span></label>
         <input type="text" name="target" list="target-suggestions" value="<%= mapping.target %>" required>
         <datalist id="target-suggestions">
-          <% targetSuggestions.forEach(t => { %><option value="<%= t %>"><% }) %>
+          <% targetSuggestions.forEach(tt => { %><option value="<%= tt %>"><% }) %>
         </datalist>
       </div>
       <div>
-        <label>Value transform</label>
+        <label><%= t('Value transform') %></label>
         <select name="value_transform">
-          <option value="passthrough" <%= mapping.value_transform === 'passthrough' ? 'selected' : '' %>>Pass through unchanged</option>
-          <option value="bool_on_off" <%= mapping.value_transform === 'bool_on_off' ? 'selected' : '' %>>on/off &rarr; 1/0</option>
-          <option value="json_path" <%= mapping.value_transform === 'json_path' ? 'selected' : '' %>>JSON path</option>
-          <option value="translation_table" <%= mapping.value_transform === 'translation_table' ? 'selected' : '' %>>Translation table (manage separately)</option>
+          <option value="passthrough" <%= mapping.value_transform === 'passthrough' ? 'selected' : '' %>><%= t('Pass through unchanged') %></option>
+          <option value="bool_on_off" <%= mapping.value_transform === 'bool_on_off' ? 'selected' : '' %>><%= t('on/off → 1/0') %></option>
+          <option value="json_path" <%= mapping.value_transform === 'json_path' ? 'selected' : '' %>><%= t('JSON path') %></option>
+          <option value="translation_table" <%= mapping.value_transform === 'translation_table' ? 'selected' : '' %>><%= t('Translation table (manage separately)') %></option>
         </select>
       </div>
       <div>
-        <label>Transform argument (e.g. JSON path "data.temp")</label>
+        <label><%= t('Transform argument (e.g. JSON path "data.temp")') %></label>
         <input type="text" name="transform_arg" value="<%= mapping.transform_arg || '' %>">
       </div>
       <div>
-        <label>Min. interval between updates (ms, 0 = off)</label>
+        <label><%= t('Min. interval between updates (ms, 0 = off)') %></label>
         <input type="number" name="min_interval_ms" value="<%= mapping.min_interval_ms %>" min="0">
       </div>
-      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
     </div>
   </form>
   <% } else { %>
-  <p class="hint">You don't have permission to edit this mapping.</p>
+  <p class="hint"><%= t('You don\'t have permission to edit this mapping.') %></p>
   <% } %>
 </div>
 
-<p><a href="/mappings/mqtt-to-loxone">&larr; Back to mappings</a></p>
+<p><a href="/mappings/mqtt-to-loxone"><%= t('← Back to mappings') %></a></p>
 
 <%- include('partials/foot') %>

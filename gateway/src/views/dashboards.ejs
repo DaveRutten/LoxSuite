@@ -1,9 +1,8 @@
 <%- include('partials/head', { pageTitle: 'My Dashboards', active: 'dashboards' }) %>
 
 <p class="hint">
-  Build your own dashboards out of the monitors you're tracking on the <a href="/monitor">Monitor</a>
-  page &mdash; charts, tables, or current-value tiles, arranged however you like. These are personal
-  to your account; other logged-in users have their own.
+  <%= t('Build your own dashboards out of the monitors you\'re tracking on the') %> <a href="/monitor"><%= t('Monitor') %></a>
+  <%= t('page — charts, tables, or current-value tiles, arranged however you like. These are personal to your account; other logged-in users have their own.') %>
 </p>
 
 <% if (error) { %>
@@ -11,18 +10,18 @@
 <% } %>
 
 <details class="add-panel">
-  <summary>Create dashboard</summary>
+  <summary><%= t('Create dashboard') %></summary>
   <div class="add-panel-body">
     <form method="post" action="/dashboards" class="form-grid">
-      <div><label>Name</label><input type="text" name="name" placeholder="e.g. Upstairs temperatures" required></div>
-      <button type="submit" class="primary"><%- icon('plus') %> Create</button>
+      <div><label><%= t('Name') %></label><input type="text" name="name" placeholder="<%= t('e.g. Upstairs temperatures') %>" required></div>
+      <button type="submit" class="primary"><%- icon('plus') %> <%= t('Create') %></button>
     </form>
   </div>
 </details>
 
 <div class="table-wrap">
   <table>
-    <thead><tr><th>Name</th><th>Panels</th><th>Actions</th></tr></thead>
+    <thead><tr><th><%= t('Name') %></th><th><%= t('Panels') %></th><th><%= t('Actions') %></th></tr></thead>
     <tbody>
       <% dashboards.forEach(d => { %>
         <tr>
@@ -32,15 +31,15 @@
           <td><%= d.panelCount %></td>
           <td>
             <div class="row-actions">
-              <a class="inline" href="/dashboards/<%= d.id %>"><button type="button" class="btn-soft"><%- icon('list') %> Open</button></a>
+              <a class="inline" href="/dashboards/<%= d.id %>"><button type="button" class="btn-soft"><%- icon('list') %> <%= t('Open') %></button></a>
               <form class="inline" method="post" action="/dashboards/<%= d.id %>/<%= d.isFavorited ? 'unfavorite' : 'favorite' %>">
                 <input type="hidden" name="redirect_to" value="/dashboards">
                 <button type="submit" class="btn-soft favorite-toggle-btn <%= d.isFavorited ? 'is-favorited' : '' %>" title="<%= d.isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>"><%- icon('star') %> <%= d.isFavorited ? 'Remove from favorite' : 'Add to favorite' %></button>
               </form>
-              <button type="button" class="btn-edit" data-toggle-row="dash-rename-<%= d.id %>"><%- icon('edit') %> Rename</button>
-              <button type="button" class="btn-edit" data-toggle-row="dash-share-<%= d.id %>"><%- icon('share') %> Share<%= d.shareCount > 0 ? ` (${d.shareCount})` : '' %></button>
-              <form class="inline" method="post" action="/dashboards/<%= d.id %>/delete" data-confirm="Delete this dashboard and all of its panels? Monitors themselves are not affected.">
-                <button type="submit" class="danger"><%- icon('trash') %> Delete</button>
+              <button type="button" class="btn-edit" data-toggle-row="dash-rename-<%= d.id %>"><%- icon('edit') %> <%= t('Rename') %></button>
+              <button type="button" class="btn-edit" data-toggle-row="dash-share-<%= d.id %>"><%- icon('share') %> <%= t('Share') %><%= d.shareCount > 0 ? ` (${d.shareCount})` : '' %></button>
+              <form class="inline" method="post" action="/dashboards/<%= d.id %>/delete" data-confirm="<%= t('Delete this dashboard and all of its panels? Monitors themselves are not affected.') %>">
+                <button type="submit" class="danger"><%- icon('trash') %> <%= t('Delete') %></button>
               </form>
             </div>
           </td>
@@ -48,9 +47,9 @@
         <tr class="expand-row" id="dash-rename-<%= d.id %>">
           <td colspan="3">
             <form method="post" action="/dashboards/<%= d.id %>/rename" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
-              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);">New name:</label>
+              <label style="margin:0; font-size:0.85rem; color:var(--text-muted);"><%= t('New name:') %></label>
               <input type="text" name="name" value="<%= d.name %>" required style="flex:1; min-width:8rem; max-width:24rem;">
-              <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+              <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
             </form>
           </td>
         </tr>
@@ -64,13 +63,13 @@
                       <span style="flex:1;"><%= s.name %></span>
                       <span class="badge badge-live <%= s.canEdit ? 'badge-ok' : 'badge-neutral' %>"><%= s.canEdit ? 'Editor' : 'Viewer' %></span>
                       <form class="inline" method="post" action="/dashboards/<%= d.id %>/share/<%= s.userId %>/remove">
-                        <button type="submit" class="icon-btn icon-btn-danger" title="Remove" aria-label="Remove"><%- icon('trash') %></button>
+                        <button type="submit" class="icon-btn icon-btn-danger" title="<%= t('Remove') %>" aria-label="<%= t('Remove') %>"><%- icon('trash') %></button>
                       </form>
                     </div>
                   <% }) %>
                 </div>
               <% } else { %>
-                <p class="hint" style="margin:0;">Not shared with anyone yet.</p>
+                <p class="hint" style="margin:0;"><%= t('Not shared with anyone yet.') %></p>
               <% } %>
               <% var sharedUserIds = shares[d.id].map(s => s.userId);
                  var candidateUsers = otherUsers.filter(u => sharedUserIds.indexOf(u.id) === -1); %>
@@ -89,17 +88,17 @@
                   </select>
                   <div style="display:flex; flex-direction:column; gap:0.4rem; align-self:center;">
                     <label style="margin:0; font-size:0.82rem; display:flex; align-items:center; gap:0.3rem;">
-                      <input type="checkbox" name="can_edit"> Can edit
+                      <input type="checkbox" name="can_edit"> <%= t('Can edit') %>
                     </label>
-                    <button type="submit" class="btn-edit"><%- icon('plus') %> Add<%- ' (Ctrl/Cmd-click for multiple)' %></button>
+                    <button type="submit" class="btn-edit"><%- icon('plus') %> <%= t('Add') %><%- ' (Ctrl/Cmd-click for multiple)' %></button>
                   </div>
                 </form>
               <% } else { %>
-                <p class="hint" style="margin:0;">Already shared with everyone else.</p>
+                <p class="hint" style="margin:0;"><%= t('Already shared with everyone else.') %></p>
               <% } %>
               <% if (currentUser && (currentUser.isAdmin || currentUser.permissions.dashboard_group_share?.edit)) { %>
                 <hr style="width:100%; border-color:var(--border); margin:0.2rem 0;">
-                <p class="hint" style="margin:0;">Groups (everyone with that Access Role):</p>
+                <p class="hint" style="margin:0;"><%= t('Groups (everyone with that Access Role):') %></p>
                 <% if (roleShares[d.id].length > 0) { %>
                   <div style="display:flex; flex-direction:column; gap:0.3rem;">
                     <% roleShares[d.id].forEach(rs => { %>
@@ -107,7 +106,7 @@
                         <span style="flex:1;"><%= rs.name %></span>
                         <span class="badge badge-live <%= rs.canEdit ? 'badge-ok' : 'badge-neutral' %>"><%= rs.canEdit ? 'Editor' : 'Viewer' %></span>
                         <form class="inline" method="post" action="/dashboards/<%= d.id %>/share-role/<%= rs.roleId %>/remove">
-                          <button type="submit" class="icon-btn icon-btn-danger" title="Remove" aria-label="Remove"><%- icon('trash') %></button>
+                          <button type="submit" class="icon-btn icon-btn-danger" title="<%= t('Remove') %>" aria-label="<%= t('Remove') %>"><%- icon('trash') %></button>
                         </form>
                       </div>
                     <% }) %>
@@ -124,9 +123,9 @@
                     </select>
                     <div style="display:flex; flex-direction:column; gap:0.4rem; align-self:center;">
                       <label style="margin:0; font-size:0.82rem; display:flex; align-items:center; gap:0.3rem;">
-                        <input type="checkbox" name="can_edit"> Can edit
+                        <input type="checkbox" name="can_edit"> <%= t('Can edit') %>
                       </label>
-                      <button type="submit" class="btn-edit"><%- icon('plus') %> Add group(s)</button>
+                      <button type="submit" class="btn-edit"><%- icon('plus') %> <%= t('Add group(s)') %></button>
                     </div>
                   </form>
                 <% } %>
@@ -136,17 +135,17 @@
         </tr>
       <% }) %>
       <% if (dashboards.length === 0) { %>
-        <tr><td colspan="3" class="empty">No dashboards yet &mdash; create one above.</td></tr>
+        <tr><td colspan="3" class="empty"><%= t('No dashboards yet — create one above.') %></td></tr>
       <% } %>
     </tbody>
   </table>
 </div>
 
 <% if (sharedWithMe.length > 0) { %>
-  <h3 style="margin-top:1.5rem;">Shared with me</h3>
+  <h3 style="margin-top:1.5rem;"><%= t('Shared with me') %></h3>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Name</th><th>Shared by</th><th>Panels</th><th>Access</th><th>Actions</th></tr></thead>
+      <thead><tr><th><%= t('Name') %></th><th><%= t('Shared by') %></th><th><%= t('Panels') %></th><th><%= t('Access') %></th><th><%= t('Actions') %></th></tr></thead>
       <tbody>
         <% sharedWithMe.forEach(d => { %>
           <tr>
@@ -158,7 +157,7 @@
             <td><span class="badge badge-live <%= d.canEdit ? 'badge-ok' : 'badge-neutral' %>"><%= d.canEdit ? 'Editor' : 'Viewer' %></span></td>
             <td>
               <div class="row-actions">
-                <a class="inline" href="/dashboards/<%= d.id %>"><button type="button" class="btn-soft"><%- icon('list') %> Open</button></a>
+                <a class="inline" href="/dashboards/<%= d.id %>"><button type="button" class="btn-soft"><%- icon('list') %> <%= t('Open') %></button></a>
                 <form class="inline" method="post" action="/dashboards/<%= d.id %>/<%= d.isFavorited ? 'unfavorite' : 'favorite' %>">
                   <input type="hidden" name="redirect_to" value="/dashboards">
                   <button type="submit" class="btn-soft favorite-toggle-btn <%= d.isFavorited ? 'is-favorited' : '' %>" title="<%= d.isFavorited ? 'Remove from favorite (Monitor → Favorite Dashboards)' : 'Add to favorite (Monitor → Favorite Dashboards)' %>"><%- icon('star') %> <%= d.isFavorited ? 'Remove from favorite' : 'Add to favorite' %></button>

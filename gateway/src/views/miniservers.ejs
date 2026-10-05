@@ -6,72 +6,61 @@
 
 <% if (canEdit('miniservers')) { %>
 <details class="add-panel">
-  <summary>Add Miniserver</summary>
+  <summary><%= t('Add Miniserver') %></summary>
   <div class="add-panel-body">
     <form method="post" action="/miniservers" id="add-ms-form">
       <div class="form-grid">
-        <div><label>Name</label><input type="text" name="name" required></div>
+        <div><label><%= t('Name') %></label><input type="text" name="name" required></div>
       </div>
       <div class="form-grid" style="margin-top:0.85rem;">
-        <div><label>Host / IP</label><input type="text" name="host" required></div>
-        <div><label>HTTP port</label><input type="number" name="http_port" value="80" required></div>
+        <div><label><%= t('Host / IP') %></label><input type="text" name="host" required></div>
+        <div><label><%= t('HTTP port') %></label><input type="number" name="http_port" value="80" required></div>
         <div>
-          <label>HTTPS</label>
+          <label><%= t('HTTPS') %></label>
           <%- toggleSwitch('use_https', false) %>
-          <p class="hint" style="margin:0.3rem 0 0;">Self-signed certificates are allowed.</p>
+          <p class="hint" style="margin:0.3rem 0 0;"><%= t('Self-signed certificates are allowed.') %></p>
         </div>
       </div>
       <div class="form-grid" style="margin-top:0.85rem;">
-        <div><label>Username</label><input type="text" name="username" required></div>
-        <div><label>Password</label><input type="password" name="password" required></div>
+        <div><label><%= t('Username') %></label><input type="text" name="username" required></div>
+        <div><label><%= t('Password') %></label><input type="password" name="password" required></div>
       </div>
 
-      <h2 style="margin-top:1.5rem;">Features</h2>
+      <h2 style="margin-top:1.5rem;"><%= t('Features') %></h2>
       <div class="form-grid">
-        <div><label>UDP port (optional)</label><input type="number" name="udp_port"></div>
+        <div><label><%= t('UDP port (optional)') %></label><input type="number" name="udp_port"></div>
         <div>
-          <label>External URL (optional)</label>
+          <label><%= t('External URL (optional)') %></label>
           <input type="text" name="external_url" placeholder="https://myhome.dyndns.org:8080">
         </div>
       </div>
       <p class="hint" style="margin-top:0.5rem;">
-        <strong>UDP port</strong> is the port <em>on the Miniserver itself</em> that Loxone listens
-        on for Virtual UDP Output commands sent by this gateway (configured in Loxone Config's
-        Virtual UDP Output, not here) &mdash; purely outbound from the gateway's side, so nothing
-        needs to change in <code>docker-compose.yml</code> for it. That file's own
-        <code>11885/udp</code> mapping is a separate, single, global port this gateway listens on
-        for the opposite direction (Loxone &rarr; gateway), configured once for every Miniserver at
-        once (see the Loxone &rarr; MQTT mappings page), not per Miniserver here.
-        <strong>External URL</strong> is used as a fallback whenever the local Host/IP can't be
-        reached (e.g. from outside the home network) &mdash; Monitor polling, Common commands, log
-        fetching and "Test" all try it automatically if the local address fails.
+        <strong><%= t('UDP port') %></strong> <%= t('is the port') %> <em><%= t('on the Miniserver itself') %></em> <%= t('that Loxone listens on for Virtual UDP Output commands sent by this gateway (configured in Loxone Config\'s Virtual UDP Output, not here) — purely outbound from the gateway\'s side, so nothing needs to change in') %> <code>docker-compose.yml</code> <%= t('for it. That file\'s own') %>
+        <code>11885/udp</code> <%= t('mapping is a separate, single, global port this gateway listens on for the opposite direction (Loxone → gateway), configured once for every Miniserver at once (see the Loxone → MQTT mappings page), not per Miniserver here.') %>
+        <strong><%= t('External URL') %></strong> <%= t('is used as a fallback whenever the local Host/IP can\'t be reached (e.g. from outside the home network) — Monitor polling, Common commands, log fetching and "Test" all try it automatically if the local address fails.') %>
       </p>
 
-      <h2 style="margin-top:1.5rem;">Gateway Client setup (optional)</h2>
+      <h2 style="margin-top:1.5rem;"><%= t('Gateway Client setup (optional)') %></h2>
       <div class="form-grid">
         <div>
-          <label>This Miniserver is a Gateway</label>
+          <label><%= t('This Miniserver is a Gateway') %></label>
           <%- toggleSwitch('is_gateway', false, { id: 'add-ms-is-gateway' }) %>
         </div>
       </div>
       <p class="hint" style="margin-top:0.5rem;">
-        Turn this on if this Miniserver is a
-        <a href="https://www.loxone.com/enen/kb/gateway-client/" target="_blank" rel="noopener">Gateway</a>
-        managing one or more Client Miniservers that share its merged Loxone Config project. Each
-        Client below is added as its own Miniserver here too (everything in LoxSuite &mdash;
-        Monitor, Mappings, Hardware, ...&mdash; still talks to it directly over its own Host/IP) but
-        reuses this Gateway's Username/Password, since Loxone requires identical credentials across
-        the whole group &mdash; just give each one its own Name and Host/IP.
+        <%= t('Turn this on if this Miniserver is a') %>
+        <a href="https://www.loxone.com/enen/kb/gateway-client/" target="_blank" rel="noopener"><%= t('Gateway') %></a>
+        <%= t('managing one or more Client Miniservers that share its merged Loxone Config project. Each Client below is added as its own Miniserver here too (everything in LoxSuite — Monitor, Mappings, Hardware, ...— still talks to it directly over its own Host/IP) but reuses this Gateway\'s Username/Password, since Loxone requires identical credentials across the whole group — just give each one its own Name and Host/IP.') %>
       </p>
       <div id="add-ms-clients-header" class="client-rows-header" hidden>
-        <div>Client Name</div><div>Host / IP</div><div>HTTP port</div><div>HTTPS</div><div></div>
+        <div><%= t('Client Name') %></div><div><%= t('Host / IP') %></div><div><%= t('HTTP port') %></div><div><%= t('HTTPS') %></div><div></div>
       </div>
       <div id="add-ms-clients-list"></div>
-      <button type="button" id="add-ms-client-row-btn" class="btn-soft" hidden><%- icon('plus') %> Add Client Miniserver</button>
+      <button type="button" id="add-ms-client-row-btn" class="btn-soft" hidden><%- icon('plus') %> <%= t('Add Client Miniserver') %></button>
 
       <div class="btn-row" style="margin-top:0.9rem;">
-        <button type="button" id="add-ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
-        <button type="submit" class="primary"><%- icon('plus') %> Add</button>
+        <button type="button" id="add-ms-test-btn" class="btn-test"><%- icon('refresh') %> <%= t('Test') %></button>
+        <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add') %></button>
       </div>
       <input type="hidden" name="clients_json" id="add-ms-clients-json">
       <div id="add-ms-test-result" style="margin-top:0.6rem;"></div>
@@ -94,7 +83,7 @@
   <div class="table-toolbar">
     <button type="button" class="btn-soft" id="ms-collapse-all-btn" hidden></button>
     <div class="columns-menu columns-menu-inline" id="ms-columns-menu">
-      <button type="button" class="btn-soft" id="ms-columns-btn"><%- icon('columns') %> Columns</button>
+      <button type="button" class="btn-soft" id="ms-columns-btn"><%- icon('columns') %> <%= t('Columns') %></button>
       <div class="columns-menu-panel" id="ms-columns-panel" hidden></div>
     </div>
   </div>
@@ -104,7 +93,7 @@
 </div>
 
 <dialog id="ms-diag-dialog" class="update-changelog-dialog ms-diag-dialog-wide">
-  <h2 id="ms-diag-dialog-title">Diagnostics</h2>
+  <h2 id="ms-diag-dialog-title"><%= t('Diagnostics') %></h2>
   <div class="ms-diagnostics-card" style="border-width:1px;">
     <div class="ms-diagnostics" id="ms-diag-dialog-stats"></div>
   </div>
@@ -112,7 +101,7 @@
   <div class="ms-update-result" id="ms-diag-dialog-result" style="margin-top:0.6rem;"></div>
   <p class="hint" id="ms-diag-dialog-hint" style="margin-top:0.6rem; margin-bottom:0;"></p>
   <div style="display:flex; justify-content:flex-end; margin-top:0.9rem;">
-    <button type="button" class="btn-soft" id="ms-diag-dialog-close">Close</button>
+    <button type="button" class="btn-soft" id="ms-diag-dialog-close"><%= t('Close') %></button>
   </div>
 </dialog>
 

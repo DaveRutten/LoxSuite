@@ -335,7 +335,7 @@ async function loadSecurityPageData(req) {
     gatewaySettings: await db.prepare('SELECT * FROM gateway_settings WHERE id = 1').get(),
     proxyTrustMisconfigured: proxyTrustMisconfigured(req),
     geoBlock: await geoBlock.loadSettings(),
-    countries: listCountries(),
+    countries: listCountries(require('../i18n').localeOf(req.lang)),
   };
 }
 

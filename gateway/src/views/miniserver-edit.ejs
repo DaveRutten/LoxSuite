@@ -4,62 +4,57 @@
   <p class="error"><%= error %></p>
 <% } %>
 <% if (saved) { %>
-  <p class="hint" style="color: var(--success);">Saved.</p>
+  <p class="hint" style="color: var(--success);"><%= t('Saved.') %></p>
 <% } %>
 <% if (authorized) { %>
-  <p class="hint" style="color: var(--success);">Authorized.</p>
+  <p class="hint" style="color: var(--success);"><%= t('Authorized.') %></p>
 <% } %>
 
 <% if (canEdit('miniservers')) { %>
 <div class="card">
   <form method="post" action="/miniservers/<%= miniserver.id %>/update" id="edit-ms-form">
     <div class="form-grid">
-      <div><label>Name</label><input type="text" name="name" value="<%= miniserver.name %>" required></div>
+      <div><label><%= t('Name') %></label><input type="text" name="name" value="<%= miniserver.name %>" required></div>
     </div>
     <div class="form-grid" style="margin-top:0.85rem;">
-      <div><label>Host / IP</label><input type="text" name="host" value="<%= miniserver.host %>" required></div>
-      <div><label>HTTP port</label><input type="number" name="http_port" value="<%= miniserver.http_port %>" required></div>
+      <div><label><%= t('Host / IP') %></label><input type="text" name="host" value="<%= miniserver.host %>" required></div>
+      <div><label><%= t('HTTP port') %></label><input type="number" name="http_port" value="<%= miniserver.http_port %>" required></div>
       <div>
-        <label>HTTPS</label>
+        <label><%= t('HTTPS') %></label>
         <%- toggleSwitch('use_https', miniserver.use_https) %>
-        <p class="hint" style="margin:0.3rem 0 0;">Self-signed certificates are allowed.</p>
+        <p class="hint" style="margin:0.3rem 0 0;"><%= t('Self-signed certificates are allowed.') %></p>
       </div>
     </div>
     <div class="form-grid" style="margin-top:0.85rem;">
-      <div><label>Username</label><input type="text" name="username" value="<%= miniserver.username %>" required></div>
+      <div><label><%= t('Username') %></label><input type="text" name="username" value="<%= miniserver.username %>" required></div>
       <div>
-        <label>Password</label>
-        <input type="password" name="password" placeholder="Leave blank to keep the current password">
+        <label><%= t('Password') %></label>
+        <input type="password" name="password" placeholder="<%= t('Leave blank to keep the current password') %>">
       </div>
     </div>
 
-    <h2 style="margin-top:1.5rem;">Features</h2>
+    <h2 style="margin-top:1.5rem;"><%= t('Features') %></h2>
     <div class="form-grid">
-      <div><label>UDP port (optional)</label><input type="number" name="udp_port" value="<%= miniserver.udp_port || '' %>"></div>
+      <div><label><%= t('UDP port (optional)') %></label><input type="number" name="udp_port" value="<%= miniserver.udp_port || '' %>"></div>
       <div>
-        <label>External URL (optional)</label>
+        <label><%= t('External URL (optional)') %></label>
         <input type="text" name="external_url" value="<%= miniserver.external_url || '' %>" placeholder="https://myhome.dyndns.org:8080">
       </div>
     </div>
     <p class="hint" style="margin-top:0.5rem;">
-      <strong>UDP port</strong> is the port <em>on the Miniserver itself</em> that Loxone listens on
-      for Virtual UDP Output commands sent by this gateway (configured in Loxone Config's Virtual
-      UDP Output, not here) &mdash; purely outbound from the gateway's side, so nothing needs to
-      change in <code>docker-compose.yml</code> for it. <strong>External URL</strong> is tried
-      automatically whenever the local Host/IP can't be reached, so this Miniserver stays usable
-      both at home and remotely.
+      <strong><%= t('UDP port') %></strong> <%= t('is the port') %> <em><%= t('on the Miniserver itself') %></em> <%= t('that Loxone listens on for Virtual UDP Output commands sent by this gateway (configured in Loxone Config\'s Virtual UDP Output, not here) — purely outbound from the gateway\'s side, so nothing needs to change in') %> <code>docker-compose.yml</code> <%= t('for it.') %> <strong><%= t('External URL') %></strong> <%= t('is tried automatically whenever the local Host/IP can\'t be reached, so this Miniserver stays usable both at home and remotely.') %>
     </p>
 
-    <h2 style="margin-top:1.5rem;">Gateway Client setup (optional)</h2>
+    <h2 style="margin-top:1.5rem;"><%= t('Gateway Client setup (optional)') %></h2>
     <div class="form-grid">
       <div>
-        <label>This Miniserver is a Client of another Gateway</label>
+        <label><%= t('This Miniserver is a Client of another Gateway') %></label>
         <%- toggleSwitch('is_client', !!miniserver.gateway_client_of, { id: 'edit-ms-is-client' }) %>
       </div>
     </div>
     <div class="form-grid" style="margin-top:0.6rem;" id="edit-ms-gateway-of-wrap" <%= miniserver.gateway_client_of ? '' : 'hidden' %>>
       <div>
-        <label>Gateway</label>
+        <label><%= t('Gateway') %></label>
         <select name="gateway_client_of">
           <% otherMiniservers.forEach(ms => { %>
             <option value="<%= ms.id %>" <%= miniserver.gateway_client_of === ms.id ? 'selected' : '' %>><%= ms.name %></option>
@@ -68,34 +63,30 @@
       </div>
     </div>
     <p class="hint" style="margin-top:0.5rem;">
-      Turn this on when this Miniserver is a
-      <a href="https://www.loxone.com/enen/kb/gateway-client/" target="_blank" rel="noopener">Gateway Client</a>
-      of another one &mdash; a Client shares its Gateway's own merged Loxone Config project rather
-      than running a fully separate one of its own. One practical effect: a shared Audioserver and
-      its Stereo Extensions can show up in both Miniservers' own hardware status. The
-      <a href="/hardware">Hardware page</a> already drops that duplicate listing automatically
-      (matched by Serial/MAC); turning this on just makes the Gateway/Client relationship itself
-      explicit, and prefers keeping the Gateway's own copy over the Client's.
+      <%= t('Turn this on when this Miniserver is a') %>
+      <a href="https://www.loxone.com/enen/kb/gateway-client/" target="_blank" rel="noopener"><%= t('Gateway Client') %></a>
+      <%= t('of another one — a Client shares its Gateway\'s own merged Loxone Config project rather than running a fully separate one of its own. One practical effect: a shared Audioserver and its Stereo Extensions can show up in both Miniservers\' own hardware status. The') %>
+      <a href="/hardware"><%= t('Hardware page') %></a> <%= t('already drops that duplicate listing automatically (matched by Serial/MAC); turning this on just makes the Gateway/Client relationship itself explicit, and prefers keeping the Gateway\'s own copy over the Client\'s.') %>
     </p>
 
-    <h2 style="margin-top:1.5rem;">AI Assistant (optional)</h2>
+    <h2 style="margin-top:1.5rem;"><%= t('AI Assistant (optional)') %></h2>
     <div class="form-grid">
       <div>
-        <label>Enabled for this Miniserver</label>
+        <label><%= t('Enabled for this Miniserver') %></label>
         <%- toggleSwitch('ai_enabled', miniserver.ai_enabled, { id: 'edit-ms-ai-enabled' }) %>
       </div>
     </div>
     <div class="form-grid" style="margin-top:0.6rem;" id="edit-ms-ai-properties-wrap" <%= miniserver.ai_enabled ? '' : 'hidden' %>>
       <div>
-        <label>Allow the assistant to send commands</label>
+        <label><%= t('Allow the assistant to send commands') %></label>
         <%- toggleSwitch('ai_allow_write_commands', miniserver.ai_allow_write_commands) %>
       </div>
       <div>
-        <label>MCP URL override (optional)</label>
-        <input type="text" name="mcp_url" value="<%= miniserver.mcp_url || '' %>" placeholder="Auto-detected from Host/IP + /mcp">
+        <label><%= t('MCP URL override (optional)') %></label>
+        <input type="text" name="mcp_url" value="<%= miniserver.mcp_url || '' %>" placeholder="<%= t('Auto-detected from Host/IP + /mcp') %>">
       </div>
       <div>
-        <label>MCP connection</label>
+        <label><%= t('MCP connection') %></label>
         <%
           // Button comes right after the label — same row as the sibling cells' own toggle/input —
           // with the status line below it, same "control, then a short line about it" order as
@@ -118,7 +109,7 @@
             // first, forcing a truly fresh login every time.
           %>
           <a href="/miniservers/<%= miniserver.id %>/mcp/restart-login" class="btn-soft">
-            <%- icon('refresh') %> Start new login
+            <%- icon('refresh') %> <%= t('Start new login') %>
           </a>
         <% } %>
         <%
@@ -129,33 +120,25 @@
         %>
         <p style="margin:0.35rem 0 0; color:var(--text-muted); font-size:0.85rem;">
           <% if (miniserver.mcp_access_token) { %>
-            Authorized<% if (miniserver.mcp_authorized_by) { %> by <strong><%= miniserver.mcp_authorized_by %></strong><% } %>.
+            <%= t('Authorized') %><% if (miniserver.mcp_authorized_by) { %> by <strong><%= miniserver.mcp_authorized_by %></strong><% } %>.
           <% } else { %>
-            Not yet authorized.
+            <%= t('Not yet authorized.') %>
           <% } %>
         </p>
       </div>
     </div>
     <p class="hint" style="margin-top:0.5rem;">
-      Requires the MCP Server plugin enabled in Loxone Config, and the global AI provider turned
-      on under <a href="/admin/ai">Administration &gt; AI Assistant</a>. Loxone recommends a
-      separate, minimally-privileged Loxone user account dedicated to the assistant rather than
-      reusing this Miniserver's own login above. <strong>Allow the assistant to send commands</strong>
-      defaults off, independent of whatever Read/Write access that Loxone user itself has &mdash;
-      leave it off for a read-only assistant that can only report on the installation.
-      <strong>Save first</strong> if you just changed anything above &mdash; Authorize navigates
-      away from this page without saving unsaved changes, same as Test below.
-      <strong>Authorize over HTTPS</strong>: Loxone's cloud rejects the login redirect unless
-      you're visiting LoxSuite over HTTPS (or literally at http://localhost) &mdash; open this same
-      page at <code>https://&lt;this host&gt;:5583/...</code> (self-signed; your browser will show a
-      one-time certificate warning) before clicking Authorize/Re-authorize/Start new login.
+      <%= t('Requires the MCP Server plugin enabled in Loxone Config, and the global AI provider turned on under') %> <a href="/admin/ai"><%= t('Administration > AI Assistant') %></a><%= t('. Loxone recommends a separate, minimally-privileged Loxone user account dedicated to the assistant rather than reusing this Miniserver\'s own login above.') %> <strong><%= t('Allow the assistant to send commands') %></strong>
+      <%= t('defaults off, independent of whatever Read/Write access that Loxone user itself has — leave it off for a read-only assistant that can only report on the installation.') %>
+      <strong><%= t('Save first') %></strong> <%= t('if you just changed anything above — Authorize navigates away from this page without saving unsaved changes, same as Test below.') %>
+      <strong><%= t('Authorize over HTTPS') %></strong><%= t(': Loxone\'s cloud rejects the login redirect unless you\'re visiting LoxSuite over HTTPS (or literally at http://localhost) — open this same page at') %> <code>https://&lt;this host&gt;:5583/...</code> <%= t('(self-signed; your browser will show a one-time certificate warning) before clicking Authorize/Re-authorize/Start new login.') %>
     </p>
     <% if (miniserver.mcp_last_error) { %>
       <%
         // Not a .hint either, same reasoning as the "Authorized by" status above — an error is
         // never something the declutter preference should be able to hide.
       %>
-      <p style="margin-top:0.5rem; color:var(--danger); font-size:0.85rem;">Last MCP connection error: <%= miniserver.mcp_last_error %></p>
+      <p style="margin-top:0.5rem; color:var(--danger); font-size:0.85rem;"><%= t('Last MCP connection error:') %> <%= miniserver.mcp_last_error %></p>
     <% } %>
 
     <%
@@ -169,19 +152,15 @@
       // still offering to manage clients of its own.
     %>
     <div id="edit-ms-clients-section" <%= miniserver.gateway_client_of ? 'hidden' : '' %>>
-      <h2 style="margin-top:1.5rem;">Client Miniservers</h2>
+      <h2 style="margin-top:1.5rem;"><%= t('Client Miniservers') %></h2>
       <p class="hint">
-        Client Miniservers that share <strong><%= miniserver.name %></strong>'s own merged Loxone
-        Config project (see the Gateway Client link above) &mdash; each reuses this Miniserver's own
-        Username/Password, since Loxone requires identical credentials across the whole group.
-        Removing a row here just unlinks it (it goes back to being a standalone Miniserver, still
-        listed on the Miniservers page) rather than deleting it.
+        <%= t('Client Miniservers that share') %> <strong><%= miniserver.name %></strong><%= t('\'s own merged Loxone Config project (see the Gateway Client link above) — each reuses this Miniserver\'s own Username/Password, since Loxone requires identical credentials across the whole group. Removing a row here just unlinks it (it goes back to being a standalone Miniserver, still listed on the Miniservers page) rather than deleting it.') %>
       </p>
       <div class="client-rows-header" <%= existingClients.length ? '' : 'hidden' %> id="edit-ms-clients-header">
-        <div>Client Name</div><div>Host / IP</div><div>HTTP port</div><div>HTTPS</div><div></div>
+        <div><%= t('Client Name') %></div><div><%= t('Host / IP') %></div><div><%= t('HTTP port') %></div><div><%= t('HTTPS') %></div><div></div>
       </div>
       <div id="edit-ms-clients-list"></div>
-      <button type="button" id="edit-ms-client-row-btn" class="btn-soft"><%- icon('plus') %> Add Client Miniserver</button>
+      <button type="button" id="edit-ms-client-row-btn" class="btn-soft"><%- icon('plus') %> <%= t('Add Client Miniserver') %></button>
       <input type="hidden" name="clients_json" id="edit-ms-clients-json">
     </div>
 
@@ -192,16 +171,16 @@
     %>
     <div class="btn-row" style="margin-top:0.9rem;">
       <div id="edit-ms-test-result" style="flex:1; min-width:0;"></div>
-      <button type="button" id="edit-ms-test-btn" class="btn-test"><%- icon('refresh') %> Test</button>
-      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+      <button type="button" id="edit-ms-test-btn" class="btn-test"><%- icon('refresh') %> <%= t('Test') %></button>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
     </div>
   </form>
 </div>
 <% } else { %>
-  <p class="hint">Your Access Role doesn't have permission to edit Miniservers.</p>
+  <p class="hint"><%= t('Your Access Role doesn\'t have permission to edit Miniservers.') %></p>
 <% } %>
 
-<p><a href="/miniservers">&larr; Back to Miniservers</a></p>
+<p><a href="/miniservers"><%= t('← Back to Miniservers') %></a></p>
 
 <script>
   (function () {

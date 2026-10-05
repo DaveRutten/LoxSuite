@@ -5,8 +5,7 @@
 <% } %>
 
 <p class="hint">
-  The token/callback URL stays the same unless you change it below &mdash; changing it means
-  updating the command/URL configured in Loxone Config too.
+  <%= t('The token/callback URL stays the same unless you change it below — changing it means updating the command/URL configured in Loxone Config too.') %>
 </p>
 
 <div class="card">
@@ -14,20 +13,19 @@
   <form method="post" action="/mappings/loxone-to-mqtt/<%= mapping.id %>/update">
     <div class="form-grid">
       <div>
-        <label>Token</label>
+        <label><%= t('Token') %></label>
         <input type="text" name="token" value="<%= mapping.token %>" required>
         <p class="hint" style="margin:0.3rem 0 0;">
-          The identifier used in the callback URL / UDP message. Defaults to a random string, but
-          you can set it to something readable (e.g. the topic itself) if you'd rather send
-          <code>&lt;your-token&gt;=\v</code> from Loxone than the generated one.
+          <%= t('The identifier used in the callback URL / UDP message. Defaults to a random string, but you can set it to something readable (e.g. the topic itself) if you\'d rather send') %>
+          <code>&lt;your-token&gt;=\v</code> <%= t('from Loxone than the generated one.') %>
         </p>
       </div>
       <div>
-        <label>MQTT topic</label>
+        <label><%= t('MQTT topic') %></label>
         <input type="text" name="mqtt_topic" value="<%= mapping.mqtt_topic %>" required>
       </div>
       <div>
-        <label>Miniserver (informational)</label>
+        <label><%= t('Miniserver (informational)') %></label>
         <select name="miniserver_id">
           <option value="">-</option>
           <% miniservers.forEach(ms => { %>
@@ -36,14 +34,14 @@
         </select>
       </div>
       <div>
-        <label>Transport</label>
+        <label><%= t('Transport') %></label>
         <select name="transport">
-          <option value="http" <%= mapping.transport === 'http' ? 'selected' : '' %>>HTTP (Virtual Output)</option>
-          <option value="udp" <%= mapping.transport === 'udp' ? 'selected' : '' %>>UDP (Virtual Output)</option>
+          <option value="http" <%= mapping.transport === 'http' ? 'selected' : '' %>><%= t('HTTP (Virtual Output)') %></option>
+          <option value="udp" <%= mapping.transport === 'udp' ? 'selected' : '' %>><%= t('UDP (Virtual Output)') %></option>
         </select>
       </div>
       <div>
-        <label>QoS</label>
+        <label><%= t('QoS') %></label>
         <select name="qos">
           <option value="0" <%= mapping.qos === 0 ? 'selected' : '' %>>0</option>
           <option value="1" <%= mapping.qos === 1 ? 'selected' : '' %>>1</option>
@@ -51,46 +49,44 @@
         </select>
       </div>
       <div>
-        <label>Retain</label>
+        <label><%= t('Retain') %></label>
         <%- toggleSwitch('retain', mapping.retain) %>
       </div>
       <div>
-        <label>Value transform</label>
+        <label><%= t('Value transform') %></label>
         <select name="value_transform" id="value-transform-select">
-          <option value="passthrough" <%= mapping.value_transform === 'passthrough' ? 'selected' : '' %>>Pass through unchanged</option>
+          <option value="passthrough" <%= mapping.value_transform === 'passthrough' ? 'selected' : '' %>><%= t('Pass through unchanged') %></option>
           <%
             // See mappings-loxone-to-mqtt.ejs's own Add form comment on this option — behaves
             // exactly like "Pass through unchanged" server-side, just gets the Test dialog's 0-100%
             // slider instead of a plain text box.
           %>
-          <option value="dimmer" <%= mapping.value_transform === 'dimmer' ? 'selected' : '' %>>Dimmer (0-100%)</option>
-          <option value="translation_table" <%= mapping.value_transform === 'translation_table' ? 'selected' : '' %>>Translation table (manage separately)</option>
-          <option value="shelly_rgbw" <%= mapping.value_transform === 'shelly_rgbw' ? 'selected' : '' %>>Shelly RGBW/White (color/N/set JSON)</option>
+          <option value="dimmer" <%= mapping.value_transform === 'dimmer' ? 'selected' : '' %>><%= t('Dimmer (0-100%)') %></option>
+          <option value="translation_table" <%= mapping.value_transform === 'translation_table' ? 'selected' : '' %>><%= t('Translation table (manage separately)') %></option>
+          <option value="shelly_rgbw" <%= mapping.value_transform === 'shelly_rgbw' ? 'selected' : '' %>><%= t('Shelly RGBW/White (color/N/set JSON)') %></option>
         </select>
       </div>
       <div id="shelly-rgbw-mode-field" style="<%= mapping.value_transform === 'shelly_rgbw' ? '' : 'display:none;' %>">
-        <label>Shelly RGBW mode</label>
+        <label><%= t('Shelly RGBW mode') %></label>
         <select name="transform_arg">
-          <option value="rgb" <%= mapping.transform_arg === 'rgb' ? 'selected' : '' %>>RGB (from Loxone's RGB output, "H,S,V")</option>
-          <option value="rgb-percent" <%= mapping.transform_arg === 'rgb-percent' ? 'selected' : '' %>>RGB (Loxone's Analog input RGB, "R+G*1000+B*1000000")</option>
-          <option value="white" <%= mapping.transform_arg === 'white' ? 'selected' : '' %>>White (0-100%)</option>
-          <option value="tunablew" <%= mapping.transform_arg === 'tunablew' ? 'selected' : '' %>>Tunable white (from Loxone Lumitech, "brightness,kelvin")</option>
+          <option value="rgb" <%= mapping.transform_arg === 'rgb' ? 'selected' : '' %>><%= t('RGB (from Loxone\'s RGB output, "H,S,V")') %></option>
+          <option value="rgb-percent" <%= mapping.transform_arg === 'rgb-percent' ? 'selected' : '' %>><%= t('RGB (Loxone\'s Analog input RGB, "R+G*1000+B*1000000")') %></option>
+          <option value="white" <%= mapping.transform_arg === 'white' ? 'selected' : '' %>><%= t('White (0-100%)') %></option>
+          <option value="tunablew" <%= mapping.transform_arg === 'tunablew' ? 'selected' : '' %>><%= t('Tunable white (from Loxone Lumitech, "brightness,kelvin")') %></option>
         </select>
         <p class="hint" style="margin:0.3rem 0 0;">
-          For an RGBW2/Bulb in color mode. RGB and White/Tunable-white are two separate Loxone
-          outputs each with their own mapping to this same topic — set up one mapping per output
-          you actually use. See Help for the exact Loxone output each mode expects.
+          <%= t('For an RGBW2/Bulb in color mode. RGB and White/Tunable-white are two separate Loxone outputs each with their own mapping to this same topic — set up one mapping per output you actually use. See Help for the exact Loxone output each mode expects.') %>
         </p>
       </div>
-      <button type="submit" class="btn-edit"><%- icon('edit') %> Save</button>
+      <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
     </div>
   </form>
   <% } else { %>
-  <p class="hint">You don't have permission to edit this mapping.</p>
+  <p class="hint"><%= t('You don\'t have permission to edit this mapping.') %></p>
   <% } %>
 </div>
 
-<p><a href="/mappings/loxone-to-mqtt">&larr; Back to mappings</a></p>
+<p><a href="/mappings/loxone-to-mqtt"><%= t('← Back to mappings') %></a></p>
 
 <script>
   (function () {
