@@ -107,3 +107,28 @@ test('cost per km and the consumption to plan with', () => {
   assert.equal(effectiveKwhPerKm({}, 0.2), 0.2);
   assert.equal(effectiveKwhPerKm(null, 0.25), 0.25);
 });
+
+test('weekPattern: per weekday how often, how far and when back; kmToday', () => {
+  const { weekPattern, kmToday } = require('../src/driving');
+  const tz = 'Europe/Amsterdam';
+  // Four Mondays: out 07:30–08:00 (local) and back 17:00–17:40, 40 km a day; one Tuesday 10 km.
+  const trips = [];
+  for (let w = 0; w < 4; w++) {
+    const mon = Date.parse('2026-09-07T05:30:00Z') + w * 7 * 86400000; // 07:30 local
+    trips.push({ start: mon, end: mon + 30 * 60000, km: 20 });
+    trips.push({ start: mon + 9.5 * 3600000, end: mon + 10.17 * 3600000, km: 20 });
+  }
+  trips.push({ start: Date.parse('2026-09-08T12:00:00Z'), end: Date.parse('2026-09-08T12:30:00Z'), km: 10 });
+  const nowMs = Date.parse('2026-10-05T10:00:00Z'); // Monday noon local
+  trips.push({ start: Date.parse('2026-10-05T05:40:00Z'), end: Date.parse('2026-10-05T06:10:00Z'), km: 18 });
+  const p = weekPattern(trips, { tz, nowMs, firstMs: Date.parse('2026-09-07T00:00:00Z') });
+  assert.equal(p[0].key, 'mon');
+  assert.equal(p[0].drivenDays, 4, 'today is not part of the pattern');
+  assert.equal(p[0].days, 4);
+  assert.equal(p[0].usual, true);
+  assert.equal(p[0].kmMedian, 40);
+  assert.equal(p[0].back, '17:40');
+  assert.equal(p[1].drivenDays, 1);
+  assert.equal(p[1].usual, false);
+  assert.equal(kmToday(trips, { tz, nowMs }), 18);
+});

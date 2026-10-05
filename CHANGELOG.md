@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.32.0-alpha.1] - 2026-10-05
+
+### Added
+- **Smart charging plans from when the car is expected home.** While the car is out, the plan starts at the time
+  it is expected back: an appointment with the car that is going on now (its end + travel time), else the
+  learned weekday pattern (end of the last trip of the day from the odometer, or the usual plug-in time). The
+  page shows *Expected home*, a blue line in the chart, and below the plan what it would do if the car came home
+  now (or another car were plugged in), outlined in the chart. Plugging in always re-plans from that moment.
+- **Learning from the odometer.** Per weekday: on how many days the car is driven, how far (usual and long
+  day), when it leaves and when it is back — over the last 8 weeks (Wallbox → Learned, *Driving per weekday*).
+  While the car is out, the km it usually still drives that day are added to what it needs; a car without a
+  state of charge is estimated from the usual km of that weekday.
+- **Fold cards away.** Every card with a title has a chevron; a folded card shows only its title. Remembered on
+  that device/browser, so phone and PC each keep their own layout.
+- **Long explanations on one line.** With help text off (the lightbulb in the top bar, off by default and
+  remembered per device), long explanations show as one line with ⓘ: hover for the whole text, click to unfold.
+  Lightbulb on shows them in full.
+
+### Fixed
+- The plan said "grid" while there was solar: the solar part of intervals where solar is below the Wallbox
+  minimum is now counted and shown (e.g. "11,0 kWh (2,9 ☀ + 8,1 ⚡)", yellow part in the bars), with a note why
+  the rest comes from the grid.
+- Leftover English on the planner and Learned page ("Plan: … interval(s) … expected", "ready 09:35",
+  "learned wed departure (medium)", "Monday morning").
+
 ## [0.31.1-alpha.1] - 2026-10-05
 
 ### Changed

@@ -276,6 +276,13 @@
   ]
  },
  {
+  "key": "· about {0} km more today (learned: {1} km on a {2})",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
   "key": "· advise only",
   "module": "charging",
   "where": [
@@ -550,13 +557,6 @@
   ]
  },
  {
-  "key": "({0} kWh solar)",
-  "module": "charging",
-  "where": [
-   "planner (script)"
-  ]
- },
- {
   "key": "({0} ms)",
   "module": "ocpp",
   "where": [
@@ -592,7 +592,7 @@
   ]
  },
  {
-  "key": "(charging straight away: {0} avg. — saves {1})",
+  "key": "(charging straight away: {0} average — saves {1})",
   "module": "charging",
   "where": [
    "planner (script)"
@@ -823,13 +823,6 @@
   "module": "charging",
   "where": [
    "src/chargeLog.js"
-  ]
- },
- {
-  "key": "{0} · avg.",
-  "module": "charging",
-  "where": [
-   "planner (script)"
   ]
  },
  {
@@ -1097,6 +1090,13 @@
   ]
  },
  {
+  "key": "{0} kWh solar, {1} kWh grid",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "{0} kWh/day, about {1} kW while running",
   "module": "energy_manager",
   "where": [
@@ -1225,7 +1225,7 @@
   ]
  },
  {
-  "key": "{0}–{1} {2} kWh {3}",
+  "key": "{0}–{1} {2} kWh{3}",
   "module": "charging",
   "where": [
    "planner (script)"
@@ -1458,10 +1458,24 @@
   ]
  },
  {
+  "key": "≈ kWh",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "● failing",
   "module": "vehicles",
   "where": [
    "vehicle-edit (script)"
+  ]
+ },
+ {
+  "key": "☀ {0} / {1} kWh",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -1975,6 +1989,13 @@
   ]
  },
  {
+  "key": "afternoon",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "Agenda",
   "module": "charging",
   "where": [
@@ -2101,6 +2122,13 @@
   "where": [
    "live-data (script)",
    "src/chartFieldHelpers.js"
+  ]
+ },
+ {
+  "key": "all from the grid",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -2418,10 +2446,31 @@
   ]
  },
  {
+  "key": "average",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Avg trip",
   "module": "vehicles",
   "where": [
    "driving (script)"
+  ]
+ },
+ {
+  "key": "Back",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
+  "key": "Back home",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -3602,6 +3651,13 @@
   ]
  },
  {
+  "key": "costs about",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Could not check model status.",
   "module": "ai",
   "where": [
@@ -4230,10 +4286,24 @@
   ]
  },
  {
+  "key": "Driven",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "Driven this month",
   "module": "vehicles",
   "where": [
    "driving (script)"
+  ]
+ },
+ {
+  "key": "Driven today: {0} km.",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -4527,6 +4597,7 @@
   "where": [
    "admin-notifications (script)",
    "public/ai-chat-widget.js",
+   "public/hint-info.js",
    "settings-general (script)"
   ]
  },
@@ -4636,10 +4707,24 @@
   ]
  },
  {
+  "key": "estimated from the usual {0} km on a {1} (learned from the odometer)",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
   "key": "evcc (loadpoint 1)",
   "module": "vehicles",
   "where": [
    "src/vehicles.js"
+  ]
+ },
+ {
+  "key": "evening",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -4713,7 +4798,21 @@
   ]
  },
  {
+  "key": "Expected home",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Expected solar covers {0} of {1} kWh before the deadline.",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
+  "key": "Expected solar surplus is below the Wallbox minimum of {0} kW, so part of it comes from the grid (in the cheapest hours).",
   "module": "charging",
   "where": [
    "src/planner.js"
@@ -5032,6 +5131,13 @@
   ]
  },
  {
+  "key": "Fold",
+  "module": "core",
+  "where": [
+   "public/card-collapse.js"
+  ]
+ },
+ {
   "key": "Follow values over time in charts and put them on your own dashboards.",
   "module": "core",
   "where": [
@@ -5061,9 +5167,8 @@
  },
  {
   "key": "Fri",
-  "module": "charging",
+  "module": "mqtt",
   "where": [
-   "agenda (script)",
    "incoming-schedules"
   ]
  },
@@ -5072,7 +5177,8 @@
   "module": "charging",
   "where": [
    "learned (script)",
-   "src/energyPatterns.js"
+   "src/energyPatterns.js",
+   "src/planner.js"
   ]
  },
  {
@@ -5398,10 +5504,17 @@
   ]
  },
  {
-  "key": "Home",
+  "key": "high",
   "module": "charging",
   "where": [
    "learned (script)"
+  ]
+ },
+ {
+  "key": "home ~{0}",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -5598,6 +5711,13 @@
   "module": "ocpp",
   "where": [
    "ocpp-bridge-edit (script)"
+  ]
+ },
+ {
+  "key": "If it came home now (or another car were plugged in):",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -5967,6 +6087,13 @@
   ]
  },
  {
+  "key": "learned departure on {0} ({1} confidence)",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
   "key": "Learned departures and energy per trip",
   "module": "core",
   "where": [
@@ -5999,6 +6126,13 @@
   "module": "energy_manager",
   "where": [
    "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "learned: usually home around {0} on {1}",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
   ]
  },
  {
@@ -6257,6 +6391,13 @@
   ]
  },
  {
+  "key": "loading",
+  "module": "core",
+  "where": [
+   "public/card-collapse.js"
+  ]
+ },
+ {
   "key": "Loading devices from the Homey…",
   "module": "core",
   "where": [
@@ -6374,6 +6515,13 @@
   ]
  },
  {
+  "key": "Long day",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "Longitude",
   "module": "vehicles",
   "where": [
@@ -6392,6 +6540,13 @@
   "module": "charging",
   "where": [
    "agenda (script)"
+  ]
+ },
+ {
+  "key": "low",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -6684,6 +6839,13 @@
   "module": "monitor",
   "where": [
    "src/dashboardSuggestions.js"
+  ]
+ },
+ {
+  "key": "medium",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -7080,9 +7242,8 @@
  },
  {
   "key": "Mon",
-  "module": "charging",
+  "module": "mqtt",
   "where": [
-   "agenda (script)",
    "incoming-schedules"
   ]
  },
@@ -7091,7 +7252,8 @@
   "module": "charging",
   "where": [
    "learned (script)",
-   "src/energyPatterns.js"
+   "src/energyPatterns.js",
+   "src/planner.js"
   ]
  },
  {
@@ -7183,6 +7345,13 @@
   "module": "charging",
   "where": [
    "agenda (script)"
+  ]
+ },
+ {
+  "key": "morning",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -7848,6 +8017,13 @@
   ]
  },
  {
+  "key": "No odometer readings yet — add the odometer to the car's data source (Škoda, Homey, Home Assistant or MQTT).",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "no plan for this hour",
   "module": "energy_manager",
   "where": [
@@ -8243,6 +8419,13 @@
   "module": "core",
   "where": [
    "src/routes/liveData.js"
+  ]
+ },
+ {
+  "key": "nothing to charge",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -9237,6 +9420,14 @@
   ]
  },
  {
+  "key": "ready {0}",
+  "module": "charging",
+  "where": [
+   "agenda (script)",
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Ready by",
   "module": "charging",
   "where": [
@@ -9643,9 +9834,8 @@
  },
  {
   "key": "Sat",
-  "module": "charging",
+  "module": "mqtt",
   "where": [
-   "agenda (script)",
    "incoming-schedules"
   ]
  },
@@ -9654,7 +9844,8 @@
   "module": "charging",
   "where": [
    "learned (script)",
-   "src/energyPatterns.js"
+   "src/energyPatterns.js",
+   "src/planner.js"
   ]
  },
  {
@@ -10542,9 +10733,8 @@
  },
  {
   "key": "Sun",
-  "module": "charging",
+  "module": "mqtt",
   "where": [
-   "agenda (script)",
    "incoming-schedules"
   ]
  },
@@ -10553,7 +10743,8 @@
   "module": "charging",
   "where": [
    "learned (script)",
-   "src/energyPatterns.js"
+   "src/energyPatterns.js",
+   "src/planner.js"
   ]
  },
  {
@@ -10811,6 +11002,13 @@
   "module": "vehicles",
   "where": [
    "src/vehicles.js"
+  ]
+ },
+ {
+  "key": "The car is out: this is the plan from when it is expected home ({0}).",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -11186,9 +11384,8 @@
  },
  {
   "key": "Thu",
-  "module": "charging",
+  "module": "mqtt",
   "where": [
-   "agenda (script)",
    "incoming-schedules"
   ]
  },
@@ -11197,7 +11394,8 @@
   "module": "charging",
   "where": [
    "learned (script)",
-   "src/energyPatterns.js"
+   "src/energyPatterns.js",
+   "src/planner.js"
   ]
  },
  {
@@ -11509,9 +11707,8 @@
  },
  {
   "key": "Tue",
-  "module": "charging",
+  "module": "mqtt",
   "where": [
-   "agenda (script)",
    "incoming-schedules"
   ]
  },
@@ -11520,7 +11717,8 @@
   "module": "charging",
   "where": [
    "learned (script)",
-   "src/energyPatterns.js"
+   "src/energyPatterns.js",
+   "src/planner.js"
   ]
  },
  {
@@ -11615,6 +11813,13 @@
   "module": "ocpp",
   "where": [
    "src/routes/ocpp.js"
+  ]
+ },
+ {
+  "key": "Unfold",
+  "module": "core",
+  "where": [
+   "public/card-collapse.js"
   ]
  },
  {
@@ -12165,9 +12370,8 @@
  },
  {
   "key": "Wed",
-  "module": "charging",
+  "module": "mqtt",
   "where": [
-   "agenda (script)",
    "incoming-schedules"
   ]
  },
@@ -12176,7 +12380,8 @@
   "module": "charging",
   "where": [
    "learned (script)",
-   "src/energyPatterns.js"
+   "src/energyPatterns.js",
+   "src/planner.js"
   ]
  },
  {
@@ -12389,6 +12594,13 @@
   "module": "ai",
   "where": [
    "src/routes/aiChat.js"
+  ]
+ },
+ {
+  "key": "your departure time on {0}",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
   ]
  },
  {

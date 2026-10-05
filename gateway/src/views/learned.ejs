@@ -21,6 +21,12 @@
   <div style="overflow-x:auto;"><table id="ln-trips"><tbody><tr><td class="hint"><%= t('Loading…') %></td></tr></tbody></table></div>
 </div>
 
+<div class="card">
+  <h2 style="margin-top:0;"><%= t('Driving per weekday — from the odometer') %></h2>
+  <p class="hint" style="margin:0 0 0.5rem;"><%= t('Learned from the car\'s own odometer over the last 8 weeks: on how many of each weekday the car was driven, how far, and when it usually leaves and is back. While the car is out, the smart plan adds the km it usually still drives that day and plans from the time it is usually home.') %></p>
+  <div id="ln-drive"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
+</div>
+
 <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr)); gap:1rem;">
   <div class="card">
     <h2 style="margin-top:0;"><%= t('Solar — forecast tomorrow') %></h2>
@@ -37,6 +43,9 @@
   var DAYS = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
   var SLOT = { morning: 'morning', afternoon: 'afternoon', evening: 'evening' };
   var DUR = { short: 'short · < 2 h away', medium: '2 – 6 h away', long: '> 6 h away' };
+  // translated one by one, so "Monday" + "morning" don't end up as one untranslatable text
+  var L = function (o) { Object.keys(o).forEach(function (k) { o[k] = window.lsT ? window.lsT(o[k]) : o[k]; }); };
+  L(DAYS); L(SLOT); L(DUR);
   var CONF = { high: ['high', '#2e7d32'], medium: ['medium', '#b8860b'], low: ['low', '#c0392b'], none: ['—', 'inherit'] };
   var canEdit = <%- JSON.stringify(canEdit('charging')) %>;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -55,7 +64,7 @@
   function toMin(t) { if (!t) return null; var p = t.split(':'); return +p[0] * 60 + +p[1]; }
 
   function renderDep(d) {
-    var rows = '<thead><tr><th>Day</th><th>' + axis([0, 6, 12, 18, 24], 24, TW).replace(/>(\d+)</g, function (m, h) { return '>' + String(h).padStart(2, '0') + '<'; }) + '</th><th>Leaves</th><th>Ready by</th><th>Home</th><th>Charges</th><th>Confidence</th><th>Own time</th></tr></thead><tbody>';
+    var rows = '<thead><tr><th>Day</th><th>' + axis([0, 6, 12, 18, 24], 24, TW).replace(/>(\d+)</g, function (m, h) { return '>' + String(h).padStart(2, '0') + '<'; }) + '</th><th>Leaves</th><th>Ready by</th><th>Back home</th><th>Charges</th><th>Confidence</th><th>Own time</th></tr></thead><tbody>';
     d.departures.forEach(function (x) {
       rows += '<tr><td style="font-weight:600;">' + DAYS[x.key] + '</td><td>' + timeline(x.allUnplugs, x.morningUnplugs, toMin(x.departure)) + '</td>' +
         '<td><strong>' + (x.departure || '—') + '</strong></td><td>' + (x.ready || '—') + (x.override ? ' <span class="hint">(own)</span>' : '') + '</td><td>' + (x.arrival || '—') + '</td>' +
@@ -88,6 +97,18 @@
     });
     document.getElementById('ln-trips').innerHTML = rows + '</tbody>';
     document.getElementById('ln-trip-note').textContent = d.vehicle && d.vehicle.type === 'phev' ? 'A plug-in hybrid that emptied its battery drove on fuel after that, so its real need was higher.' : '';
+  }
+
+  function renderDrive(d) {
+    var el = document.getElementById('ln-drive');
+    if (!d.driving || !d.driving.length) { el.innerHTML = '<p class="hint" style="margin:0;">No odometer readings yet — add the odometer to the car\'s data source (Škoda, Homey, Home Assistant or MQTT).</p>'; return; }
+    el.innerHTML = d.driving.map(function (v) {
+      var rows = '<thead><tr><th>Day</th><th>Driven</th><th>Usually</th><th>Long day</th><th>Leaves</th><th>Back</th><th>≈ kWh</th><th>Confidence</th></tr></thead><tbody>';
+      v.days.forEach(function (x) {
+        rows += '<tr' + (x.usual ? '' : ' style="opacity:0.6;"') + '><td><strong>' + DAYS[x.key] + '</strong></td><td>' + x.drivenDays + ' / ' + x.days + '</td><td>' + (x.kmMedian != null ? nf(x.kmMedian, 0) + ' km' : '—') + '</td><td>' + (x.kmHigh != null ? nf(x.kmHigh, 0) + ' km' : '—') + '</td><td>' + (x.depart || '—') + '</td><td>' + (x.back || '—') + '</td><td>' + (x.kmMedian != null ? nf(x.kmMedian * v.kwhPerKm, 1) : '—') + '</td><td>' + conf(x.confidence) + '</td></tr>';
+      });
+      return (d.driving.length > 1 ? '<h3 style="margin:0.6rem 0 0.3rem;">' + esc(v.name) + '</h3>' : '') + '<div style="overflow-x:auto;"><table>' + rows + '</tbody></table></div><p class="hint" style="margin:0.3rem 0 0;">Driven today: ' + nf(v.kmToday, 0) + ' km.</p>';
+    }).join('');
   }
 
   function renderSolar(d) {
@@ -157,7 +178,7 @@
   function load() {
     fetch('/learned/data.json').then(function (r) { return r.json(); }).then(function (d) {
       document.getElementById('ln-meta').textContent = d.sessions ? 'Based on ' + d.sessions + ' charging sessions since ' + new Date(d.firstSession).toLocaleDateString() + '.' : 'No charging sessions yet.';
-      renderDep(d); renderTrips(d); renderSolar(d); renderHouse(d); lastData = d;
+      renderDep(d); renderTrips(d); renderDrive(d); renderSolar(d); renderHouse(d); lastData = d;
     }).catch(function () {});
   }
   load();

@@ -170,6 +170,54 @@ function analyze(readings, { capacityKwh = null, type = 'bev', kwhPerKm = 0.2, m
   };
 }
 
+// Driving per weekday, learned from the odometer trips: on how many of each weekday the car is
+// driven, how far (median km on a driven day), and when it usually leaves (first trip) and is back
+// (end of the last trip). Used by the planner: the km still to come today while the car is out, and
+// the time it is expected home. Only the last `days` days count, so it follows changes in routine.
+function weekPattern(trips, { tz, nowMs = Date.now(), days = 56, firstMs = null } = {}) {
+  const { localParts, localMidnight, WEEKDAYS } = require('./localTime');
+  const fromMs = Math.max(nowMs - days * 86400000, firstMs ?? (trips.length ? Math.min(...trips.map((t) => t.start)) : nowMs));
+  const todayMs = localMidnight(nowMs, tz); // today isn't over yet: not part of the pattern
+  const byDay = new Map();
+  for (const t of trips) {
+    if (t.start < fromMs || t.start >= todayMs || !(t.km > 0)) continue;
+    const p = localParts(t.start, tz);
+    const key = `${p.y}-${p.m}-${p.d}`;
+    const e = localParts(t.end, tz);
+    const d = byDay.get(key) || { weekday: p.weekday, km: 0, first: null, last: null };
+    d.km += t.km;
+    const sMin = p.hour * 60 + p.minute;
+    const eMin = (e.d !== p.d ? 24 * 60 - 1 : e.hour * 60 + e.minute);
+    d.first = d.first === null ? sMin : Math.min(d.first, sMin);
+    d.last = d.last === null ? eMin : Math.max(d.last, eMin);
+    byDay.set(key, d);
+  }
+  const count = Array(7).fill(0);
+  for (let t = localMidnight(fromMs, tz); t < todayMs; t = localMidnight(t, tz, 1)) count[localParts(t + 12 * 3600000, tz).weekday]++;
+  const fmt = (m) => (m === null ? null : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.round(m % 60)).padStart(2, '0')}`);
+  return WEEKDAYS.map((key, wd) => {
+    const list = [...byDay.values()].filter((d) => d.weekday === wd);
+    const n = list.length;
+    const share = count[wd] ? Math.min(1, n / count[wd]) : 0;
+    const kms = list.map((d) => d.km);
+    return {
+      key, weekday: wd, days: count[wd], drivenDays: n, share: Math.round(share * 100) / 100,
+      kmMedian: r1(median(kms)), kmAvg: count[wd] ? r1(kms.reduce((a, b) => a + b, 0) / count[wd]) : null,
+      kmHigh: kms.length ? r1([...kms].sort((a, b) => a - b)[Math.min(kms.length - 1, Math.floor(kms.length * 0.75))]) : null,
+      depart: fmt(median(list.map((d) => d.first))), back: fmt(median(list.map((d) => d.last))),
+      usual: n >= 3 && share >= 0.4,
+      confidence: n >= 8 ? 'high' : n >= 4 ? 'medium' : n > 0 ? 'low' : 'none',
+    };
+  });
+}
+
+// km driven since local midnight (trips that started today).
+function kmToday(trips, { tz, nowMs = Date.now() } = {}) {
+  const { localMidnight } = require('./localTime');
+  const from = localMidnight(nowMs, tz);
+  return r1(trips.filter((t) => t.start >= from && t.start <= nowMs).reduce((a, t) => a + (t.km || 0), 0));
+}
+
 // € per kWh that went into the car per month, from hourly meter data: the grid part of each hour at
 // that hour's all-in price, the solar part at its feed-in value ('saldering' = the price of that hour,
 // 'fixed' = feedInEur). hours: [{ hour, wallboxKwh, gridImportKwh, price }] (price may be null).
@@ -305,6 +353,25 @@ async function report(vehicle) {
   };
 }
 
+// The weekday pattern + today's km of a car, from its stored readings (cached 30 min per car).
+const patternCache = new Map();
+async function drivePattern(vehicle, { nowMs = Date.now() } = {}) {
+  if (!vehicle?.id) return null;
+  const hit = patternCache.get(vehicle.id);
+  if (hit && nowMs - hit.at < 30 * 60000) return hit.value;
+  const { displayTz } = require('./localTime');
+  const tz = displayTz();
+  const readings = await loadReadings(vehicle.id, 60);
+  const a = analyze(readings, { capacityKwh: vehicle.battery_kwh, type: vehicle.type });
+  const value = a.hasOdometer ? {
+    days: weekPattern(a.trips, { tz, nowMs, firstMs: readings.length ? Date.parse(readings[0].ts) : null }),
+    kmToday: kmToday(a.trips, { tz, nowMs }),
+    lastTripEnd: a.trips.length ? a.trips[a.trips.length - 1].end : null,
+  } : null;
+  patternCache.set(vehicle.id, { at: nowMs, value });
+  return value;
+}
+
 function hasField(vehicle, key) {
   try { const c = JSON.parse(vehicle.source_config || '{}'); return !!c.fields?.[key]; } catch { return false; }
 }
@@ -337,4 +404,4 @@ function stopDriving() {
   timer = null;
 }
 
-module.exports = { analyze, emptyLevel, chargingCost, costPerKm, effectiveKwhPerKm, loadReadings, loadChargeHours, report, learnAll, startDriving, stopDriving };
+module.exports = { analyze, emptyLevel, weekPattern, kmToday, drivePattern, chargingCost, costPerKm, effectiveKwhPerKm, loadReadings, loadChargeHours, report, learnAll, startDriving, stopDriving };

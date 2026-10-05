@@ -36,9 +36,15 @@ router.get('/data.json', asyncHandler(async (req, res) => {
     if (s > 0.2) { surplus += s; if (!from) from = h.hour; to = new Date(Date.parse(h.hour) + 3600000).toISOString(); }
   }
   const houseTomorrow = (localParts(tomorrow, tz).weekday >= 5 ? house.weekend : house.workday);
+  // Driving per weekday from each car's odometer (the planner uses it while the car is out).
+  const driving = [];
+  for (const v of await db.prepare('SELECT * FROM vehicles WHERE enabled = 1 ORDER BY id').all().catch(() => [])) {
+    const dp = await require('../driving').drivePattern(v).catch(() => null);
+    if (dp) driving.push({ name: v.name, kwhPerKm: require('../driving').effectiveKwhPerKm(v, 0.2), kmToday: dp.kmToday, days: dp.days });
+  }
   const firstSession = sessions.length ? new Date(sessions[0].connect).toISOString() : null;
   res.json({
-    sessions: sessions.length, firstSession, departures, trips: { classes: trips.classes, fallback: trips.fallback, count: trips.trips.length },
+    sessions: sessions.length, firstSession, departures, driving, trips: { classes: trips.classes, fallback: trips.fallback, count: trips.trips.length },
     house, solar: { tomorrow: fc, history, status: await settings.get('solar_status', null), config: await solar.getConfig() },
     surplus: { kwh: Math.round(surplus * 10) / 10, from, to, houseDay: Math.round((houseTomorrow || []).filter((x, i) => i >= 8 && i < 18).reduce((a, b) => a + (b || 0), 0) * 10) / 10 },
     vehicle: vehicle ? { name: vehicle.name, type: vehicle.type, battery_kwh: vehicle.battery_kwh } : null,

@@ -36,7 +36,7 @@
   <div id="pl-target" style="margin-top:1rem;"></div>
   <div id="pl-plan" style="margin-top:0.8rem;"></div>
   <div style="margin-top:0.8rem;">
-    <div class="hint" style="margin:0 0 0.2rem; font-size:0.8rem;"><%= t('Price per interval (all-in) —') %> <span style="color:var(--accent); font-weight:700;">■</span> <%= t('planned') %> &nbsp;<span style="color:#d4a017; font-weight:700;">━</span> <%= t('expected solar surplus (kW)') %> &nbsp;<span style="color:#e5534b; font-weight:700;">┆</span> <%= t('ready by') %></div>
+    <div class="hint" style="margin:0 0 0.2rem; font-size:0.8rem;"><%= t('Price per interval (all-in) —') %> <span style="color:var(--accent); font-weight:700;">■</span> <%= t('planned') %> &nbsp;<span style="color:#d4a017; font-weight:700;">━</span> <%= t('expected solar surplus (kW)') %> &nbsp;<span style="color:#e5534b; font-weight:700;">┆</span> <%= t('ready by') %> &nbsp;<span style="color:#d4a017; font-weight:700;">■</span> <%= t('solar part') %> &nbsp;<span style="color:#3b82f6; font-weight:700;">┆</span> <%= t('expected home') %> &nbsp;<span style="color:var(--accent); font-weight:700;">⬚</span> <%= t('if it came home now') %></div>
     <div id="pl-chart"></div>
   </div>
 </div>
@@ -200,10 +200,22 @@
     var out = [];
     slots.forEach(function (x) {
       var last = out[out.length - 1];
-      if (last && last.end === x.start && last.source === x.source) { last.end = x.end; last.kwh += x.kwh; }
-      else out.push({ start: x.start, end: x.end, kwh: x.kwh, source: x.source });
+      if (last && last.end === x.start && last.source === x.source) { last.end = x.end; last.kwh += x.kwh; last.pvKwh += x.pvKwh || 0; return; }
+      else out.push({ start: x.start, end: x.end, kwh: x.kwh, source: x.source, pvKwh: 0 });
+      out[out.length - 1].pvKwh += x.pvKwh || 0;
     });
     return out;
+  }
+  // A whole sentence with {0}, {1} … translated as one (window.LS_I18N), then filled in.
+  function T(key) {
+    var args = arguments;
+    var tr = (window.LS_I18N && window.LS_I18N[key]) || key;
+    return tr.replace(/\{(\d+)\}/g, function (all, n) { var v = args[Number(n) + 1]; return v === undefined ? all : v; });
+  }
+  function slotText(x) {
+    var pv = x.pvKwh || 0, grid = Math.max(0, x.kwh - pv);
+    var mix = pv > 0.05 && grid > 0.05 ? ' (' + nf(pv, 1) + ' ☀ + ' + nf(grid, 1) + ' ⚡)' : pv > 0.05 ? ' ☀' : ' ⚡';
+    return dtm(x.start) + '–' + tm(x.end) + ' ' + nf(x.kwh, 1) + ' kWh' + mix;
   }
   var MODE_LABEL = { off: 'Off', now: 'Now', pv: 'Solar', minpv: 'Min + Solar', plan: 'Smart plan' };
 
@@ -227,6 +239,7 @@
       th = '<div class="form-grid" style="align-items:end;">' +
         '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Needs</div><div style="font-size:1.15rem; font-weight:700;">' + nf(p.needKwh, 1) + ' kWh</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.needSource) + '</div></div>' +
         '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Ready by</div><div style="font-size:1.15rem; font-weight:700;">' + dtm(p.readyAt) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.readySource || 'no departure known — within 24 h') + '</div></div>' +
+        (p.arrival ? '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Expected home</div><div style="font-size:1.15rem; font-weight:700; color:#3b82f6;">' + dtm(p.arrival.at) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(p.arrival.label) + '</div></div>' : '') +
         (canEdit ? '<div><label>Ready by (this session)</label><input type="datetime-local" id="pl-ready"> <button type="button" class="btn-soft" id="pl-ready-btn" style="margin-top:0.3rem;">Set</button></div>' : '') +
         '</div>';
     }
@@ -239,11 +252,17 @@
       if (p.slots.length) {
         var first = p.slots[0];
         var last = p.slots[p.slots.length - 1];
+        var pvK = p.pvKwh || 0, gridK = Math.max(0, p.kwh - pvK);
         ph = '<div style="padding:0.8rem 1rem; border-radius:10px; background:color-mix(in srgb, var(--accent) 10%, transparent); border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);">' +
-          '<strong>Plan:</strong> ' + p.slots.length + ' interval(s), ' + dtm(first.start) + ' – ' + dtm(last.end) + ' &rarr; <strong>' + nf(p.kwh, 1) + ' kWh</strong>' +
-          (p.pvKwh ? ' (' + nf(p.pvKwh, 1) + ' kWh solar)' : '') + ' · avg. <strong>' + eur(p.avgPrice, 3) + '</strong>/kWh · expected <strong>' + eur(p.cost) + '</strong>' +
-          (p.compare && p.compare.saving > 0.05 ? '<span class="hint" style="margin:0;"> (charging straight away: ' + eur(p.compare.avgPrice, 3) + ' avg. — saves ' + eur(p.compare.saving) + ')</span>' : '') +
-          '<div class="hint" style="margin:0.3rem 0 0;">' + mergeSlots(p.slots).map(function (x) { return dtm(x.start) + '–' + tm(x.end) + ' ' + nf(x.kwh, 1) + ' kWh ' + (x.source === 'pv' ? '☀' : x.source === 'mixed' ? '☀+⚡' : '⚡'); }).join(' · ') + '</div></div>';
+          (p.arrival ? '<div class="hint" style="margin:0 0 0.25rem;">' + esc(T('The car is out: this is the plan from when it is expected home ({0}).', dtm(p.arrival.at))) + '</div>' : '') +
+          '<strong>' + esc(T('Plan:')) + '</strong> ' + esc(T('{0} – {1}', dtm(first.start), dtm(last.end))) + ' &rarr; <strong>' + nf(p.kwh, 1) + ' kWh</strong>' +
+          ' (' + (pvK > 0.05 ? esc(T('{0} kWh solar, {1} kWh grid', nf(pvK, 1), nf(gridK, 1))) : esc(T('all from the grid'))) + ')' +
+          ' · ' + esc(T('average')) + ' <strong>' + eur(p.avgPrice, 3) + '</strong>/kWh · ' + esc(T('costs about')) + ' <strong>' + eur(p.cost) + '</strong>' +
+          (p.compare && p.compare.saving > 0.05 ? '<span class="hint" style="margin:0;"> ' + esc(T('(charging straight away: {0} average — saves {1})', eur(p.compare.avgPrice, 3), eur(p.compare.saving))) + '</span>' : '') +
+          '<div class="hint" style="margin:0.3rem 0 0;">' + mergeSlots(p.slots).map(slotText).join(' · ') + '</div>' +
+          (p.ifNow ? '<div class="hint" style="margin:0.45rem 0 0; padding-top:0.4rem; border-top:1px dashed var(--border);">' + esc(T('If it came home now (or another car were plugged in):')) + ' ' +
+            (p.ifNow.slots.length ? mergeSlots(p.ifNow.slots).map(slotText).join(' · ') + ' · ' + eur(p.ifNow.cost) : esc(T('nothing to charge'))) + '</div>' : '') +
+          '</div>';
       } else {
         ph = '<p class="hint" style="margin:0;">' + (p.needKwh > 0 ? 'Nothing planned.' : 'Nothing to charge.') + '</p>';
       }
@@ -276,10 +295,20 @@
       var h = s.price / maxP * H;
       var isPlan = !!planned[s.start] || p.slots.some(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); });
       svg += '<rect x="' + x + '" y="' + (10 + H - h) + '" width="' + w + '" height="' + h + '" rx="1.5" fill="' + (isPlan ? 'var(--accent)' : '#c9d0d8') + '" opacity="' + (isPlan ? 0.95 : 0.75) + '"><title>' + tm(s.start) + ' € ' + s.price.toFixed(3) + '</title></rect>';
+      // solar part of a planned interval: the lower part of the bar in yellow
+      var ps = isPlan ? p.slots.filter(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); }) : [];
+      var pk = ps.reduce(function (a, q) { return a + (q.pvKwh || 0); }, 0), tk = ps.reduce(function (a, q) { return a + q.kwh; }, 0);
+      if (pk > 0.05 && tk > 0) { var sh = h * Math.min(1, pk / tk); svg += '<rect x="' + x + '" y="' + (10 + H - sh) + '" width="' + w + '" height="' + sh + '" fill="#d4a017" opacity="0.9"><title>☀ ' + nf(pk, 1) + ' / ' + nf(tk, 1) + ' kWh</title></rect>'; }
+      // what it would do if the car came home now: outlined
+      if (p.ifNow && !isPlan && p.ifNow.slots.some(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); })) svg += '<rect x="' + (x + 0.75) + '" y="' + (10 + H - h + 0.75) + '" width="' + Math.max(0, w - 1.5) + '" height="' + Math.max(0, h - 1.5) + '" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3 2"/>';
     });
     var pts = slots.map(function (s) { return X((Date.parse(s.start) + Date.parse(s.end)) / 2).toFixed(1) + ',' + (10 + H - (s.pvKw || 0) / maxPv * H * 0.9).toFixed(1); });
     svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#d4a017" stroke-width="2" opacity="0.9"/>';
-    if (p.readyAt) { var rx = X(Date.parse(p.readyAt)); if (rx > left && rx < W) svg += '<line x1="' + rx + '" y1="4" x2="' + rx + '" y2="' + (10 + H) + '" stroke="#e5534b" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (rx > W - 90 ? rx - 3 : rx + 3) + '" y="9" font-size="10" text-anchor="' + (rx > W - 90 ? 'end' : 'start') + '" fill="#e5534b">ready ' + tm(p.readyAt) + '</text>'; }
+    if (p.arrival) {
+      var ax = X(Date.parse(p.arrival.at)), nx0 = left;
+      if (ax > left && ax < W) svg += '<rect x="' + nx0 + '" y="10" width="' + Math.max(0, ax - nx0) + '" height="' + H + '" fill="#3b82f6" opacity="0.06"/><line x1="' + ax + '" y1="4" x2="' + ax + '" y2="' + (10 + H) + '" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (ax + 3) + '" y="9" font-size="10" fill="#3b82f6">' + esc(T('home ~{0}', tm(p.arrival.at))) + '</text>';
+    }
+    if (p.readyAt) { var rx = X(Date.parse(p.readyAt)); if (rx > left && rx < W) svg += '<line x1="' + rx + '" y1="4" x2="' + rx + '" y2="' + (10 + H) + '" stroke="#e5534b" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (rx > W - 90 ? rx - 3 : rx + 3) + '" y="9" font-size="10" text-anchor="' + (rx > W - 90 ? 'end' : 'start') + '" fill="#e5534b">' + esc(T('ready {0}', tm(p.readyAt))) + '</text>'; }
     var lastLabel = -1;
     slots.forEach(function (s) { var ms = Date.parse(s.start); var d = new Date(ms); if (d.getMinutes() === 0 && d.getHours() % 3 === 0 && ms !== lastLabel) { lastLabel = ms; svg += '<text x="' + X(ms) + '" y="' + (H + 26) + '" font-size="10" fill="currentColor" opacity="0.6">' + (d.getHours() === 0 ? d.toLocaleDateString([], { weekday: 'short' }) : String(d.getHours()).padStart(2, '0')) + '</text>'; } });
     svg += '</svg>';

@@ -70,7 +70,7 @@ function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {} } = {
     return {
       key: d.key, weekday: d.weekday, n, share: Math.round(share * 100) / 100, usual,
       departure: fmtMin(med), early: fmtMin(p25), ready: override || fmtMin(readyMin), learnedReady: fmtMin(readyMin), override,
-      arrival: fmtMin(median(d.arrivals)), kwh_median: round1(median(d.kwh.filter((k) => k > 0.3))),
+      arrival: fmtMin(median(d.arrivals)), arrivalN: d.arrivals.length, kwh_median: round1(median(d.kwh.filter((k) => k > 0.3))),
       confidence: confidence(n), allUnplugs: d.all.sort((a, b) => a - b), morningUnplugs: d.morning.sort((a, b) => a - b),
     };
   });

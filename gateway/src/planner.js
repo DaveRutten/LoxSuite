@@ -72,16 +72,16 @@ function makePlan({
     const pvValue = feedIn === 'fixed' ? feedInEur : (price ?? feedInEur);
     if (pv >= minKw) {
       const kwA = Math.min(maxKw, pv);
-      chunks.push({ slot: s, kw: kwA, h, cost: pvValue, source: 'pv' });
-      if (kwA < maxKw && price !== null) chunks.push({ slot: s, kw: maxKw - kwA, h, cost: price, source: 'grid', topUp: true });
+      chunks.push({ slot: s, kw: kwA, h, cost: pvValue, source: 'pv', pvKw: kwA });
+      if (kwA < maxKw && price !== null) chunks.push({ slot: s, kw: maxKw - kwA, h, cost: price, source: 'grid', topUp: true, pvKw: 0 });
     } else if (price !== null) {
       // Not enough solar for the minimum on its own: the first part (up to the minimum power) uses the
       // little solar there is, the rest is grid at the price. Picking the cheapest kWh then fills the
       // cheapest intervals first — at full power where needed, so the car is full at the lowest cost.
       const base = Math.min(minKw, maxKw);
       const blended = (pv * pvValue + (base - pv) * price) / base;
-      chunks.push({ slot: s, kw: base, h, cost: blended, source: pv > 0.3 ? 'mixed' : 'grid', pvShare: pv / base });
-      if (maxKw > base) chunks.push({ slot: s, kw: maxKw - base, h, cost: price, source: 'grid', topUp: true });
+      chunks.push({ slot: s, kw: base, h, cost: blended, source: pv > 0.3 ? 'mixed' : 'grid', pvShare: pv / base, pvKw: pv > 0.3 ? pv : 0 });
+      if (maxKw > base) chunks.push({ slot: s, kw: maxKw - base, h, cost: price, source: 'grid', topUp: true, pvKw: 0 });
     }
   }
 
@@ -93,7 +93,7 @@ function makePlan({
   } else if (mode === 'minpv') {
     picked = win.map((s) => {
       const pv = Math.max(0, (s.pvKw || 0) * trust);
-      return { slot: s, kw: Math.min(maxKw, Math.max(minKw, pv)), h: (s.e - s.s) / 3600000, cost: s.price, source: pv >= minKw ? 'pv' : 'grid' };
+      return { slot: s, kw: Math.min(maxKw, Math.max(minKw, pv)), h: (s.e - s.s) / 3600000, cost: s.price, source: pv >= minKw ? 'pv' : pv > 0.3 ? 'mixed' : 'grid', pvKw: pv };
     });
   } else if (mode === 'plan') {
     const sorted = [...chunks].sort((a, b) => a.cost - b.cost || a.slot.s - b.slot.s);
@@ -121,6 +121,8 @@ function makePlan({
     result.push({
       start: new Date(c.slot.s).toISOString(), end: new Date(c.slot.s + (c.slot.e - c.slot.s) * frac).toISOString(),
       kw: round2(kwUse), kwh: round3(take), source: c.source, price: c.slot.price ?? null, cost: round3(take * c.cost), topUp: !!c.topUp,
+      // the expected solar part of it (the rest comes from the grid)
+      pvKwh: round3(Math.min(take, (c.pvKw || 0) * c.h * frac)),
     });
     remaining -= take;
     if (sequential && mode === 'pv' && remaining <= 0) break;
@@ -131,14 +133,16 @@ function makePlan({
     const k = r.start;
     const prev = bySlot.get(k);
     if (prev) {
-      prev.kw = round2(prev.kw + r.kw); prev.kwh = round3(prev.kwh + r.kwh); prev.cost = round3(prev.cost + r.cost);
+      prev.kw = round2(prev.kw + r.kw); prev.kwh = round3(prev.kwh + r.kwh); prev.cost = round3(prev.cost + r.cost); prev.pvKwh = round3((prev.pvKwh || 0) + (r.pvKwh || 0));
       prev.source = prev.source === 'grid' && r.source === 'grid' ? 'grid' : 'mixed'; if (r.end > prev.end) prev.end = r.end;
     } else bySlot.set(k, { ...r });
   }
   const planSlots = [...bySlot.values()].sort((a, b) => a.start.localeCompare(b.start));
   const kwh = round3(planSlots.reduce((s, r) => s + r.kwh, 0));
   const cost = round3(planSlots.reduce((s, r) => s + r.cost, 0));
-  const pvKwh = round3(planSlots.filter((r) => r.source === 'pv').reduce((s, r) => s + r.kwh, 0));
+  const pvKwh = round3(planSlots.reduce((s, r) => s + (r.pvKwh || 0), 0));
+  // Some solar, but less than the Wallbox's minimum power: the rest of those intervals is grid.
+  if (mode !== 'off' && planSlots.some((r) => r.source === 'mixed')) notes.push(`Expected solar surplus is below the Wallbox minimum of ${round2(minKw)} kW, so part of it comes from the grid (in the cheapest hours).`);
   const shortfall = round3(Math.max(0, need - kwh));
   if (mode !== 'off' && shortfall > 0.05) {
     notes.push(mode === 'pv'
@@ -228,6 +232,9 @@ function controlStep({ nowMs, mode, cfg, plan, live, state = {}, done = false, o
 
 // ------------------------------------------------------------------ runtime
 
+const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
 async function getConfig() { return settings.get('planner', DEFAULTS); }
 async function saveConfig(v) {
   const cur = await getConfig();
@@ -311,6 +318,14 @@ async function computeTarget(nowMs, wb) {
   const reading = freshReading(vehicle);
   let needKwh = null;
   let needSource = '';
+  // Driving per weekday from the car's odometer (driving.js): while the car is out, the km it
+  // usually still drives today count too, so the plan for "when it's back" is about the right size.
+  let drive = null;
+  try { drive = await require('./driving').drivePattern(vehicle, { nowMs }); } catch { drive = null; }
+  const away = !wb?.connected && reading?.home !== true;
+  const kpkNow = require('./driving').effectiveKwhPerKm(vehicle, cfg.default_kwh_per_km);
+  const todayPat = drive && vehicle ? drive.days[require('./localTime').localParts(nowMs, tz).weekday] : null;
+  const usualToday = away && todayPat?.usual && todayPat.kmMedian ? todayPat : null;
   if (reading && vehicle?.battery_kwh) {
     const limitPct = reading.limit_soc ?? vehicle.charge_limit_pct ?? 100;
     needKwh = Math.max(0, vehicle.battery_kwh * (limitPct - reading.soc) / 100);
@@ -324,6 +339,16 @@ async function computeTarget(nowMs, wb) {
       const since = Math.max(0, sessKwh - rt.socBase.kwh);
       if (since > 0.05) { needKwh = Math.max(0, needKwh - since); needSource += `, minus ${since.toFixed(1)} kWh charged since`; }
     }
+    if (usualToday) {
+      const moreKm = Math.max(0, Math.round(usualToday.kmMedian - (drive.kmToday || 0)));
+      const room = usable !== null ? Math.max(0, usable - needKwh) : Infinity;
+      const extra = Math.min(room, moreKm * kpkNow);
+      if (moreKm >= 2 && extra > 0.1) { needKwh += extra; needSource += ` · about ${moreKm} km more today (learned: ${usualToday.kmMedian} km on a ${WEEKDAY_NAMES[usualToday.weekday]})`; }
+    }
+  } else if (usualToday) {
+    // Out, and no state of charge from the car: what it usually drives on this weekday (odometer).
+    needKwh = Math.min(usable ?? Infinity, usualToday.kmMedian * kpkNow);
+    needSource = `estimated from the usual ${usualToday.kmMedian} km on a ${WEEKDAY_NAMES[usualToday.weekday]} (learned from the odometer)`;
   } else {
     // Estimate: energy of the trip the car just came back from (learned), minus what this session charged.
     const sessions = await learning.loadSessions(60, vehicle?.id || null);
@@ -357,7 +382,11 @@ async function computeTarget(nowMs, wb) {
   if (!rt.readyOverride || rt.readyOverride <= nowMs) {
     const stats = await learning.learnedDepartures(vehicle?.id || null);
     const nx = learning.nextReadyTime(stats, nowMs, { tz });
-    if (nx && (!readyAtMs || nx.at < readyAtMs)) { readyAtMs = nx.at; readySource = `${nx.source} ${nx.weekday} departure (${nx.confidence})`; }
+    if (nx && (!readyAtMs || nx.at < readyAtMs)) {
+      const day = WEEKDAY_NAMES[WEEKDAY_KEYS.indexOf(nx.weekday)] || nx.weekday;
+      readyAtMs = nx.at;
+      readySource = nx.source === 'override' ? `your departure time on ${day}` : `learned departure on ${day} (${nx.confidence} confidence)`;
+    }
   }
   if (readyAtMs) readyAtMs -= 0; // ready time already includes the learned margin
   if (rt.fullKey && rt.fullKey === rt.session) { needKwh = 0; needSource = 'battery full (not unplugged since)'; }
@@ -366,7 +395,47 @@ async function computeTarget(nowMs, wb) {
     needSource += ` — less than the ${minTopup} kWh minimum top-up, so no grid charging (solar surplus still counts)`;
     needKwh = 0;
   }
-  return { needKwh: round3(needKwh || 0), needSource, readyAtMs, readySource, vehicle, usable, reading };
+  return { needKwh: round3(needKwh || 0), needSource, readyAtMs, readySource, vehicle, usable, reading, drive, away };
+}
+
+// When the car that is out is expected home: an appointment with the car that is going on now (its
+// end + travel time), else the learned weekday pattern — the end of the last trip of the day from the
+// odometer, or the usual plug-in time from the Wallbox sessions. Null = no idea, or later than the
+// deadline (then the plan simply starts now).
+async function expectedArrival(nowMs, target, untilMs) {
+  if (!target.away) return null;
+  const { displayTz, localParts, localMidnight, localTimeOn } = require('./localTime');
+  const tz = displayTz();
+  try {
+    const list = await require('./agenda').items(new Date(nowMs - 12 * 3600000).toISOString(), new Date(nowMs + 3600000).toISOString());
+    const cur = list.find((i) => i.needsCar && Date.parse(i.start) <= nowMs && Date.parse(i.end) > nowMs && !i.allDay
+      && (!target.vehicle || !i.vehicle_id || i.vehicle_id === target.vehicle.id));
+    if (cur) {
+      const at = Date.parse(cur.end) + (cur.travelMin || 0) * 60000;
+      if (at > nowMs && at < untilMs) return { at, source: 'agenda', label: `agenda: ${cur.title}`, confidence: 'set' };
+    }
+  } catch { /* no agenda */ }
+  const sessionsStats = await require('./learning').learnedDepartures(target.vehicle?.id || null).catch(() => []);
+  for (let i = 0; i < 3; i++) {
+    const dayMs = localMidnight(nowMs, tz, i) + 12 * 3600000;
+    const wd = localParts(dayMs, tz).weekday;
+    const d = target.drive?.days?.[wd];
+    const st = sessionsStats[wd];
+    let pick = null;
+    if (d?.usual && d.back) pick = { time: d.back, source: 'odometer', confidence: d.confidence, n: d.drivenDays };
+    else if (st?.arrival && st.arrivalN >= 3) pick = { time: st.arrival, source: 'wallbox', confidence: st.arrivalN >= 12 ? 'high' : st.arrivalN >= 6 ? 'medium' : 'low', n: st.arrivalN };
+    if (!pick) continue;
+    const at = localTimeOn(dayMs, pick.time, tz);
+    if (at <= nowMs) continue;
+    if (at >= untilMs) return null;
+    return { at, source: pick.source, label: `learned: usually home around ${pick.time} on ${WEEKDAY_NAMES[wd]}`, confidence: pick.confidence };
+  }
+  return null;
+}
+
+function planSummary(p) {
+  if (!p) return null;
+  return { slots: p.slots, kwh: p.kwh, cost: p.cost, avgPrice: p.avgPrice, pvKwh: p.pvKwh };
 }
 
 // Price + expected solar surplus per interval from now to the deadline (or 36 h).
@@ -409,12 +478,20 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
     fuel = fuelBreakEven({ fuelEurL: fuelPrice?.eur_l ?? cfg.fuel_eur_l, lPer100km: vehicle.fuel_l_per_100km || 6.5, kwhPerKm: require('./driving').effectiveKwhPerKm(vehicle, cfg.default_kwh_per_km) });
     if (fuel !== null) priceCap = priceCap === null ? fuel : Math.min(priceCap, fuel);
   }
-  const plan = makePlan({
+  const planArgs = {
     nowMs, readyAtMs: target.readyAtMs, needKwh: target.needKwh, slots, mode: rt.override || cfg.mode,
     minKw: cfg.min_kw, maxKw: cfg.max_kw, solarTrust: cfg.solar_trust, priceCap,
     insufficient: vehicle?.type === 'phev' ? 'stop' : cfg.insufficient, feedIn: cfg.feed_in, feedInEur: cfg.feed_in_eur_kwh,
-  });
-  plan.target = { ...target, vehicle: vehicle ? { id: vehicle.id, name: vehicle.name, type: vehicle.type } : null, reading: undefined };
+  };
+  // The car is out: plan from the moment it is expected home; what it would do if it came home (or
+  // another car were plugged in) right now is kept next to it. Plugging in always re-plans from now.
+  const arrival = await expectedArrival(nowMs, target, until).catch(() => null);
+  const plan = makePlan(arrival ? { ...planArgs, nowMs: arrival.at } : planArgs);
+  if (arrival) {
+    plan.arrival = { at: new Date(arrival.at).toISOString(), source: arrival.source, label: arrival.label, confidence: arrival.confidence };
+    plan.ifNow = planSummary(makePlan(planArgs));
+  }
+  plan.target = { ...target, vehicle: vehicle ? { id: vehicle.id, name: vehicle.name, type: vehicle.type } : null, reading: undefined, drive: undefined };
   plan.fuelBreakEven = fuel;
   plan.priceCap = priceCap;
   plan.slotsAll = slots;

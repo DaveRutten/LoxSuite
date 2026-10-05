@@ -329,3 +329,15 @@ test('agenda.parseClimate: off/empty -> null, else 16–29.5 °C in half degrees
   assert.equal(agenda.parseClimate(12), 16);
   assert.equal(agenda.parseClimate(40), 29.5);
 });
+
+test('makePlan counts the solar part of a mixed interval (solar below the Wallbox minimum)', () => {
+  const now = Date.parse('2026-10-05T10:00:00Z');
+  const slots = hourlySlots('2026-10-05T10:00:00Z', [0.30, 0.15, 0.30], [0, 3, 0]);
+  const plan = planner.makePlan({ nowMs: now, needKwh: 11, slots, solarTrust: 'expected', minKw: 4.16, maxKw: 11 });
+  assert.equal(plan.slots.length, 1);
+  assert.equal(plan.slots[0].source, 'mixed');
+  assert.equal(plan.slots[0].pvKwh, 3);
+  assert.equal(plan.pvKwh, 3);
+  assert.equal(plan.gridKwh, 8);
+  assert.ok(plan.notes.some((n) => /below the Wallbox minimum/.test(n)));
+});

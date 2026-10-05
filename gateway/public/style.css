@@ -4712,3 +4712,28 @@ body.no-scroll { overflow: hidden; }
   .badge-dot { font-size: 0; padding: 0.3rem; gap: 0; background: transparent !important; }
   .badge-dot::before { width: 10px; height: 10px; }
 }
+
+/* Fold a card away (card-collapse.js): only its header stays; remembered per device. */
+.card-collapse-title { display: flex; align-items: center; gap: 0.4rem; }
+.card-collapse-btn {
+  margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; border: none; border-radius: 8px; background: transparent;
+  color: var(--text-muted); cursor: pointer; transition: background 0.15s, transform 0.2s;
+}
+.card-collapse-btn:hover { background: var(--surface-alt, rgba(127, 127, 127, 0.12)); color: var(--text); }
+.card-collapse-btn svg { transition: transform 0.2s; }
+.card-collapsed .card-collapse-btn svg { transform: rotate(-90deg); }
+.card.card-collapsed > :not(.card-head) { display: none !important; }
+.card.card-collapsed > .card-head, .card.card-collapsed .card-collapse-title { margin-bottom: 0 !important; }
+
+/* Long explanations folded to one line (hint-info.js) while help text is off (the lightbulb in the
+   top bar, remembered per device): hover = whole text, click = unfold. Lightbulb on = all in full. */
+body.panel-hints-hidden .hint.hint-clamp {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1;
+  overflow: hidden; cursor: help; position: relative; padding-left: 1.25em; border-radius: 6px;
+}
+body.panel-hints-hidden .hint.hint-clamp::before {
+  content: "ⓘ"; position: absolute; left: 0; top: 0; color: var(--accent, #5CA83F); font-style: normal; font-weight: 600;
+}
+body.panel-hints-hidden .hint.hint-clamp:hover, body.panel-hints-hidden .hint.hint-clamp:focus-visible { color: var(--text); }
+body.panel-hints-hidden .hint.hint-clamp.hint-open { -webkit-line-clamp: unset; line-clamp: unset; display: block; cursor: pointer; }
