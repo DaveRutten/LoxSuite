@@ -1,7 +1,16 @@
+# package.json without its "version": a version bump alone then leaves the dependency layer below
+# cached. Without this every release recompiled better-sqlite3 & co. for arm64 under QEMU (10+ min
+# per build, hours when several tags build at once). COPY --from compares file content, so an
+# unchanged dependency list is a cache hit.
+FROM node:20-alpine AS manifest
+WORKDIR /m
+COPY package.json ./package.src.json
+RUN node -e "const p=require('./package.src.json'); delete p.version; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2))"
+
 FROM node:20-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache python3 make g++
-COPY package.json ./
+COPY --from=manifest /m/package.json ./
 RUN npm install --omit=dev
 
 FROM eclipse-mosquitto:2 AS mosquitto

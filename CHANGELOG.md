@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.32.4-alpha.1] - 2026-10-05
+
+### Changed
+- **Faster Docker builds after a version bump.** The dependency layer was rebuilt whenever package.json changed,
+  so every release recompiled better-sqlite3 & co. for arm64 under emulation (10+ minutes per build, much longer
+  with several tags at once). The build now installs dependencies from package.json without its version, so a
+  release without dependency changes reuses the cached layer.
+
 ## [0.32.3-alpha.1] - 2026-10-05
 
 ### Changed
