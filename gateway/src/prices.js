@@ -152,6 +152,32 @@ function hourOfDayProfile(samples, tzHour) {
   });
 }
 
+// Pure: hours of day without data get the median of the hours that have it.
+function fillProfile(prof) {
+  const known = prof.filter((p) => p !== null).sort((a, b) => a - b);
+  if (!known.length) return prof;
+  const mid = known[Math.floor(known.length / 2)];
+  return prof.map((p) => (p === null ? mid : p));
+}
+
+// The Spot Price Optimizer's own price history (statistics, 15-minute values) of the last `days`
+// days through the Miniserver's MCP server. [] when that isn't authorized or has nothing.
+async function loxoneHistory(nowMs = Date.now(), days = 14, { callTool } = {}) {
+  const spo = await findSpotOptimizer();
+  if (!spo?.statGroup) return [];
+  const call = callTool || ((ms, name, input) => require('./mcpClient').callTool(ms, name, input));
+  const res = await call(spo.miniserver, 'control_statistics', {
+    uuid: spo.uuid, mode: 'raw', group_id: spo.statGroup,
+    from: new Date(nowMs - days * 86400000).toISOString(), to: new Date(nowMs).toISOString(), limit: 10000,
+  });
+  let obj = res;
+  if (res && Array.isArray(res.content)) {
+    if (res.isError) return [];
+    try { obj = JSON.parse(res.content.find((c) => c.type === 'text')?.text || '{}'); } catch { return []; }
+  }
+  return (obj?.rows || []).map((r) => ({ start: r.ts, price: Number(r.values?.[0]) })).filter((r) => Number.isFinite(Date.parse(r.start)) && Number.isFinite(r.price));
+}
+
 // ------------------------------------------------------------------ config
 
 async function getConfig() {
@@ -219,7 +245,8 @@ async function findSpotOptimizer() {
     try { s = await loxoneStructure.getStructure(ms); } catch { continue; }
     for (const [uuid, c] of Object.entries(s?.controls || {})) {
       if (c.type === 'SpotPriceOptimizer' && (!cfg.loxone_uuid || cfg.loxone_uuid === uuid)) {
-        return { miniserver: ms, uuid, name: c.name, currentState: c.states?.current };
+        const group = (c.statisticV2?.groups || []).find((g) => (g.dataPoints || []).some((d) => d.output === 'current'));
+        return { miniserver: ms, uuid, name: c.name, currentState: c.states?.current, statGroup: group ? String(group.id) : null };
       }
     }
   }
@@ -264,17 +291,29 @@ async function refreshPrices(nowMs = Date.now(), { fetchImpl } = {}) {
   const to = localMidnight(nowMs, undefined, 2);
   const calib = cfg.calibrate_loxone ? await calibration() : null;
   let intervals = [];
+  let basis = null;
   if (cfg.source === 'fixed') {
     // quarters, so a low tariff that starts at e.g. 22:45 is exact
     for (let t = from; t < to; t += 900000) intervals.push({ start: new Date(t).toISOString(), end: new Date(t + 900000).toISOString(), market: null, allin: round4(fixedPrice(t, cfg)) });
   } else if (cfg.source === 'loxone') {
-    const samples = (await settings.get('price_samples', [])) || [];
+    // Loxone's own API gives the current price and its history, not the day-ahead forecast the app
+    // shows: an estimate per hour of day from the last two weeks — the Miniserver's own statistics
+    // (through its MCP server, when authorized) plus what LoxSuite sampled itself.
+    const samples = ((await settings.get('price_samples', [])) || []).map((s) => ({ start: s.start, price: s.loxone }));
+    const history = await loxoneHistory(nowMs).catch(() => []);
     const { localParts } = require('./localTime');
-    const prof = hourOfDayProfile(samples.map((s) => ({ start: s.start, price: s.loxone })), (ms) => localParts(ms).hour);
+    const all = [...history, ...samples].filter((s) => Number.isFinite(s.price) && s.price !== 0);
+    if (!all.length) throw new Error('No Loxone prices yet: LoxSuite samples the Spot Price Optimizer every 15 minutes (or authorize its MCP server under Miniservers for its history).');
+    const prof = fillProfile(hourOfDayProfile(all, (ms) => localParts(ms).hour));
+    // the hours that already passed today: what the price really was
+    const actual = new Map(all.map((s) => [Math.floor(Date.parse(s.start) / 3600000) * 3600000, null]));
+    for (const s of all) { const h = Math.floor(Date.parse(s.start) / 3600000) * 3600000; const a = actual.get(h); actual.set(h, a ? { sum: a.sum + s.price, n: a.n + 1 } : { sum: s.price, n: 1 }); }
     for (let t = from; t < to; t += 3600000) {
-      const p = prof[localParts(t).hour];
-      if (p !== null) intervals.push({ start: new Date(t).toISOString(), end: new Date(t + 3600000).toISOString(), market: null, allin: p });
+      const a = t + 3600000 <= nowMs ? actual.get(t) : null;
+      const p = a ? round4(a.sum / a.n) : prof[localParts(t).hour];
+      intervals.push({ start: new Date(t).toISOString(), end: new Date(t + 3600000).toISOString(), market: null, allin: p });
     }
+    basis = all.length; // number of Spot Price Optimizer values the estimate is made from
   } else {
     let market = await fetchMarket(cfg, from, to, fetchImpl);
     if (cfg.price_interval !== 'quarter') market = toHourly(market);
@@ -287,7 +326,7 @@ async function refreshPrices(nowMs = Date.now(), { fetchImpl } = {}) {
   for (const i of intervals) {
     await db.upsert('energy_prices', { start_at: i.start, end_at: i.end, market_eur_kwh: i.market, allin_eur_kwh: i.allin, source: cfg.source, fetched_at: now }, ['start_at']);
   }
-  await settings.set('prices_status', { ok: true, at: now, count: intervals.length, until: intervals.length ? intervals[intervals.length - 1].end : null, calib });
+  await settings.set('prices_status', { ok: true, at: now, count: intervals.length, until: intervals.length ? intervals[intervals.length - 1].end : null, calib, basis });
   return { count: intervals.length, calib };
 }
 
@@ -326,7 +365,7 @@ function stopPrices() {
 }
 
 module.exports = {
-  DEFAULTS, allinPrice, fitLinear, parseEnergyZero, parseEntsoe, entsoeTime, hourOfDayProfile, toIntervals, toHourly, fixedPrice,
+  DEFAULTS, allinPrice, fitLinear, parseEnergyZero, parseEntsoe, entsoeTime, hourOfDayProfile, fillProfile, loxoneHistory, toIntervals, toHourly, fixedPrice,
   getConfig, saveConfig, fetchMarket, refreshPrices, getPrices, currentPrice, calibration, sampleCalibration,
   loxoneCurrentPrice, findSpotOptimizer, startPrices, stopPrices,
 };

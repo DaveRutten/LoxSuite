@@ -8,7 +8,7 @@
   <h2 style="margin-top:0;"><%= t('Prices, solar & fuel') %></h2>
   <p class="hint" style="margin:0 0 0.4rem;"><%= t('Used by Smart charging, the energy manager, Driving & costs and OCPP costs.') %></p>
   <details <%= saved === 'prices' ? 'open' : '' %>>
-    <summary><strong><%= t('Electricity price') %></strong> <span class="hint"><%= priceStatus ? (priceStatus.ok ? `· ${priceStatus.count} intervals, until ${formatDateTime(priceStatus.until)}` : `· ${priceStatus.error}`) : '' %></span></summary>
+    <summary><strong><%= t('Electricity price') %></strong> <span class="hint"><%= priceStatus ? (priceStatus.ok ? '· ' + t('{0} intervals, until {1}', [priceStatus.count, formatDateTime(priceStatus.until)]) + (priceStatus.basis ? ' · ' + t('estimate from {0} Spot Price Optimizer values', [priceStatus.basis]) : '') : '· ' + t(priceStatus.error)) : '' %></span></summary>
     <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
       <input type="hidden" name="section" value="prices">
       <div class="form-grid">

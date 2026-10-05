@@ -3887,5 +3887,8 @@
   "on the way home ({0} km, ~{1} min drive)": "onderweg naar huis ({0} km, ~{1} min rijden)",
   "parked {0} km away at {1}": "geparkeerd op {0} km, bij {1}",
   "parked {0} km from home": "geparkeerd op {0} km van huis",
-  "Administration → Energy & charging": "Beheer → Energie & laden"
+  "Administration → Energy & charging": "Beheer → Energie & laden",
+  "{0} intervals, until {1}": "{0} intervallen, tot {1}",
+  "estimate from {0} Spot Price Optimizer values": "schatting uit {0} waarden van de Spot Price Optimizer",
+  "No Loxone prices yet: LoxSuite samples the Spot Price Optimizer every 15 minutes (or authorize its MCP server under Miniservers for its history).": "Nog geen Loxone-prijzen: LoxSuite leest de Spot Price Optimizer elke 15 minuten uit (of autoriseer zijn MCP-server onder Miniservers voor de geschiedenis)."
 }

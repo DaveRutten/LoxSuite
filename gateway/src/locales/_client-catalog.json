@@ -7962,6 +7962,13 @@
   ]
  },
  {
+  "key": "No Loxone prices yet: LoxSuite samples the Spot Price Optimizer every 15 minutes (or authorize its MCP server under Miniservers for its history).",
+  "module": "energy",
+  "where": [
+   "src/prices.js"
+  ]
+ },
+ {
   "key": "No mappings yet.",
   "module": "mqtt",
   "where": [

@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.35.1-alpha.1] - 2026-10-05
+
+### Fixed
+- **Price source Loxone left hours out**: hours of the day without samples got no price at all. The estimate
+  now also uses the Spot Price Optimizer's own history of the last two weeks (its statistics, through the
+  Miniserver's MCP server when that is authorized), hours without data get the median, and the hours that
+  already passed today use the real price. Loxone's API only gives the current price and its history, not the
+  day-ahead forecast the Loxone app shows — so this stays an estimate; Settings says how many values it is
+  made from.
+- "48 intervals, until …" on Energy & charging is now translated.
+
 ## [0.35.0-alpha.1] - 2026-10-05
 
 ### Changed
