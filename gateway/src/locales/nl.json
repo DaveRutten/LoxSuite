@@ -3756,10 +3756,19 @@
   "skipped": "overgeslagen",
   "Skoda: Climate started": "Skoda: klimaat gestart",
   "Start this long before leaving (min)": "Zo lang voor vertrek starten (min)",
-  "Starts {0} min before you leave{1}.{2}": "Start {0} min voor vertrek{1}.{2}",
   "Temperature": "Temperatuur",
   "trying again": "opnieuw proberen",
   "Where it goes": "Waar het heen gaat",
   "Work": "Werk",
-  "Would start the air conditioning at {0} °C for \"{1}\" (leave {2}). Switch \"Climate at departure\" on in the agenda settings to send it.": "Zou de airco starten op {0} °C voor \"{1}\" (vertrek {2}). Zet \"Klimaat bij vertrek\" aan in de agenda-instellingen om het te versturen."
+  "Would start the air conditioning at {0} °C for \"{1}\" (leave {2}). Switch \"Climate at departure\" on in the agenda settings to send it.": "Zou de airco starten op {0} °C voor \"{1}\" (vertrek {2}). Zet \"Klimaat bij vertrek\" aan in de agenda-instellingen om het te versturen.",
+  "Already handled for this departure.": "Voor dit vertrek al afgehandeld.",
+  "Off. Switching it on sets it for every week.": "Uit. Aanzetten geldt voor elke week.",
+  "Starts {0} min before you leave{1}.{2}{3}": "Start {0} min voor vertrek{1}.{2}{3}",
+  "Switch off for every week": "Voor elke week uitzetten",
+  "switched off": "uitgezet",
+  "Switched off for this time; the other weeks keep {0} °C.": "Deze keer uitgezet; de andere weken blijven op {0} °C.",
+  "Switching it off skips this time only.": "Uitzetten slaat alleen deze keer over.",
+  "Temperature (every week)": "Temperatuur (elke week)",
+  "Switched off for this time.": "Deze keer uitgezet.",
+  "Off.": "Uit."
 }

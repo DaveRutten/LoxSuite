@@ -26,7 +26,7 @@ exports.up = async function up(knex) {
     t.text('title');
     t.text('depart_at').notNullable();
     t.float('target_c');
-    t.text('status').notNullable(); // sent | logged | failed | skipped | retry
+    t.text('status').notNullable(); // sent | logged | failed | skipped | retry | off (switched off for this time)
     t.text('message');
     t.integer('attempts').notNullable().defaultTo(0);
     t.text('next_at');

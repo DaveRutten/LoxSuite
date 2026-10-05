@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.31.1-alpha.1] - 2026-10-05
+
+### Changed
+- **Climate at departure has an on/off switch** per appointment or trip (with the temperature next to it), so you
+  can leave it off when you don't want it. For a weekly trip, switching it off skips just that week (the other weeks
+  keep their temperature); "Switch off for every week" turns it off for good. The last temperature you picked is
+  remembered for the next one. Appointments with climate on show 🌡️ in the agenda.
+
+### Fixed
+- Weekday names in the agenda (Mon, Tue …) follow the user's language.
+
 ## [0.31.0-alpha.1] - 2026-10-05
 
 ### Added

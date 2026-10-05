@@ -2120,6 +2120,13 @@
   ]
  },
  {
+  "key": "Already handled for this departure.",
+  "module": "charging",
+  "where": [
+   "src/routes/agenda.js"
+  ]
+ },
+ {
   "key": "already monitored",
   "module": "core",
   "where": [
@@ -8418,6 +8425,13 @@
   ]
  },
  {
+  "key": "Off. Switching it on sets it for every week.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "offline",
   "module": "monitor",
   "where": [
@@ -10402,7 +10416,7 @@
   ]
  },
  {
-  "key": "Starts {0} min before you leave{1}.{2}",
+  "key": "Starts {0} min before you leave{1}.{2}{3}",
   "module": "charging",
   "where": [
    "agenda (script)"
@@ -10557,6 +10571,13 @@
   ]
  },
  {
+  "key": "Switch off for every week",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Switch the module off first.",
   "module": "core",
   "where": [
@@ -10568,6 +10589,20 @@
   "module": "core",
   "where": [
    "src/routes/languages.js"
+  ]
+ },
+ {
+  "key": "Switched off for this time; the other weeks keep {0} °C.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "Switching it off skips this time only.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -10637,10 +10672,18 @@
  },
  {
   "key": "Temperature",
-  "module": "core",
+  "module": "charging",
   "where": [
+   "agenda (script)",
    "src/carClimate.js",
    "src/notifications.js"
+  ]
+ },
+ {
+  "key": "Temperature (every week)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {

@@ -55,6 +55,7 @@ router.get('/items.json', asyncHandler(async (req, res) => {
     it.climateOk = !!vid && skoda.has(vid);
     const r = runOf.get(carClimate.itemKey(it));
     if (r) it.climateRun = { status: r.status, message: r.message, at: r.updated_at };
+    it.climateOff = r?.status === 'off';
   }
   const acfg = await agenda.getConfig();
   res.json({ items, learned, plan: plan ? plan.slots : [], sessions, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
@@ -130,6 +131,26 @@ router.post('/trips', requirePermission('charging', 'edit'), asyncHandler(async 
 
 router.post('/trips/:id/climate.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   await db.prepare('UPDATE trips SET climate_c = ? WHERE id = ?').run(agenda.parseClimate(req.body?.climate_c), req.params.id);
+  res.json({ ok: true });
+}));
+
+// Climate off (or back on) for one departure only — e.g. one week of a weekly trip.
+router.post('/climate-skip.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
+  const b = req.body || {};
+  const leave = Date.parse(b.leave_at || b.start);
+  if (!b.start || !Number.isFinite(Date.parse(b.start)) || !Number.isFinite(leave) || !['trip', 'event'].includes(b.kind)) return res.json({ ok: false, message: 'Missing event.' });
+  const key = require('../carClimate').itemKey({ kind: b.kind, id: Number(b.id), calendar_id: Number(b.calendar_id), uid: String(b.uid || ''), start: String(b.start) });
+  const cur = await db.prepare('SELECT status FROM climate_runs WHERE item_key = ?').get(key);
+  if (Number(b.off)) {
+    if (cur && cur.status !== 'off') return res.json({ ok: false, message: 'Already handled for this departure.' });
+    const now = new Date().toISOString();
+    await db.upsert('climate_runs', {
+      item_key: key, vehicle_id: null, title: String(b.title || '').slice(0, 120), depart_at: new Date(leave).toISOString(), target_c: agenda.parseClimate(b.target_c),
+      status: 'off', message: 'Switched off for this time.', attempts: 0, next_at: null, created_at: now, updated_at: now,
+    }, ['item_key']);
+  } else if (cur?.status === 'off') {
+    await db.prepare("DELETE FROM climate_runs WHERE item_key = ? AND status = 'off'").run(key);
+  }
   res.json({ ok: true });
 }));
 

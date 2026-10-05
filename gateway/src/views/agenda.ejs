@@ -110,7 +110,7 @@
     <p class="hint" style="margin:0.5rem 0 0;"><%= t('Choose a temperature per appointment or trip (click it in the agenda). At the set time before you leave, LoxSuite asks the car to start its air conditioning through the Škoda API, once per departure. Only for cars with the Škoda API as data source; each start uses one of the 20 API requests per hour. With "Log only" LoxSuite just writes down what it would have sent.') %><% if (!skodaCars) { %> <strong><%= t('No car uses the Škoda API yet.') %></strong><% } %></p>
     <% if (climateRuns.length) { %>
       <table class="table" style="margin-top:0.6rem; font-size:0.85rem;"><thead><tr><th><%= t('Leaves') %></th><th><%= t('Trip') %></th><th><%= t('Status') %></th><th><%= t('Detail') %></th></tr></thead><tbody>
-        <% climateRuns.forEach(r => { %><tr><td><%= formatDateTime(r.depart_at) %></td><td><%= r.title %> · <%= r.target_c %> °C</td><td><%= ({ sent: t('sent'), logged: t('logged'), failed: t('failed'), skipped: t('skipped'), retry: t('trying again') })[r.status] || r.status %></td><td><%= r.message %></td></tr><% }) %>
+        <% climateRuns.forEach(r => { %><tr><td><%= formatDateTime(r.depart_at) %></td><td><%= r.title %> · <%= r.target_c %> °C</td><td><%= ({ sent: t('sent'), logged: t('logged'), failed: t('failed'), skipped: t('skipped'), retry: t('trying again'), off: t('switched off') })[r.status] || r.status %></td><td><%= r.message %></td></tr><% }) %>
       </tbody></table>
     <% } %>
     <p class="hint" style="margin:0.5rem 0 0;">
@@ -130,7 +130,8 @@
   var cursor = new Date();
   var data = null;
   var selected = null;
-  var DAYN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  // weekday names in the user's language (Mon 5 Oct 2026 is a Monday)
+  var DAYN = [0, 1, 2, 3, 4, 5, 6].map(function (i) { return new Date(2026, 9, 5 + i).toLocaleDateString([], { weekday: 'short' }); });
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
   function tm(d) { return new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
@@ -177,7 +178,8 @@
 
   function itemColor(i) { return i.color || '#3b82c4'; }
   // The car marker only once: not again in front of a title that already has one.
-  function carMark(i) { return i.needsCar && !/[\u{1F697}\u{1F699}\u{1F698}]/u.test(i.title || '') ? '🚗 ' : ''; }
+  function lastTemp() { try { return Number(localStorage.getItem('ag-climate-last')) || 20; } catch (e) { return 20; } }
+  function carMark(i) { return (i.needsCar && !/[\u{1F697}\u{1F699}\u{1F698}]/u.test(i.title || '') ? '🚗 ' : '') + (i.needsCar && i.climateC != null && !i.climateOff ? '🌡️ ' : ''); }
   function itemsOnDay(day) { var e = addDays(day, 1); return (data.items || []).filter(function (i) { return new Date(i.start) < e && new Date(i.end) > day; }); }
 
   function render() {
@@ -328,28 +330,49 @@
     if (it.kind === 'event' && canEdit && it.needsCar) html += '<div style="margin-top:0.7rem;"><label>Own value (optional)</label><input type="text" id="ag-own" value="' + esc(it.own || '') + '" placeholder="150 km, 30 kWh or full"><button type="button" class="btn-soft" id="ag-own-save" style="margin-top:0.3rem;">Save</button></div>';
     if (it.needsCar && (canEdit || it.climateC != null)) {
       var cm = (data.climate || {}).mode || 'log';
-      var opts = '<option value="">off</option>';
-      for (var tc = 16; tc <= 26; tc++) opts += '<option value="' + tc + '"' + (Number(it.climateC) === tc ? ' selected' : '') + '>' + tc + ' °C</option>';
+      var lead = (data.climate || {}).leadMin || 20;
+      var weekly = it.kind === 'trip' && it.weekly;
+      var climOn = it.climateC != null && !it.climateOff;
+      var opts = '';
+      for (var tc = 16; tc <= 26; tc++) opts += '<option value="' + tc + '"' + (Number(it.climateC || lastTemp()) === tc ? ' selected' : '') + '>' + tc + ' °C</option>';
       if (it.climateC != null && (it.climateC % 1 || it.climateC < 16 || it.climateC > 26)) opts += '<option value="' + it.climateC + '" selected>' + nf(it.climateC, 1) + ' °C</option>';
       html += '<div style="margin-top:0.7rem; padding:0.5rem 0.7rem; border-radius:10px; background:var(--surface-alt, #f4f6f8);">' +
         '<div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;"><strong>🌡️ Climate at departure</strong>' +
-        (canEdit ? '<select id="ag-climate" style="width:auto;"' + (it.climateOk ? '' : ' disabled') + '>' + opts + '</select>' : '<span>' + nf(it.climateC, 1) + ' °C</span>') + '</div>' +
-        '<div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;">' +
+        (canEdit ? '<label class="switch"><input type="checkbox" id="ag-clim-on"' + (climOn ? ' checked' : '') + (it.climateOk ? '' : ' disabled') + '><span class="switch-track"><span class="switch-thumb"></span></span></label>'
+          : '<span>' + (climOn ? nf(it.climateC, 1) + ' °C' : 'off') + '</span>') + '</div>';
+      if (canEdit && climOn) {
+        html += '<div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-top:0.35rem;"><span>' + (weekly ? 'Temperature (every week)' : 'Temperature') + '</span><select id="ag-climate" style="width:auto;">' + opts + '</select></div>';
+      }
+      html += '<div class="hint" style="margin:0.25rem 0 0; font-size:0.75rem;">' +
         (!it.climateOk ? 'Needs a car with the Škoda API as data source.'
+          : it.climateOff ? 'Switched off for this time; the other weeks keep ' + nf(it.climateC, 1) + ' °C.'
+          : !climOn ? (weekly ? 'Off. Switching it on sets it for every week.' : 'Off.')
           : cm === 'off' ? 'Climate at departure is off in the agenda settings.'
-          : 'Starts ' + ((data.climate || {}).leadMin || 20) + ' min before you leave' + (it.leaveAt ? ' (' + tm(new Date(Date.parse(it.leaveAt) - ((data.climate || {}).leadMin || 20) * 60000).toISOString()) + ')' : '') + '.' + (cm === 'log' ? ' Log only: nothing is sent to the car yet (agenda settings).' : '')) +
+          : 'Starts ' + lead + ' min before you leave' + (it.leaveAt ? ' (' + tm(new Date(Date.parse(it.leaveAt) - lead * 60000).toISOString()) + ')' : '') + '.' + (cm === 'log' ? ' Log only: nothing is sent to the car yet (agenda settings).' : '') + (weekly ? ' Switching it off skips this time only.' : '')) +
         '</div>' +
-        (it.climateRun ? '<div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;' + (it.climateRun.status === 'failed' ? ' color:var(--danger);' : '') + '">' + esc(it.climateRun.message || it.climateRun.status) + '</div>' : '') +
+        (canEdit && weekly && it.climateC != null ? '<div style="margin-top:0.25rem; font-size:0.8rem;"><a href="#" id="ag-clim-all">Switch off for every week</a></div>' : '') +
+        (it.climateRun && it.climateRun.status !== 'off' ? '<div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;' + (it.climateRun.status === 'failed' ? ' color:var(--danger);' : '') + '">' + esc(it.climateRun.message || it.climateRun.status) + '</div>' : '') +
         '</div>';
     }
     html += '<p style="margin:0.6rem 0 0;"><a href="#" id="ag-close">Close</a></p></div>';
     el.innerHTML = html;
-    var clim = document.getElementById('ag-climate');
-    if (clim) clim.onchange = function () {
-      var v = clim.value;
-      if (it.kind === 'trip') post('/agenda/trips/' + it.id + '/climate.json', { climate_c: v }).then(load);
-      else post('/agenda/override.json', { calendar_id: it.calendar_id, uid: it.uid, start_at: it.start, climate_c: v }).then(load);
+    var setTemp = function (v) {
+      if (it.kind === 'trip') return post('/agenda/trips/' + it.id + '/climate.json', { climate_c: v });
+      return post('/agenda/override.json', { calendar_id: it.calendar_id, uid: it.uid, start_at: it.start, climate_c: v });
     };
+    var skip = function (off) {
+      return post('/agenda/climate-skip.json', { kind: it.kind, id: it.id, calendar_id: it.calendar_id, uid: it.uid, start: it.start, leave_at: it.leaveAt, title: it.title, target_c: it.climateC, off: off ? 1 : 0 });
+    };
+    var climOnEl = document.getElementById('ag-clim-on');
+    if (climOnEl) climOnEl.onchange = function () {
+      var weeklySet = it.kind === 'trip' && it.weekly && it.climateC != null;
+      if (climOnEl.checked) (it.climateOff ? skip(false) : setTemp(lastTemp())).then(load);
+      else (weeklySet ? skip(true) : setTemp('')).then(load);
+    };
+    var clim = document.getElementById('ag-climate');
+    if (clim) clim.onchange = function () { try { localStorage.setItem('ag-climate-last', clim.value); } catch (e) {} setTemp(clim.value).then(load); };
+    var climAll = document.getElementById('ag-clim-all');
+    if (climAll) climAll.onclick = function (e) { e.preventDefault(); (it.climateOff ? skip(false) : Promise.resolve()).then(function () { return setTemp(''); }).then(load); };
     var save = function (patch) {
       post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.start, needs_car: document.getElementById('ag-need') ? document.getElementById('ag-need').value : '', own_value: document.getElementById('ag-own') ? document.getElementById('ag-own').value : it.own }, patch || {})).then(load);
     };

@@ -100,3 +100,10 @@ test('skipped for a car without the Škoda API or without the operation', async 
   r = await cc.tick(LEAVE - 10 * 60000, { command: async () => assert.fail('must not send') });
   assert.equal(r[0].status, 'skipped');
 });
+
+test('a departure switched off for this time is left alone', async () => {
+  reset(); items = [trip];
+  cfg = { climate_mode: 'on', climate_lead_min: 20 };
+  runs.set(cc.itemKey(trip), { item_key: cc.itemKey(trip), status: 'off' });
+  assert.deepEqual(await cc.tick(LEAVE - 10 * 60000, { command: async () => assert.fail('must not send') }), []);
+});

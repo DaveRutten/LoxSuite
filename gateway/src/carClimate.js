@@ -6,7 +6,8 @@
 // Global switch in the agenda settings: 'off', 'log' (default: only write down what it would send,
 // nothing goes to the car) or 'on'. Every departure is handled once (climate_runs); a failed send is
 // retried at most twice while there is still time. One command = one of the car's 20 API
-// requests per hour.
+// requests per hour. A departure can be switched off for that one time (status 'off', e.g. one week
+// of a weekly trip); the worker then leaves it alone.
 const db = require('./db');
 
 const MAX_ATTEMPTS = 3;
@@ -69,6 +70,7 @@ async function tick(nowMs = Date.now(), deps = {}) {
     if (!due(item, nowMs, lead)) continue;
     const key = itemKey(item);
     const prev = await db.prepare('SELECT * FROM climate_runs WHERE item_key = ?').get(key);
+    // handled already, or switched off for this time ('off')
     if (prev && (prev.status !== 'retry' || (prev.next_at && Date.parse(prev.next_at) > nowMs))) continue;
     const vehicle = item.vehicle_id
       ? await db.prepare('SELECT * FROM vehicles WHERE id = ?').get(item.vehicle_id)
