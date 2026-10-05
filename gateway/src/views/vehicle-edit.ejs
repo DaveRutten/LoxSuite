@@ -16,12 +16,8 @@
     <p class="hint">
       <%= t('LoxSuite publishes this car\'s values as retained MQTT topics (') %><code>loxsuite/vehicles/<%= v.id %>/&hellip;</code><%= t(', on change). Add them as monitors, or map them to Loxone under Mappings.') %>
     </p>
-    <div id="veh-monitor-picks" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:0.3rem 1rem;">
-      <% Object.entries(topics).forEach(([k, t]) => { %>
-        <label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" value="<%= k %>" <%= ['soc', 'plugged', 'home'].includes(k) ? 'checked' : '' %>> <%= topicLabels[k] %> <code class="hint" style="font-size:0.72rem;"><%= t %></code></label>
-      <% }) %>
-    </div>
-    <div class="btn-row" style="margin-top:0.6rem;"><button type="button" class="btn-soft" id="veh-monitor-btn"><%- icon('plus') %> <%= t('Add to Monitor') %></button></div>
+    <div id="veh-monitor-picks"></div>
+    <div class="btn-row" style="margin-top:0.6rem;"><button type="button" class="btn-soft" id="veh-monitor-btn"><%- icon('plus') %> <%= t('Add selected to Monitor') %></button></div>
     <div id="veh-monitor-result" class="hint" style="margin-top:0.4rem;"></div>
   </details>
 </div>
@@ -91,16 +87,10 @@
   function tick() { fetch('/vehicles/<%= v.id %>/status.json').then(function (r) { return r.json(); }).then(render).catch(function () {}); }
   tick();
   setInterval(tick, 10000);
-  var monBtn = document.getElementById('veh-monitor-btn');
-  if (monBtn) monBtn.addEventListener('click', function () {
-    var metrics = Array.prototype.slice.call(document.querySelectorAll('#veh-monitor-picks input:checked')).map(function (c) { return c.value; });
-    var out = document.getElementById('veh-monitor-result');
-    monBtn.disabled = true;
-    fetch('/vehicles/<%= v.id %>/monitor', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metrics: metrics }) })
-      .then(function (r) { return r.json(); })
-      .then(function (d) { out.innerHTML = !d.ok ? esc(d.message) : ('Added ' + d.created.length + ' monitor(s)' + (d.skipped.length ? ', ' + d.skipped.length + ' already existed' : '') + '. <a href="/monitor">Open Monitor</a>'); })
-      .catch(function (e) { out.textContent = e.message; })
-      .finally(function () { monBtn.disabled = false; });
+  var picks = document.getElementById('veh-monitor-picks');
+  if (picks) window.lsMonitorPicks(picks, {
+    items: <%- JSON.stringify(Object.entries(topics).map(([k, tp]) => ({ key: k, label: t(topicLabels[k]), topic: tp, monitorId: monitored[k] || null }))) %>,
+    postUrl: '/vehicles/<%= v.id %>/monitor', button: document.getElementById('veh-monitor-btn'), out: document.getElementById('veh-monitor-result'),
   });
 })();
 </script>

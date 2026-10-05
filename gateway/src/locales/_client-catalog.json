@@ -150,9 +150,7 @@
   "key": ", {0} already existed",
   "module": "energy",
   "where": [
-   "energy (script)",
-   "ocpp-bridge-edit (script)",
-   "vehicle-edit (script)"
+   "energy (script)"
   ]
  },
  {
@@ -648,13 +646,6 @@
   ]
  },
  {
-  "key": "(Homey: often",
-  "module": "vehicles",
-  "where": [
-   "driving (script)"
-  ]
- },
- {
   "key": "(last 8 weeks, {0} days measured{1})",
   "module": "energy_manager",
   "where": [
@@ -781,13 +772,6 @@
   "module": "monitor",
   "where": [
    "dashboard-detail"
-  ]
- },
- {
-  "key": ") to see trips and km.",
-  "module": "vehicles",
-  "where": [
-   "driving (script)"
   ]
  },
  {
@@ -1201,6 +1185,13 @@
   "module": "core",
   "where": [
    "src/routes/languages.js"
+  ]
+ },
+ {
+  "key": "{0} trips, on average {1} km",
+  "module": "vehicles",
+  "where": [
+   "driving (script)"
   ]
  },
  {
@@ -1920,12 +1911,17 @@
   ]
  },
  {
+  "key": "Added {0} monitor(s).",
+  "module": "monitor",
+  "where": [
+   "public/monitor-picks.js"
+  ]
+ },
+ {
   "key": "Added {0} monitor(s){1}.",
   "module": "energy",
   "where": [
-   "energy (script)",
-   "ocpp-bridge-edit (script)",
-   "vehicle-edit (script)"
+   "energy (script)"
   ]
  },
  {
@@ -2655,13 +2651,6 @@
   ]
  },
  {
-  "key": "battery %",
-  "module": "vehicles",
-  "where": [
-   "driving (script)"
-  ]
- },
- {
   "key": "battery full (not unplugged since)",
   "module": "charging",
   "where": [
@@ -3183,6 +3172,13 @@
   "where": [
    "miniservers (script)",
    "public/miniservers-tabulator.js"
+  ]
+ },
+ {
+  "key": "checked disabled",
+  "module": "monitor",
+  "where": [
+   "public/monitor-picks.js"
   ]
  },
  {
@@ -4680,9 +4676,10 @@
  },
  {
   "key": "Error",
-  "module": "core",
+  "module": "monitor",
   "where": [
    "app (script)",
+   "public/monitor-picks.js",
    "src/format.js",
    "src/routes/miniservers.js",
    "translations (script)"
@@ -5749,6 +5746,13 @@
   ]
  },
  {
+  "key": "in Monitor",
+  "module": "monitor",
+  "where": [
+   "public/monitor-picks.js"
+  ]
+ },
+ {
   "key": "Inbound endpoint responded {0}{1}",
   "module": "mqtt",
   "where": [
@@ -5802,20 +5806,6 @@
   "module": "core",
   "where": [
    "src/routes/auth.js"
-  ]
- },
- {
-  "key": "is mapped — without it the consumption and electric/fuel split can't be learned.",
-  "module": "vehicles",
-  "where": [
-   "driving (script)"
-  ]
- },
- {
-  "key": "is mapped for {0} — map it under",
-  "module": "vehicles",
-  "where": [
-   "driving (script)"
   ]
  },
  {
@@ -8785,8 +8775,7 @@
   "module": "energy",
   "where": [
    "energy (script)",
-   "ocpp-bridge-edit (script)",
-   "vehicle-edit (script)"
+   "public/monitor-picks.js"
   ]
  },
  {
@@ -9010,8 +8999,9 @@
  },
  {
   "key": "Pick at least one value.",
-  "module": "energy",
+  "module": "monitor",
   "where": [
+   "public/monitor-picks.js",
    "src/routes/energy.js",
    "src/routes/ocpp.js",
    "src/routes/vehicles.js"
@@ -11012,6 +11002,13 @@
   ]
  },
  {
+  "key": "The battery % is not mapped yet — without it the consumption and the electric/fuel split can't be learned.",
+  "module": "vehicles",
+  "where": [
+   "driving (script)"
+  ]
+ },
+ {
   "key": "The car is not accepting requests right now (e.g. deep sleep or no connection).",
   "module": "vehicles",
   "where": [
@@ -11135,6 +11132,13 @@
   "module": "charging",
   "where": [
    "src/reminders.js"
+  ]
+ },
+ {
+  "key": "The odometer of {0} is not mapped yet — map it under Vehicles to see trips and km (Homey: often meter_mileage / odometer; the Škoda API gives it by itself).",
+  "module": "vehicles",
+  "where": [
+   "driving (script)"
   ]
  },
  {

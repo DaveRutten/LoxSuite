@@ -90,17 +90,18 @@
     if (d.error) { document.getElementById('dr-tiles').innerHTML = '<p class="hint" style="margin:0;">' + esc(d.error) + '</p>'; return; }
     var v = d.vehicle, phev = v.type === 'phev';
     var warn = [];
-    if (!v.hasOdometerField) warn.push('No <strong>odometer</strong> is mapped for ' + esc(v.name) + ' &mdash; map it under <a href="/vehicles">Vehicles</a> (Homey: often <code>meter_mileage</code> / <code>odometer</code>) to see trips and km.');
-    if (!v.hasSocField) warn.push('No <strong>battery %</strong> is mapped &mdash; without it the consumption and electric/fuel split can\'t be learned.');
+    var TR = function (k, a) { var s2 = (window.LS_I18N && window.LS_I18N[k]) || k; return esc(s2).replace('{0}', esc(a || '')); };
+    if (!v.hasOdometerField) warn.push(TR('The odometer of {0} is not mapped yet — map it under Vehicles to see trips and km (Homey: often meter_mileage / odometer; the Škoda API gives it by itself).', v.name) + ' <a href="/vehicles">' + TR('Vehicles') + '</a>');
+    if (!v.hasSocField) warn.push(TR('The battery % is not mapped yet — without it the consumption and the electric/fuel split can\'t be learned.'));
     if (!v.battery_kwh) warn.push('No <strong>battery size</strong> set for ' + esc(v.name) + ' &mdash; needed to turn battery % into kWh.');
     document.getElementById('dr-warn').innerHTML = warn.map(function (w) { return '<p class="hint" style="border-left:3px solid #d4a017; padding-left:0.6rem;">' + w + '</p>'; }).join('');
 
     var c = d.consumption, cur = d.months[d.months.length - 1] || null, tot = d.months.reduce(function (a, m) { a.km += m.km || 0; a.e += m.elecKm || 0; a.f += m.fuelKm || 0; return a; }, { km: 0, e: 0, f: 0 });
-    var used = v.kwh_per_km ? 'your own setting: ' + nf(v.kwh_per_km * 100, 1) + ' kWh/100 km' : (c.kwhPer100 && c.confidence !== 'none' ? 'used for planning' : 'not enough data yet — planning uses ' + nf(d.kwhPerKmUsed * 100, 1));
+    var used = v.kwh_per_km ? TR('your own setting: {0} kWh/100 km', nf(v.kwh_per_km * 100, 1)) : (c.kwhPer100 && c.confidence !== 'none' ? TR('used for planning') : TR('not enough data yet — planning uses {0}', nf(d.kwhPerKmUsed * 100, 1)));
     var tiles = [
       tile('Electric consumption', c.kwhPer100 != null ? nf(c.kwhPer100, 1) + ' <span style="font-size:0.8rem; font-weight:500;">kWh/100 km</span>' : '—',
         '<span style="color:' + CONF[c.confidence] + ';">' + c.confidence + '</span> · ' + nf(c.km, 0) + ' km · ' + used),
-      tile('Driven this month', nf(cur ? cur.km : 0, 0) + ' <span style="font-size:0.8rem; font-weight:500;">km</span>', cur ? cur.trips + ' trip(s), avg ' + nf(cur.avgTripKm, 0) + ' km' : ''),
+      tile('Driven this month', nf(cur ? cur.km : 0, 0) + ' <span style="font-size:0.8rem; font-weight:500;">km</span>', cur ? TR('{0} trips, on average {1} km', cur.trips).replace('{1}', nf(cur.avgTripKm, 0)) : ''),
     ];
     if (phev) tiles.push(tile('On electricity', tot.e + tot.f > 0 ? Math.round(tot.e / (tot.e + tot.f) * 100) + '%' : '—', nf(tot.e, 0) + ' km electric · ' + nf(tot.f, 0) + ' km fuel', '#4caf50'));
     tiles.push(tile('Cost per km', eur(d.prices.elecPerKm, 3), 'electric · fuel ' + eur(d.prices.fuelPerKm, 3) + ' (' + eur(d.prices.fuelEurL) + '/l)'));

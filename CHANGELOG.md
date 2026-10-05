@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.32.3-alpha.1] - 2026-10-05
+
+### Changed
+- **"Use in Monitor" on the vehicle and OCPP pages** is tidier: compact tiles (name with the topic under it),
+  more per row, a bit more room under the title. Values that already have a monitor show as checked with an
+  "in Monitor →" link — what you added before is visible again after a reload or an update (before, the same
+  three boxes were simply pre-ticked every time). The button adds only the newly ticked values.
+
+### Fixed
+- **Driving & costs said no odometer / battery % was mapped for a car on the Škoda API** — the Škoda API always
+  provides both; the check now also looks at the readings themselves. The warnings and two tile texts are Dutch
+  now.
+
 ## [0.32.2-alpha.1] - 2026-10-05
 
 ### Fixed

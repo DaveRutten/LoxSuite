@@ -17,6 +17,7 @@
   <% if (typeof lang !== 'undefined' && lang !== 'en') { %>
   <script src="/i18n/<%= lang %>.js?v=<%= typeof i18nVersion !== 'undefined' ? i18nVersion : assetVersion %>"></script>
   <script src="/i18n.js?v=<%= assetVersion %>"></script>
+  <script src="/monitor-picks.js?v=<%= assetVersion %>"></script>
   <% } %>
   <script>
     // Dates and numbers in the browser follow the user's language (nl -> nl-NL) and the clock setting

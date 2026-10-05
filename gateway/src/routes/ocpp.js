@@ -15,7 +15,6 @@ const ocppExport = require('../ocppExport');
 const { getDisplayTimezone } = require('../dateFormat');
 const { fetchMiniserver } = require('../loxone');
 const ocppStats = require('../ocppStats');
-const { reloadMqttMonitors } = require('../monitorCollector');
 
 const router = express.Router();
 
@@ -271,7 +270,8 @@ router.get('/:id/stats.json', asyncHandler(async (req, res) => {
   const bridge = await db.prepare('SELECT * FROM ocpp_bridges WHERE id = ?').get(req.params.id);
   if (!bridge) return res.status(404).json({ error: 'Not found.' });
   const result = await ocppStats.loadStats(bridge);
-  return res.json({ ...result, topics: ocppStats.statTopics(bridge.id), labels: ocppStats.STAT_LABELS });
+  const topics = ocppStats.statTopics(bridge.id);
+  return res.json({ ...result, topics, labels: ocppStats.STAT_LABELS, monitored: await require('../monitorPicks').monitoredMap(topics) });
 }));
 
 // Adds the chosen statistics as MQTT monitors (Monitor page / dashboards). JSON, so CSRF-exempt.
@@ -283,20 +283,9 @@ router.post('/:id/monitor', requirePermission('monitor', 'edit'), asyncHandler(a
   const topics = ocppStats.statTopics(bridge.id);
   const wanted = (Array.isArray(req.body?.metrics) ? req.body.metrics : []).filter((k) => topics[k]);
   if (!wanted.length) return res.json({ ok: false, message: 'Pick at least one value.' });
-  const created = [];
-  const skipped = [];
-  for (const key of wanted) {
-    const topic = topics[key];
-    const exists = await db.prepare("SELECT id FROM monitors WHERE source_type = 'mqtt' AND mqtt_topic = ?").get(topic);
-    if (exists) { skipped.push(key); continue; }
-    await db.prepare(
-      `INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at, config) VALUES ('mqtt', ?, ?, 1, ?, '{}')`
-    ).run(`${bridge.name} – ${ocppStats.STAT_LABELS[key]}`, topic, new Date().toISOString());
-    created.push(key);
-  }
-  if (created.length) await reloadMqttMonitors();
+  const r = await require('../monitorPicks').addMonitors(topics, wanted, (key) => `${bridge.name} – ${ocppStats.STAT_LABELS[key]}`);
   ocppStats.publishAllStats().catch(() => {});
-  return res.json({ ok: true, created, skipped });
+  return res.json({ ok: true, ...r });
 }));
 
 router.post('/:id/update', requirePermission('ocpp', 'edit'), asyncHandler(async (req, res) => {

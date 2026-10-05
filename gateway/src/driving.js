@@ -345,7 +345,7 @@ async function report(vehicle) {
     return { ...m, chargedKwh: c?.kwh ?? null, solarShare: c?.solarShare ?? null, chargeEur: c?.eur ?? null, eurPerKwh: eurKwh !== null ? Math.round(eurKwh * 1000) / 1000 : null, eurPerKwhEstimated: !c, elecEurKm: perKm.elec, fuelEurKm: r3(compareFuelPerKm), fuelEur, saved };
   });
   return {
-    vehicle: { id: vehicle.id, name: vehicle.name, type: vehicle.type, battery_kwh: vehicle.battery_kwh, kwh_per_km: vehicle.kwh_per_km, fuel_l_per_100km: lPer100, hasOdometerField: hasField(vehicle, 'odometer_km'), hasSocField: hasField(vehicle, 'soc') },
+    vehicle: { id: vehicle.id, name: vehicle.name, type: vehicle.type, battery_kwh: vehicle.battery_kwh, kwh_per_km: vehicle.kwh_per_km, fuel_l_per_100km: lPer100, hasOdometerField: hasField(vehicle, 'odometer_km') || a.hasOdometer, hasSocField: hasField(vehicle, 'soc') || a.hasSoc },
     ...a, kwhPerKmUsed: kpk, months,
     prices: { fuelEurL, fuelPerKm: r3(compareFuelPerKm), avgEurKwh: avgEurKwh !== null ? r3(avgEurKwh) : null, estEurKwh: estEurKwh !== null ? r3(estEurKwh) : null, elecPerKm: r3((avgEurKwh ?? estEurKwh ?? 0) * kpk) || null },
     savedTotal: Math.round(savedTotal * 100) / 100,
@@ -372,8 +372,14 @@ async function drivePattern(vehicle, { nowMs = Date.now() } = {}) {
   return value;
 }
 
+// Is this value mapped from the car's data source? The Škoda API always gives odometer and battery %;
+// Homey/Home Assistant map it in fields, MQTT in topics.
 function hasField(vehicle, key) {
-  try { const c = JSON.parse(vehicle.source_config || '{}'); return !!c.fields?.[key]; } catch { return false; }
+  try {
+    const c = JSON.parse(vehicle.source_config || '{}');
+    if (vehicle.source_type === 'http' && c.provider === 'skoda') return key === 'odometer_km' || key === 'soc';
+    return !!(c.fields?.[key] || c.topics?.[key] || c[key]);
+  } catch { return false; }
 }
 
 // Store the learned consumption on each car (used by the planner, agenda and reminders when no

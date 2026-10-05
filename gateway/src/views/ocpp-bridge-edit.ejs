@@ -28,9 +28,9 @@
     <p class="hint">
       <%= t('LoxSuite publishes these values as retained MQTT topics (') %><code>loxsuite/ocpp/<%= bridge.id %>/&hellip;</code><%= t(', on change, checked every minute). Add them as monitors to chart them over time or put them on a dashboard.') %>
     </p>
-    <div id="ocpp-monitor-picks" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:0.3rem 1rem;"></div>
+    <div id="ocpp-monitor-picks"></div>
     <div class="btn-row" style="margin-top:0.6rem;">
-      <button type="button" class="btn-soft" id="ocpp-monitor-btn"><%- icon('plus') %> <%= t('Add to Monitor') %></button>
+      <button type="button" class="btn-soft" id="ocpp-monitor-btn"><%- icon('plus') %> <%= t('Add selected to Monitor') %></button>
     </div>
     <div id="ocpp-monitor-result" class="hint" style="margin-top:0.4rem;"></div>
   </details>
@@ -250,9 +250,10 @@
     el.innerHTML = html;
     var picks = document.getElementById('ocpp-monitor-picks');
     if (picks && !picks.dataset.done && d.labels) {
-      picks.innerHTML = Object.keys(d.labels).map(function (k) {
-        return '<label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" value="' + k + '"' + (['today_kwh', 'month_kwh', 'quarter_kwh', 'year_kwh', 'power_kw'].indexOf(k) !== -1 ? ' checked' : '') + '> ' + esc(d.labels[k]) + '</label>';
-      }).join('');
+      window.lsMonitorPicks(picks, {
+        items: Object.keys(d.labels).map(function (k) { return { key: k, label: d.labels[k], topic: d.topics && d.topics[k], monitorId: d.monitored && d.monitored[k] || null }; }),
+        postUrl: '/ocpp/<%= bridge.id %>/monitor', button: document.getElementById('ocpp-monitor-btn'), out: document.getElementById('ocpp-monitor-result'),
+      });
       picks.dataset.done = '1';
     }
   }
@@ -261,19 +262,6 @@
   }
   statsTick();
   setInterval(statsTick, 60000);
-  var monBtn = document.getElementById('ocpp-monitor-btn');
-  if (monBtn) monBtn.addEventListener('click', function () {
-    var metrics = Array.prototype.slice.call(document.querySelectorAll('#ocpp-monitor-picks input:checked')).map(function (c) { return c.value; });
-    var out = document.getElementById('ocpp-monitor-result');
-    monBtn.disabled = true;
-    fetch('/ocpp/<%= bridge.id %>/monitor', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metrics: metrics }) })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        out.innerHTML = !d.ok ? esc(d.message) : ('Added ' + d.created.length + ' monitor(s)' + (d.skipped.length ? ', ' + d.skipped.length + ' already existed' : '') + '. <a href="/monitor">Open Monitor</a>');
-      })
-      .catch(function (e) { out.textContent = e.message; })
-      .finally(function () { monBtn.disabled = false; });
-  });
   function tick() {
     fetch('/ocpp/<%= bridge.id %>/status.json').then(function (r) { return r.json(); }).then(render).catch(function () {});
   }

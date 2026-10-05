@@ -9,7 +9,6 @@ const { encrypt, decrypt } = require('../secretCrypto');
 const { logSystemEvent } = require('../auditLog');
 const vehicles = require('../vehicles');
 const mqttClient = require('../mqttClient');
-const { reloadMqttMonitors } = require('../monitorCollector');
 
 const router = express.Router();
 
@@ -213,6 +212,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
   if (!v) return res.redirect('/vehicles');
   res.render('vehicle-edit', {
     v: viewModel(v), fields: vehicles.FIELDS, presets: vehicles.MQTT_PRESETS, topics: vehicles.vehicleTopics(v.id),
+    monitored: await require('../monitorPicks').monitoredMap(vehicles.vehicleTopics(v.id)),
     topicLabels: vehicles.TOPIC_LABELS, sourceLabels: vehicles.SOURCE_LABELS,
     error: req.query.error || null, saved: !!req.query.saved,
   });
@@ -231,17 +231,8 @@ router.post('/:id/monitor', requirePermission('monitor', 'edit'), asyncHandler(a
   const topics = vehicles.vehicleTopics(v.id);
   const wanted = (Array.isArray(req.body?.metrics) ? req.body.metrics : []).filter((k) => topics[k]);
   if (!wanted.length) return res.json({ ok: false, message: 'Pick at least one value.' });
-  const created = [];
-  const skipped = [];
-  for (const key of wanted) {
-    const exists = await db.prepare("SELECT id FROM monitors WHERE source_type = 'mqtt' AND mqtt_topic = ?").get(topics[key]);
-    if (exists) { skipped.push(key); continue; }
-    await db.prepare("INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at, config) VALUES ('mqtt', ?, ?, 1, ?, '{}')")
-      .run(`${v.name} – ${vehicles.TOPIC_LABELS[key]}`, topics[key], new Date().toISOString());
-    created.push(key);
-  }
-  if (created.length) await reloadMqttMonitors();
-  return res.json({ ok: true, created, skipped });
+  const r = await require('../monitorPicks').addMonitors(topics, wanted, (key) => `${v.name} – ${vehicles.TOPIC_LABELS[key]}`);
+  return res.json({ ok: true, ...r });
 }));
 
 router.post('/:id/update', requirePermission('vehicles', 'edit'), asyncHandler(async (req, res) => {

@@ -4737,3 +4737,17 @@ body.panel-hints-hidden .hint.hint-clamp::before {
 }
 body.panel-hints-hidden .hint.hint-clamp:hover, body.panel-hints-hidden .hint.hint-clamp:focus-visible { color: var(--text); }
 body.panel-hints-hidden .hint.hint-clamp.hint-open { -webkit-line-clamp: unset; line-clamp: unset; display: block; cursor: pointer; }
+
+/* "Use in Monitor" pickers (monitor-picks.js): compact tiles, monitored ones marked and linked. */
+details > summary + p.hint { margin-top: 0.5rem; }
+.pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.45rem; margin-top: 0.7rem; }
+.pick {
+  display: flex; gap: 0.5rem; align-items: flex-start; margin: 0; padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border); border-radius: 8px; font-weight: normal; cursor: pointer; min-width: 0;
+}
+.pick input { margin: 0.15rem 0 0; flex-shrink: 0; }
+.pick-text { display: flex; flex-direction: column; min-width: 0; gap: 0.1rem; }
+.pick-name { font-size: 0.88rem; line-height: 1.25; }
+.pick-topic { font-size: 0.68rem; color: var(--text-muted); background: none; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-link { font-size: 0.75rem; }
+.pick.pick-on { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 7%, transparent); cursor: default; }
