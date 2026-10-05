@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.36.2-alpha.1] - 2026-10-05
+
+### Fixed
+- **The split before a trip didn't apply when your own (or the learned) departure time came first**, e.g. 06:30
+  set for Tuesday while the appointment needs the car ready at 06:41: then it still planned the whole battery.
+  An appointment within 3 hours of the deadline now counts as the same trip.
+
+### Added
+- Without an appointment, a learned departure splits too: what the car usually drives that weekday (odometer,
+  plus the margin) and the reserve before leaving, the rest after the time it is usually back.
+
 ## [0.36.1-alpha.1] - 2026-10-05
 
 ### Changed

@@ -384,6 +384,7 @@ async function computeTarget(nowMs, wb) {
   let readyAtMs = null;
   let readySource = '';
   let tripItem = null;
+  let agendaTrip = null;
   if (rt.readyOverride && rt.readyOverride > nowMs) {
     readyAtMs = rt.readyOverride; readySource = 'set by you';
     // with a distance or amount: make sure that much is in the battery (like a trip in the agenda)
@@ -403,6 +404,7 @@ async function computeTarget(nowMs, wb) {
   try {
     const agenda = require('./agenda');
     const trip = await agenda.nextCarTrip(nowMs, vehicle);
+    agendaTrip = trip || null;
     if (trip && (!readyAtMs || trip.readyAt < readyAtMs)) {
       readyAtMs = trip.readyAt; readySource = `agenda: ${trip.title}`; tripItem = trip;
       if (trip.needKwh && usable && trip.needKwh > needKwh) {
@@ -427,14 +429,31 @@ async function computeTarget(nowMs, wb) {
   // Plugged in before an appointment in the agenda: only what that trip needs (plus the reserve) has to
   // be in by then; the rest may come after it is back — with solar, or in whichever hours are cheapest.
   let split = null;
-  const it = tripItem?.item;
-  if (!away && tripItem && tripItem.readyAt === readyAtMs && it && !it.allDay && it.end && tripItem.needKwh && vehicle?.battery_kwh && reading) {
+  // The appointment the deadline belongs to: the one that set it, or one within 3 hours of it (your own
+  // or the learned departure time for the same trip, a few minutes earlier).
+  const near = agendaTrip && readyAtMs && Math.abs(agendaTrip.readyAt - readyAtMs) <= 3 * 3600000 ? agendaTrip : null;
+  const trip0 = tripItem || near;
+  const it = trip0?.item;
+  let tripPart = null; // { kwh, backAtMs, leaveMs, title }
+  if (it && !it.allDay && it.end && trip0.needKwh) {
+    tripPart = { kwh: trip0.needKwh, backAtMs: Date.parse(it.end) + (it.travelMin || 0) * 60000, leaveMs: Math.min(readyAtMs, Date.parse(it.leaveAt || it.start)), title: trip0.title };
+  } else if (readyAtMs && drive && vehicle && !tripItem) {
+    // No appointment: what the car usually drives on that weekday (odometer) and when it is usually back.
+    const { localParts, localTimeOn } = require('./localTime');
+    const d = drive.days?.[localParts(readyAtMs, tz).weekday];
+    if (d?.usual && d.kmMedian && d.back) {
+      const back = localTimeOn(readyAtMs, d.back, tz);
+      const marginKm = Number((await require('./agenda').getConfig().catch(() => ({}))).margin_km) || 0;
+      if (back > readyAtMs) tripPart = { kwh: (d.kmMedian + marginKm) * kpkNow, backAtMs: back, leaveMs: readyAtMs, title: `usual ${d.kmMedian} km` };
+    }
+  }
+  if (!away && tripPart && vehicle?.battery_kwh && reading) {
     const energyNow = vehicle.battery_kwh * reading.soc / 100;
     const reserveKwh = vehicle.battery_kwh * (Number(vehicle.reserve_pct ?? 15) || 0) / 100;
-    const must = Math.max(0, Math.min(needKwh, tripItem.needKwh + reserveKwh - energyNow));
-    const backAtMs = Date.parse(it.end) + (it.travelMin || 0) * 60000;
+    const must = Math.max(0, Math.min(needKwh, tripPart.kwh + reserveKwh - energyNow));
+    const backAtMs = tripPart.backAtMs;
     if (needKwh - must > 1 && backAtMs > readyAtMs) {
-      split = { mustKwh: round3(must), restKwh: round3(needKwh - must), backAtMs, tripKwh: tripItem.needKwh, reserveKwh: round3(reserveKwh), title: tripItem.title, away: [[Date.parse(it.leaveAt || it.start), backAtMs]], later: [] };
+      split = { mustKwh: round3(must), restKwh: round3(needKwh - must), backAtMs, tripKwh: round3(tripPart.kwh), reserveKwh: round3(reserveKwh), title: tripPart.title, away: [[tripPart.leaveMs, backAtMs]], later: [] };
       // the car's next trips in the agenda (within a day of being back): it is away then, and each
       // needs its own energy in the battery before it leaves
       try {

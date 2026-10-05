@@ -12452,6 +12452,13 @@
   ]
  },
  {
+  "key": "usual {0} km",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
   "key": "usual run ({0})",
   "module": "energy_manager",
   "where": [

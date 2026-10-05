@@ -3908,5 +3908,6 @@
   "no hour below the price cap": "geen uur onder de prijsgrens",
   "Room in the battery": "Past nog in de accu",
   "To charge (estimate)": "Te laden (schatting)",
-  "trip {0} kWh + reserve {1} kWh; room in the battery {2} kWh, the rest after it is back ({3})": "rit {0} kWh + reserve {1} kWh; past nog {2} kWh in de accu, de rest als hij terug is ({3})"
+  "trip {0} kWh + reserve {1} kWh; room in the battery {2} kWh, the rest after it is back ({3})": "rit {0} kWh + reserve {1} kWh; past nog {2} kWh in de accu, de rest als hij terug is ({3})",
+  "usual {0} km": "gebruikelijk {0} km"
 }
