@@ -42,6 +42,7 @@ const DEFAULTS = {
   feed_in_eur_kwh: 0.05,
   target_policy: 'full',          // 'full' before every departure | 'needed' (next trip + reserve; needs SoC)
   ready_margin_min: 15,
+  depart_certainty: 'normal',     // learned departures: 'safe' (ready before 9 in 10) | 'normal' (3 in 4) | 'relaxed' (half)
   fuel_eur_l: 2.10,
   fuel_auto: false,
   default_kwh_per_km: 0.2,
@@ -419,10 +420,14 @@ async function computeTarget(nowMs, wb) {
   if (!rt.readyOverride || rt.readyOverride <= nowMs) {
     const stats = await learning.learnedDepartures(vehicle?.id || null);
     const nx = learning.nextReadyTime(stats, nowMs, { tz });
-    if (nx && (!readyAtMs || nx.at < readyAtMs)) {
+    // it often left before it was ready: the learned time moves earlier (forecastLog.js)
+    const shift = nx && nx.source !== 'override' ? (await require('./forecastLog').corrections(nowMs).catch(() => ({}))).departShiftMin || 0 : 0;
+    const nxAt = nx ? nx.at - shift * 60000 : null;
+    if (nx && nxAt > nowMs && (!readyAtMs || nxAt < readyAtMs)) {
       const day = WEEKDAY_NAMES[WEEKDAY_KEYS.indexOf(nx.weekday)] || nx.weekday;
-      readyAtMs = nx.at;
+      readyAtMs = nxAt;
       readySource = nx.source === 'override' ? `your departure time on ${day}` : `learned departure on ${day} (${nx.confidence} confidence)`;
+      if (shift) readySource += ' · ' + `${shift} min earlier: it often left before it was ready`;
     }
   }
   if (readyAtMs) readyAtMs -= 0; // ready time already includes the learned margin
@@ -607,13 +612,16 @@ async function buildSlots(nowMs, untilMs) {
   const rows = await prices.getPrices(fromIso, toIso);
   const pv = await solar.forecastBetween(new Date(Math.floor(nowMs / 3600000) * 3600000).toISOString(), toIso);
   const house = await learning.learnedHouse();
+  // learned from the planner's own forecast errors (forecastLog.js): house kWh scaled with what it really used
+  const corr = await require('./forecastLog').corrections(nowMs).catch(() => ({ houseFactor: 1 }));
   const slots = [];
   const covered = rows.length ? Date.parse(rows[rows.length - 1].end_at) : nowMs;
   const pushSlot = (s, e, price) => {
     const hour = new Date(Math.floor(s / 3600000) * 3600000).toISOString();
     const pvKwh = pv.get(hour) || 0;
-    const houseKwh = learning.expectedHouseKwh(house, s, { tz }) ?? 0.4;
-    slots.push({ start: new Date(s).toISOString(), end: new Date(e).toISOString(), price, pvKw: round3(Math.max(0, pvKwh - houseKwh)), pvKwh, houseKwh });
+    const houseRaw = learning.expectedHouseKwh(house, s, { tz }) ?? 0.4;
+    const houseKwh = round3(houseRaw * (corr.houseFactor || 1));
+    slots.push({ start: new Date(s).toISOString(), end: new Date(e).toISOString(), price, pvKw: round3(Math.max(0, pvKwh - houseKwh)), pvKwh, houseKwh, houseRaw });
   };
   for (const r of rows) pushSlot(Date.parse(r.start_at), Date.parse(r.end_at), r.allin_eur_kwh);
   // Hours without a price (beyond the known prices — tomorrow's come out around 13:00 — or a gap,
@@ -645,6 +653,11 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
     if (ok) slots = await buildSlots(nowMs, Math.max(horizon, nowMs + 3600000));
   }
   const priceGapFrom = slots.priceGapFrom ?? null;
+  // write down what is expected, and fill in what really happened (how good the predictions are)
+  const flog = require('./forecastLog');
+  flog.recordSlots(slots.map((x) => ({ ...x, houseKwh: x.houseRaw ?? x.houseKwh })), nowMs).catch(() => {});
+  flog.fillActuals(nowMs).catch(() => {});
+  if (!rt.prunedAt || nowMs - rt.prunedAt > 86400000) { rt.prunedAt = nowMs; flog.prune(nowMs).catch(() => {}); }
   const vehicle = target.vehicle;
   let priceCap = cfg.max_price_eur_kwh ? Number(cfg.max_price_eur_kwh) : null;
   let fuel = null;
@@ -664,6 +677,8 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   let plan = makePlan(arrival ? { ...planArgs, nowMs: arrival.at } : planArgs);
   if (split && !arrival && planArgs.mode === 'plan') plan = withRest(plan, planArgs, slots, split, until);
   if (arrival) {
+    // the expected homecoming, kept to compare with when it really plugs in (made at least 30 min before)
+    if (arrival.at - nowMs >= 30 * 60000) rt.arrivalPred = { at: arrival.at, source: arrival.source };
     plan.arrival = { at: new Date(arrival.at).toISOString(), source: arrival.source, label: arrival.label, confidence: arrival.confidence };
     plan.ifNow = planSummary(makePlan(planArgs));
   }
@@ -740,6 +755,18 @@ async function tick(nowMs = Date.now()) {
   const key = connected ? String(wb.connectAt || 'c') : 'none';
   if (rt.session !== key) {
     try { require('./vehicles').notifyWallbox(connected); } catch { /* vehicles not loaded */ }
+    // how good were the predictions: unplugged vs the deadline it had to be ready by; plugged in vs the
+    // expected homecoming
+    if (rt.session !== null) {
+      const flog = require('./forecastLog');
+      if (!connected && rt.session !== 'none' && rt.plan?.target?.readyAtMs && Math.abs(rt.plan.target.readyAtMs - nowMs) <= 3 * 3600000) {
+        flog.recordEvent('depart', rt.plan.target.readyAtMs, nowMs, rt.plan.target.readySource || null).then(() => flog.resetCache()).catch(() => {});
+      }
+      if (connected && rt.arrivalPred) {
+        flog.recordEvent('arrive', rt.arrivalPred.at, nowMs, rt.arrivalPred.source || null).catch(() => {});
+        rt.arrivalPred = null;
+      }
+    }
     // A "ready by" set while the car was out is meant for when it comes back: kept for that session.
     // (Right after a start of LoxSuite the stored one is kept as it was.)
     const first = rt.session === null;

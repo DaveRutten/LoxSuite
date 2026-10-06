@@ -48,9 +48,11 @@ router.get('/data.json', asyncHandler(async (req, res) => {
     const plan = rt.plan?.loads.find((p) => p.id === l.id) || null;
     const signals = (em.KINDS[l.kind]?.signals || []).map((s) => ({ key: s.key, vi: em.viName(l, s), unit: s.unit, hint: s.hint, value: rt.signals.find((x) => x.id === l.id)?.values?.[s.key] ?? null }));
     const lp = rt.loads.find((x) => x.id === l.id) || {};
-    const patterns = (lp.patterns || []).map((p) => ({ ...p, text: ep.describe(p, names) }));
+    const patterns = (lp.patterns || []).map((p) => ({ ...p, key: ep.patternKey(p), text: ep.describe(p, names) }));
     const follows = rt.follows.filter((f) => f.from === l.id || f.to === l.id).map((f) => ({ ...f, text: ep.describe(f, names) }));
-    const expected = lp.profile && rt.localOf ? (rt.plan?.hours || []).slice(0, 24).map((h) => ({ ms: h.ms, kwh: ep.expectedKwh(lp.profile, h.ms, rt.localOf) })) : [];
+    // expected use, corrected with how far off the expectation was for this consumer (forecastLog.js)
+    const lf = (await require('../forecastLog').corrections().catch(() => ({ loadFactors: {} }))).loadFactors?.[l.id] || 1;
+    const expected = lp.profile && rt.localOf ? (rt.plan?.hours || []).slice(0, 24).map((h) => { const k = ep.expectedKwh(lp.profile, h.ms, rt.localOf); return { ms: h.ms, kwh: k === null || k === undefined ? k : Math.round(k * lf * 1000) / 1000 }; }) : [];
     const runs = l.kind === 'appliance' ? await db.prepare("SELECT * FROM load_runs WHERE load_id = ? ORDER BY start_at DESC").all(l.id) : [];
     out.push({
       id: l.id, name: l.name, kind: l.kind, kindLabel: em.KINDS[l.kind]?.label, priority: l.priority, enabled: !!l.enabled, output: l.output,
@@ -58,7 +60,7 @@ router.get('/data.json', asyncHandler(async (req, res) => {
       reason: rt.signals.find((x) => x.id === l.id)?.reason || null, signals, learned: await em.learned(l),
       plan: plan ? plan.hours.map((h) => ({ hour: h.hour, values: h.values, reason: h.reason })) : [],
       requests: (plan?.requests || []).map((q) => ({ id: q.id, expected: !!q.expected, usualStart: q.usualStart || null, readyBy: q.readyBy, label: q.label, plannedStart: q.plannedStart || null, plannedCost: q.plannedCost ?? null, kwh: q.kwh, durationH: q.durationH })),
-      patterns, follows, expected, patternDays: lp.profile?.days || 0, usePatterns: l.settings.use_patterns !== false,
+      patterns, follows, expected, patternDays: lp.profile?.days || 0, ignoredPatterns: lp.ignoredPatterns || 0, usePatterns: l.settings.use_patterns !== false,
       daily: await em.dailyReport(l, 14),
       runs: runs.filter((r) => r.kind === 'run').slice(0, 15),
     });
@@ -120,6 +122,20 @@ router.post('/loads/:id/delete', requirePermission('energy_manager', 'edit'), as
   await db.prepare('DELETE FROM energy_loads WHERE id = ?').run(id);
   em.invalidate();
   res.redirect('/energy-manager?saved=deleted');
+}));
+
+// "Not right": leave a learned pattern out (or put them all back).
+router.post('/loads/:id/patterns.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
+  const load = (await em.listLoads()).find((l) => l.id === Number(req.params.id));
+  if (!load) return res.json({ ok: false, message: 'Not found.' });
+  const raw = JSON.parse((await db.prepare('SELECT settings FROM energy_loads WHERE id = ?').get(load.id))?.settings || '{}');
+  const list = new Set(raw.ignored_patterns || []);
+  if (req.body?.restore) list.clear();
+  else if (req.body?.ignore) list.add(String(req.body.ignore).slice(0, 60));
+  raw.ignored_patterns = [...list].slice(-50);
+  await db.prepare('UPDATE energy_loads SET settings = ? WHERE id = ?').run(JSON.stringify(raw), load.id);
+  em.invalidate();
+  res.json({ ok: true });
 }));
 
 router.post('/settings', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {

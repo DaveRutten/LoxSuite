@@ -92,6 +92,10 @@
           <option value="bonus" <%= cfg.solar_trust === 'bonus' ? 'selected' : '' %>><%= t('Not at all (solar is a bonus)') %></option></select></div>
         <div><label><%= t('Max. price (€/kWh, optional)') %></label><input type="text" name="max_price_eur_kwh" value="<%= cfg.max_price_eur_kwh ?? '' %>"></div>
         <div><label><%= t('Battery full, still plugged in') %></label><select name="full_hold"><option value="release" <%= cfg.full_hold !== 'off' ? 'selected' : '' %>><%= t('Keep the Wallbox open at the minimum (the car tops itself up and pre-heats from the grid)') %></option><option value="off" <%= cfg.full_hold === 'off' ? 'selected' : '' %>><%= t('Nothing until unplugged') %></option></select></div>
+        <div><label><%= t('Ready before a learned departure') %></label><select name="depart_certainty">
+          <option value="safe" <%= cfg.depart_certainty === 'safe' ? 'selected' : '' %>><%= t('Safe: 9 in 10 times') %></option>
+          <option value="normal" <%= !cfg.depart_certainty || cfg.depart_certainty === 'normal' ? 'selected' : '' %>><%= t('Normal: 3 in 4 times') %></option>
+          <option value="relaxed" <%= cfg.depart_certainty === 'relaxed' ? 'selected' : '' %>><%= t('Relaxed: half of the times (cheapest)') %></option></select></div>
         <div><label><%= t('No grid top-up below (kWh)') %></label><input type="text" name="min_topup_kwh" value="<%= cfg.min_topup_kwh ?? 1 %>"></div>
         <div><label><%= t('Too few cheap intervals (full electric)') %></label><select name="insufficient"><option value="charge" <%= cfg.insufficient !== 'stop' ? 'selected' : '' %>><%= t('Charge anyway') %></option><option value="stop" <%= cfg.insufficient === 'stop' ? 'selected' : '' %>><%= t('Stop at the max. price') %></option></select></div>
         <div><label><%= t('Value of exported solar') %></label><select name="feed_in"><option value="saldering" <%= cfg.feed_in !== 'fixed' ? 'selected' : '' %>><%= t('Net metering (price of that moment)') %></option><option value="fixed" <%= cfg.feed_in === 'fixed' ? 'selected' : '' %>><%= t('Fixed feed-in tariff') %></option></select></div>

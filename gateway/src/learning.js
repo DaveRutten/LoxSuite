@@ -28,6 +28,32 @@ function quantile(arr, q) {
   const hi = Math.ceil(pos);
   return a[lo] + (a[hi] - a[lo]) * (pos - lo);
 }
+// Weighted quantile: newer values count more (weights from recencyWeight).
+function weightedQuantile(values, weights, q) {
+  const pairs = values.map((v, i) => [v, weights ? weights[i] : 1]).filter(([v, w]) => Number.isFinite(v) && w > 0).sort((a, b) => a[0] - b[0]);
+  if (!pairs.length) return null;
+  const total = pairs.reduce((a, p) => a + p[1], 0);
+  let acc = 0;
+  for (const [v, w] of pairs) { acc += w; if (acc >= q * total - 1e-9) return v; }
+  return pairs[pairs.length - 1][0];
+}
+// Half the weight every `halfLifeDays`: a new habit outweighs an old one within a few weeks.
+const recencyWeight = (ms, nowMs, halfLifeDays) => Math.pow(0.5, Math.max(0, (nowMs - ms) / 86400000) / halfLifeDays);
+
+// Pure: did the daily use change? daily [{ day (sortable), kwh }] -> the last 7 days against the 21 before.
+function detectChange(daily, { minKwh = 0.5, threshold = 0.35 } = {}) {
+  const d = [...daily].filter((x) => Number.isFinite(x.kwh)).sort((a, b) => String(a.day).localeCompare(String(b.day)));
+  if (d.length < 14) return { changed: false };
+  const recent = d.slice(-7);
+  const before = d.slice(-28, -7);
+  const avg = (a) => a.reduce((s, x) => s + x.kwh, 0) / a.length;
+  const r = avg(recent);
+  const b = avg(before);
+  if (b < minKwh && r < minKwh) return { changed: false, recent: round1(r), before: round1(b) };
+  const ratio = b > 0 ? r / b : Infinity;
+  return { changed: Math.abs(ratio - 1) > threshold, recent: round1(r), before: round1(b), ratio: Number.isFinite(ratio) ? Math.round(ratio * 100) / 100 : null };
+}
+
 const fmtMin = (m) => (m === null || m === undefined ? null : `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.round(m % 60)).padStart(2, '0')}`);
 const toMin = (hhmm) => { const [h, m] = String(hhmm).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
 const round1 = (x) => (x === null ? null : Math.round(x * 10) / 10);
@@ -36,13 +62,15 @@ function confidence(n) { return n >= 12 ? 'high' : n >= 6 ? 'medium' : n > 0 ? '
 // ------------------------------------------------------------------ departures
 
 // sessions: [{connect (ms), disconnect (ms|null), kwh}]
-function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {} } = {}) {
+// certainty: 'safe' = ready before 9 in 10 departures, 'normal' = 3 in 4, 'relaxed' = half of them.
+const CERTAINTY_Q = { safe: 0.1, normal: 0.25, relaxed: 0.5 };
+function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {}, certainty = 'normal', halfLifeDays = 45 } = {}) {
   const done = sessions.filter((s) => s.disconnect);
   const firstMs = sessions.length ? Math.min(...sessions.map((s) => s.connect)) : nowMs;
   // How many of each weekday the observation window holds (denominator for "usually").
   const weekdayCount = Array(7).fill(0);
   for (let t = localMidnight(firstMs, tz); t < nowMs; t = localMidnight(t, tz, 1)) weekdayCount[localParts(t + 3600000 * 12, tz).weekday]++;
-  const out = WEEKDAYS.map((key, wd) => ({ key, weekday: wd, all: [], morning: [], morningDays: new Set(), arrivals: [], kwh: [] }));
+  const out = WEEKDAYS.map((key, wd) => ({ key, weekday: wd, all: [], morning: [], morningW: [], morningDays: new Set(), arrivals: [], kwh: [] }));
   for (const s of done) {
     const p = localParts(s.disconnect, tz);
     const min = p.hour * 60 + p.minute;
@@ -50,7 +78,7 @@ function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {} } = {
     d.all.push(min);
     if (min >= MORNING[0] && min <= MORNING[1]) {
       const dayKey = `${p.y}-${p.m}-${p.d}`;
-      if (!d.morningDays.has(dayKey)) { d.morningDays.add(dayKey); d.morning.push(min); }
+      if (!d.morningDays.has(dayKey)) { d.morningDays.add(dayKey); d.morning.push(min); d.morningW.push(recencyWeight(s.disconnect, nowMs, halfLifeDays)); }
     }
   }
   for (const s of sessions) {
@@ -63,13 +91,15 @@ function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {} } = {
     const n = d.morning.length;
     const share = weekdayCount[d.weekday] ? n / weekdayCount[d.weekday] : 0;
     const usual = n >= 3 && share >= 0.4;
-    const med = usual ? median(d.morning) : null;
-    const p25 = usual ? quantile(d.morning, 0.25) : null;
-    const readyMin = p25 === null ? null : Math.floor((p25 - 15) / 5) * 5;
+    const med = usual ? weightedQuantile(d.morning, d.morningW, 0.5) : null;
+    const p25 = usual ? weightedQuantile(d.morning, d.morningW, 0.25) : null;
+    const p10 = usual ? weightedQuantile(d.morning, d.morningW, 0.1) : null;
+    const pick = usual ? weightedQuantile(d.morning, d.morningW, CERTAINTY_Q[certainty] ?? 0.25) : null;
+    const readyMin = pick === null ? null : Math.floor((pick - 15) / 5) * 5;
     const override = overrides[d.key] || null;
     return {
       key: d.key, weekday: d.weekday, n, share: Math.round(share * 100) / 100, usual,
-      departure: fmtMin(med), early: fmtMin(p25), ready: override || fmtMin(readyMin), learnedReady: fmtMin(readyMin), override,
+      departure: fmtMin(med), early: fmtMin(p25), earliest: fmtMin(p10), certainty, ready: override || fmtMin(readyMin), learnedReady: fmtMin(readyMin), override,
       arrival: fmtMin(median(d.arrivals)), arrivalN: d.arrivals.length, kwh_median: round1(median(d.kwh.filter((k) => k > 0.3))),
       confidence: confidence(n), allUnplugs: d.all.sort((a, b) => a - b), morningUnplugs: d.morning.sort((a, b) => a - b),
     };
@@ -151,8 +181,9 @@ function expectedTripKwh(stats, departMs, awayH, { tz, safe = true } = {}) {
 // ------------------------------------------------------------------ house profile
 
 // hourly: [{hour (ISO), kwh}] for role 'house'. -> { workday: [24], weekend: [24], dayTotals }
-function houseProfile(hourly, { tz } = {}) {
+function houseProfile(hourly, { tz, nowMs = Date.now(), halfLifeDays = 10 } = {}) {
   const buckets = { workday: Array.from({ length: 24 }, () => []), weekend: Array.from({ length: 24 }, () => []) };
+  const weights = { workday: Array.from({ length: 24 }, () => []), weekend: Array.from({ length: 24 }, () => []) };
   const days = new Map();
   for (const r of hourly) {
     if (r.kwh === null || r.kwh === undefined) continue;
@@ -160,16 +191,19 @@ function houseProfile(hourly, { tz } = {}) {
     const p = localParts(ms, tz);
     const type = p.weekday >= 5 ? 'weekend' : 'workday';
     buckets[type][p.hour].push(r.kwh);
+    weights[type][p.hour].push(recencyWeight(ms, nowMs, halfLifeDays));
     const dk = `${p.y}-${p.m}-${p.d}`;
     const d = days.get(dk) || { type, kwh: 0, hours: 0 };
     d.kwh += r.kwh; d.hours += 1;
     days.set(dk, d);
   }
-  const prof = (b) => b.map((arr) => (arr.length ? Math.round(median(arr) * 1000) / 1000 : null));
+  const prof = (b, w) => b.map((arr, h) => (arr.length ? Math.round(weightedQuantile(arr, w[h], 0.5) * 1000) / 1000 : null));
   const full = [...days.values()].filter((d) => d.hours >= 22);
-  const base = Math.min(...prof(buckets.workday).concat(prof(buckets.weekend)).filter((x) => x !== null));
+  const wp = prof(buckets.workday, weights.workday);
+  const we = prof(buckets.weekend, weights.weekend);
+  const base = Math.min(...wp.concat(we).filter((x) => x !== null));
   return {
-    workday: prof(buckets.workday), weekend: prof(buckets.weekend),
+    workday: wp, weekend: we,
     perDay: round1(median(full.map((d) => d.kwh))), days: full.length,
     baseLoadKw: Number.isFinite(base) ? Math.round(base * 100) / 100 : null,
   };
@@ -241,7 +275,8 @@ async function setOverrides(o) { return settings.set('departure_overrides', o); 
 
 async function learnedDepartures(vehicleId = null) {
   const { displayTz } = require('./localTime');
-  return departureStats(await loadSessions(180, vehicleId), { tz: displayTz(), overrides: await getOverrides() });
+  const certainty = (await settings.get('planner', {}))?.depart_certainty || 'normal';
+  return departureStats(await loadSessions(180, vehicleId), { tz: displayTz(), overrides: await getOverrides(), certainty });
 }
 
 async function learnedTrips(vehicle = null) {
@@ -254,7 +289,12 @@ async function learnedHouse(days = 28) {
   const { displayTz } = require('./localTime');
   const from = new Date(Date.now() - days * 86400000).toISOString();
   const rows = await db.prepare("SELECT hour, import_kwh AS kwh FROM energy_hourly WHERE role = 'house' AND hour >= ? ORDER BY hour").all(from);
-  return houseProfile(rows, { tz: displayTz() });
+  // a clear change in daily use (new appliance, other season): learn from the last week only
+  const byDay = new Map();
+  for (const r of rows) { const k = r.hour.slice(0, 10); byDay.set(k, (byDay.get(k) || 0) + (r.kwh || 0)); }
+  const change = detectChange([...byDay.entries()].slice(0, -1).map(([day, kwh]) => ({ day, kwh })));
+  const use = change.changed ? rows.filter((r) => r.hour >= new Date(Date.now() - 8 * 86400000).toISOString()) : rows;
+  return { ...houseProfile(use, { tz: displayTz() }), change };
 }
 
 let timer = null;
@@ -272,6 +312,7 @@ function stopLearning() {
 }
 
 module.exports = {
+  weightedQuantile, recencyWeight, detectChange, CERTAINTY_Q,
   median, quantile, fmtMin, toMin, departureStats, nextReadyTime, tripStats, expectedTripKwh, houseProfile, expectedHouseKwh,
   slotOf, durationClass, syncSessions, loadSessions, getOverrides, setOverrides, learnedDepartures, learnedTrips, learnedHouse,
   startLearning, stopLearning, wallboxControl,

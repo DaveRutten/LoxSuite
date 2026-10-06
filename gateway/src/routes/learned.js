@@ -15,6 +15,11 @@ router.get('/', asyncHandler(async (req, res) => {
   res.render('learned', { saved: !!req.query.saved });
 }));
 
+// How good are the predictions (forecastLog.js), and what LoxSuite corrects because of it.
+router.get('/accuracy.json', asyncHandler(async (req, res) => {
+  res.json(await require('../forecastLog').summary(Date.now(), 28));
+}));
+
 router.get('/data.json', asyncHandler(async (req, res) => {
   const vehicle = await db.prepare('SELECT * FROM vehicles WHERE enabled = 1 ORDER BY id LIMIT 1').get().catch(() => null);
   const sessions = await learning.loadSessions(180, null);

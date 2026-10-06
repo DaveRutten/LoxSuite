@@ -253,6 +253,13 @@
   ]
  },
  {
+  "key": "· {0} min earlier: it often left before it was ready",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
   "key": "· {0} min to full",
   "module": "vehicles",
   "where": [
@@ -898,6 +905,13 @@
   ]
  },
  {
+  "key": "{0} departures, on average {1} min from the deadline",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "{0} Diagnostics",
   "module": "core",
   "where": [
@@ -1210,6 +1224,13 @@
   ]
  },
  {
+  "key": "{0} times, on average {1} min off",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "{0} Translations",
   "module": "mqtt",
   "where": [
@@ -1387,10 +1408,31 @@
   ]
  },
  {
+  "key": "{0}{1} min",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "{0}% — sends \"{1}\"",
   "module": "mqtt",
   "where": [
    "public/mappings-loxone-to-mqtt-tabulator.js"
+  ]
+ },
+ {
+  "key": "{0}% too high",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
+  "key": "{0}% too low",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -1816,6 +1858,13 @@
   "module": "core",
   "where": [
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "about right",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -2953,6 +3002,13 @@
   ]
  },
  {
+  "key": "Car ready on time",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "car reports {0}%",
   "module": "charging",
   "where": [
@@ -3675,6 +3731,13 @@
   ]
  },
  {
+  "key": "Corrected now:",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "Correctie",
   "module": "energy_manager",
   "where": [
@@ -4280,6 +4343,13 @@
   "module": "monitor",
   "where": [
    "src/dashboardSuggestions.js"
+  ]
+ },
+ {
+  "key": "Direction",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -4900,6 +4970,7 @@
   "key": "Expected home",
   "module": "charging",
   "where": [
+   "learned (script)",
    "planner (script)"
   ]
  },
@@ -5778,7 +5849,8 @@
   "key": "Hours",
   "module": "energy",
   "where": [
-   "energy-load (script)"
+   "energy-load (script)",
+   "learned (script)"
   ]
  },
  {
@@ -5801,6 +5873,27 @@
   "module": "core",
   "where": [
    "src/modules.js"
+  ]
+ },
+ {
+  "key": "house use × {0}",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
+  "key": "House, an hour ahead",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
+  "key": "House, the day before",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -6256,6 +6349,13 @@
   "module": "charging",
   "where": [
    "src/planner.js"
+  ]
+ },
+ {
+  "key": "learned departures {0} min earlier",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -7005,6 +7105,20 @@
   "module": "core",
   "where": [
    "src/routes/miniservers.js"
+  ]
+ },
+ {
+  "key": "measured from the next departures",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
+  "key": "measured from the next homecomings",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -8528,8 +8642,9 @@
  },
  {
   "key": "Not found.",
-  "module": "ocpp",
+  "module": "energy_manager",
   "where": [
+   "src/routes/energyManager.js",
    "src/routes/ocpp.js",
    "src/routes/vehicles.js"
   ]
@@ -8561,6 +8676,13 @@
   "where": [
    "src/vehicles.js",
    "vehicle-edit (script)"
+  ]
+ },
+ {
+  "key": "not right",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -8610,6 +8732,13 @@
   "module": "charging",
   "where": [
    "src/reminders.js"
+  ]
+ },
+ {
+  "key": "nothing — the predictions are close enough (or there is too little to go on yet).",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -8832,6 +8961,20 @@
   "module": "energy_manager",
   "where": [
    "partials/energy-load-form"
+  ]
+ },
+ {
+  "key": "Off by (average)",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
+  "key": "Off by (share)",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -9510,6 +9653,13 @@
   ]
  },
  {
+  "key": "Prediction",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "Preparing",
   "module": "ocpp",
   "where": [
@@ -9648,6 +9798,13 @@
   "module": "core",
   "where": [
    "src/routes/app.js"
+  ]
+ },
+ {
+  "key": "put back",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -10833,6 +10990,20 @@
   ]
  },
  {
+  "key": "Solar, an hour ahead",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
+  "key": "Solar, the day before",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "Solid",
   "module": "core",
   "where": [
@@ -11437,6 +11608,13 @@
   "module": "charging",
   "where": [
    "src/reminders.js"
+  ]
+ },
+ {
+  "key": "the day before",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -12544,6 +12722,14 @@
   "module": "core",
   "where": [
    "src/webPush.js"
+  ]
+ },
+ {
+  "key": "Use changed: last week {0} kWh/day against {1} before — LoxSuite now learns mostly from the last week.",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)",
+   "learned (script)"
   ]
  },
  {

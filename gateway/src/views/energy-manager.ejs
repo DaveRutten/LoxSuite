@@ -64,6 +64,7 @@
     return '<strong>' + esc(sig.value) + '</strong> ' + esc(sig.unit);
   }
   var last = null;
+  var TLx = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
   // on/off and status now, with how long already
   function stateHtml(lv) {
     if (!lv || (lv.on == null && lv.status == null)) return '<span class="hint">—</span>';
@@ -116,7 +117,8 @@
     var h = '<div style="margin-top:0.8rem;"><div class="hint" style="margin:0 0 0.3rem; font-size:0.8rem;"><strong>Patterns</strong> (last 8 weeks, ' + l.patternDays + ' days measured' + (l.usePatterns ? '' : ' &mdash; not used in the plan') + ')</div>';
     var list = (l.patterns || []).concat(l.follows || []);
     if (!list.length) h += '<p class="hint" style="margin:0;">' + (l.patternDays < 7 ? 'Not enough days measured yet (patterns appear after about a week).' : 'No clear pattern yet.') + '</p>';
-    else h += '<ul style="margin:0 0 0.4rem; padding-left:1.1rem;">' + list.map(function (p) { return '<li>' + esc(p.text) + '</li>'; }).join('') + '</ul>';
+    else h += '<ul style="margin:0 0 0.4rem; padding-left:1.1rem;">' + list.map(function (p) { return '<li>' + esc(p.text) + (CAN && p.key ? ' <a href="#" class="hint" data-ignore="' + esc(p.key) + '" data-load="' + l.id + '">' + esc(TLx('not right')) + '</a>' : '') + '</li>'; }).join('') + '</ul>';
+    if (l.ignoredPatterns && CAN) h += '<p class="hint" style="margin:0 0 0.3rem;">' + esc(TLx('{0} pattern(s) left out by you').replace('{0}', l.ignoredPatterns)) + ' <a href="#" data-restore="' + l.id + '">' + esc(TLx('put back')) + '</a></p>';
     var ex = l.expected || [], max = Math.max.apply(null, ex.map(function (x) { return x.kwh; }).concat([0.01]));
     if (ex.some(function (x) { return x.kwh > 0; })) {
       var w = 100 / ex.length;
@@ -148,6 +150,7 @@
         h += '<div style="overflow-x:auto;"><table><thead><tr><th>Run</th><th>Duration</th><th>kWh</th><th>Cost</th><th>Best start (hindsight)</th><th>Then</th><th>Saving</th></tr></thead><tbody>' +
           (l.runs.length ? l.runs.map(function (r) { var dur = (Date.parse(r.end_at) - Date.parse(r.start_at)) / 60000; var sav = r.cost_eur != null && r.best_cost_eur != null ? r.cost_eur - r.best_cost_eur : null; return '<tr><td>' + esc(new Date(r.start_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + Math.round(dur) + ' min</td><td>' + nf(r.kwh, 2) + '</td><td>' + eur(r.cost_eur) + '</td><td>' + (r.best_start ? hh(r.best_start) : '—') + '</td><td>' + eur(r.best_cost_eur) + '</td><td style="color:' + (sav > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(sav) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No runs measured yet.</td></tr>') + '</tbody></table></div>';
       } else {
+        if (lr.change && lr.change.changed) h += '<p class="hint" style="margin:0 0 0.4rem; color:#b8860b;">' + esc(TLx('Use changed: last week {0} kWh/day against {1} before — LoxSuite now learns mostly from the last week.').replace('{0}', nf(lr.change.recent, 1)).replace('{1}', nf(lr.change.before, 1))) + '</p>';
         h += '<p class="hint" style="margin:0 0 0.5rem;">Learned: ' + (lr.kwhPerDay != null ? nf(lr.kwhPerDay, 1) + ' kWh/day, about ' + nf(lr.kwPeak, 1) + ' kW while running' : 'no measurements yet') + '. "In advised hours" = share of the kWh that fell in hours LoxSuite would have released; "could save" = moving the rest there.</p>';
         h += '<div style="overflow-x:auto;"><table><thead><tr><th>Day</th><th>kWh</th><th>Cost</th><th>€/kWh</th><th>Solar</th><th>In advised hours</th><th>Could save</th></tr></thead><tbody>' +
           (l.daily.length ? l.daily.map(function (x) { return '<tr><td>' + esc(dayLabel(x.day)) + '</td><td>' + nf(x.kwh, 1) + '</td><td>' + eur(x.cost) + '</td><td>' + eur(x.eurPerKwh, 3) + '</td><td>' + (x.solarShare == null ? '—' : x.solarShare + '%') + '</td><td>' + (x.advisedShare == null ? '<span class="hint">not logged yet</span>' : x.advisedShare + '%') + '</td><td style="color:' + (x.potential > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(x.potential) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No measurements yet.</td></tr>') + '</tbody></table></div>';
@@ -161,6 +164,12 @@
         var id = b.dataset.req, v = document.getElementById('em-ready-' + id).value;
         post('/energy-manager/loads/' + id + '/request.json', { readyBy: v ? new Date(v).toISOString() : '', label: document.getElementById('em-label-' + id).value }).then(function (r) { if (!r.ok) alert(r.message); load(); });
       });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ignore]'), function (a) {
+      a.addEventListener('click', function (e) { e.preventDefault(); post('/energy-manager/loads/' + a.dataset.load + '/patterns.json', { ignore: a.dataset.ignore }).then(function () { return post('/energy-manager/recalc.json'); }).then(load); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-restore]'), function (a) {
+      a.addEventListener('click', function (e) { e.preventDefault(); post('/energy-manager/loads/' + a.dataset.restore + '/patterns.json', { restore: true }).then(function () { return post('/energy-manager/recalc.json'); }).then(load); });
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-delreq]'), function (a) {
       a.addEventListener('click', function (e) { e.preventDefault(); post('/energy-manager/requests/' + a.dataset.delreq + '/delete.json').then(load); });

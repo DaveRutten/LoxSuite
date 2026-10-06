@@ -137,6 +137,7 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
       feed_in: b.feed_in === 'fixed' ? 'fixed' : 'saldering', feed_in_eur_kwh: num(b.feed_in_eur_kwh, 0.05),
       target_policy: b.target_policy === 'needed' ? 'needed' : 'full',
       full_hold: b.full_hold === 'off' ? 'off' : 'release', min_topup_kwh: Math.max(0, num(b.min_topup_kwh, 1)),
+      depart_certainty: ['safe', 'normal', 'relaxed'].includes(b.depart_certainty) ? b.depart_certainty : 'normal',
     });
     const cfg = await planner.getConfig();
     if (cfg.output === 'live') await logSystemEvent(`Planner output set to Live (virtual input "${cfg.vi_setpoint}") by ${req.session?.username || 'unknown user'}`).catch(() => {});

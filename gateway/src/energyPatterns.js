@@ -173,6 +173,12 @@ function nextOccurrence(p, fromMs, toMs, localOf) {
   return null;
 }
 
+// A stable name for a pattern, to remember "this is not right" (ignored patterns) across recalculations.
+function patternKey(p) {
+  if (p.type === 'follows') return `follows:${p.from}:${p.to}`;
+  return `${p.type}:${p.weekday === null || p.weekday === undefined ? '*' : p.weekday}:${p.from ?? p.hour ?? ''}`;
+}
+
 const pad = (n) => String(n).padStart(2, '0');
 // Plain English line for the page (the view translates the weekday and the template).
 function describe(p, names = {}) {
@@ -184,4 +190,4 @@ function describe(p, names = {}) {
   return '';
 }
 
-module.exports = { WEEKDAYS, profile, hourPatterns, runPatterns, followPatterns, findPatterns, expectedKwh, nextOccurrence, describe, blocks };
+module.exports = { patternKey, WEEKDAYS, profile, hourPatterns, runPatterns, followPatterns, findPatterns, expectedKwh, nextOccurrence, describe, blocks };

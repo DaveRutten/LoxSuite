@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.38.0-alpha.1] - 2026-10-06
+
+### Added
+- **How good are my predictions?** (Learned page). Every plan writes down what it expects — solar and house kWh
+  per hour (an hour ahead and the day before), each consumer's kWh per hour, when the car would be ready and
+  when it would be home — and the real value goes next to it (`forecast_log`). The page shows per prediction how
+  far off it was on average, as a share, and in which direction; how often the car was ready on time; and how far
+  off "expected home" was.
+- **LoxSuite corrects itself with that**: the planned house use is scaled with what the house really used over
+  the last two weeks (×0.75–×1.33), the same per consumer, and learned departures move earlier when the car
+  left before it was ready more than 1 in 10 times (by how early it usually was, at most an hour). The page
+  says what is corrected now.
+- **Certainty of a learned departure** (Smart charging → Settings): *safe* (ready before 9 in 10 departures),
+  *normal* (3 in 4, as before) or *relaxed* (half; cheapest).
+- **Patterns: "not right"** next to every learned pattern of a consumer: it is left out (and not planned for);
+  *put back* undoes it.
+
+### Changed
+- **Newer data counts more**: departures (half-life 45 days) and the house profile (10 days) use recency-weighted
+  quantiles, so a new habit outweighs an old one within weeks.
+- **A change in use is noticed**: when the house or a consumer used clearly more or less in the last week than in
+  the three before (>35%), LoxSuite learns from the last week only and says so.
+
 ## [0.37.0-alpha.1] - 2026-10-06
 
 ### Added

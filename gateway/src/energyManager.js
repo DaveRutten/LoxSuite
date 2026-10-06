@@ -531,7 +531,12 @@ async function learned(load) {
   const rows = await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ?').all(load.id, from);
   const active = rows.map((r) => r.kwh).filter((k) => k > 0.1);
   const days = new Set(rows.map((r) => r.hour.slice(0, 10))).size;
-  return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay: days ? r2(rows.reduce((a, r) => a + r.kwh, 0) / days) : null, hours: rows.length, ...(await learnedStatus(load)) };
+  // a clear change in daily use: the last week counts
+  const byDay = new Map();
+  for (const r of rows) byDay.set(r.hour.slice(0, 10), (byDay.get(r.hour.slice(0, 10)) || 0) + r.kwh);
+  const change = require('./learning').detectChange([...byDay.entries()].slice(0, -1).map(([day, kwh]) => ({ day, kwh })));
+  const kwhPerDay = change.changed ? change.recent : (days ? r2(rows.reduce((a, r) => a + r.kwh, 0) / days) : null);
+  return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay, change, hours: rows.length, ...(await learnedStatus(load)) };
 }
 
 // Pure: per status (or on/off) from the hourly bookings: hours in it, kWh, the typical kW (only from
@@ -605,7 +610,9 @@ async function loadPatterns(load, nowMs, localOf) {
   const hourly = await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ?').all(load.id, from).catch(() => []);
   const runs = load.kind === 'appliance' ? await db.prepare("SELECT start_at, end_at, kwh FROM load_runs WHERE load_id = ? AND kind = 'run' AND start_at >= ?").all(load.id, from).catch(() => []) : [];
   const r = ep.findPatterns({ kind: load.kind, hourly, runs, localOf, nowMs });
-  return { patterns: r.patterns, profile: r.profile };
+  // patterns you marked as "not right" are left out (and not planned for)
+  const ignored = new Set(load.settings?.ignored_patterns || []);
+  return { patterns: r.patterns.filter((p) => !ignored.has(ep.patternKey(p))), ignoredPatterns: r.patterns.filter((p) => ignored.has(ep.patternKey(p))).length, profile: r.profile };
 }
 async function followsFor(loads) {
   const apps = loads.filter((l) => l.kind === 'appliance');
@@ -652,6 +659,12 @@ async function recalc(nowMs = Date.now()) {
     }
     l.learned = lr;
     Object.assign(l, await loadPatterns(l, nowMs, localOf));
+    // write down the expected kWh per hour, to compare with what it really uses (forecastLog.js)
+    if (l.profile) {
+      const ep = require('./energyPatterns');
+      const exp = hours.slice(0, 36).map((h) => ({ ms: h.ms, kwh: ep.expectedKwh(l.profile, h.ms, localOf) })).filter((x) => x.kwh !== null && x.kwh !== undefined);
+      require('./forecastLog').recordLoad(l.id, exp, nowMs).catch(() => {});
+    }
   }
   rt.follows = await followsFor(loads);
   const plan = planLoads({ hours, loads, carKwh, carPriority: cfg.car_priority, nowMs, localOf, feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, solarBonus: cfg.solar_bonus_eur });

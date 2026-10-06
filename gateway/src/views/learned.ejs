@@ -27,6 +27,12 @@
   <div id="ln-drive"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
 </div>
 
+<div class="card">
+  <h2 style="margin-top:0;"><%= t('How good are my predictions?') %></h2>
+  <p class="hint"><%= t('Every plan writes down what it expects; once it has happened the real value goes next to it. LoxSuite corrects itself with that.') %></p>
+  <div id="ln-accuracy"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
+</div>
+
 <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr)); gap:1rem;">
   <div class="card">
     <h2 style="margin-top:0;"><%= t('Solar — forecast tomorrow') %></h2>
@@ -151,6 +157,31 @@
     el.innerHTML = html;
   }
 
+  function signedMin(v) { return (v > 0 ? '+' : '') + String(v) + '\u00a0min'; }
+  function renderAccuracy(a) {
+    var el = document.getElementById('ln-accuracy');
+    var T = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
+    var pct = function (x) { return x == null ? '—' : Math.round(x * 100) + '%'; };
+    // Σ actual / Σ predicted -> "x% too high/low"
+    var dir = function (s) { if (!s || !s.n || s.factor == null) return '—'; var d = Math.round((1 / s.factor - 1) * 100); return Math.abs(d) < 3 ? T('about right') : (d > 0 ? T('{0}% too high').replace('{0}', d) : T('{0}% too low').replace('{0}', -d)); };
+    var row = function (label, s, unit) { return '<tr><td>' + esc(label) + '</td><td>' + (s && s.n ? s.n : 0) + '</td><td>' + (s && s.n ? nf(s.mae, 2) + ' ' + unit : '—') + '</td><td>' + (s && s.n ? pct(s.relErr) : '—') + '</td><td>' + dir(s) + '</td></tr>'; };
+    var html = '<div style="overflow-x:auto;"><table><thead><tr><th>' + esc(T('Prediction')) + '</th><th>' + esc(T('Hours')) + '</th><th>' + esc(T('Off by (average)')) + '</th><th>' + esc(T('Off by (share)')) + '</th><th>' + esc(T('Direction')) + '</th></tr></thead><tbody>' +
+      row(T('Solar, the day before'), a.pv.d1, 'kWh') + row(T('Solar, an hour ahead'), a.pv.h1, 'kWh') +
+      row(T('House, the day before'), a.house.d1, 'kWh') + row(T('House, an hour ahead'), a.house.h1, 'kWh') +
+      (a.loads || []).map(function (l) { return row(l.name + ' — ' + T('the day before'), l.d1, 'kWh'); }).join('') + '</tbody></table></div>';
+    var dep = a.depart || {}, arr = a.arrive || {};
+    html += '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:0.8rem; margin-top:0.7rem;">' +
+      '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">' + esc(T('Car ready on time')) + '</div><div style="font-size:1.2rem; font-weight:700;">' + (dep.n ? pct(dep.onTime) : '—') + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + (dep.n ? esc(T('{0} departures, on average {1} min from the deadline').replace('{0}', dep.n).replace('{1}', dep.maeMin)) : esc(T('measured from the next departures'))) + '</div></div>' +
+      '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">' + esc(T('Expected home')) + '</div><div style="font-size:1.2rem; font-weight:700;">' + (arr.n ? signedMin(arr.biasMin) : '—') + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + (arr.n ? esc(T('{0} times, on average {1} min off').replace('{0}', arr.n).replace('{1}', arr.maeMin)) : esc(T('measured from the next homecomings'))) + '</div></div></div>';
+    var c = a.corrections || {};
+    var lines = [];
+    if (c.houseFactor && Math.abs(c.houseFactor - 1) > 0.02) lines.push(T('house use × {0}').replace('{0}', nf(c.houseFactor, 2)));
+    Object.keys(c.loadFactors || {}).forEach(function (id) { var l = (a.loads || []).find(function (x) { return String(x.id) === id; }); lines.push((l ? l.name : '#' + id) + ' × ' + nf(c.loadFactors[id], 2)); });
+    if (c.departShiftMin) lines.push(T('learned departures {0} min earlier').replace('{0}', c.departShiftMin));
+    html += '<p class="hint" style="margin:0.7rem 0 0;"><strong>' + esc(T('Corrected now:')) + '</strong> ' + (lines.length ? esc(lines.join(' · ')) : esc(T('nothing — the predictions are close enough (or there is too little to go on yet).'))) + '</p>';
+    el.innerHTML = html;
+  }
+
   function renderHouse(d) {
     var h = d.house;
     var el = document.getElementById('ln-house');
@@ -165,7 +196,8 @@
     svg += line(h.workday, '#4a7bd0') + line(h.weekend, '#9b59b6', true);
     [0, 6, 12, 18, 23].forEach(function (i) { svg += '<text x="' + X(i) + '" y="' + (H + 22) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + String(i).padStart(2, '0') + '</text>'; });
     svg += '</svg>';
-    var html = '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700; color:#4a7bd0;">' + nf(h.perDay, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh/day</span></div><div class="hint" style="margin:0;">base load ±' + nf(h.baseLoadKw, 2) + ' kW · without the Wallbox · ' + h.days + ' full days</div></div>' + svg +
+    var chg = h.change && h.change.changed ? '<p class="hint" style="margin:0 0 0.4rem; color:#b8860b;">' + esc(((window.LS_I18N && window.LS_I18N['Use changed: last week {0} kWh/day against {1} before — LoxSuite now learns mostly from the last week.']) || 'Use changed: last week {0} kWh/day against {1} before — LoxSuite now learns mostly from the last week.').replace('{0}', nf(h.change.recent, 1)).replace('{1}', nf(h.change.before, 1))) + '</p>' : '';
+    var html = chg + '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700; color:#4a7bd0;">' + nf(h.perDay, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh/day</span></div><div class="hint" style="margin:0;">base load ±' + nf(h.baseLoadKw, 2) + ' kW · without the Wallbox · ' + h.days + ' full days</div></div>' + svg +
       '<div class="hint" style="margin:0.1rem 0 0;"><span style="color:#4a7bd0; font-weight:700;">━</span> workday &nbsp; <span style="color:#9b59b6; font-weight:700;">┅</span> weekend &nbsp;(kWh per hour, median of the last 4 weeks)</div>' +
       '<p class="hint" style="margin:0.5rem 0 0;">Calculated per hour as grid import &minus; export + solar &minus; Wallbox from the meters.</p>';
     var s = d.surplus;
@@ -180,6 +212,7 @@
       document.getElementById('ln-meta').textContent = d.sessions ? 'Based on ' + d.sessions + ' charging sessions since ' + new Date(d.firstSession).toLocaleDateString() + '.' : 'No charging sessions yet.';
       renderDep(d); renderTrips(d); renderDrive(d); renderSolar(d); renderHouse(d); lastData = d;
     }).catch(function () {});
+    fetch('/learned/accuracy.json').then(function (r) { return r.json(); }).then(renderAccuracy).catch(function () {});
   }
   load();
   var sync = document.getElementById('ln-sync');
