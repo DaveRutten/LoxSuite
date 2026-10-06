@@ -60,6 +60,7 @@ function collectStateGroups(control) {
 // /jdev/sps/io/<uuid> accepts for reading a live value.
 async function flattenStates(structure) {
   const rooms = structure.rooms || {};
+  const cats = structure.cats || {};
   const controls = structure.controls || {};
   const hiddenNames = await getHiddenStateNames();
   const states = [];
@@ -75,7 +76,7 @@ async function flattenStates(structure) {
         if (typeof uuid !== 'string') continue;
         if (hiddenNames.has(stateName.toLowerCase())) continue;
         const label = [roomName, control.name, group.name, stateName].filter(Boolean).join(' / ');
-        states.push({ uuid, label });
+        states.push({ uuid, label, type: group.type || control.type || null, control: group.name ? `${control.name} / ${group.name}` : control.name, state: stateName, room: roomName, category: (control.cat && cats[control.cat]?.name) || null });
       }
     }
   }

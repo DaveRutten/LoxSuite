@@ -27,6 +27,9 @@ const DEFAULTS = {
   // What your dynamic contract bills: 'hour' (average of the four quarters, most suppliers) or
   // 'quarter' (each 15 minutes its own price; ENTSO-E gives quarters, EnergyZero only hours).
   price_interval: 'hour',
+  // What the charts show: 'hour', or 'quarter' when the source has quarters (ENTSO-E) — also when
+  // the contract bills per hour, so you see the price move within the hour.
+  chart_interval: 'hour',
   calibrate_loxone: true,
   loxone_miniserver_id: null,
   loxone_uuid: null,          // SpotPriceOptimizer control
@@ -316,6 +319,9 @@ async function refreshPrices(nowMs = Date.now(), { fetchImpl } = {}) {
     basis = all.length; // number of Spot Price Optimizer values the estimate is made from
   } else {
     let market = await fetchMarket(cfg, from, to, fetchImpl);
+    // the quarters as they came in, for the charts (planning stays on what the contract bills)
+    const quarterly = market.some((i) => Date.parse(i.end) - Date.parse(i.start) < 3600000);
+    await settings.set('price_quarters', quarterly ? market.map((i) => ({ start: i.start, end: i.end, price: allinPrice(i.market, cfg, calib) })) : []);
     if (cfg.price_interval !== 'quarter') market = toHourly(market);
     intervals = market.map((i) => ({ ...i, allin: allinPrice(i.market, cfg, calib) }));
   }
@@ -328,6 +334,16 @@ async function refreshPrices(nowMs = Date.now(), { fetchImpl } = {}) {
   }
   await settings.set('prices_status', { ok: true, at: now, count: intervals.length, until: intervals.length ? intervals[intervals.length - 1].end : null, calib, basis });
   return { count: intervals.length, calib };
+}
+
+// Quarter-hour all-in prices for the charts between two times, or null when the charts show hours
+// (setting) or the source has no quarters (EnergyZero, the Loxone estimate).
+async function chartQuarters(fromIso, toIso) {
+  const cfg = await getConfig();
+  if (cfg.chart_interval !== 'quarter' || !['energyzero', 'entsoe'].includes(cfg.source)) return null;
+  const a = Date.parse(fromIso), b = Date.parse(toIso);
+  const list = ((await settings.get('price_quarters', [])) || []).filter((q) => Date.parse(q.end) > a && Date.parse(q.start) < b);
+  return list.length ? list : null;
 }
 
 async function getPrices(fromIso, toIso) {
@@ -366,6 +382,6 @@ function stopPrices() {
 
 module.exports = {
   DEFAULTS, allinPrice, fitLinear, parseEnergyZero, parseEntsoe, entsoeTime, hourOfDayProfile, fillProfile, loxoneHistory, toIntervals, toHourly, fixedPrice,
-  getConfig, saveConfig, fetchMarket, refreshPrices, getPrices, currentPrice, calibration, sampleCalibration,
+  getConfig, saveConfig, fetchMarket, refreshPrices, getPrices, chartQuarters, currentPrice, calibration, sampleCalibration,
   loxoneCurrentPrice, findSpotOptimizer, startPrices, stopPrices,
 };

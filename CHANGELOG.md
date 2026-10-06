@@ -2,6 +2,41 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.43.1-alpha.1] - 2026-10-06
+
+### Fixed
+- **Days away → presence from Loxone kept no state** (reported: after saving it showed "— none —" again):
+  typing in the search box only filtered the list and chose nothing, which on a phone looks like a choice.
+  Searching now picks the first match, a saved state stays in the list even when it is not among the loaded
+  ones, and a state the server doesn't accept gives a message instead of being dropped silently.
+
+### Added
+- **No price = clearly marked**: in the Smart charging chart every stretch without a price is hatched over the
+  full height, with what is going on — "prices not known yet — out around 13:00 on Wednesday" for tomorrow's
+  day-ahead prices, "no prices yet — LoxSuite keeps trying" when they should have been there, "no price known"
+  for a gap. In the energy manager an hour without a price (planned with the median) is hatched as well.
+- **Quarter-hour prices in the charts**: Administration → Energy & charging → Prices → *Prices in the charts*
+  per hour or per quarter. With quarters (ENTSO-E; EnergyZero only gives hours) the Smart charging chart shows a
+  bar per quarter and the energy manager's price row four blocks per hour, also when the contract bills per
+  hour — the plan itself keeps the intervals the contract bills.
+- **Energy manager: a status from a Loxone Status block just works** (reported: the washer's and dryer's
+  status had to be typed in by hand):
+  - the text itself is the status — the consumer's name in front and a countdown or clock time are left off
+    ("Wasmachine wassen - nog 45 min" → *Wassen*), no value list needed (it is hidden for a text status);
+  - off, idle, done, paused, delayed or waiting ("uitgeschakeld", "klaar", "pauze", "uitgestelde start" …)
+    count as not running — "Wasmachine uitgeschakeld" used to count as running; a numbered status labelled
+    *Done* is not running either;
+  - the state pickers work like Live Data: each state with its value now, the best matches for this consumer
+    on top (its name + the kind of state: a Status block's text for the status, *actual* for power, *total*
+    for the counter), the rest grouped per room → category; a single clear match is suggested;
+  - statuses it has seen appear as buttons — tap the ones that mean running;
+  - a new consumer named like an appliance (washer, dryer, dishwasher …) gets the kind *Appliance*.
+  The pickers use the core (Loxone structure + live values), not the Live Data page, so the energy manager
+  stays independent of other modules.
+- **Energy manager: details per hour**: tap (or click) an hour in *Plan — next 36 hours* for price (per
+  quarter), solar surplus, the car, and per consumer what it would send and why. Works on a phone, where
+  hovering doesn't.
+
 ## [0.43.0-alpha.1] - 2026-10-06
 
 ### Added

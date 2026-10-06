@@ -634,13 +634,6 @@
   ]
  },
  {
-  "key": "(estimate)",
-  "module": "energy_manager",
-  "where": [
-   "energy-manager (script)"
-  ]
- },
- {
   "key": "(estimated)",
   "module": "energy",
   "where": [
@@ -2845,6 +2838,13 @@
   ]
  },
  {
+  "key": "Best matches",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form (script)"
+  ]
+ },
+ {
   "key": "Best start (hindsight)",
   "module": "energy",
   "where": [
@@ -3495,7 +3495,8 @@
   "key": "Close",
   "module": "charging",
   "where": [
-   "agenda (script)"
+   "agenda (script)",
+   "energy-manager (script)"
   ]
  },
  {
@@ -8230,8 +8231,9 @@
  },
  {
   "key": "No category",
-  "module": "core",
+  "module": "energy_manager",
   "where": [
+   "partials/energy-load-form (script)",
    "src/loxoneStructure.js"
   ]
  },
@@ -8574,6 +8576,41 @@
   ]
  },
  {
+  "key": "no price known",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "no price yet — median",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "no price yet — planned with the median {0}",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "no price yet (planned with the median)",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "no prices yet — LoxSuite keeps trying",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "No prices yet.",
   "module": "charging",
   "where": [
@@ -8603,8 +8640,9 @@
  },
  {
   "key": "No room",
-  "module": "core",
+  "module": "energy_manager",
   "where": [
+   "partials/energy-load-form (script)",
    "src/loxoneStructure.js"
   ]
  },
@@ -9937,6 +9975,13 @@
   "module": "energy_manager",
   "where": [
    "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "prices not known yet — out around 13:00 on {0}",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -11535,6 +11580,13 @@
   ]
  },
  {
+  "key": "Suggested from the name.",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form (script)"
+  ]
+ },
+ {
   "key": "Sun",
   "module": "mqtt",
   "where": [
@@ -11622,6 +11674,13 @@
  },
  {
   "key": "taking longer than usual",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "Tap an hour for the details.",
   "module": "energy_manager",
   "where": [
    "energy-manager (script)"
@@ -11763,6 +11822,13 @@
    "ocpp-bridge-edit (script)",
    "public/miniservers-tabulator.js",
    "setup-wizard (script)"
+  ]
+ },
+ {
+  "key": "Text status: used as it is, no values needed.",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form (script)"
   ]
  },
  {
@@ -12859,6 +12925,13 @@
   "module": "core",
   "where": [
    "src/i18n.js"
+  ]
+ },
+ {
+  "key": "Unknown Loxone state, choose it again from the list",
+  "module": "core",
+  "where": [
+   "src/routes/settingsEnergy.js"
   ]
  },
  {

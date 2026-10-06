@@ -43,6 +43,7 @@ router.post('/day-types', require('../middleware/requirePermission').requirePerm
   const b = req.body || {};
   const date = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
   const uuid = String(b.presence_uuid || '').trim();
+  if (uuid && !/^[0-9a-f-]{20,}$/i.test(uuid)) return res.redirect('/settings/energy?error=' + encodeURIComponent('Unknown Loxone state, choose it again from the list') + '#day-types');
   await require('../dayType').saveConfig({
     away_words: String(b.away_words || '').slice(0, 400), home_words: String(b.home_words || '').slice(0, 400),
     away_from: date(b.away_from), away_to: date(b.away_to), holidays: !!b.holidays,
@@ -72,6 +73,7 @@ async function energyManagerData(req) {
   return {
     emLoads: loads.map((l) => ({ ...l, signals: (em.KINDS[l.kind]?.signals || []).map((x) => ({ ...x, vi: em.viName(l, x) })) })),
     emKinds: em.KINDS, emMeters: meters, emCfg: await em.getConfig(),
+    seenStatuses: Object.fromEntries(await Promise.all(loads.map(async (l) => [l.id, await em.seenStatuses(l.id).catch(() => [])]))),
   };
 }
 

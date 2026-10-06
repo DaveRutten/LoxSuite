@@ -82,3 +82,23 @@ test('prices from Loxone: every hour gets a price, also hours without samples', 
   assert.ok(rows.length >= 46);
   assert.ok(rows.every((x) => x.allin_eur_kwh !== null && x.allin_eur_kwh > 0));
 });
+
+test('quarter prices: the charts can show quarters while the plan keeps hours', async () => {
+  const settings = require('../src/wallboxSettings');
+  const prices = require('../src/prices');
+  const { localMidnight } = require('../src/localTime');
+  const from = localMidnight(Date.now());
+  const Q = 900000;
+  // a source that delivers quarters (ENTSO-E does; faked here through the EnergyZero parser)
+  const body = { Prices: Array.from({ length: 8 }, (_, i) => ({ readingDate: new Date(from + i * Q).toISOString(), price: 0.1 + i / 100 })) };
+  const fetchImpl = async () => JSON.stringify(body);
+  await settings.set('prices', { ...prices.DEFAULTS, source: 'energyzero', price_interval: 'hour', chart_interval: 'quarter' });
+  await prices.refreshPrices(Date.now(), { fetchImpl });
+  const rows = await prices.getPrices(new Date(from).toISOString(), new Date(from + 2 * H).toISOString());
+  assert.equal(rows.length, 2, 'the plan gets hours (what the contract bills)');
+  const qs = await prices.chartQuarters(new Date(from).toISOString(), new Date(from + 2 * H).toISOString());
+  assert.equal(qs.length, 8, 'the chart gets the quarters');
+  assert.ok(qs[1].price > qs[0].price);
+  await settings.set('prices', { ...prices.DEFAULTS, source: 'energyzero', price_interval: 'hour', chart_interval: 'hour' });
+  assert.equal(await prices.chartQuarters(new Date(from).toISOString(), new Date(from + 2 * H).toISOString()), null, 'hours chosen: no quarters');
+});

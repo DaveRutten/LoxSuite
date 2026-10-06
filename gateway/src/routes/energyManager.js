@@ -23,7 +23,13 @@ router.get('/', asyncHandler(async (req, res) => {
 router.get('/states/:miniserverId', asyncHandler(async (req, res) => {
   const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(Number(req.params.miniserverId));
   if (!ms) return res.status(404).json({ error: 'Miniserver not found' });
-  try { res.json({ states: await require('../loxoneStructure').getMonitorableStates(ms, { forceRefresh: req.query.refresh === '1' }) }); } catch (err) { res.status(502).json({ error: err.message }); }
+  try {
+    const states = await require('../loxoneStructure').getMonitorableStates(ms, { forceRefresh: req.query.refresh === '1' });
+    // with the value now, so a Status block's text ("Wasmachine uitgeschakeld") is recognisable in the list
+    const ws = require('../loxoneWebSocket');
+    ws.ensureConnection(ms);
+    res.json({ states: states.map((s) => { const v = ws.getLiveValue(ms.id, s.uuid); return v === undefined || v === null ? s : { ...s, value: typeof v === 'number' ? Math.round(v * 1000) / 1000 : String(v).slice(0, 60) }; }) });
+  } catch (err) { res.status(502).json({ error: err.message }); }
 }));
 
 // One consumer in detail: its state now, the timeline, kWh per hour and per status, runs.
@@ -79,7 +85,7 @@ router.get('/data.json', asyncHandler(async (req, res) => {
       runs: runs.filter((r) => r.kind === 'run').slice(0, 15),
     });
   }
-  res.json({ unknown: rt.unknown || [], dayTypes: rt.plan?.dayTypes || {}, loads: out, hours: rt.plan?.hours || [], carKwh: rt.plan?.carKwh || {}, status: rt.status, live: rt.plan?.live || null, planAt: rt.plan?.at || null, cfg: await em.getConfig() });
+  res.json({ unknown: rt.unknown || [], dayTypes: rt.plan?.dayTypes || {}, loads: out, hours: rt.plan?.hours || [], carKwh: rt.plan?.carKwh || {}, quarters: rt.plan?.hours?.length ? await require('../prices').chartQuarters(new Date(rt.plan.hours[0].ms).toISOString(), new Date(rt.plan.hours[rt.plan.hours.length - 1].ms + 3600000).toISOString()).catch(() => null) : null, status: rt.status, live: rt.plan?.live || null, planAt: rt.plan?.at || null, cfg: await em.getConfig() });
 }));
 
 // The Loxone signals of a consumer (state uuids): on/off, status (+ value labels and which values mean

@@ -68,6 +68,9 @@ const controlDefs = [
   ['Washing machine program', roomUtility, catEnergy, 'InfoOnlyAnalog', { value: 'wm-status' }],
   ['Heat pump compressor', roomUtility, catEnergy, 'Switch', { active: 'hp-on' }],
   ['Heat pump mode', roomUtility, catEnergy, 'InfoOnlyAnalog', { value: 'hp-mode' }],
+  // Status blocks (text states, like a real install's appliance status)
+  ['Droger', roomUtility, catEnergy, 'TextState', { textAndIcon: 'dr-text', iconAndColor: 'dr-icon' }],
+  ['Wasmachine', roomUtility, catEnergy, 'TextState', { textAndIcon: 'wm-text', iconAndColor: 'wm-icon' }],
 ];
 
 const controls = {};
@@ -97,6 +100,25 @@ const FIXED = {
   'wm-actual': () => 1.92 + Math.random() * 0.05, 'wm-total': () => 412.3,
   'wm-status': () => 1, 'hp-on': () => 1, 'hp-mode': () => 1,
 };
+// Text states (identifier 3), sent in their own frame.
+const TEXTS = { 'dr-text': () => 'Droger drogen - nog 35 min', 'wm-text': () => 'Wasmachine uitgeschakeld' };
+const isText = (uuid) => !!TEXTS[(stateSeeds.get(uuid) || {}).seed] || /-icon$/.test((stateSeeds.get(uuid) || {}).seed || '');
+function buildTextFrame(uuids) {
+  const parts = uuids.filter((u) => TEXTS[stateSeeds.get(u).seed]).map((u) => {
+    const text = Buffer.from(TEXTS[stateSeeds.get(u).seed](), 'utf8');
+    const rec = Buffer.alloc(Math.ceil((36 + text.length) / 4) * 4);
+    uuidStringToBytes(u).copy(rec, 0);
+    rec.writeUInt32LE(text.length, 32);
+    text.copy(rec, 36);
+    return rec;
+  });
+  const payload = Buffer.concat(parts);
+  const header = Buffer.alloc(8);
+  header.writeUInt8(3, 0);
+  header.writeUInt8(3, 1); // identifier 3 = text states
+  header.writeUInt32LE(payload.length, 4);
+  return [header, payload];
+}
 function currentValue(uuid) {
   const info = stateSeeds.get(uuid);
   const seed = info ? info.seed : uuid;
@@ -247,7 +269,8 @@ wss.on('connection', (ws) => {
 
     if (text === 'jdev/sps/enablebinstatusupdate') {
       sendLL('jdev/sps/enablebinstatusupdate', '1');
-      const allUuids = [...stateSeeds.keys()];
+      const allUuids = [...stateSeeds.keys()].filter((u) => !isText(u));
+      const textUuids = [...stateSeeds.keys()].filter((u) => isText(u));
       // Send an immediate first push (Live Data's own screenshot needs values populated well
       // before Playwright ever gets a chance to click into a room, not just eventually).
       const send = () => {
@@ -255,6 +278,9 @@ wss.on('connection', (ws) => {
         const [header, payload] = buildValueFrame(allUuids);
         ws.send(header, { binary: true });
         ws.send(payload, { binary: true });
+        const [th, tp] = buildTextFrame(textUuids);
+        ws.send(th, { binary: true });
+        ws.send(tp, { binary: true });
       };
       send();
       pushTimer = setInterval(send, 2000);

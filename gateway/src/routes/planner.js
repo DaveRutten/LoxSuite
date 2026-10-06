@@ -153,6 +153,7 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
       fixed_low_until: /^\d{1,2}:\d{2}$/.test(String(b.fixed_low_until || '').trim()) ? String(b.fixed_low_until).trim() : '07:00',
       fixed_low_weekend: !!b.fixed_low_weekend,
       price_interval: b.price_interval === 'quarter' ? 'quarter' : 'hour',
+      chart_interval: b.chart_interval === 'quarter' ? 'quarter' : 'hour',
     });
     prices.refreshPrices().catch(() => {});
   } else if (section === 'solar') {

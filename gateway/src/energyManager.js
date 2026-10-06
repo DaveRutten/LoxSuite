@@ -81,12 +81,34 @@ function parseStatusMap(text) {
   }
   return out;
 }
+// Pure: a status text from Loxone (a Status block's textAndIcon) cleaned up to book per status: the
+// consumer's own name in front ("Wasmachine uitgeschakeld" -> "Uitgeschakeld") and a countdown or
+// clock time ("Wassen - nog 45 min", "klaar om 14:30") left off, so one step doesn't become a new
+// status every minute.
+function cleanStatusText(text, name = '') {
+  const orig = String(text ?? '').trim();
+  let t = orig;
+  const n = String(name || '').trim();
+  if (n && t.toLowerCase().startsWith(n.toLowerCase())) t = t.slice(n.length);
+  const named = t;
+  t = t.replace(/\b(nog|rest(erend)?|resterende tijd|remaining)\b.*$/i, '')
+    .replace(/\b\d{1,2}:\d{2}(:\d{2})?\b/g, '')
+    .replace(/\b\d+([.,]\d+)?\s*(%|min(uten|utes)?|uur|h|kwh|kw|w)(?![a-z])/gi, '')
+    .replace(/\s+(om|at|in|over)\s*$/i, '')
+    .replace(/^[\s\-–—·:,|()]+|[\s\-–—·:,|()]+$/g, '').replace(/\s{2,}/g, ' ').trim();
+  if (!t) t = named.replace(/^[\s\-–—·:,|()]+|[\s\-–—·:,|()]+$/g, '').trim() || orig;
+  return (t.charAt(0).toUpperCase() + t.slice(1)).slice(0, 40);
+}
+// Pure: does a status (text or label) mean it is not running (off, idle, done, paused, waiting)?
+const OFF_TEXT = /(^|[^a-zà-ÿ])(uitgeschakeld|uit|off|switched off|idle|stand-?by|klaar|gereed|beëindigd|beeindigd|einde|afgelopen|finished|done|ready|offline|niet verbonden|disconnected|gepauzeerd|pauze|paused|uitgesteld|uitgestelde|delayed|wacht|wachten|waiting)($|[^a-zà-ÿ])/i;
+function isOffText(t) { return OFF_TEXT.test(String(t ?? '')); }
+
 const parseList = (text) => String(text || '').split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
 
 // Pure: one reading of a consumer from its signals -> { kw, total, on, status, label, measured }.
 //   meter: { kw, total } of the Loxone meter block (or nulls); raw: { onoff, status, power, energy }.
 // "on" comes from the on/off state, else from the status (running values), else from the power.
-function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05 }) {
+function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05, name = '' }) {
   const num = (v) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
   let kw = num(meter.kw);
   if (kw === null && src.power) { const p = num(raw.power); kw = p === null ? null : (src.powerUnit === 'kW' ? p : p / 1000); }
@@ -96,7 +118,7 @@ function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05 }) {
   let label = null;
   if (src.status && raw.status !== undefined && raw.status !== null && raw.status !== '') {
     const n = num(raw.status);
-    status = n !== null ? String(Math.round(n * 1000) / 1000) : String(raw.status).slice(0, 40);
+    status = n !== null ? String(Math.round(n * 1000) / 1000) : cleanStatusText(raw.status, name);
     label = src.statusMap[status] || (n === null ? status : null);
   }
   let on = null;
@@ -105,7 +127,7 @@ function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05 }) {
     const b = v !== null ? v !== 0 : /^(on|aan|true|1)$/i.test(String(raw.onoff));
     on = src.onoffInvert ? !b : b;
   } else if (status !== null) {
-    on = src.statusOn.length ? src.statusOn.includes(status) || (label !== null && src.statusOn.includes(label)) : !(status === '0' || /^(off|uit|idle)$/i.test(label || status));
+    on = src.statusOn.length ? src.statusOn.includes(status) || (label !== null && src.statusOn.includes(label)) : !(status === '0' || isOffText(label || status));
   } else if (kw !== null) on = kw >= onKw;
   const temp = src.temp ? num(raw.temp) : null;
   return { kw, total, on, status, label, measured: total !== null || kw !== null, temp };
@@ -371,6 +393,12 @@ function hourCost(kwh, { gridImport = null, houseKwh = null, price = null, solar
 
 const rt = { plan: null, planAt: 0, signals: [], last: new Map(), samples: new Map(), runs: new Map(), prevTotals: new Map(), timer: null, status: null };
 
+// The statuses a consumer has been in (last 60 days, most time first), for "values that mean running".
+async function seenStatuses(loadId, nowMs = Date.now()) {
+  const rows = await db.prepare('SELECT status, SUM(minutes) AS m FROM load_status_hourly WHERE load_id = ? AND hour >= ? GROUP BY status').all(loadId, new Date(nowMs - 60 * 86400000).toISOString()).catch(() => []);
+  return rows.filter((r) => r.status && r.status !== 'on' && r.status !== 'off').sort((a, b) => b.m - a.m).slice(0, 16).map((r) => ({ status: r.status, hours: Math.round((Number(r.m) || 0) / 6) / 10 }));
+}
+
 async function listLoads() {
   return (await db.prepare('SELECT * FROM energy_loads ORDER BY priority, id').all().catch(() => [])).map((l) => ({ ...l, settings: parseSettings(l) }));
 }
@@ -406,7 +434,7 @@ async function readLoad(load) {
       for (const k of ['onoff', 'status', 'power', 'energy', 'temp']) if (src[k]) raw[k] = ws.getLiveValue(ms.id, src[k]);
     }
   }
-  const st = loadState({ meter, raw, src });
+  const st = loadState({ meter, raw, src, name: load.name });
   return { ...st, found: !!m?.control || Object.values(raw).some((x) => x !== undefined && x !== null), name };
 }
 
@@ -902,6 +930,7 @@ function stopEnergyManager() {
 function invalidate() { rt.planAt = 0; }
 
 module.exports = {
+  cleanStatusText, isOffText, seenStatuses,
   applyLive,
   KINDS, parseSettings, viName, toHours, effCost, planLoads, currentSignals, runStep, hourCost, quantile,
   runProgress, anomalies, unknownPatterns, weatherFor, sourcesOf, parseStatusMap, loadState, statusKey, statusSummary, timeline, loadDetail, learnedStatus,

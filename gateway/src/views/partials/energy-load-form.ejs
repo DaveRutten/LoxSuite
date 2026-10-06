@@ -15,16 +15,17 @@
       <div style="grid-column:span 2;"><label><%= t('Search states') %></label><input type="text" data-state-filter placeholder="<%= t('room, name or state — e.g. washing machine') %>"><span class="hint" data-state-msg style="margin:0;"></span></div>
     </div>
     <div class="form-grid" style="margin-top:0.4rem;">
-      <div><label><%= t('On / off') %></label><select name="src_onoff" data-state-pick data-current="<%= src.onoff || '' %>"><option value=""><%= t('— none —') %></option><% if (src.onoff) { %><option value="<%= src.onoff %>" selected><%= src.onoff %></option><% } %></select>
+      <div><label><%= t('On / off') %></label><select name="src_onoff" data-state-pick="onoff" data-current="<%= src.onoff || '' %>"><option value=""><%= t('— none —') %></option><% if (src.onoff) { %><option value="<%= src.onoff %>" selected><%= src.onoff %></option><% } %></select>
         <label style="display:flex; gap:0.3rem; font-weight:normal; margin-top:0.2rem;"><input type="checkbox" name="src_onoff_invert" value="1" <%= src.onoff_invert ? 'checked' : '' %>> <%= t('inverted (0 = on)') %></label></div>
-      <div><label><%= t('Status (enumerator)') %></label><select name="src_status" data-state-pick data-current="<%= src.status || '' %>"><option value=""><%= t('— none —') %></option><% if (src.status) { %><option value="<%= src.status %>" selected><%= src.status %></option><% } %></select></div>
-      <div><label><%= t('Power') %></label><div style="display:flex; gap:0.3rem;"><select name="src_power" data-state-pick data-current="<%= src.power || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.power) { %><option value="<%= src.power %>" selected><%= src.power %></option><% } %></select><select name="src_power_unit" style="width:6em;"><option value="W" <%= src.power_unit !== 'kW' ? 'selected' : '' %>>W</option><option value="kW" <%= src.power_unit === 'kW' ? 'selected' : '' %>>kW</option></select></div></div>
-      <div><label><%= t('Temperature (room or tank)') %></label><select name="src_temp" data-state-pick data-current="<%= src.temp || '' %>"><option value=""><%= t('— none —') %></option><% if (src.temp) { %><option value="<%= src.temp %>" selected><%= src.temp %></option><% } %></select></div>
-      <div><label><%= t('Energy counter') %></label><div style="display:flex; gap:0.3rem;"><select name="src_energy" data-state-pick data-current="<%= src.energy || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.energy) { %><option value="<%= src.energy %>" selected><%= src.energy %></option><% } %></select><select name="src_energy_unit" style="width:6.5em;"><option value="kWh" <%= src.energy_unit !== 'Wh' ? 'selected' : '' %>>kWh</option><option value="Wh" <%= src.energy_unit === 'Wh' ? 'selected' : '' %>>Wh</option></select></div></div>
+      <div><label><%= t('Status (text or number)') %></label><select name="src_status" data-state-pick="status" data-current="<%= src.status || '' %>"><option value=""><%= t('— none —') %></option><% if (src.status) { %><option value="<%= src.status %>" selected><%= src.status %></option><% } %></select><p class="hint" data-status-hint style="margin:0.2rem 0 0;"></p></div>
+      <div><label><%= t('Power') %></label><div style="display:flex; gap:0.3rem;"><select name="src_power" data-state-pick="power" data-current="<%= src.power || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.power) { %><option value="<%= src.power %>" selected><%= src.power %></option><% } %></select><select name="src_power_unit" style="width:6em;"><option value="W" <%= src.power_unit !== 'kW' ? 'selected' : '' %>>W</option><option value="kW" <%= src.power_unit === 'kW' ? 'selected' : '' %>>kW</option></select></div></div>
+      <div><label><%= t('Temperature (room or tank)') %></label><select name="src_temp" data-state-pick="temp" data-current="<%= src.temp || '' %>"><option value=""><%= t('— none —') %></option><% if (src.temp) { %><option value="<%= src.temp %>" selected><%= src.temp %></option><% } %></select></div>
+      <div><label><%= t('Energy counter') %></label><div style="display:flex; gap:0.3rem;"><select name="src_energy" data-state-pick="energy" data-current="<%= src.energy || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.energy) { %><option value="<%= src.energy %>" selected><%= src.energy %></option><% } %></select><select name="src_energy_unit" style="width:6.5em;"><option value="kWh" <%= src.energy_unit !== 'Wh' ? 'selected' : '' %>>kWh</option><option value="Wh" <%= src.energy_unit === 'Wh' ? 'selected' : '' %>>Wh</option></select></div></div>
     </div>
     <div class="form-grid" style="margin-top:0.4rem;">
-      <div style="grid-column:span 2;"><label><%= t('Status values') %></label><textarea name="src_status_map" rows="3" placeholder="<%= t('0=Off, 1=Washing, 2=Spinning, 3=Done (one per line or comma)') %>"><%= src.status_map || '' %></textarea></div>
-      <div><label><%= t('Values that mean running') %></label><input type="text" name="src_status_on" value="<%= src.status_on || '' %>" placeholder="1, 2"><p class="hint" style="margin:0.2rem 0 0;"><%= t('Empty: everything except 0 / off.') %></p></div>
+      <div style="grid-column:span 2;" data-status-map><label><%= t('Status values') %></label><textarea name="src_status_map" rows="3" placeholder="<%= t('0=Off, 1=Washing, 2=Spinning, 3=Done (one per line or comma)') %>"><%= src.status_map || '' %></textarea></div>
+      <div><label><%= t('Values that mean running') %></label><input type="text" name="src_status_on" value="<%= src.status_on || '' %>" placeholder="1, 2"><p class="hint" style="margin:0.2rem 0 0;"><%= t('Empty: everything except off, idle, done, paused or waiting.') %></p>
+        <% const seen = (typeof seenStatuses !== 'undefined' && l && seenStatuses[l.id]) || []; if (seen.length) { %><div class="hint" style="margin:0.3rem 0 0;"><%= t('Seen — tap what means running:') %><div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.2rem;"><% seen.forEach(x => { %><button type="button" class="chip" data-status-chip="<%= x.status %>" title="<%= x.hours %> h"><%= x.status %></button><% }) %></div></div><% } %></div>
     </div>
     <p class="hint" style="margin:0.4rem 0 0;"><%= t('On/off is the basis: LoxSuite learns when and how long it runs. A status tells it what it is doing (and how long each step takes); power or an energy counter gives the real kWh — without them it estimates from the kW above.') %></p>
   </details>
@@ -81,18 +82,77 @@
   var picks = form.querySelectorAll('[data-state-pick]');
   window.__emStates = window.__emStates || {};
   var states = [];
+  // Ranked: states of a control with this consumer's name first ("Wasmachine" → the Wasmachine Status
+  // block), and per field the kind of state that fits (status: a Status block's text; power: actual …).
+  var nameIn = form.querySelector('input[name="name"]');
+  var FIT = {
+    status: function (x) { return (x.type === 'TextState' && /^text/i.test(x.state || '')) ? 3 : /status|state|mode|program/i.test(x.state || '') ? 1 : 0; },
+    power: function (x) { return /^(actual|power|p|value)$/i.test(x.state || '') ? 2 : 0; },
+    energy: function (x) { return /^(total|energy|e)$/i.test(x.state || '') ? 2 : 0; },
+    onoff: function (x) { return /^(active|on|value|state)$/i.test(x.state || '') ? 1 : 0; },
+    temp: function (x) { return /temp/i.test(x.state || '') ? 2 : 0; },
+  };
+  function nameScore(x) {
+    var words = String((nameIn && nameIn.value) || '').toLowerCase().split(/[\s\-_/]+/).filter(function (w) { return w.length >= 3; });
+    var c = String(x.control || x.label || '').toLowerCase();
+    return words.some(function (w) { return c.indexOf(w) !== -1; }) ? 1 : 0;
+  }
+  function optText(x) { return x.label + (x.value !== undefined && x.value !== '' ? ' — ' + x.value : ''); }
   function fill() {
     var q = (filter.value || '').toLowerCase();
     Array.prototype.forEach.call(picks, function (p) {
+      var role = p.getAttribute('data-state-pick') || '';
+      var fit = FIT[role] || function () { return 0; };
       var cur = p.value || p.dataset.current || '';
-      var list = states.filter(function (x) { return !q || x.uuid === cur || x.label.toLowerCase().indexOf(q) !== -1; }).slice(0, 400);
+      var list = states.filter(function (x) { return !q || x.uuid === cur || (x.label + ' ' + (x.value == null ? '' : x.value)).toLowerCase().indexOf(q) !== -1; })
+        .map(function (x) { return { x: x, s: nameScore(x) * 10 + fit(x) }; })
+        .sort(function (a, b) { return b.s - a.s; }).map(function (o) { return o.x; }).slice(0, 400);
+      // nothing chosen yet: the one state that clearly is this consumer's status is suggested
+      var suggested = null;
+      if (!cur && !p.dataset.touched && role === 'status') {
+        var hits = list.filter(function (x) { return nameScore(x) && fit(x) === 3; });
+        if (hits.length === 1) { suggested = hits[0]; cur = suggested.uuid; }
+      }
       var none = p.options[0] ? p.options[0].textContent : '—';
       p.innerHTML = '';
       var o0 = document.createElement('option'); o0.value = ''; o0.textContent = none; p.appendChild(o0);
-      if (cur && !list.some(function (x) { return x.uuid === cur; })) list.unshift({ uuid: cur, label: (states.find(function (x) { return x.uuid === cur; }) || {}).label || cur });
-      list.forEach(function (x) { var o = document.createElement('option'); o.value = x.uuid; o.textContent = x.label; if (x.uuid === cur) o.selected = true; p.appendChild(o); });
+      if (cur && !list.some(function (x) { return x.uuid === cur; })) list.unshift(states.find(function (x) { return x.uuid === cur; }) || { uuid: cur, label: cur });
+      // like Live Data: the best matches on top, the rest grouped per room → category
+      var top = list.filter(function (x) { return x.uuid === cur || (nameScore(x) && fit(x) > 0) || (q && fit(x) > 0); });
+      var rest = list.filter(function (x) { return top.indexOf(x) === -1; });
+      function opt(x, parent, short) { var o = document.createElement('option'); o.value = x.uuid; o.textContent = short ? (x.control || x.label) + ' · ' + (x.state || '') + (x.value !== undefined && x.value !== '' ? ' — ' + x.value : '') : optText(x); if (x.uuid === cur) o.selected = true; parent.appendChild(o); }
+      if (top.length && rest.length) { var g0 = document.createElement('optgroup'); g0.label = TLs('Best matches'); top.forEach(function (x) { opt(x, g0); }); p.appendChild(g0); }
+      else top.forEach(function (x) { opt(x, p); });
+      var groups = {};
+      rest.forEach(function (x) { var k = (x.room || TLs('No room')) + ' → ' + (x.category || TLs('No category')); (groups[k] = groups[k] || []).push(x); });
+      Object.keys(groups).sort().forEach(function (k) { var g = document.createElement('optgroup'); g.label = k; groups[k].forEach(function (x) { opt(x, g, true); }); p.appendChild(g); });
+      if (role === 'status') statusHint(p, suggested);
     });
   }
+  // A text status needs no value list: the text itself is the status (the name in front and a countdown
+  // are left off, "uitgeschakeld", "klaar", "pauze" … count as not running).
+  function statusHint(p, suggested) {
+    var x = states.find(function (s) { return s.uuid === p.value; });
+    var isText = !!x && (x.type === 'TextState' || (x.value !== undefined && x.value !== '' && !isFinite(Number(x.value))));
+    var hint = form.querySelector('[data-status-hint]'), map = form.querySelector('[data-status-map]');
+    if (hint) hint.textContent = !x ? '' : (suggested ? TLs('Suggested from the name.') + ' ' : '') + (isText ? TLs('Text status: used as it is, no values needed.') : '');
+    if (map) map.style.display = isText ? 'none' : '';
+  }
+  function TLs(k) { return (window.LS_I18N && window.LS_I18N[k]) || k; }
+  Array.prototype.forEach.call(picks, function (p) { p.addEventListener('change', function () { p.dataset.touched = '1'; if (p.getAttribute('data-state-pick') === 'status') statusHint(p, null); }); });
+  if (nameIn) nameIn.addEventListener('change', function () {
+    // a new consumer named like an appliance is one
+    if (fid === 'new' && /was|droger|dryer|washer|vaatwas|dish|oven/i.test(nameIn.value || '') && sel.value !== 'appliance') { sel.value = 'appliance'; show(); }
+    if (states.length) fill();
+  });
+  // seen statuses: tap to add to / remove from "values that mean running"
+  Array.prototype.forEach.call(form.querySelectorAll('[data-status-chip]'), function (b) {
+    var inp = form.querySelector('input[name="src_status_on"]');
+    function list() { return String(inp.value || '').split(',').map(function (v) { return v.trim(); }).filter(Boolean); }
+    function paint() { b.style.background = list().indexOf(b.getAttribute('data-status-chip')) !== -1 ? 'var(--accent)' : ''; b.style.color = list().indexOf(b.getAttribute('data-status-chip')) !== -1 ? '#fff' : ''; }
+    b.addEventListener('click', function () { var v = b.getAttribute('data-status-chip'), l = list(), i = l.indexOf(v); if (i === -1) l.push(v); else l.splice(i, 1); inp.value = l.join(', '); paint(); });
+    paint();
+  });
   function loadStates() {
     if (!msSel || !msSel.value) return;
     var id = msSel.value;

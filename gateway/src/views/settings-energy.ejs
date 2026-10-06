@@ -12,7 +12,7 @@
   <% if (typeof emLoads !== 'undefined' && emLoads && canEdit('energy_manager')) { %><a href="#energy-manager"><%= t('Energy manager') %></a><% } %>
 </nav>
 
-<% if (error) { %><p class="error"><%= error %></p><% } %>
+<% if (error) { %><p class="error"><%= t(error) %></p><% } %>
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
 
 <div class="card" id="prices">
@@ -33,6 +33,10 @@
         <div data-show-if="source=energyzero|entsoe"><label><%= t('Your contract bills per') %></label><select name="price_interval">
           <option value="hour" <%= priceCfg.price_interval !== 'quarter' ? 'selected' : '' %>><%= t('hour (average of the quarters)') %></option>
           <option value="quarter" <%= priceCfg.price_interval === 'quarter' ? 'selected' : '' %>><%= t('quarter of an hour') %></option></select></div>
+        <div data-show-if="source=energyzero|entsoe"><label><%= t('Prices in the charts') %></label><select name="chart_interval">
+          <option value="hour" <%= priceCfg.chart_interval !== 'quarter' ? 'selected' : '' %>><%= t('per hour') %></option>
+          <option value="quarter" <%= priceCfg.chart_interval === 'quarter' ? 'selected' : '' %>><%= t('per quarter of an hour (ENTSO-E only)') %></option></select></div>
+        <div data-show-if="source=energyzero"><p class="hint" style="margin:1.4rem 0 0;"><%= t('EnergyZero only gives prices per hour. For quarters choose ENTSO-E (free API key from transparency.entsoe.eu).') %></p></div>
       </div>
       <div class="form-grid" style="margin-top:0.8rem;" data-show-if="source=fixed">
         <div><label><%= t('Price (€/kWh, all-in)') %></label><input type="text" name="fixed_eur_kwh" value="<%= priceCfg.fixed_eur_kwh %>"></div>
@@ -215,7 +219,12 @@
       var q = (f.value || '').toLowerCase(), cur = sel.value || sel.dataset.current || '';
       var none = sel.options[0] ? sel.options[0].textContent : '—';
       sel.innerHTML = '<option value="">' + none + '</option>';
-      states.filter(function (x) { return !q || x.uuid === cur || x.label.toLowerCase().indexOf(q) !== -1; }).slice(0, 300).forEach(function (x) { var o = document.createElement('option'); o.value = x.uuid; o.textContent = x.label; if (x.uuid === cur) o.selected = true; sel.appendChild(o); });
+      var list = states.filter(function (x) { return !q || x.uuid === cur || x.label.toLowerCase().indexOf(q) !== -1; }).slice(0, 300);
+      // keep the saved state even when it isn't in the (filtered) list, so it never silently falls back to "none"
+      if (cur && !list.some(function (x) { return x.uuid === cur; })) list.unshift({ uuid: cur, label: (states.find(function (x) { return x.uuid === cur; }) || {}).label || cur });
+      // searching without a choice yet picks the first match (a phone doesn't open the list while typing)
+      if (!cur && q && list.length) cur = list[0].uuid;
+      list.forEach(function (x) { var o = document.createElement('option'); o.value = x.uuid; o.textContent = x.label; if (x.uuid === cur) o.selected = true; sel.appendChild(o); });
     }
     function load() { if (!ms.value) return; fetch('/settings/energy/states/' + ms.value).then(function (r) { return r.json(); }).then(function (d) { states = d.states || []; fill(); }).catch(function () {}); }
     ms.addEventListener('change', function () { sel.dataset.current = ''; load(); });
@@ -343,7 +352,7 @@
   <% emLoads.forEach(l => { %>
     <details>
       <summary><strong><%= l.name %></strong> <span class="hint">· <%= t(emKinds[l.kind].label) %> <%= t('· priority') %> <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
-      <%- include('partials/energy-load-form', { l, kinds: emKinds, meters: emMeters, miniservers }) %>
+      <%- include('partials/energy-load-form', { l, kinds: emKinds, meters: emMeters, miniservers, seenStatuses }) %>
       <form method="post" action="/energy-manager/loads/<%= l.id %>/delete" style="margin-top:0.6rem;" onsubmit="return confirm(<%= JSON.stringify(t('Delete {name} and its history?', { name: l.name })) %>);"><button type="submit" class="danger"><%- icon('trash') %> <%= t('Delete') %></button></form>
     </details>
   <% }) %>

@@ -44,7 +44,7 @@
   <% } %>
   <div id="pl-plan" style="margin-top:1rem;"></div>
   <div style="margin-top:1rem;">
-    <div class="hint" style="margin:0 0 0.2rem; font-size:0.8rem;"><%= t('Price per interval (all-in) —') %> <span style="color:var(--accent); font-weight:700;">■</span> <%= t('planned') %> &nbsp;<span style="color:#d4a017; font-weight:700;">━</span> <%= t('expected solar surplus (kW)') %> &nbsp;<span style="color:#e5534b; font-weight:700;">┆</span> <%= t('ready by') %> &nbsp;<span style="color:#d4a017; font-weight:700;">■</span> <%= t('solar part') %> &nbsp;<span style="color:#3b82f6; font-weight:700;">┆</span> <%= t('expected home') %> &nbsp;<span style="color:var(--accent); font-weight:700;">⬚</span> <%= t('if it came home now') %> &nbsp;<span style="color:#e0794f; font-weight:700;">┅</span> <%= t('expected import from the grid (kW)') %></div>
+    <div class="hint" style="margin:0 0 0.2rem; font-size:0.8rem;"><%= t('Price per interval (all-in) —') %> <span style="color:var(--accent); font-weight:700;">■</span> <%= t('planned') %> &nbsp;<span style="color:#d4a017; font-weight:700;">━</span> <%= t('expected solar surplus (kW)') %> &nbsp;<span style="color:#e5534b; font-weight:700;">┆</span> <%= t('ready by') %> &nbsp;<span style="color:#d4a017; font-weight:700;">■</span> <%= t('solar part') %> &nbsp;<span style="color:#3b82f6; font-weight:700;">┆</span> <%= t('expected home') %> &nbsp;<span style="color:var(--accent); font-weight:700;">⬚</span> <%= t('if it came home now') %> &nbsp;<span style="color:#e0794f; font-weight:700;">┅</span> <%= t('expected import from the grid (kW)') %> &nbsp;<span style="display:inline-block; width:0.9em; height:0.8em; vertical-align:-0.05em; background:repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 5px); opacity:0.45;"></span> <%= t('no price (yet)') %></div>
     <div id="pl-chart"></div>
   </div>
 </div>
@@ -163,13 +163,26 @@
     renderChart(p);
   }
 
+  // Hourly slots split into their quarter-hour prices for the chart (Administration → Energy &
+  // charging → "Show prices in the charts per quarter"); the plan itself keeps its own intervals.
+  function withQuarters(slots, quarters) {
+    if (!quarters || !quarters.length) return slots;
+    var out = [];
+    slots.forEach(function (s) {
+      var a = Date.parse(s.start), b = Date.parse(s.end);
+      var sub = quarters.filter(function (q) { return Date.parse(q.start) >= a && Date.parse(q.end) <= b; });
+      if (sub.length < 2) { out.push(s); return; }
+      sub.forEach(function (q) { out.push(Object.assign({}, s, { start: q.start, end: q.end, price: q.price })); });
+    });
+    return out;
+  }
   var chartPlan = null;
   lsOnResize(function () { if (chartPlan) renderChart(chartPlan); });
   function renderChart(p) {
     chartPlan = p;
     var el = document.getElementById('pl-chart');
     if (!p || !p.slotsAll || !p.slotsAll.length) { el.innerHTML = '<p class="hint" style="margin:0;">No prices yet.</p>'; return; }
-    var slots = p.slotsAll.slice(0, 160);
+    var slots = withQuarters(p.slotsAll.slice(0, 160), p.chartPrices);
     var W = lsChartW(el, 900), H = 160, left = 40, n = slots.length, bw = (W - left - 8) / n;
     var maxP = Math.max(0.1, Math.max.apply(null, slots.map(function (s) { return s.price || 0; })));
     // expected import from the grid per interval (kW): the house beyond the expected solar, plus the
@@ -189,12 +202,13 @@
     p.slots.forEach(function (x) { planned[x.start] = true; });
     var t0 = Date.parse(slots[0].start), t1 = Date.parse(slots[n - 1].end);
     var X = function (ms) { return left + (ms - t0) / (t1 - t0) * (W - left - 8); };
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 34) + '" width="100%" style="display:block;">';
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 34) + '" width="100%" style="display:block;">' +
+      '<defs><pattern id="pl-noprice" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="currentColor" stroke-width="2" opacity="0.18"/></pattern></defs>';
     [0.25, 0.5, 0.75, 1].forEach(function (f) { var v = maxP * f; var y = 10 + H - f * H; svg += '<line x1="' + left + '" y1="' + y + '" x2="' + (W - 5) + '" y2="' + y + '" stroke="currentColor" opacity="0.08"/><text x="' + (left - 4) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">€' + v.toFixed(2) + '</text>'; });
     slots.forEach(function (s, i) {
       var x = X(Date.parse(s.start));
       var w = Math.max(1, X(Date.parse(s.end)) - x - 1);
-      if (s.price == null) { svg += '<rect x="' + x + '" y="' + (10 + H - 4) + '" width="' + w + '" height="4" fill="currentColor" opacity="0.1"/>'; return; }
+      if (s.price == null) return; // marked below as one hatched block
       var h = s.price / maxP * H;
       var isPlan = !!planned[s.start] || p.slots.some(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); });
       svg += '<rect x="' + x + '" y="' + (10 + H - h) + '" width="' + w + '" height="' + h + '" rx="1.5" fill="' + (isPlan ? 'var(--accent)' : '#c9d0d8') + '" opacity="' + (isPlan ? 0.95 : 0.75) + '"><title>' + tm(s.start) + ' € ' + s.price.toFixed(3) + (gridKw[i] != null ? ' · ' + esc(T('import ~{0} kW', nf(gridKw[i], 1))) : '') + '</title></rect>';
@@ -204,6 +218,26 @@
       if (pk > 0.05 && tk > 0) { var sh = h * Math.min(1, pk / tk); svg += '<rect x="' + x + '" y="' + (10 + H - sh) + '" width="' + w + '" height="' + sh + '" fill="#d4a017" opacity="0.9"><title>☀️ ' + nf(pk, 1) + ' / ' + nf(tk, 1) + ' kWh</title></rect>'; }
       // what it would do if the car came home now: outlined
       if (p.ifNow && !isPlan && p.ifNow.slots.some(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); })) svg += '<rect x="' + (x + 0.75) + '" y="' + (10 + H - h + 0.75) + '" width="' + Math.max(0, w - 1.5) + '" height="' + Math.max(0, h - 1.5) + '" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3 2"/>';
+    });
+    // Intervals without a price: hatched over the full height with what is going on, so an empty
+    // stretch never looks like "nothing planned because it is expensive". Day-ahead prices for a day
+    // come out around 13:00 the day before.
+    var runs = [], run = null;
+    slots.forEach(function (s) {
+      var a = Date.parse(s.start), b = Date.parse(s.end);
+      if (s.price != null) { run = null; return; }
+      if (run && run.b === a) run.b = b; else runs.push(run = { a: a, b: b });
+    });
+    runs.forEach(function (r) {
+      var x0 = X(r.a), x1 = X(r.b), tail = r.b >= t1;
+      var pub = new Date(r.a - 86400000); pub.setHours(13, 0, 0, 0);
+      var label = !tail ? T('no price known')
+        : Date.now() < pub.getTime() + 30 * 60000 ? T('prices not known yet — out around 13:00 on {0}', pub.toLocaleDateString([], { weekday: 'long' }))
+        : T('no prices yet — LoxSuite keeps trying');
+      svg += '<rect x="' + x0 + '" y="10" width="' + Math.max(1, x1 - x0) + '" height="' + H + '" fill="url(#pl-noprice)"><title>' + esc(label) + '</title></rect>' +
+        '<line x1="' + x0 + '" y1="10" x2="' + x0 + '" y2="' + (10 + H) + '" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" opacity="0.4"/>';
+      if (x1 - x0 > 70) svg += '<text x="' + ((x0 + x1) / 2) + '" y="' + (10 + H * 0.3) + '" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">' + esc(label) + '</text>';
+      else if (x1 - x0 >= 12) { var cx = (x0 + x1) / 2 + 3.5, cy = 10 + H - 6; svg += '<text x="' + cx + '" y="' + cy + '" transform="rotate(-90 ' + cx + ' ' + cy + ')" font-size="10" fill="currentColor" opacity="0.75">' + esc(label) + '</text>'; }
     });
     var pts = slots.map(function (s) { return X((Date.parse(s.start) + Date.parse(s.end)) / 2).toFixed(1) + ',' + (10 + H - (s.pvKw || 0) / maxPv * H * 0.9).toFixed(1); });
     svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#d4a017" stroke-width="2" opacity="0.9"/>';

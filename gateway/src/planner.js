@@ -850,6 +850,7 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   plan.fuelBreakEven = fuel;
   plan.priceCap = priceCap;
   plan.slotsAll = slots;
+  plan.chartPrices = slots.length ? await require('./prices').chartQuarters(slots[0].start, slots[slots.length - 1].end).catch(() => null) : null;
   plan.priceGapFrom = priceGapFrom === null ? null : new Date(priceGapFrom).toISOString();
   plan.madeAt = new Date(nowMs).toISOString();
   rt.plan = plan;

@@ -34,6 +34,24 @@ test('status: label from the values, running values decide on/off without an on/
   assert.equal(em.loadState({ raw: { status: 'Eco' }, src: SRC({ status: 'u' }) }).label, 'Eco');
 });
 
+test('text status (Loxone Status block): name and countdown left off, off-words mean not running', () => {
+  assert.equal(em.cleanStatusText('Wasmachine uitgeschakeld', 'Wasmachine'), 'Uitgeschakeld');
+  assert.equal(em.cleanStatusText('Wasmachine wassen - nog 45 min', 'Wasmachine'), 'Wassen');
+  assert.equal(em.cleanStatusText('Wasmachine Spoelen (nog 0:12)', 'Wasmachine'), 'Spoelen');
+  assert.equal(em.cleanStatusText('Droger: Drogen 35%', 'Droger'), 'Drogen');
+  assert.equal(em.cleanStatusText('Wasmachine klaar om 14:30', 'Wasmachine'), 'Klaar');
+  assert.equal(em.cleanStatusText('Wasmachine', 'Wasmachine'), 'Wasmachine');
+  for (const t of ['Uitgeschakeld', 'Klaar', 'Programma beëindigd', 'Pauze', 'Uitgestelde start', 'Off', 'Stand-by']) assert.equal(em.isOffText(t), true, t);
+  for (const t of ['Wassen', 'Centrifugeren', 'Drogen', 'Kreukbescherming', 'Eco 40-60']) assert.equal(em.isOffText(t), false, t);
+  const src = SRC({ status: 'u-text' });
+  const off = em.loadState({ raw: { status: 'Wasmachine uitgeschakeld' }, src, name: 'Wasmachine' });
+  assert.equal(off.label, 'Uitgeschakeld'); assert.equal(off.on, false);
+  const on = em.loadState({ raw: { status: 'Wasmachine wassen - nog 45 min' }, src, name: 'Wasmachine' });
+  assert.equal(on.status, 'Wassen'); assert.equal(on.on, true);
+  // numeric status with a label "Done" is not running either
+  assert.equal(em.loadState({ raw: { status: 3 }, src: SRC({ status: 'u', status_map: '3=Done' }) }).on, false);
+});
+
 test('power and energy: units converted, the meter block wins when there is one', () => {
   const src = SRC({ power: 'u-p', power_unit: 'W', energy: 'u-e', energy_unit: 'Wh' });
   const st = em.loadState({ raw: { power: 1850, energy: 123400 }, src });
