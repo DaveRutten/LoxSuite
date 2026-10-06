@@ -4736,6 +4736,14 @@ body.panel-hints-hidden .hint.hint-clamp::before {
   content: "ⓘ"; position: absolute; left: 0; top: 0; color: var(--accent, #5CA83F); font-style: normal; font-weight: 600;
 }
 body.panel-hints-hidden .hint.hint-clamp:hover, body.panel-hints-hidden .hint.hint-clamp:focus-visible { color: var(--text); }
+/* A field's explanation behind an ⓘ after its label (hint-info.js), shown in full with the lightbulb on. */
+.hint-i { display: none; }
+body.panel-hints-hidden .hint-i {
+  display: inline-flex; align-items: center; justify-content: center; margin-left: 0.3rem; padding: 0; width: 1.15em; height: 1.15em;
+  border: 0; background: none; color: var(--accent, #5CA83F); font-size: 0.95em; font-weight: 600; line-height: 1; cursor: help; vertical-align: baseline;
+}
+body.panel-hints-hidden .hint-i[aria-expanded="true"] { color: var(--text); }
+body.panel-hints-hidden .hint.hint-field:not(.hint-field-open) { display: none; }
 body.panel-hints-hidden .hint.hint-clamp.hint-open { -webkit-line-clamp: unset; line-clamp: unset; display: block; cursor: pointer; }
 
 /* "Use in Monitor" pickers (monitor-picks.js): compact tiles, monitored ones marked and linked. */
@@ -4773,7 +4781,7 @@ details > summary + p.hint { margin-top: 0.5rem; }
                              Vehicles, Driving & costs, the energy manager, OCPP
      .subhead                a heading inside a card that starts a new part of it
      details > summary       a chevron instead of the browser's own triangle
-     .form-actions           Save on the left, Delete pushed to the right
+     .form-actions           Save, then Delete next to it — all actions on the left
      .section-nav            jump links over a long page (Administration → Energy & charging)
      .toolbar                a row of controls under a card's title */
 .ls-tiles {
@@ -4859,7 +4867,7 @@ details.ls-more > summary { font-size: 0.85rem; color: var(--text-muted); }
 .form-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
 .form-actions > form { margin: 0; }
 .form-actions > button, .form-actions > form > button { margin-right: 0; }
-.form-actions .push-right { margin-left: auto; }
+.form-actions .push-right { margin-left: 0; } /* Delete right after Save, the same gap — every action on the left */
 
 a.btn-soft, a.btn-edit, a.btn-test, a.primary { text-decoration: none; }
 /* A button's own display:inline-flex must not beat the hidden attribute. */

@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.44.3-alpha.1] - 2026-10-06
+
+### Changed
+- **Calmer forms** (reported: too much text around fields and buttons): the explanations under form fields
+  are hidden behind **one ⓘ per block** — next to the title of the card or fold-out they are in; a tap shows
+  or hides that block's explanations, hovering says how many. Explanations at the top of a card fold to one
+  line sooner (90 characters). The lightbulb in the top bar still shows everything. Status lines that
+  scripts fill in, coloured warnings and explanations with buttons or links stay as they are.
+- **Shorter labels and choices** in the energy manager's consumers (*Control via*: Virtual inputs / Device
+  (direct); *Start via LoxSuite*: Off / Log only / On; *Max. pause (h)*, *Done within (h)* …), the appliance
+  explanation in two short lines (the wiring line only with virtual inputs), *Use learned patterns* and *keep
+  my kW* on one line with their explanation as a tooltip.
+- **Save and Delete side by side** at the bottom of every consumer — and everywhere: Delete now sits right next to Save on the left, with the same gap, instead of pushed to the far right.
+
+### Fixed
+- **Sub-menu showed the wrong part at the bottom of the page**: the lit chip is now the last part whose
+  heading scrolled up to the bars, the last part at the very bottom, and the clicked one after a click (until
+  you scroll). One shared script (`public/section-nav.js`) for every page with such a sub-menu.
+
 ## [0.44.2-alpha.1] - 2026-10-06
 
 ### Added

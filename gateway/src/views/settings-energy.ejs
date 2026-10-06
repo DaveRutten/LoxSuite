@@ -353,7 +353,6 @@
     <details>
       <summary><strong><%= l.name %></strong> <span class="hint">· <%= t(emKinds[l.kind].label) %> <%= t('· priority') %> <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
       <%- include('partials/energy-load-form', { l, kinds: emKinds, meters: emMeters, miniservers, seenStatuses, homeConnect }) %>
-      <form method="post" action="/energy-manager/loads/<%= l.id %>/delete" style="margin-top:0.6rem;" onsubmit="return confirm(<%= JSON.stringify(t('Delete {name} and its history?', { name: l.name })) %>);"><button type="submit" class="danger"><%- icon('trash') %> <%= t('Delete') %></button></form>
     </details>
   <% }) %>
   <details <%= emLoads.length ? '' : 'open' %>>
@@ -386,16 +385,7 @@
   };
   place();
   window.addEventListener('resize', place);
-  if (!('IntersectionObserver' in window)) return;
-  var links = Array.prototype.slice.call(nav.querySelectorAll('a'));
-  var seen = {};
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) { seen[e.target.id] = e.isIntersecting ? e.intersectionRatio : 0; });
-    var best = null, bestR = 0;
-    links.forEach(function (a) { var r = seen[a.getAttribute('href').slice(1)] || 0; if (r > bestR) { bestR = r; best = a; } });
-    links.forEach(function (a) { a.classList.toggle('on', a === best); });
-  }, { threshold: [0, 0.15, 0.4, 0.7, 1] });
-  links.forEach(function (a) { var el = document.getElementById(a.getAttribute('href').slice(1)); if (el) io.observe(el); });
+  // which chip is lit: public/section-nav.js
 })();
 </script>
 

@@ -6914,6 +6914,7 @@
   "module": "core",
   "where": [
    "public/card-collapse.js",
+   "public/section-nav.js",
    "public/show-if.js"
   ]
  },
@@ -6986,7 +6987,7 @@
   ]
  },
  {
-  "key": "Log only (default)",
+  "key": "Log only",
   "module": "energy_manager",
   "where": [
    "partials/energy-load-form"
@@ -9377,16 +9378,10 @@
  },
  {
   "key": "On",
-  "module": "mqtt",
-  "where": [
-   "public/mappings-loxone-to-mqtt-tabulator.js"
-  ]
- },
- {
-  "key": "On — start in the best hour",
   "module": "energy_manager",
   "where": [
-   "partials/energy-load-form"
+   "partials/energy-load-form",
+   "public/mappings-loxone-to-mqtt-tabulator.js"
   ]
  },
  {
@@ -11176,6 +11171,13 @@
   "module": "core",
   "where": [
    "partials/head (script)"
+  ]
+ },
+ {
+  "key": "Show the explanations ({0})",
+  "module": "core",
+  "where": [
+   "public/hint-info.js"
   ]
  },
  {
