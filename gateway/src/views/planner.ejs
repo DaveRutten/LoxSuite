@@ -86,6 +86,9 @@
     var mix = pv > 0.05 && grid > 0.05 ? ' (' + nf(pv, 1) + ' ☀️ + ' + nf(grid, 1) + ' ⚡)' : pv > 0.05 ? ' ☀️' : ' ⚡';
     return dtm(x.start) + '–' + tm(x.end) + ' ' + nf(x.kwh, 1) + ' kWh' + mix;
   }
+  // "car reports 64% · about 52 km more today … · trip needs 22.7 kWh": each "· …" part in its own text
+  // node, so each is translated on its own (the whole line has no translation of its own)
+  function parts(text) { var p = String(text || '').split(' · '); return esc(p[0]) + p.slice(1).map(function (x) { return ' <span>' + esc('· ' + x) + '</span>'; }).join(''); }
   var MODE_LABEL = { off: 'Off', now: 'Now', pv: 'Solar', minpv: 'Min + Solar', plan: 'Smart plan' };
   var readyFilled = false;
 
@@ -108,8 +111,8 @@
     var th = '';
     if (tg) {
       th = (p.split
-          ? tile('Needs before leaving', nf(p.split.mustKwh, 1) + ' <small>kWh</small>', esc(T('trip {0} kWh + reserve {1} kWh; room in the battery {2} kWh, the rest after it is back ({3})', nf(p.split.tripKwh, 1), nf(p.split.reserveKwh, 1), nf(p.split.mustKwh + p.split.restKwh, 1), dtm(p.split.backAt))))
-          : tile(T(/^car reports/.test(tg.needSource || '') ? 'Room in the battery' : 'To charge (estimate)'), nf(p.needKwh, 1) + ' <small>kWh</small>', esc(tg.needSource))) +
+          ? tile('Needs before leaving', nf(p.split.mustKwh, 1) + ' <small>kWh</small>', esc(T('trip {0} kWh + reserve {1} kWh; after it is back ({2}) {3} kWh more to be full again', nf(p.split.tripKwh, 1), nf(p.split.reserveKwh, 1), dtm(p.split.backAt), nf(p.split.restKwh, 1))))
+          : tile(T(/^car reports/.test(tg.needSource || '') ? 'Room in the battery' : 'To charge (estimate)'), nf(p.needKwh, 1) + ' <small>kWh</small>', parts(tg.needSource))) +
         tile('Ready by', dtm(p.readyAt), esc(tg.readySource || 'no departure known — within 24 h')) +
         (p.arrival ? tile('Expected home', dtm(p.arrival.at), esc(p.arrival.label), '#3b82f6') : '');
     }
@@ -139,10 +142,15 @@
           ' · ' + esc(T('average')) + ' <strong>' + eur(p.avgPrice, 3) + '</strong>/kWh · ' + esc(T('costs about')) + ' <strong>' + eur(p.cost) + '</strong>' +
           (p.compare && p.compare.saving > 0.05 ? '<span class="hint" style="margin:0;"> ' + esc(T('(charging straight away: {0} average — saves {1})', eur(p.compare.avgPrice, 3), eur(p.compare.saving))) + '</span>' : '') +
           (p.split
-            ? '<div class="hint" style="margin:0.3rem 0 0;">' + esc(T('Before leaving:')) + ' ' + (p.split.mustSlots.length ? mergeSlots(p.split.mustSlots).map(slotText).join(' · ') : esc(T('nothing to charge'))) + '</div>' +
-              '<div class="hint" style="margin:0.15rem 0 0;">' + esc(T('After it is back:')) + ' ' + (p.split.restSlots.length ? mergeSlots(p.split.restSlots).map(slotText).join(' · ') : esc(T('no hour below the price cap'))) +
-                (p.split.later || []).map(function (l) { return ' · ' + esc(T('{0} kWh of it for {1} (ready {2})', nf(l.kwh, 1), l.title, dtm(l.readyAt))); }).join('') + '</div>'
+            ? (function () {
+                var before = (p.split.mustSlots || []).concat(p.split.preSlots || []).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+                return '<div class="hint" style="margin:0.3rem 0 0;">' + esc(T('Before leaving:')) + ' ' + (before.length ? mergeSlots(before).map(slotText).join(' · ') : esc(T('nothing to charge'))) + '</div>' +
+                  '<div class="hint" style="margin:0.15rem 0 0;">' + esc(T('After it is back:')) + ' ' + (p.split.restSlots.length ? mergeSlots(p.split.restSlots).map(slotText).join(' · ') : esc(T('nothing more to charge'))) +
+                    (p.split.later || []).map(function (l) { return ' · ' + esc(T('{0} kWh of it for {1} (ready {2})', nf(l.kwh, 1), l.title, dtm(l.readyAt))); }).join('') +
+                    (p.split.restBy ? ' · ' + esc(T('full again by {0}', dtm(p.split.restBy))) : '') + '</div>';
+              })()
             : '<div class="hint" style="margin:0.3rem 0 0;">' + mergeSlots(p.slots).map(slotText).join(' · ') + '</div>') +
+          (p.buffer ? '<div class="hint" style="margin:0.3rem 0 0;">' + esc(T('Ready for the unexpected: {0} kWh ({1} km) by {2}', nf(p.buffer.kwh, 1), p.buffer.km, dtm(p.buffer.by))) + '</div>' : '') +
           (p.ifNow ? '<div class="hint" style="margin:0.45rem 0 0; padding-top:0.4rem; border-top:1px dashed var(--border);">' + esc(T('If it came home now (or another car were plugged in):')) + ' ' +
             (p.ifNow.slots.length ? mergeSlots(p.ifNow.slots).map(slotText).join(' · ') + ' · ' + eur(p.ifNow.cost) : esc(T('nothing to charge'))) + '</div>' : '') +
           '</div>';

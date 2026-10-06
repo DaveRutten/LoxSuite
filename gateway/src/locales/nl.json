@@ -4076,5 +4076,18 @@
   "Show fewer": "Toon minder",
   "Solar and planning": "Zon en planning",
   "The car among the consumers": "De auto tussen de verbruikers",
-  "kWh per day": "kWh per dag"
+  "kWh per day": "kWh per dag",
+  "{0} kWh of the rest finds no free hour below the price cap before it is needed again — it is left for later.": "{0} kWh van de rest vindt geen vrij uur onder de prijsgrens voordat hij weer nodig is — dat blijft voor later.",
+  "After a trip": "Na een rit",
+  "After a trip the car is charged full again before it is needed next (its next departure in the agenda or the learned one), in the cheapest hours it is home — never while it is away. Right after plugging in (or coming home) the buffer comes first, so an unexpected trip is always possible. An hour that costs at most \"earlier is worth\" more per day that it comes earlier is taken first: the car is full sooner for a few cents. For a plug-in hybrid nothing above the fuel break-even price is planned.": "Na een rit wordt de auto weer vol geladen vóór hij opnieuw nodig is (het volgende vertrek uit de agenda of het geleerde vertrek), in de goedkoopste uren dat hij thuis is — nooit terwijl hij weg is. Direct na inpluggen (of thuiskomen) gaat de buffer voor, zodat een onverwachte rit altijd kan. Een uur dat hooguit \"eerder is waard\" duurder is per dag dat het eerder komt, gaat voor: de auto is dan voor een paar cent eerder vol. Bij een plug-in hybride wordt niets boven het omslagpunt van brandstof gepland.",
+  "Buffer charged within (hours)": "Buffer geladen binnen (uur)",
+  "Buffer for an unexpected trip (km)": "Buffer voor een onverwachte rit (km)",
+  "Earlier is worth (€/kWh per day)": "Eerder vol is waard (€/kWh per dag)",
+  "Full again before the next departure (recommended)": "Weer vol vóór het volgende vertrek (aanbevolen)",
+  "full again by {0}": "weer vol om {0}",
+  "Full and ready": "Vol en klaar",
+  "nothing more to charge": "niets meer te laden",
+  "Only what the next departure usually needs + buffer": "Alleen wat het volgende vertrek meestal nodig heeft + buffer",
+  "Ready for the unexpected: {0} kWh ({1} km) by {2}": "Klaar voor onverwacht: {0} kWh ({1} km) om {2}",
+  "trip {0} kWh + reserve {1} kWh; after it is back ({2}) {3} kWh more to be full again": "rit {0} kWh + reserve {1} kWh; als hij terug is ({2}) nog {3} kWh om weer vol te zijn"
 }

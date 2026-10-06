@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.41.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.42.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -710,6 +710,13 @@ charging page itself is the overview.
   moment, or a fixed feed-in tariff), grid energy at the all-in price; the cheapest intervals win. For a plug-in
   hybrid intervals above the fuel break-even price (fuel price x l/100 km vs kWh/km) are skipped. Every planned
   interval shows its solar and grid part (e.g. *11.0 kWh (2.9 ☀️ + 8.1 ⚡)*), also in the chart.
+- **Full and ready**: plugged in before a trip, only the trip + reserve has to be in before leaving; the trip's
+  own kWh come out of the battery, so after it is back the car is charged **full again before it is needed
+  next** (its next departure in the agenda or the learned one) — in the cheapest hours it is home, never while
+  it is away; appointments right after each other count as one trip. A **buffer** (default 40 km) comes first
+  after plugging in or coming home, within a few hours, so an unexpected trip is always possible. And an hour
+  that is only slightly dearer but earlier wins (*earlier is worth*, default € 0.03/kWh per day), so the
+  battery is full sooner for a few cents. Or choose *only what the next departure usually needs + buffer*.
 - **Control** every 30 s: the charging power is written to a Loxone virtual input (kW, 0 = stop; optional 1/0
   "charging allowed" input) on change and at least every 5 minutes, never above the grid connection limit.
   A *Send test value* button checks the wiring. Published as `loxsuite/planner/{setpoint_kw,mode,need_kwh,…}`.

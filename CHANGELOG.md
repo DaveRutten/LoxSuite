@@ -2,9 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [0.42.0-alpha.1] - 2026-10-06
+
+### Changed
+- **Smart plan: full and ready** (reported: charging stopped at 15:00 with cheap power and a half-full battery,
+  the rest — too little — planned for Wednesday 13:00):
+  - after a trip the rest is what it takes to be **full again**: the trip's own kWh come out of the battery
+    (it used to stop at the room there was before leaving, 10.4 instead of 19.2 kWh);
+  - before leaving it charges at most what still fits then;
+  - the rest is **ready before the car is needed next** (its next learned departure or your own departure time,
+    else within 24 hours), in hours it is home — no longer at Wednesday 13:00 when it leaves at 05:30;
+  - appointments with the car right after each other (the next one starts before it is back, or within 45
+    minutes) are one trip: their kWh add up and it is away until the last one is over;
+  - **buffer for an unexpected trip** (default 40 km): right after plugging in or coming home that much range
+    comes first, within 3 hours, in the cheapest of those hours;
+  - **earlier is worth** (default € 0.03/kWh per day): an hour that is only slightly dearer but earlier wins,
+    so the battery is full sooner — e.g. now at € 0.26 instead of a night hour at € 0.31;
+  - working-from-home days (agenda words) have no learned departure, like days away and holidays;
+  - all under Administration → Energy & charging → Smart charging → *Full and ready*, with the choice
+    *only what the next departure usually needs + buffer*. For a plug-in hybrid nothing above the fuel
+    break-even price is planned.
+- The plan on Smart charging shows what is charged before leaving, after it is back, by when it is full again
+  and the buffer.
 
 ### Fixed
+- The jump links on Administration → Energy & charging stick just below the top bar instead of under it, and a
+  jump to a card lands below both.
 - **Docker `:latest` is always the newest main**: a version tag whose commit is on main also wrote `:latest`
   (`{{is_default_branch}}` is true for those), so after pushing several tags together `:latest` was whichever
   build finished last (v0.39.0 instead of v0.41.0). `:latest` now comes only from main, one main build at a time

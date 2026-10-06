@@ -23,7 +23,11 @@ test('split: only the trip + reserve before leaving (Kodiaq at 4%, 8.8 kWh trip)
   const s = planSplit({ needKwh: 25, batteryKwh: 25.7, soc: 4, reservePct: 15, readyAtMs: ready, trip: { kwh: 8.8, backAtMs: ready + 2 * H, leaveMs: ready, title: 'Sev' } });
   assert.ok(s, 'expected a split');
   assert.ok(Math.abs(s.mustKwh - (8.8 + 3.855 - 1.028)) < 0.05, `must ${s.mustKwh}`);
-  assert.ok(Math.abs(s.mustKwh + s.restKwh - 25) < 0.01);
+  // before leaving there is room for what is left of the 25 kWh; the trip itself uses 8.8 kWh, so after
+  // it is back the car needs that much more to be full again (v0.42: it used to stop at the 25 kWh)
+  assert.ok(Math.abs(s.preMaxKwh - (25 - s.mustKwh)) < 0.01);
+  assert.ok(Math.abs(s.energyAfterKwh - 3.855) < 0.05, `after the trip ${s.energyAfterKwh}`);
+  assert.ok(Math.abs(s.restKwh - (1.028 + 25 - 3.855)) < 0.05, `rest ${s.restKwh}`);
   assert.deepEqual(s.away, [[ready, ready + 2 * H]]);
 });
 
@@ -55,11 +59,13 @@ test('split plan: the rest never lands while the car is away, and the total is w
   const split = planSplit({ needKwh: 25, batteryKwh: 25.7, soc: 4, readyAtMs: ready, trip: { kwh: 8.8, backAtMs: back, leaveMs: ready, title: 'Sev' } });
   const args = { nowMs: t0, readyAtMs: ready, needKwh: split.mustKwh, slots, mode: 'plan', minKw: 4.16, maxKw: 11, solarTrust: 'expected', priceCap: 0.7, insufficient: 'stop' };
   const plan = withRest(makePlan(args), args, slots, split, ready);
-  assert.ok(Math.abs(plan.kwh - 25) < 0.1);
-  for (const s of plan.split.restSlots) assert.ok(!(Date.parse(s.start) < back && Date.parse(s.end) > ready), `charging while away: ${s.start}`);
-  // before leaving it is only the must part, not the whole battery (the reported "3 hours for 11 kWh")
-  const beforeKwh = plan.split.mustSlots.reduce((a, s) => a + s.kwh, 0);
-  assert.ok(Math.abs(beforeKwh - split.mustKwh) < 0.05);
+  // must + the rest to be full again after the 8.8 kWh trip
+  assert.ok(Math.abs(plan.kwh - (split.mustKwh + split.restKwh)) < 0.1, `planned ${plan.kwh}`);
+  for (const s of [...plan.split.restSlots, ...plan.split.preSlots]) assert.ok(!(Date.parse(s.start) < back && Date.parse(s.end) > ready), `charging while away: ${s.start}`);
+  // before leaving: the must part, plus at most what still fits (here the night is dearer than the sun after it is back)
+  const beforeKwh = [...plan.split.mustSlots, ...plan.split.preSlots].reduce((a, s) => a + s.kwh, 0);
+  assert.ok(beforeKwh <= split.mustKwh + split.preMaxKwh + 0.05);
+  assert.ok(Math.abs(plan.split.mustSlots.reduce((a, s) => a + s.kwh, 0) - split.mustKwh) < 0.05);
 });
 
 // ---------------------------------------------------------------- Driving: battery before odometer

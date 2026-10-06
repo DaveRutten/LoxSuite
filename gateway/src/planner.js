@@ -40,7 +40,12 @@ const DEFAULTS = {
   insufficient: 'charge',         // too few cheap intervals: 'charge' anyway | 'stop' at the price cap
   feed_in: 'saldering',           // value of exported solar: 'saldering' (= price of that moment) | 'fixed'
   feed_in_eur_kwh: 0.05,
-  target_policy: 'full',          // 'full' before every departure | 'needed' (next trip + reserve; needs SoC)
+  target_policy: 'full',          // after a trip: 'full' again before the next departure | 'needed' (what that departure
+                                  // usually needs + reserve + buffer)
+  buffer_km: 40,                  // always this much range soon after plugging in (an unexpected trip), within buffer_h
+  buffer_h: 3,
+  early_value_eur: 0.03,          // a kWh in the battery a day earlier is worth this much (€/kWh per day): an hour that
+                                  // costs at most that much more is taken earlier, so the car is ready for the unexpected
   ready_margin_min: 15,
   depart_certainty: 'normal',     // learned departures: 'safe' (ready before 9 in 10) | 'normal' (3 in 4) | 'relaxed' (half)
   fuel_eur_l: 2.10,
@@ -57,6 +62,7 @@ const round3 = (x) => Math.round(x * 1000) / 1000;
 function makePlan({
   nowMs, readyAtMs = null, needKwh, slots, mode = 'plan', minKw = 4.16, maxKw = 11,
   solarTrust = 'low', priceCap = null, insufficient = 'charge', feedIn = 'saldering', feedInEur = 0.05, horizonH = 24,
+  earlyValue = 0,
 }) {
   const end = readyAtMs || nowMs + horizonH * 3600000;
   const trust = solarTrust === 'bonus' ? 0 : solarTrust === 'expected' ? 1 : 0.7;
@@ -99,7 +105,10 @@ function makePlan({
   } else if (mode === 'plan') {
     // An extra part on top of an interval's base can only run together with that base (the Wallbox
     // can't charge below its minimum): a top-up that sorts before its base waits until the base is in.
-    const byCost = [...chunks].sort((a, b) => a.cost - b.cost || a.slot.s - b.slot.s || (a.topUp ? 1 : 0) - (b.topUp ? 1 : 0));
+    // Earlier is worth a little (earlyValue €/kWh per day): an hour that costs only slightly more now is
+    // taken before a slightly cheaper one much later, so the car is ready sooner for an unexpected trip.
+    const eff = (c) => c.cost + (earlyValue > 0 ? earlyValue * Math.max(0, c.slot.s - nowMs) / 86400000 : 0);
+    const byCost = [...chunks].sort((a, b) => eff(a) - eff(b) || a.slot.s - b.slot.s || (a.topUp ? 1 : 0) - (b.topUp ? 1 : 0));
     const sorted = [];
     const baseIn = new Set();
     const waiting = new Map();
@@ -417,15 +426,23 @@ async function computeTarget(nowMs, wb) {
     }
   } catch { /* agenda not configured */ }
   // The learned weekday pattern counts too: whichever comes first (unless set by hand).
+  let learnedNext = null;
+  let learnedShift = 0;
   if (!rt.readyOverride || rt.readyOverride <= nowMs) {
     const stats = await learning.learnedDepartures(vehicle?.id || null);
     // away or a public holiday (dayType.js): that day has no usual departure
     const dts = await require('./dayType').typesBetween(nowMs, nowMs + 8 * 86400000).catch(() => new Map());
     const { localParts: lp } = require('./localTime');
-    const skip = (ms) => { const p = lp(ms, tz); const t = dts.get(`${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`)?.type; return t === 'away' || t === 'holiday'; };
+    // working from home: no usual commute either
+    const skip = (ms) => { const p = lp(ms, tz); const t = dts.get(`${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`)?.type; return t === 'away' || t === 'holiday' || t === 'home'; };
+    learnedNext = (fromMs) => {
+      const n = learning.nextReadyTime(stats, fromMs, { tz, skip });
+      return n ? { ...n, at: n.at - (n.source === 'override' ? 0 : learnedShift) * 60000 } : null;
+    };
     const nx = learning.nextReadyTime(stats, nowMs, { tz, skip });
     // it often left before it was ready: the learned time moves earlier (forecastLog.js)
-    const shift = nx && nx.source !== 'override' ? (await require('./forecastLog').corrections(nowMs).catch(() => ({}))).departShiftMin || 0 : 0;
+    learnedShift = (await require('./forecastLog').corrections(nowMs).catch(() => ({}))).departShiftMin || 0;
+    const shift = nx && nx.source !== 'override' ? learnedShift : 0;
     const nxAt = nx ? nx.at - shift * 60000 : null;
     if (nx && nxAt > nowMs && (!readyAtMs || nxAt < readyAtMs)) {
       const day = WEEKDAY_NAMES[WEEKDAY_KEYS.indexOf(nx.weekday)] || nx.weekday;
@@ -456,32 +473,67 @@ async function computeTarget(nowMs, wb) {
       if (back > readyAtMs) tripPart = { kwh: (d.kmMedian + marginKm) * kpkNow, backAtMs: back, leaveMs: readyAtMs, title: `usual ${d.kmMedian} km` };
     }
   }
+  const agendaCar = async (fromMs, toMs) => {
+    try {
+      const list = await require('./agenda').items(new Date(fromMs).toISOString(), new Date(toMs).toISOString());
+      return list.filter((n) => n.needsCar && !n.allDay && n.end && !(n.vehicle_id && vehicle && n.vehicle_id !== vehicle.id)).map((n) => ({
+        kwh: n.needKwh || 0, leaveMs: Date.parse(n.leaveAt || n.start), backAtMs: Date.parse(n.end) + (n.travelMin || 0) * 60000,
+        readyAtMs: Date.parse(n.readyAt || n.leaveAt || n.start), title: n.title,
+      }));
+    } catch { return []; }
+  };
   if (!away && tripPart && vehicle?.battery_kwh && reading) {
-    split = planSplit({ needKwh, batteryKwh: vehicle.battery_kwh, soc: reading.soc, reservePct: vehicle.reserve_pct ?? 15, readyAtMs, trip: tripPart });
-    const backAtMs = split?.backAtMs;
+    // appointments right after each other are one trip (the car doesn't come home in between)
+    if (it) {
+      const firstLeave = Date.parse(it.leaveAt || it.start);
+      const nextOnes = (await agendaCar(tripPart.leaveMs, tripPart.backAtMs + 6 * 3600000)).filter((n) => n.leaveMs > firstLeave + 60000);
+      tripPart = mergeTrips(tripPart, nextOnes);
+    }
+    const fullKwh = vehicle.battery_kwh * ((reading.limit_soc ?? vehicle.charge_limit_pct ?? 100) / 100);
+    const energyNowKwh = Math.max(0, fullKwh - needKwh);
+    // when it is needed again after it is back: its next learned departure (or within 24 hours)
+    let restByMs = tripPart.backAtMs + 24 * 3600000;
+    let restBySource = null;
+    const nxt = learnedNext ? learnedNext(tripPart.backAtMs + 30 * 60000) : null;
+    if (nxt && nxt.at > tripPart.backAtMs + 3600000 && nxt.at < restByMs) { restByMs = nxt.at; restBySource = nxt.source; }
+    // 'needed': after it is back only what that next departure usually needs (+ reserve + buffer)
+    let restTargetKwh = null;
+    if (cfg.target_policy === 'needed' && drive) {
+      const d = drive.days?.[require('./localTime').localParts(restByMs, tz).weekday];
+      if (d?.usual && d.kmMedian) {
+        const marginKm = Number((await require('./agenda').getConfig().catch(() => ({}))).margin_km) || 0;
+        restTargetKwh = (d.kmMedian + marginKm) * kpkNow + vehicle.battery_kwh * (Number(vehicle.reserve_pct) || 0) / 100 + (Number(cfg.buffer_km) || 0) * kpkNow;
+      }
+    }
+    split = planSplit({ needKwh, batteryKwh: vehicle.battery_kwh, soc: reading.soc, reservePct: vehicle.reserve_pct ?? 15, readyAtMs, trip: tripPart, energyNowKwh, restTargetKwh });
     if (split) {
-      // the car's next trips in the agenda (within a day of being back): it is away then, and each
-      // needs its own energy in the battery before it leaves
-      try {
-        const list = await require('./agenda').items(new Date(backAtMs).toISOString(), new Date(backAtMs + 24 * 3600000).toISOString());
-        for (const n of list) {
-          if (!n.needsCar || n.allDay || !n.end || (n.vehicle_id && n.vehicle_id !== vehicle.id) || Date.parse(n.start) < backAtMs) continue;
-          const leave = Date.parse(n.leaveAt || n.start);
-          const back = Date.parse(n.end) + (n.travelMin || 0) * 60000;
-          split.away.push([leave, back]);
-          if (split.later.length < 3) split.later.push({ title: n.title, readyAtMs: Date.parse(n.readyAt || n.leaveAt || n.start), kwh: n.needKwh || 0 });
-        }
-      } catch { /* agenda not readable */ }
+      split.restByMs = restByMs; split.restBySource = restBySource;
+      // the car's next trips in the agenda (between being back and being needed again): it is away
+      // then, and each needs its own energy in the battery before it leaves
+      for (const n of await agendaCar(split.backAtMs, restByMs)) {
+        if (n.leaveMs < split.backAtMs) continue;
+        split.away.push([n.leaveMs, n.backAtMs]);
+        if (split.later.length < 3) split.later.push({ title: n.title, readyAtMs: n.readyAtMs, kwh: n.kwh });
+      }
     }
   }
-  if (rt.fullKey && rt.fullKey === rt.session) { needKwh = 0; needSource = 'battery full (not unplugged since)'; }
+  // Ready for the unexpected: soon after plugging in (or coming home) at least buffer_km of range.
+  let bufferKwh = 0;
+  if (vehicle?.battery_kwh && Number(cfg.buffer_km) > 0) {
+    const fullKwh = usable ?? vehicle.battery_kwh;
+    const want = Math.min(fullKwh, Number(cfg.buffer_km) * kpkNow);
+    const energyNow = Math.max(0, fullKwh - (needKwh || 0));
+    bufferKwh = round3(Math.max(0, Math.min(needKwh || 0, want - energyNow)));
+  }
+  let zeroed = false;
+  if (rt.fullKey && rt.fullKey === rt.session) { needKwh = 0; needSource = 'battery full (not unplugged since)'; zeroed = true; }
   const minTopup = Number(cfg.min_topup_kwh) || 0;
   if ((rt.override || cfg.mode) === 'plan' && needKwh > 0 && needKwh < minTopup) {
     needSource += ` — less than the ${minTopup} kWh minimum top-up, so no grid charging (solar surplus still counts)`;
-    needKwh = 0;
+    needKwh = 0; zeroed = true;
   }
-  if (split && needKwh < split.mustKwh + split.restKwh - 0.01) split = null; // minimum top-up / full: no split
-  return { needKwh: round3(needKwh || 0), needSource, readyAtMs, readySource, vehicle, usable, reading, drive, away, split };
+  if (zeroed) { split = null; bufferKwh = 0; } // full / minimum top-up: nothing to split or to buffer
+  return { needKwh: round3(needKwh || 0), needSource, readyAtMs, readySource, vehicle, usable, reading, drive, away, split, bufferKwh, bufferKm: Number(cfg.buffer_km) || 0 };
 }
 
 // When the car that is out is expected home: an appointment with the car that is going on now (its
@@ -533,33 +585,59 @@ function sameTrip(trip, readyAtMs) {
 }
 
 // Pure: what has to be in before leaving (the trip + the reserve, minus what is in the battery) and
-// what may come after the car is back. Null when there is nothing worth splitting (less than 1 kWh
-// left over, or the car isn't back after the deadline).
-function planSplit({ needKwh, batteryKwh, soc, reservePct = 15, readyAtMs, trip }) {
+// what comes after the car is back. The trip itself empties the battery by its kWh (a plug-in hybrid
+// drives on fuel once it is empty), so after it is back the car needs that much more to be full again:
+//   mustKwh     before leaving: trip + reserve − energy now
+//   preMaxKwh   what may be charged before leaving at all (the room that is left)
+//   restKwh     after it is back: to be full again (restTargetKwh: only up to that level instead)
+// Null when there is nothing to choose before leaving (less than 1 kWh of room left after the must
+// part), or the car isn't back after the deadline.
+function planSplit({ needKwh, batteryKwh, soc, reservePct = 15, readyAtMs, trip, energyNowKwh = null, restTargetKwh = null }) {
   if (!trip || !(batteryKwh > 0) || soc === null || soc === undefined || !(needKwh > 0)) return null;
-  const energyNow = batteryKwh * soc / 100;
+  const energyNow = Number.isFinite(energyNowKwh) ? energyNowKwh : batteryKwh * soc / 100;
   const reserveKwh = batteryKwh * (Number(reservePct) || 0) / 100;
   const must = Math.max(0, Math.min(needKwh, trip.kwh + reserveKwh - energyNow));
   if (!(needKwh - must > 1) || !(trip.backAtMs > readyAtMs)) return null;
+  const fullKwh = energyNow + needKwh; // the level the car charges to (its limit)
+  const afterTrip = Math.max(0, energyNow + must - trip.kwh);
+  const target = Number.isFinite(restTargetKwh) ? Math.min(fullKwh, Math.max(0, restTargetKwh)) : fullKwh;
+  const rest = Math.max(0, target - afterTrip);
   return {
-    mustKwh: round3(must), restKwh: round3(needKwh - must), backAtMs: trip.backAtMs, tripKwh: round3(trip.kwh), reserveKwh: round3(reserveKwh),
-    title: trip.title, away: [[trip.leaveMs ?? readyAtMs, trip.backAtMs]], later: [],
+    mustKwh: round3(must), restKwh: round3(rest), preMaxKwh: round3(needKwh - must), energyAfterKwh: round3(afterTrip), fullKwh: round3(fullKwh),
+    backAtMs: trip.backAtMs, tripKwh: round3(trip.kwh), reserveKwh: round3(reserveKwh),
+    title: trip.title, away: [[trip.leaveMs ?? readyAtMs, trip.backAtMs]], later: [], restByMs: null,
   };
 }
 
+// Pure: appointments with the car that follow each other (the next one starts before the car is back
+// from the previous one, or less than `gapMin` after) are one trip: the car doesn't come home to
+// charge in between. trips: [{ kwh, leaveMs, backAtMs, title }] in order -> merged first trip.
+function mergeTrips(first, next = [], { gapMin = 45 } = {}) {
+  const out = { ...first };
+  for (const n of [...next].sort((a, b) => a.leaveMs - b.leaveMs)) {
+    if (!(n.leaveMs > out.leaveMs) || n.leaveMs > out.backAtMs + gapMin * 60000) continue;
+    out.kwh = round3((out.kwh || 0) + (n.kwh || 0));
+    out.backAtMs = Math.max(out.backAtMs, n.backAtMs);
+    out.title = `${out.title} + ${n.title}`;
+    out.merged = (out.merged || 0) + 1;
+  }
+  return out;
+}
+
 // Pure: the plan for what must be in before the appointment + the rest. The rest is picked from the
-// free hours — before the appointment, and in the 24 hours after the car is back, never while it is
-// away for a later trip — and a later trip's own energy comes first, before that trip leaves.
+// free hours — before the appointment (at most what still fits then), and after the car is back until
+// it is needed again (split.restByMs: its next departure, else 24 hours), never while it is away for a
+// later trip — and a later trip's own energy comes first, before that trip leaves.
 function withRest(must, planArgs, slots, split, untilMs) {
   const taken = [...must.slots];
   const away = split.away || [];
-  const freeSlots = (endMs) => {
+  const restBy = split.restByMs && split.restByMs > split.backAtMs ? split.restByMs : split.backAtMs + 24 * 3600000;
+  const freeSlots = (endMs, { pre = true, post = true } = {}) => {
     const out = [];
     for (const s of slots) {
       let a = Math.max(Date.parse(s.start), planArgs.nowMs);
       let b = Date.parse(s.end);
-      if (a < untilMs) b = Math.min(b, untilMs);
-      else if (a < split.backAtMs) continue;
+      if (a < untilMs) { if (!pre) continue; b = Math.min(b, untilMs); } else if (a < split.backAtMs || !post) continue;
       b = Math.min(b, endMs);
       if (b - a < 60000) continue;
       if (away.some(([x, y]) => a < y && b > x)) continue;
@@ -568,35 +646,107 @@ function withRest(must, planArgs, slots, split, untilMs) {
     }
     return out;
   };
+  const sumKwh = (list) => list.reduce((t, r) => t + r.kwh, 0);
   const parts = [];
   let left = split.restKwh;
+  let preLeft = Number.isFinite(split.preMaxKwh) ? split.preMaxKwh : Infinity;
   for (const n of split.later || []) {
     if (left <= 0.05) break;
     const want = Math.min(left, n.kwh || 0);
     if (want <= 0.05) continue;
-    const p = makePlan({ ...planArgs, needKwh: want, slots: freeSlots(n.readyAtMs), readyAtMs: n.readyAtMs, insufficient: 'stop' });
+    const p = makePlan({ ...planArgs, needKwh: want, slots: freeSlots(Math.min(n.readyAtMs, restBy), { pre: false }), readyAtMs: Math.min(n.readyAtMs, restBy), insufficient: 'stop' });
     parts.push({ title: n.title, readyAt: new Date(n.readyAtMs).toISOString(), plan: p });
     taken.push(...p.slots);
     left -= p.kwh;
   }
-  const end = split.backAtMs + 24 * 3600000;
-  const rest = makePlan({ ...planArgs, needKwh: Math.max(0, left), slots: freeSlots(end), readyAtMs: end, insufficient: 'stop' });
-  const restSlots = [...parts.flatMap((x) => x.plan.slots), ...rest.slots].sort((x, y) => x.start.localeCompare(y.start));
+  // The rest in the cheapest free hours; before leaving there is only room for preMaxKwh.
+  let restPlan = makePlan({ ...planArgs, needKwh: Math.max(0, left), slots: freeSlots(restBy), readyAtMs: restBy, insufficient: 'stop' });
+  let rest = restPlan.slots;
+  const preKwh = sumKwh(rest.filter((r) => Date.parse(r.start) < untilMs));
+  if (preKwh > preLeft + 0.05) {
+    const pre = makePlan({ ...planArgs, needKwh: preLeft, slots: freeSlots(untilMs, { post: false }), readyAtMs: untilMs, insufficient: 'stop' });
+    taken.push(...pre.slots);
+    const post = makePlan({ ...planArgs, needKwh: Math.max(0, left - pre.kwh), slots: freeSlots(restBy, { pre: false }), readyAtMs: restBy, insufficient: 'stop' });
+    rest = [...pre.slots, ...post.slots];
+    preLeft -= pre.kwh;
+  }
+  const restSlots = [...parts.flatMap((x) => x.plan.slots), ...rest].sort((x, y) => x.start.localeCompare(y.start));
   const all = [...must.slots, ...restSlots].sort((x, y) => x.start.localeCompare(y.start));
-  const kwh = round3(all.reduce((t, r) => t + r.kwh, 0));
+  const kwh = round3(sumKwh(all));
   const cost = round3(all.reduce((t, r) => t + r.cost, 0));
   const pvKwh = round3(all.reduce((t, r) => t + (r.pvKwh || 0), 0));
-  const short = round3(Math.max(0, split.restKwh - restSlots.reduce((t, r) => t + r.kwh, 0)));
+  const short = round3(Math.max(0, split.restKwh - sumKwh(restSlots)));
   return {
     ...must, slots: all, needKwh: round3(split.mustKwh + split.restKwh), kwh, cost, pvKwh, gridKwh: round3(kwh - pvKwh),
     avgPrice: kwh > 0 ? round3(cost / kwh) : null, compare: null,
     split: {
-      mustKwh: split.mustKwh, restKwh: split.restKwh, tripKwh: split.tripKwh, reserveKwh: split.reserveKwh, title: split.title,
-      backAt: new Date(split.backAtMs).toISOString(), mustSlots: must.slots, restSlots,
+      mustKwh: split.mustKwh, restKwh: split.restKwh, preMaxKwh: split.preMaxKwh ?? null, energyAfterKwh: split.energyAfterKwh ?? null, fullKwh: split.fullKwh ?? null,
+      tripKwh: split.tripKwh, reserveKwh: split.reserveKwh, title: split.title,
+      backAt: new Date(split.backAtMs).toISOString(), restBy: new Date(restBy).toISOString(), restBySource: split.restBySource || null,
+      mustSlots: must.slots, restSlots: restSlots.filter((r) => Date.parse(r.start) >= split.backAtMs), preSlots: restSlots.filter((r) => Date.parse(r.start) < untilMs),
       later: parts.map((x) => ({ title: x.title, readyAt: x.readyAt, kwh: x.plan.kwh })),
     },
-    notes: [...(must.notes || []), ...(short > 0.05 ? [`${short.toFixed(1)} kWh of the rest finds no free hour below the price cap — it is left for later.`] : [])],
+    notes: [...(must.notes || []), ...(short > 0.05 ? [`${short.toFixed(1)} kWh of the rest finds no free hour below the price cap before it is needed again — it is left for later.`] : [])],
   };
+}
+
+// Pure: two plans as one (the buffer first, then the rest), totals added up.
+function joinPlans(first, second) {
+  if (!first || !first.slots.length) return second;
+  const all = [...first.slots, ...second.slots].sort((x, y) => x.start.localeCompare(y.start));
+  const kwh = round3(all.reduce((t, r) => t + r.kwh, 0));
+  const cost = round3(all.reduce((t, r) => t + r.cost, 0));
+  const pvKwh = round3(all.reduce((t, r) => t + (r.pvKwh || 0), 0));
+  return {
+    ...second, slots: all, kwh, cost, pvKwh, gridKwh: round3(kwh - pvKwh), avgPrice: kwh > 0 ? round3(cost / kwh) : null,
+    needKwh: round3((second.needKwh || 0) + first.kwh), compare: second.compare && first.kwh ? null : second.compare,
+    notes: [...(first.notes || []), ...(second.notes || [])],
+  };
+}
+
+// Pure: slots with the time a plan already uses taken out (what is left of a partly used interval stays).
+function freeOf(slots, used) {
+  const out = [];
+  for (const s of slots) {
+    let parts = [[Date.parse(s.start), Date.parse(s.end)]];
+    for (const p of used) {
+      const a = Date.parse(p.start); const b = Date.parse(p.end);
+      parts = parts.flatMap(([x, y]) => (a >= y || b <= x ? [[x, y]] : [[x, Math.min(y, a)], [Math.max(x, b), y]].filter(([u, v]) => v - u >= 60000)));
+    }
+    for (const [x, y] of parts) out.push({ ...s, start: new Date(x).toISOString(), end: new Date(y).toISOString() });
+  }
+  out.priceGapFrom = slots.priceGapFrom;
+  return out;
+}
+
+// Pure: the whole plan. In the smart plan the buffer comes first — at least bufferKwh within bufferH
+// hours of plugging in (or of coming home), in the cheapest of those hours — then what the deadline
+// needs and, around a trip, the rest after it is back (withRest).
+function planWithBuffer({ args, slots, split = null, untilMs, startMs, bufferKwh = 0, bufferH = 3, bufferKm = 0 }) {
+  const a0 = { ...args, nowMs: startMs };
+  const smart = args.mode === 'plan';
+  let buf = null;
+  if (smart && bufferKwh > 0.3) {
+    const by = Math.min(untilMs || Infinity, startMs + bufferH * 3600000);
+    buf = makePlan({ ...a0, needKwh: bufferKwh, slots, readyAtMs: by, insufficient: 'stop' });
+    if (!buf.slots.length) buf = null;
+  }
+  const bk = buf ? buf.kwh : 0;
+  const rest = buf ? freeOf(slots, buf.slots) : slots;
+  let plan;
+  if (split && smart) {
+    const extra = Math.max(0, bk - split.mustKwh); // buffer above the trip's own need stays in the battery
+    const s2 = { ...split, mustKwh: round3(Math.max(0, split.mustKwh - bk)), restKwh: round3(Math.max(0, split.restKwh - extra)), preMaxKwh: round3(Math.max(0, (split.preMaxKwh ?? Infinity) - extra)) };
+    const must = makePlan({ ...a0, needKwh: s2.mustKwh, slots: rest });
+    plan = withRest(must, { ...a0, slots: rest }, rest, s2, untilMs);
+    plan.split = { ...plan.split, mustKwh: split.mustKwh, restKwh: split.restKwh, preMaxKwh: split.preMaxKwh ?? null, mustSlots: [...(buf ? buf.slots.filter((x) => Date.parse(x.start) < untilMs) : []), ...plan.split.mustSlots].sort((x, y) => x.start.localeCompare(y.start)) };
+    if (buf) plan = { ...joinPlans(buf, plan), split: plan.split };
+  } else {
+    plan = makePlan({ ...a0, needKwh: Math.max(0, (args.needKwh || 0) - bk), slots: rest });
+    if (buf) plan = joinPlans(buf, plan);
+  }
+  plan.buffer = buf ? { kwh: buf.kwh, km: bufferKm, by: new Date(Math.min(untilMs || Infinity, startMs + bufferH * 3600000)).toISOString(), slots: buf.slots } : null;
+  return plan;
 }
 
 function planSummary(p) {
@@ -684,17 +834,17 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
     nowMs, readyAtMs: target.readyAtMs, needKwh: split ? split.mustKwh : target.needKwh, slots, mode: rt.override || cfg.mode,
     minKw: cfg.min_kw, maxKw: cfg.max_kw, solarTrust: cfg.solar_trust, priceCap,
     insufficient: vehicle?.type === 'phev' ? 'stop' : cfg.insufficient, feedIn: cfg.feed_in, feedInEur: cfg.feed_in_eur_kwh,
+    earlyValue: Math.max(0, Number(cfg.early_value_eur) || 0),
   };
   // The car is out: plan from the moment it is expected home; what it would do if it came home (or
   // another car were plugged in) right now is kept next to it. Plugging in always re-plans from now.
   const arrival = await expectedArrival(nowMs, target, until).catch(() => null);
-  let plan = makePlan(arrival ? { ...planArgs, nowMs: arrival.at } : planArgs);
-  if (split && !arrival && planArgs.mode === 'plan') plan = withRest(plan, planArgs, slots, split, until);
+  const plan = planWithBuffer({ args: planArgs, slots, split: arrival ? null : split, untilMs: until, startMs: arrival ? arrival.at : nowMs, bufferKwh: target.bufferKwh, bufferH: Number(cfg.buffer_h) || 3, bufferKm: target.bufferKm });
   if (arrival) {
     // the expected homecoming, kept to compare with when it really plugs in (made at least 30 min before)
     if (arrival.at - nowMs >= 30 * 60000) rt.arrivalPred = { at: arrival.at, source: arrival.source };
     plan.arrival = { at: new Date(arrival.at).toISOString(), source: arrival.source, label: arrival.label, confidence: arrival.confidence };
-    plan.ifNow = planSummary(makePlan(planArgs));
+    plan.ifNow = planSummary(planWithBuffer({ args: planArgs, slots, split: null, untilMs: until, startMs: nowMs, bufferKwh: target.bufferKwh, bufferH: Number(cfg.buffer_h) || 3, bufferKm: target.bufferKm }));
   }
   plan.target = { ...target, vehicle: vehicle ? { id: vehicle.id, name: vehicle.name, type: vehicle.type } : null, reading: undefined, drive: undefined };
   plan.fuelBreakEven = fuel;
@@ -903,6 +1053,6 @@ function stopPlanner() {
 }
 
 module.exports = {
-  MODES, DEFAULTS, makePlan, withRest, planSplit, sameTrip, fuelBreakEven, activeSlot, controlStep,
+  MODES, DEFAULTS, makePlan, withRest, planSplit, sameTrip, mergeTrips, planWithBuffer, joinPlans, freeOf, fuelBreakEven, activeSlot, controlStep,
   houseWeather, getConfig, saveConfig, recalc, tick, outputMiniserver, sessionFull, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, stopPlanner, buildSlots, computeTarget, wallboxLive,
 };

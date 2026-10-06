@@ -4881,7 +4881,7 @@ a.btn-soft, a.btn-edit, a.btn-test, a.primary { text-decoration: none; }
 
 /* Jump links over a long page; sticks under the top while scrolling. */
 .section-nav {
-  position: sticky; top: 0; z-index: 20;
+  position: sticky; top: var(--ls-topbar-h, 0px); z-index: 9;
   display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center;
   margin: -0.4rem 0 1.1rem; padding: 0.5rem 0;
   background: color-mix(in srgb, var(--bg, #f3f4f6) 88%, transparent);
@@ -4893,7 +4893,8 @@ a.btn-soft, a.btn-edit, a.btn-test, a.primary { text-decoration: none; }
   transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
 }
 .section-nav a:hover, .section-nav a.on { color: var(--accent); border-color: var(--accent); }
-[id] { scroll-margin-top: 4rem; }
+/* a jump to a card lands below the sticky top bar (and the jump links), not under it */
+[id] { scroll-margin-top: calc(var(--ls-topbar-h, 4.5rem) + var(--ls-subnav-h, 0px) + 0.75rem); }
 
 /* A card's header row (a title with extra controls next to it): the title on the left, the
    controls and the fold chevron on the right. */

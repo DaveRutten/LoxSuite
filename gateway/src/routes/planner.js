@@ -136,6 +136,8 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
       max_price_eur_kwh: num(b.max_price_eur_kwh), insufficient: b.insufficient === 'stop' ? 'stop' : 'charge',
       feed_in: b.feed_in === 'fixed' ? 'fixed' : 'saldering', feed_in_eur_kwh: num(b.feed_in_eur_kwh, 0.05),
       target_policy: b.target_policy === 'needed' ? 'needed' : 'full',
+      buffer_km: Math.max(0, Math.min(500, num(b.buffer_km, 40))), buffer_h: Math.max(1, Math.min(12, num(b.buffer_h, 3))),
+      early_value_eur: Math.max(0, Math.min(0.5, num(b.early_value_eur, 0.03))),
       full_hold: b.full_hold === 'off' ? 'off' : 'release', min_topup_kwh: Math.max(0, num(b.min_topup_kwh, 1)),
       depart_certainty: ['safe', 'normal', 'relaxed'].includes(b.depart_certainty) ? b.depart_certainty : 'normal',
     });

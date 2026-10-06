@@ -1097,7 +1097,7 @@
   ]
  },
  {
-  "key": "{0} kWh of the rest finds no free hour below the price cap — it is left for later.",
+  "key": "{0} kWh of the rest finds no free hour below the price cap before it is needed again — it is left for later.",
   "module": "charging",
   "where": [
    "src/planner.js"
@@ -5520,6 +5520,13 @@
   ]
  },
  {
+  "key": "full again by {0}",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Full electric",
   "module": "vehicles",
   "where": [
@@ -8300,13 +8307,6 @@
   ]
  },
  {
-  "key": "no hour below the price cap",
-  "module": "charging",
-  "where": [
-   "planner (script)"
-  ]
- },
- {
   "key": "No hourly data for this day yet.",
   "module": "energy",
   "where": [
@@ -8888,6 +8888,13 @@
   "module": "energy",
   "where": [
    "energy-load (script)"
+  ]
+ },
+ {
+  "key": "nothing more to charge",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -10074,6 +10081,13 @@
  },
  {
   "key": "Ready by (when it is back, one time)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "Ready for the unexpected: {0} kWh ({1} km) by {2}",
   "module": "charging",
   "where": [
    "planner (script)"
@@ -12530,7 +12544,7 @@
   ]
  },
  {
-  "key": "trip {0} kWh + reserve {1} kWh; room in the battery {2} kWh, the rest after it is back ({3})",
+  "key": "trip {0} kWh + reserve {1} kWh; after it is back ({2}) {3} kWh more to be full again",
   "module": "charging",
   "where": [
    "planner (script)"
