@@ -10,6 +10,12 @@ on:
     tags: ['v*']
   workflow_dispatch: {}
 
+# One run per branch/tag at a time. A newer push to main cancels a main run that is still going, so
+# :latest always ends up as the newest main — never as whichever run happened to finish last.
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/loxsuite
 
@@ -67,8 +73,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_NAME }}
+          # :latest only from main itself. {{is_default_branch}} is also true for a TAG push whose commit
+          # is on main (the push payload's base_ref), so every version tag pushed together with main
+          # also wrote :latest, and the run that finished last won — v0.39.0 after pushing 0.36.4–0.41.0.
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=tag
             type=sha,prefix=,format=short
 

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Docker `:latest` is always the newest main**: a version tag whose commit is on main also wrote `:latest`
+  (`{{is_default_branch}}` is true for those), so after pushing several tags together `:latest` was whichever
+  build finished last (v0.39.0 instead of v0.41.0). `:latest` now comes only from main, one main build at a time
+  (a newer push cancels the older build). Version tags still get their own image.
+
 ## [0.41.0-alpha.1] - 2026-10-06
 
 ### Changed
