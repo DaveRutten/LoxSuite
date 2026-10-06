@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.36.4-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.37.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -188,6 +188,19 @@ It provides:
 </picture>
 
 </td>
+</tr>
+<tr>
+<td width="50%">
+
+**A consumer in detail** — on/off, status, power and energy from Loxone: what it is doing now, the last 48 hours, kWh per hour and what it learned per status.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/energy-load-dark.png">
+  <img src="docs/screenshots/energy-load-light.png" alt="A heat pump in the energy manager: state now, a 48-hour timeline of space heating, hot water and off, kWh per hour over a week and typical power per status">
+</picture>
+
+</td>
+<td width="50%"></td>
 </tr>
 </table>
 
@@ -824,6 +837,14 @@ logic first. It learns usage **patterns** (hot water every day around 07:00, the
 morning) and plans ahead of them, works with the **real values** as well as the forecast (the current hour from
 the meters, the next hours corrected when the solar forecast is off; an hour planned on solar that isn't there
 waits), and shows per day what each load cost and what better timing would have saved.
+
+Each consumer can have several **signals from Loxone**, all optional next to its meter: **on/off** (the basis —
+when and how long it runs), a **status** (an enumerator such as *0 = Off, 1 = Washing, 2 = Spinning*, with the
+values that count as running), a **power** (W or kW) and an **energy counter** (kWh or Wh). LoxSuite books the
+minutes and kWh per status, keeps every change, and learns the typical power per status (*space heating 1.45 kW,
+hot water 2.3 kW*); without power or energy it estimates from the consumer's kW. An appliance's runs follow its
+on/off or status when it has one. Every consumer has its own page with its state now, a 48-hour timeline, kWh per
+hour over a week and what it learned per status.
 
 ### OCPP (Loxone Wallbox → OCPP backend)
 

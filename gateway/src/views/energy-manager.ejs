@@ -33,13 +33,13 @@
   <% loads.forEach(l => { %>
     <details style="border-top:1px solid var(--border); padding:0.5rem 0;">
       <summary style="cursor:pointer;"><strong><%= l.name %></strong> <span class="hint">· <%= kinds[l.kind].label %> <%= t('· priority') %> <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
-      <%- include('partials/energy-load-form', { l, kinds, meters }) %>
+      <%- include('partials/energy-load-form', { l, kinds, meters, miniservers }) %>
       <form method="post" action="/energy-manager/loads/<%= l.id %>/delete" style="margin-top:0.4rem;" onsubmit="return confirm(<%= JSON.stringify(t('Delete {name} and its history?', { name: l.name })) %>);"><button type="submit" class="btn-soft"><%= t('Delete') %></button></form>
     </details>
   <% }) %>
   <details style="border-top:1px solid var(--border); padding:0.5rem 0;" <%= loads.length ? '' : 'open' %>>
     <summary style="cursor:pointer;"><strong><%= t('+ Add a consumer') %></strong></summary>
-    <%- include('partials/energy-load-form', { l: null, kinds, meters }) %>
+    <%- include('partials/energy-load-form', { l: null, kinds, meters, miniservers }) %>
   </details>
   <form method="post" action="/energy-manager/settings" class="form-grid" style="margin-top:0.8rem; border-top:1px solid var(--border); padding-top:0.8rem;">
     <div><label><%= t('Priority of the car') %></label><input type="text" name="car_priority" value="<%= cfg.car_priority %>"></div>
@@ -64,6 +64,20 @@
     return '<strong>' + esc(sig.value) + '</strong> ' + esc(sig.unit);
   }
   var last = null;
+  // on/off and status now, with how long already
+  function stateHtml(lv) {
+    if (!lv || (lv.on == null && lv.status == null)) return '<span class="hint">—</span>';
+    var dot = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; background:' + (lv.on ? 'var(--success, #4caf50)' : '#9aa5b1') + ';"></span>';
+    var txt = lv.status != null ? (lv.label || lv.status) : (lv.on ? 'on' : 'off');
+    var mins = lv.since ? Math.round((Date.now() - lv.since) / 60000) : null;
+    return dot + '<strong>' + esc(txt) + '</strong>' + (mins != null ? '<div class="hint" style="margin:0; font-size:0.75rem;">' + esc((window.LS_I18N && window.LS_I18N['in this state for {0}'] || 'in this state for {0}').replace('{0}', mins >= 60 ? Math.floor(mins / 60) + ' h ' + String(mins % 60).padStart(2, '0') : mins + ' min')) + '</div>' : '');
+  }
+  function perStatusHtml(lr) {
+    var ps = (lr && lr.perStatus) || [];
+    if (!ps.length) return '';
+    return '<div style="overflow-x:auto; margin:0.4rem 0;"><table><thead><tr><th>Status</th><th>Hours (4 weeks)</th><th>Per day</th><th>kWh</th><th>Typical power</th></tr></thead><tbody>' +
+      ps.map(function (x) { return '<tr><td>' + esc(x.status) + '</td><td>' + nf(x.hours, 1) + '</td><td>' + nf(x.hoursPerDay, 1) + ' h</td><td>' + nf(x.kwh, 1) + (x.measured ? '' : ' <span class="hint">(estimated)</span>') + '</td><td>' + (x.kw > 0.005 ? nf(x.kw, 2) + ' kW' : '—') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  }
 
   function planChart(d) {
     var el = document.getElementById('em-plan');
@@ -120,13 +134,13 @@
       (st.exportKw != null ? ' · ' + TL('feeding in now {0} kW').replace('{0}', nf(st.exportKw, 1)) : '') +
       (d.live && d.live.ratio != null && Math.abs(d.live.ratio - 1) > 0.15 ? ' · ' + TL('plan adjusted to the real values') : '') : '';
     if (!d.loads.length) { document.getElementById('em-now').innerHTML = '<p class="hint" style="margin:0;">No consumers yet &mdash; add one below.</p>'; }
-    else document.getElementById('em-now').innerHTML = '<div style="overflow-x:auto;"><table><thead><tr><th>Consumer</th><th>Power now</th><th>Would send (virtual input = value)</th><th>Why</th></tr></thead><tbody>' + d.loads.map(function (l) {
-      return '<tr><td><strong>' + esc(l.name) + '</strong><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(l.kindLabel) + ' · prio ' + l.priority + ' · ' + (l.output === 'live' ? 'live' : 'shadow') + '</div></td><td>' + (l.live && l.live.kw != null ? nf(l.live.kw, 2) + ' kW' : (l.live && l.live.found === false ? '<span class="hint">meter not found</span>' : '—')) + (l.running ? ' <span class="badge">running</span>' : '') + '</td><td>' +
+    else document.getElementById('em-now').innerHTML = '<div style="overflow-x:auto;"><table><thead><tr><th>Consumer</th><th>State</th><th>Power now</th><th>Would send (virtual input = value)</th><th>Why</th></tr></thead><tbody>' + d.loads.map(function (l) {
+      return '<tr><td><a href="/energy-manager/loads/' + l.id + '"><strong>' + esc(l.name) + '</strong></a><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(l.kindLabel) + ' · prio ' + l.priority + ' · ' + (l.output === 'live' ? 'live' : 'shadow') + '</div></td><td>' + stateHtml(l.live) + '</td><td>' + (l.live && l.live.kw != null ? nf(l.live.kw, 2) + ' kW' : (l.live && l.live.found === false ? '<span class="hint">not found</span>' : '—')) + (l.running ? ' <span class="badge">running</span>' : '') + '</td><td>' +
         l.signals.map(function (s) { return '<code>' + esc(s.vi) + '</code> = ' + val(s); }).join('<br>') + '</td><td class="hint">' + esc(l.reason || '') + '</td></tr>';
     }).join('') + '</tbody></table></div>';
     planChart(d);
     document.getElementById('em-loads').innerHTML = d.loads.map(function (l) {
-      var lr = l.learned || {}, h = '<div class="card"><h2 style="margin-top:0;">' + esc(l.name) + ' <span class="hint" style="font-size:0.8rem; font-weight:400;">' + esc(l.kindLabel) + '</span></h2>';
+      var lr = l.learned || {}, h = '<div class="card"><h2 style="margin-top:0;">' + esc(l.name) + '</h2><p class="hint" style="margin:-0.4rem 0 0.5rem;">' + esc(l.kindLabel) + ' · <a href="/energy-manager/loads/' + l.id + '">' + esc((window.LS_I18N && window.LS_I18N['Details →']) || 'Details →') + '</a></p>' + perStatusHtml(lr);
       if (l.kind === 'appliance') {
         h += '<p class="hint" style="margin:0 0 0.5rem;">Learned: ' + (lr.runs ? lr.runs + ' run(s), typically ' + nf(lr.kwh, 2) + ' kWh in ' + nf(lr.durationH, 1) + ' h' : 'no runs measured yet') + '.</p>';
         if (CAN) h += '<div class="btn-row" style="align-items:flex-end;"><div><label>Ready by</label><input type="datetime-local" id="em-ready-' + l.id + '"></div><div><label>Label</label><input type="text" id="em-label-' + l.id + '" placeholder="e.g. 40° wash"></div><button type="button" class="btn-soft" data-req="' + l.id + '">Plan the best start</button></div>';

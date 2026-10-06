@@ -71,6 +71,8 @@ const DATA = {
     { table: 'load_hourly', label: 'Hourly values per consumer' },
     { table: 'load_runs', label: 'Appliance runs' },
     { table: 'em_log', label: 'Shadow signal log' },
+    { table: 'load_status_hourly', label: 'Time and kWh per status' },
+    { table: 'load_events', label: 'On/off and status changes' },
   ],
 };
 

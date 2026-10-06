@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.37.0-alpha.1] - 2026-10-06
+
+### Added
+- **Energy manager: more signals per consumer**, all optional next to its Loxone meter (picked from the
+  Miniserver's states with a search field):
+  - **On/off** (the basis; can be inverted) — LoxSuite learns when and how long it runs.
+  - **Status (enumerator)** with value labels (*0 = Off, 1 = Washing, 2 = Spinning, 3 = Done*) and the values that
+    count as running — so it knows what it is doing, also while it is on.
+  - **Power** (W or kW) and an **energy counter** (kWh or Wh) for the real consumption.
+  Every minute LoxSuite books the minutes and kWh per status (`load_status_hourly`) and every change
+  (`load_events`); without power or energy it estimates from the consumer's kW. It learns the typical power per
+  status and the kW while on. An appliance's runs follow its on/off or status (ending 2 minutes after it goes off).
+- **A page per consumer** (Energy manager → a consumer → Details): state now and for how long, power, last 24
+  hours, what it learned, a 48-hour timeline per status, kWh per hour over 7 days, per status (hours, per day, kWh,
+  typical power) and the runs.
+- The energy manager's *Now* table shows the state (on/off or status, and since when); each consumer card shows
+  what it learned per status.
+- Tests: `energyLoadSignals.test.js` (status values, on/off, status, power/energy units, per-status learning, the
+  timeline, and sampling against a real database: minutes, estimated kWh, change events, a run from on/off).
+
 ## [0.36.4-alpha.1] - 2026-10-05
 
 ### Added

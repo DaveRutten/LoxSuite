@@ -632,6 +632,14 @@
   ]
  },
  {
+  "key": "(estimated)",
+  "module": "energy",
+  "where": [
+   "energy-load (script)",
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "(excl. VAT)",
   "module": "ocpp",
   "where": [
@@ -1081,6 +1089,20 @@
   ]
  },
  {
+  "key": "{0} kWh per day",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
+  ]
+ },
+ {
+  "key": "{0} kWh per run",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
+  ]
+ },
+ {
   "key": "{0} kWh solar, {1} kWh grid",
   "module": "charging",
   "where": [
@@ -1106,6 +1128,7 @@
   "module": "vehicles",
   "where": [
    "driving (script)",
+   "energy-load (script)",
    "energy-manager (script)"
   ]
  },
@@ -1156,6 +1179,13 @@
   "module": "core",
   "where": [
    "public/admin-backup-tabulator.js"
+  ]
+ },
+ {
+  "key": "{0} runs measured",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
   ]
  },
  {
@@ -1238,8 +1268,9 @@
  },
  {
   "key": "{0}: {1} kWh",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "energy-manager (script)"
   ]
  },
@@ -2730,8 +2761,9 @@
  },
  {
   "key": "Best start (hindsight)",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "energy-manager (script)"
   ]
  },
@@ -3658,8 +3690,9 @@
  },
  {
   "key": "Cost",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "energy-manager (script)"
   ]
  },
@@ -3843,6 +3876,13 @@
   "module": "core",
   "where": [
    "admin-notifications (script)"
+  ]
+ },
+ {
+  "key": "counter {0} kWh",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
   ]
  },
  {
@@ -4151,6 +4191,13 @@
   ]
  },
  {
+  "key": "Details →",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Device",
   "module": "core",
   "where": [
@@ -4388,6 +4435,7 @@
   "module": "vehicles",
   "where": [
    "driving (script)",
+   "energy-load (script)",
    "energy-manager (script)"
   ]
  },
@@ -4577,8 +4625,9 @@
  },
  {
   "key": "Energy manager",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
+   "energy-load",
    "energy-manager",
    "src/modules.js",
    "src/permissionAreas.js"
@@ -5589,6 +5638,13 @@
   ]
  },
  {
+  "key": "Highest hour: {0} kWh",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
+  ]
+ },
+ {
   "key": "home ~{0}",
   "module": "charging",
   "where": [
@@ -5719,6 +5775,20 @@
   ]
  },
  {
+  "key": "Hours",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
+  ]
+ },
+ {
+  "key": "Hours (4 weeks)",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "House",
   "module": "energy",
   "where": [
@@ -5831,6 +5901,14 @@
   "module": "monitor",
   "where": [
    "public/monitor-picks.js"
+  ]
+ },
+ {
+  "key": "in this state for {0}",
+  "module": "energy",
+  "where": [
+   "energy-load (script)",
+   "energy-manager (script)"
   ]
  },
  {
@@ -6067,8 +6145,9 @@
  },
  {
   "key": "Last 24 hours",
-  "module": "core",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "live-data (script)",
    "src/chartFieldHelpers.js"
   ]
@@ -6112,6 +6191,13 @@
   "where": [
    "live-data (script)",
    "src/chartFieldHelpers.js"
+  ]
+ },
+ {
+  "key": "last read {0}",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
   ]
  },
  {
@@ -6159,8 +6245,9 @@
  },
  {
   "key": "Learned",
-  "module": "charging",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "learned"
   ]
  },
@@ -6959,13 +7046,6 @@
   ]
  },
  {
-  "key": "meter not found",
-  "module": "energy_manager",
-  "where": [
-   "energy-manager (script)"
-  ]
- },
- {
   "key": "Meter reading (kWh)",
   "module": "ocpp",
   "where": [
@@ -7185,8 +7265,9 @@
  },
  {
   "key": "Miniserver not found",
-  "module": "monitor",
+  "module": "energy_manager",
   "where": [
+   "src/routes/energyManager.js",
    "src/routes/liveData.js",
    "src/routes/miniservers.js",
    "src/routes/monitor.js"
@@ -8040,8 +8121,9 @@
  },
  {
   "key": "No measurements yet.",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "energy-manager (script)"
   ]
  },
@@ -8145,6 +8227,13 @@
   ]
  },
  {
+  "key": "No on/off or status changes recorded yet — they appear once an on/off or status signal is chosen.",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
+  ]
+ },
+ {
   "key": "no plan for this hour",
   "module": "energy_manager",
   "where": [
@@ -8224,8 +8313,9 @@
  },
  {
   "key": "No runs measured yet.",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "energy-manager (script)"
   ]
  },
@@ -8429,6 +8519,14 @@
   ]
  },
  {
+  "key": "not found",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)",
+   "src/routes/energyManager.js"
+  ]
+ },
+ {
   "key": "Not found.",
   "module": "ocpp",
   "where": [
@@ -8526,6 +8624,13 @@
   "module": "core",
   "where": [
    "live-data (script)"
+  ]
+ },
+ {
+  "key": "Nothing learned per status yet.",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
   ]
  },
  {
@@ -8706,9 +8811,9 @@
   "where": [
    "admin-security (script)",
    "agenda (script)",
-   "mappings-commands (script)",
-   "monitor-detail (script)",
-   "partials/panel-grid (script)"
+   "energy-load (script)",
+   "energy-manager (script)",
+   "mappings-commands (script)"
   ]
  },
  {
@@ -8777,12 +8882,13 @@
  },
  {
   "key": "on",
-  "module": "mqtt",
+  "module": "energy",
   "where": [
    "admin-notifications (script)",
+   "energy-load (script)",
+   "energy-manager (script)",
    "mappings-commands (script)",
-   "public/mappings-loxone-to-mqtt-tabulator.js",
-   "public/show-if.js"
+   "public/mappings-loxone-to-mqtt-tabulator.js"
   ]
  },
  {
@@ -8804,6 +8910,13 @@
   "module": "vehicles",
   "where": [
    "driving (script)"
+  ]
+ },
+ {
+  "key": "on for {0}",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
   ]
  },
  {
@@ -8832,6 +8945,13 @@
   "module": "core",
   "where": [
    "settings-energy"
+  ]
+ },
+ {
+  "key": "On/off and status changes",
+  "module": "core",
+  "where": [
+   "src/moduleInfo.js"
   ]
  },
  {
@@ -9086,6 +9206,14 @@
   "module": "core",
   "where": [
    "admin-notifications (script)"
+  ]
+ },
+ {
+  "key": "Per day",
+  "module": "energy",
+  "where": [
+   "energy-load (script)",
+   "energy-manager (script)"
   ]
  },
  {
@@ -9375,8 +9503,9 @@
  },
  {
   "key": "Power now",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "energy-manager (script)"
   ]
  },
@@ -10792,8 +10921,9 @@
  },
  {
   "key": "Start",
-  "module": "ocpp",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "ocpp-bridge-edit (script)",
    "src/energyManager.js"
   ]
@@ -10877,11 +11007,19 @@
  },
  {
   "key": "State",
-  "module": "monitor",
+  "module": "energy_manager",
   "where": [
+   "energy-manager (script)",
    "live-data (script)",
    "public/dashboard-miniservers-tabulator.js",
    "public/miniservers-tabulator.js"
+  ]
+ },
+ {
+  "key": "State now",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
   ]
  },
  {
@@ -10893,13 +11031,13 @@
  },
  {
   "key": "Status",
-  "module": "monitor",
+  "module": "energy",
   "where": [
    "admin-notifications (script)",
+   "energy-load (script)",
+   "energy-manager (script)",
    "live-data (script)",
-   "public/dashboard-miniservers-tabulator.js",
-   "public/mappings-loxone-to-mqtt-tabulator.js",
-   "public/mappings-mqtt-to-loxone-tabulator.js"
+   "public/dashboard-miniservers-tabulator.js"
   ]
  },
  {
@@ -11696,6 +11834,13 @@
   ]
  },
  {
+  "key": "Time and kWh per status",
+  "module": "core",
+  "where": [
+   "src/moduleInfo.js"
+  ]
+ },
+ {
   "key": "Time of day must be HH:MM.",
   "module": "core",
   "where": [
@@ -12057,6 +12202,14 @@
   "module": "core",
   "where": [
    "src/backup.js"
+  ]
+ },
+ {
+  "key": "Typical power",
+  "module": "energy",
+  "where": [
+   "energy-load (script)",
+   "energy-manager (script)"
   ]
  },
  {
@@ -12746,9 +12899,11 @@
  },
  {
   "key": "Wh",
-  "module": "ocpp",
+  "module": "energy_manager",
   "where": [
-   "src/ocppBridge.js"
+   "src/energyManager.js",
+   "src/ocppBridge.js",
+   "src/routes/energyManager.js"
   ]
  },
  {

@@ -245,6 +245,11 @@ async function main() {
     await fold(page, ['Hot water', 'Heat pump', 'Washing machine']);
     await shoot(page, 'energy-manager', theme, { fullPage: true });
 
+    // one consumer in detail: the heat pump with its on/off and mode signals (load 2 in the seed)
+    await page.goto(`${BASE}/energy-manager/loads/2`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1500);
+    await shoot(page, 'energy-load', theme, { fullPage: true });
+
     await page.goto(`${BASE}/ocpp/1`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(3000);
     await fold(page, ['Status', 'Quarterly export', 'Sessions', 'Log']);

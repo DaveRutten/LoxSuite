@@ -64,6 +64,10 @@ const controlDefs = [
   ['Heat pump', roomUtility, catEnergy, 'Meter', { actual: 'hp-actual', total: 'hp-total' }],
   ['Hot water boiler', roomUtility, catEnergy, 'Meter', { actual: 'dhw-actual', total: 'dhw-total' }],
   ['Washing machine', roomUtility, catEnergy, 'Meter', { actual: 'wm-actual', total: 'wm-total' }],
+  // on/off and status signals of the energy manager's consumers (appended: the indices above stay)
+  ['Washing machine program', roomUtility, catEnergy, 'InfoOnlyAnalog', { value: 'wm-status' }],
+  ['Heat pump compressor', roomUtility, catEnergy, 'Switch', { active: 'hp-on' }],
+  ['Heat pump mode', roomUtility, catEnergy, 'InfoOnlyAnalog', { value: 'hp-mode' }],
 ];
 
 const controls = {};
@@ -90,7 +94,8 @@ const FIXED = {
   'wb-actual': () => 0, 'wb-total': () => 5650.2, 'wb-connected': () => 0, 'wb-active': () => 0, 'wb-mode': () => 1, 'wb-limit': () => 11, 'wb-enabled': () => 1,
   'hp-actual': () => 0.42 + Math.random() * 0.05, 'hp-total': () => 4120.3,
   'dhw-actual': () => 0, 'dhw-total': () => 1388.6,
-  'wm-actual': () => 0.002, 'wm-total': () => 412.3,
+  'wm-actual': () => 1.92 + Math.random() * 0.05, 'wm-total': () => 412.3,
+  'wm-status': () => 1, 'hp-on': () => 1, 'hp-mode': () => 1,
 };
 function currentValue(uuid) {
   const info = stateSeeds.get(uuid);

@@ -1,13 +1,32 @@
-<% const s = l ? l.settings : {}; const kind = l ? l.kind : 'dhw'; const fid = l ? l.id : 'new'; %>
+<% const s = l ? l.settings : {}; const kind = l ? l.kind : 'dhw'; const fid = l ? l.id : 'new'; const src = s.src || {}; const msList = typeof miniservers !== 'undefined' ? miniservers : []; const msSel = (l && l.miniserver_id) || (msList[0] && msList[0].id) || ''; %>
 <form method="post" action="/energy-manager/loads" style="margin-top:0.6rem;" class="em-load-form">
   <% if (l) { %><input type="hidden" name="id" value="<%= l.id %>"><% } %>
   <div class="form-grid">
     <div><label><%= t('Name') %></label><input type="text" name="name" value="<%= l ? l.name : '' %>" placeholder="<%= t('e.g. Tap water') %>"></div>
     <div><label><%= t('Kind') %></label><select name="kind" data-kindsel="<%= fid %>"><% Object.keys(kinds).forEach(k => { %><option value="<%= k %>" <%= kind === k ? 'selected' : '' %>><%= kinds[k].label %></option><% }) %></select></div>
-    <div><label><%= t('Loxone meter') %></label><select name="meter"><option value=""><%= t('— choose —') %></option><% meters.forEach(m => { const v = m.miniserverId + '|' + m.uuid; %><option value="<%= v %>" <%= l && (l.miniserver_id + '|' + l.meter_uuid) === v ? 'selected' : '' %>><%= m.name %><%= meters.some(x => x.miniserverId !== m.miniserverId) ? ' (' + m.miniserverName + ')' : '' %></option><% }) %></select></div>
+    <div><label><%= t('Loxone meter (optional)') %></label><select name="meter"><option value=""><%= t('— choose —') %></option><% meters.forEach(m => { const v = m.miniserverId + '|' + m.uuid; %><option value="<%= v %>" <%= l && (l.miniserver_id + '|' + l.meter_uuid) === v ? 'selected' : '' %>><%= m.name %><%= meters.some(x => x.miniserverId !== m.miniserverId) ? ' (' + m.miniserverName + ')' : '' %></option><% }) %></select></div>
     <div><label><%= t('Priority (1 = first)') %></label><input type="text" name="priority" value="<%= l ? l.priority : 5 %>"></div>
     <div style="align-self:end;"><label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" name="enabled" value="1" <%= !l || l.enabled ? 'checked' : '' %>> <%= t('Active') %></label></div>
   </div>
+  <details class="em-signals" style="margin-top:0.6rem;" <%= src.onoff || src.status || src.power || src.energy || !l ? 'open' : '' %>>
+    <summary style="cursor:pointer;"><strong><%= t('Signals from Loxone') %></strong> <span class="hint"><%= t('— on/off, status, power and energy; LoxSuite learns from each of them') %></span></summary>
+    <div class="form-grid" style="margin-top:0.5rem;">
+      <div><label><%= t('Miniserver') %></label><select name="src_ms" data-ms-pick><% msList.forEach(m => { %><option value="<%= m.id %>" <%= String(msSel) === String(m.id) ? 'selected' : '' %>><%= m.name %></option><% }) %></select></div>
+      <div style="grid-column:span 2;"><label><%= t('Search states') %></label><input type="text" data-state-filter placeholder="<%= t('room, name or state — e.g. washing machine') %>"><span class="hint" data-state-msg style="margin:0;"></span></div>
+    </div>
+    <div class="form-grid" style="margin-top:0.4rem;">
+      <div><label><%= t('On / off') %></label><select name="src_onoff" data-state-pick data-current="<%= src.onoff || '' %>"><option value=""><%= t('— none —') %></option><% if (src.onoff) { %><option value="<%= src.onoff %>" selected><%= src.onoff %></option><% } %></select>
+        <label style="display:flex; gap:0.3rem; font-weight:normal; margin-top:0.2rem;"><input type="checkbox" name="src_onoff_invert" value="1" <%= src.onoff_invert ? 'checked' : '' %>> <%= t('inverted (0 = on)') %></label></div>
+      <div><label><%= t('Status (enumerator)') %></label><select name="src_status" data-state-pick data-current="<%= src.status || '' %>"><option value=""><%= t('— none —') %></option><% if (src.status) { %><option value="<%= src.status %>" selected><%= src.status %></option><% } %></select></div>
+      <div><label><%= t('Power') %></label><div style="display:flex; gap:0.3rem;"><select name="src_power" data-state-pick data-current="<%= src.power || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.power) { %><option value="<%= src.power %>" selected><%= src.power %></option><% } %></select><select name="src_power_unit" style="width:6em;"><option value="W" <%= src.power_unit !== 'kW' ? 'selected' : '' %>>W</option><option value="kW" <%= src.power_unit === 'kW' ? 'selected' : '' %>>kW</option></select></div></div>
+      <div><label><%= t('Energy counter') %></label><div style="display:flex; gap:0.3rem;"><select name="src_energy" data-state-pick data-current="<%= src.energy || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.energy) { %><option value="<%= src.energy %>" selected><%= src.energy %></option><% } %></select><select name="src_energy_unit" style="width:6.5em;"><option value="kWh" <%= src.energy_unit !== 'Wh' ? 'selected' : '' %>>kWh</option><option value="Wh" <%= src.energy_unit === 'Wh' ? 'selected' : '' %>>Wh</option></select></div></div>
+    </div>
+    <div class="form-grid" style="margin-top:0.4rem;">
+      <div style="grid-column:span 2;"><label><%= t('Status values') %></label><textarea name="src_status_map" rows="3" placeholder="<%= t('0=Off, 1=Washing, 2=Spinning, 3=Done (one per line or comma)') %>"><%= src.status_map || '' %></textarea></div>
+      <div><label><%= t('Values that mean running') %></label><input type="text" name="src_status_on" value="<%= src.status_on || '' %>" placeholder="1, 2"><p class="hint" style="margin:0.2rem 0 0;"><%= t('Empty: everything except 0 / off.') %></p></div>
+    </div>
+    <p class="hint" style="margin:0.4rem 0 0;"><%= t('On/off is the basis: LoxSuite learns when and how long it runs. A status tells it what it is doing (and how long each step takes); power or an energy counter gives the real kWh — without them it estimates from the kW above.') %></p>
+  </details>
   <div class="form-grid" data-kind="dhw" data-for="<%= fid %>" style="margin-top:0.6rem;">
     <div><label><%= t('Power while heating (kW)') %></label><input type="text" name="s_kw" value="<%= s.kw ?? kinds.dhw.defaults.kw %>"></div>
     <div><label><%= t('Duration (h)') %></label><input type="text" name="s_duration_h" value="<%= s.duration_h ?? 1 %>"></div>
@@ -51,5 +70,42 @@
     });
   }
   sel.addEventListener('change', show); show();
+
+  // State pickers: the Miniserver's readable states, filtered by the search field.
+  var form = sel.closest('form');
+  var msSel = form.querySelector('[data-ms-pick]');
+  var filter = form.querySelector('[data-state-filter]');
+  var msg = form.querySelector('[data-state-msg]');
+  var picks = form.querySelectorAll('[data-state-pick]');
+  window.__emStates = window.__emStates || {};
+  var states = [];
+  function fill() {
+    var q = (filter.value || '').toLowerCase();
+    Array.prototype.forEach.call(picks, function (p) {
+      var cur = p.value || p.dataset.current || '';
+      var list = states.filter(function (x) { return !q || x.uuid === cur || x.label.toLowerCase().indexOf(q) !== -1; }).slice(0, 400);
+      var none = p.options[0] ? p.options[0].textContent : '—';
+      p.innerHTML = '';
+      var o0 = document.createElement('option'); o0.value = ''; o0.textContent = none; p.appendChild(o0);
+      if (cur && !list.some(function (x) { return x.uuid === cur; })) list.unshift({ uuid: cur, label: (states.find(function (x) { return x.uuid === cur; }) || {}).label || cur });
+      list.forEach(function (x) { var o = document.createElement('option'); o.value = x.uuid; o.textContent = x.label; if (x.uuid === cur) o.selected = true; p.appendChild(o); });
+    });
+  }
+  function loadStates() {
+    if (!msSel || !msSel.value) return;
+    var id = msSel.value;
+    var got = window.__emStates[id] || (window.__emStates[id] = fetch('/energy-manager/states/' + id).then(function (r) { return r.json(); }));
+    msg.textContent = '…';
+    got.then(function (d) { states = d.states || []; msg.textContent = d.error ? d.error : ''; fill(); }).catch(function (e) { msg.textContent = e.message; });
+  }
+  if (msSel) msSel.addEventListener('change', function () { Array.prototype.forEach.call(picks, function (p) { p.dataset.current = ''; }); loadStates(); });
+  if (filter) filter.addEventListener('input', fill);
+  var det = form.querySelector('.em-signals');
+  var started = false;
+  function start() { if (!started) { started = true; loadStates(); } }
+  if (det) { det.addEventListener('toggle', function () { if (det.open) start(); }); if (det.open && form.offsetParent !== null) start(); }
+  // a consumer's form opens inside a <details>: load the states when it is opened
+  var outer = form.closest('details:not(.em-signals)');
+  if (outer) outer.addEventListener('toggle', function () { if (outer.open && det && det.open) start(); });
 })();
 </script>

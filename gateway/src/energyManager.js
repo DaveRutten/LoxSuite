@@ -55,6 +55,68 @@ function parseSettings(load) {
   return { ...(KINDS[load.kind]?.defaults || {}), ...s };
 }
 
+// The Loxone signals of a consumer (all optional, next to its meter): state uuids on its Miniserver.
+//   onoff   on/off state (≠ 0 = on, or inverted)
+//   status  an enumerator state; status_map "0=Off\n1=Washing\n2=Spinning", status_on "1,2" = the values
+//           that count as running (empty: everything except 0 / off)
+//   power   power in W or kW
+//   energy  an energy counter in kWh or Wh (when there is no Loxone meter block)
+function sourcesOf(settings = {}) {
+  const src = settings.src || {};
+  return {
+    onoff: src.onoff || null, onoffInvert: !!src.onoff_invert,
+    status: src.status || null, statusMap: parseStatusMap(src.status_map), statusOn: parseList(src.status_on),
+    power: src.power || null, powerUnit: src.power_unit === 'kW' ? 'kW' : 'W',
+    energy: src.energy || null, energyUnit: src.energy_unit === 'Wh' ? 'Wh' : 'kWh',
+  };
+}
+
+// Pure: "0=Off\n1=Washing, 2 = Spinning" -> { '0': 'Off', '1': 'Washing', '2': 'Spinning' }.
+function parseStatusMap(text) {
+  const out = {};
+  for (const part of String(text || '').split(/[\n;,]+/)) {
+    const m = /^\s*([^=:]+?)\s*[=:]\s*(.+?)\s*$/.exec(part);
+    if (m) out[m[1]] = m[2].slice(0, 40);
+  }
+  return out;
+}
+const parseList = (text) => String(text || '').split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+
+// Pure: one reading of a consumer from its signals -> { kw, total, on, status, label, measured }.
+//   meter: { kw, total } of the Loxone meter block (or nulls); raw: { onoff, status, power, energy }.
+// "on" comes from the on/off state, else from the status (running values), else from the power.
+function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05 }) {
+  const num = (v) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+  let kw = num(meter.kw);
+  if (kw === null && src.power) { const p = num(raw.power); kw = p === null ? null : (src.powerUnit === 'kW' ? p : p / 1000); }
+  let total = num(meter.total);
+  if (total === null && src.energy) { const e = num(raw.energy); total = e === null ? null : (src.energyUnit === 'Wh' ? e / 1000 : e); }
+  let status = null;
+  let label = null;
+  if (src.status && raw.status !== undefined && raw.status !== null && raw.status !== '') {
+    const n = num(raw.status);
+    status = n !== null ? String(Math.round(n * 1000) / 1000) : String(raw.status).slice(0, 40);
+    label = src.statusMap[status] || (n === null ? status : null);
+  }
+  let on = null;
+  if (src.onoff && raw.onoff !== undefined && raw.onoff !== null && raw.onoff !== '') {
+    const v = num(raw.onoff);
+    const b = v !== null ? v !== 0 : /^(on|aan|true|1)$/i.test(String(raw.onoff));
+    on = src.onoffInvert ? !b : b;
+  } else if (status !== null) {
+    on = src.statusOn.length ? src.statusOn.includes(status) || (label !== null && src.statusOn.includes(label)) : !(status === '0' || /^(off|uit|idle)$/i.test(label || status));
+  } else if (kw !== null) on = kw >= onKw;
+  return { kw, total, on, status, label, measured: total !== null || kw !== null };
+}
+
+// Pure: the key a minute is booked under — the status label/value, else 'on'/'off'.
+function statusKey(st) {
+  if (st.status !== null && st.status !== undefined) return String(st.label || st.status).slice(0, 64);
+  if (st.on === true) return 'on';
+  if (st.on === false) return 'off';
+  return null;
+}
+
 function viName(load, signal) {
   const s = parseSettings(load);
   if (s.vi && s.vi[signal.key]) return s.vi[signal.key];
@@ -322,11 +384,27 @@ async function resolveMeter(load) {
 }
 
 async function readLoad(load) {
-  const m = await resolveMeter(load);
-  if (!m?.control) return { kw: null, total: null, found: false };
+  const src = sourcesOf(load.settings || parseSettings(load));
   const ws = require('./loxoneWebSocket');
-  const v = (n) => { const u = m.control.states?.[n]; const x = u ? ws.getLiveValue(m.ms.id, u) : undefined; return x === undefined || x === null || x === '' || !Number.isFinite(Number(x)) ? null : Number(x); };
-  return { kw: v('actual'), total: v('total'), found: true, name: m.control.name };
+  const m = await resolveMeter(load);
+  let meter = {};
+  let name = null;
+  if (m?.control) {
+    const v = (n) => { const u = m.control.states?.[n]; const x = u ? ws.getLiveValue(m.ms.id, u) : undefined; return x === undefined || x === null || x === '' || !Number.isFinite(Number(x)) ? null : Number(x); };
+    meter = { kw: v('actual'), total: v('total') };
+    name = m.control.name;
+  }
+  const raw = {};
+  const anySrc = src.onoff || src.status || src.power || src.energy;
+  if (anySrc && load.miniserver_id) {
+    const ms = m?.ms || await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(load.miniserver_id);
+    if (ms) {
+      ws.ensureConnection(ms);
+      for (const k of ['onoff', 'status', 'power', 'energy']) if (src[k]) raw[k] = ws.getLiveValue(ms.id, src[k]);
+    }
+  }
+  const st = loadState({ meter, raw, src });
+  return { ...st, found: !!m?.control || Object.values(raw).some((x) => x !== undefined && x !== null), name };
 }
 
 async function addHour(loadId, hour, kwh) {
@@ -336,21 +414,51 @@ async function addHour(loadId, hour, kwh) {
   await db.upsert('load_hourly', { load_id: loadId, hour, kwh: Math.round((base + kwh) * 10000) / 10000, source: 'live' }, ['load_id', 'hour']);
 }
 
-async function sample(nowMs = Date.now()) {
+async function addStatus(loadId, hour, key, minutes, kwh, measured) {
+  if (!key || !(minutes > 0)) return;
+  const row = await db.prepare('SELECT minutes, kwh, measured FROM load_status_hourly WHERE load_id = ? AND hour = ? AND status = ?').get(loadId, hour, key);
+  await db.upsert('load_status_hourly', {
+    load_id: loadId, hour, status: key, minutes: r3((row?.minutes || 0) + minutes), kwh: Math.round(((row?.kwh || 0) + (kwh || 0)) * 10000) / 10000,
+    measured: row ? (row.measured && measured ? 1 : 0) : (measured ? 1 : 0),
+  }, ['load_id', 'hour', 'status']);
+}
+
+// Every minute: read each consumer, book its kWh (meter/counter difference, else power × time, else
+// "on" × its kW as an estimate), the minutes per status, every change of on/off or status, and
+// appliance runs (from on/off or status when there is one, else from the power).
+async function sample(nowMs = Date.now(), { read = readLoad } = {}) {
   const em = require('./energyMeters');
   const loads = await listLoads();
   for (const l of loads) {
     if (!l.enabled) continue;
-    const r = await readLoad(l);
-    rt.samples.set(l.id, { ...r, at: nowMs });
+    const r = await read(l);
+    const prevS = rt.samples.get(l.id);
+    rt.samples.set(l.id, { ...r, at: nowMs, since: prevS && statusKey(prevS) === statusKey(r) ? prevS.since : nowMs });
+    const hour = em.hourStart(nowMs);
+    // minutes since the previous sample (a gap of more than 5 minutes counts as 1)
+    const dtMin = prevS ? Math.min(5, Math.max(0, (nowMs - prevS.at) / 60000)) || 1 : 1;
+    let kwh = null;
+    let measured = false;
     const prev = rt.prevTotals.get(l.id);
-    if (prev && r.total !== null) {
-      const d = em.safeDelta(prev.total, r.total, nowMs - prev.at, 30);
-      if (d) await addHour(l.id, em.hourStart(nowMs), d);
+    if (r.total !== null) {
+      if (prev) { const d = em.safeDelta(prev.total, r.total, nowMs - prev.at, 30); if (d !== null && d !== undefined) { kwh = d; measured = true; } }
+      rt.prevTotals.set(l.id, { total: r.total, at: nowMs });
+    } else if (r.kw !== null) { kwh = Math.max(0, r.kw) * dtMin / 60; measured = true; }
+    else if (r.on === true) kwh = (Number(l.settings.kw) || 0) * dtMin / 60;
+    if (kwh > 0) await addHour(l.id, hour, kwh);
+    const key = statusKey(r);
+    await addStatus(l.id, hour, key, dtMin, kwh || 0, measured).catch(() => {});
+    if (key !== null && (!prevS || statusKey(prevS) !== key)) {
+      await db.prepare('INSERT INTO load_events (load_id, ts, on_state, status, label, kw) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(l.id, new Date(nowMs).toISOString(), r.on === null ? null : (r.on ? 1 : 0), r.status, r.label, r.kw).catch(() => {});
     }
-    if (r.total !== null) rt.prevTotals.set(l.id, { total: r.total, at: nowMs });
     if (l.kind === 'appliance') {
-      const step = runStep(rt.runs.get(l.id) || {}, r.kw, r.total, nowMs);
+      // with an on/off or status signal the run follows that (ends 2 minutes after it goes off);
+      // otherwise the power decides
+      const bySignal = r.on !== null && (sourcesOf(l.settings).onoff || sourcesOf(l.settings).status);
+      const step = bySignal
+        ? runStep(rt.runs.get(l.id) || {}, r.on ? 1 : 0, r.total, nowMs, { onKw: 0.5, offKw: 0.5, endAfterMin: 2 })
+        : runStep(rt.runs.get(l.id) || {}, r.kw, r.total, nowMs);
       rt.runs.set(l.id, step.state);
       if (step.finished) await storeRun(l, step.finished).catch((e) => console.error(`[energy manager] ${l.name}: ${e.message}`));
     }
@@ -423,7 +531,71 @@ async function learned(load) {
   const rows = await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ?').all(load.id, from);
   const active = rows.map((r) => r.kwh).filter((k) => k > 0.1);
   const days = new Set(rows.map((r) => r.hour.slice(0, 10))).size;
-  return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay: days ? r2(rows.reduce((a, r) => a + r.kwh, 0) / days) : null, hours: rows.length };
+  return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay: days ? r2(rows.reduce((a, r) => a + r.kwh, 0) / days) : null, hours: rows.length, ...(await learnedStatus(load)) };
+}
+
+// Pure: per status (or on/off) from the hourly bookings: hours in it, kWh, the typical kW (only from
+// measured kWh) and hours per day.
+function statusSummary(rows, days) {
+  const by = new Map();
+  for (const r of rows) {
+    const g = by.get(r.status) || { status: r.status, minutes: 0, kwh: 0, mMin: 0, mKwh: 0 };
+    g.minutes += r.minutes; g.kwh += r.kwh;
+    if (r.measured) { g.mMin += r.minutes; g.mKwh += r.kwh; }
+    by.set(r.status, g);
+  }
+  return [...by.values()].sort((a, b) => b.minutes - a.minutes).map((g) => ({
+    status: g.status, hours: r2(g.minutes / 60), kwh: r2(g.kwh), kw: g.mMin >= 10 ? r2(g.mKwh / (g.mMin / 60)) : null,
+    hoursPerDay: days ? r2(g.minutes / 60 / days) : null, measured: g.mMin >= g.minutes * 0.5,
+  }));
+}
+
+async function learnedStatus(load, nowMs = Date.now()) {
+  const from = new Date(nowMs - 28 * 86400000).toISOString();
+  const rows = await db.prepare('SELECT hour, status, minutes, kwh, measured FROM load_status_hourly WHERE load_id = ? AND hour >= ?').all(load.id, from).catch(() => []);
+  if (!rows.length) return { perStatus: [] };
+  const days = Math.max(1, new Set(rows.map((r) => r.hour.slice(0, 10))).size);
+  const perStatus = statusSummary(rows, days);
+  // the kW while on, learned from measured minutes that aren't "off"
+  const on = rows.filter((r) => r.measured && !/^(off|uit|0)$/i.test(r.status));
+  const onMin = on.reduce((a, r) => a + r.minutes, 0);
+  return { perStatus, kwOn: onMin >= 30 ? r2(on.reduce((a, r) => a + r.kwh, 0) / (onMin / 60)) : null };
+}
+
+// Everything for the consumer's own page: its state now, the timeline of the last 48 hours, kWh per
+// hour over 7 days and per status.
+async function loadDetail(load, nowMs = Date.now()) {
+  const since = new Date(nowMs - 48 * HOUR).toISOString();
+  const events = await db.prepare('SELECT ts, on_state, status, label, kw FROM load_events WHERE load_id = ? AND ts >= ? ORDER BY ts').all(load.id, since).catch(() => []);
+  const before = await db.prepare('SELECT ts, on_state, status, label, kw FROM load_events WHERE load_id = ? AND ts < ? ORDER BY ts DESC LIMIT 1').get(load.id, since).catch(() => null);
+  const hourly = await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ? ORDER BY hour').all(load.id, new Date(nowMs - 7 * 86400000).toISOString()).catch(() => []);
+  const em = require('./energyMeters');
+  const todayFrom = new Date(nowMs - 24 * HOUR).toISOString();
+  const last24 = await db.prepare('SELECT status, minutes, kwh FROM load_status_hourly WHERE load_id = ? AND hour >= ?').all(load.id, todayFrom).catch(() => []);
+  const onMin24 = last24.filter((r) => !/^(off|uit|0)$/i.test(r.status)).reduce((a, r) => a + r.minutes, 0);
+  return {
+    now: rt.samples.get(load.id) || null, timeline: timeline(before ? [{ ...before, ts: since }, ...events] : events, Date.parse(since), nowMs),
+    hourly, perStatus: (await learnedStatus(load, nowMs)).perStatus, last24: { onHours: r2(onMin24 / 60), kwh: r2(last24.reduce((a, r) => a + r.kwh, 0)) },
+    runs: load.kind === 'appliance' ? await db.prepare("SELECT * FROM load_runs WHERE load_id = ? AND kind = 'run' ORDER BY start_at DESC").all(load.id).then((x) => x.slice(0, 20)) : [],
+    hourStart: em.hourStart(nowMs),
+  };
+}
+
+// Pure: change events -> segments [{ from, to, key, on }] between fromMs and toMs.
+function timeline(events, fromMs, toMs) {
+  const out = [];
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    const a = Math.max(fromMs, Date.parse(e.ts));
+    const b = Math.min(toMs, i + 1 < events.length ? Date.parse(events[i + 1].ts) : toMs);
+    if (b <= a) continue;
+    const key = e.status !== null && e.status !== undefined ? String(e.label || e.status) : e.on_state === 1 ? 'on' : e.on_state === 0 ? 'off' : null;
+    if (key === null) continue;
+    const last = out[out.length - 1];
+    if (last && last.key === key && last.to === a) last.to = b;
+    else out.push({ from: a, to: b, key, on: e.on_state === null || e.on_state === undefined ? null : !!e.on_state });
+  }
+  return out;
 }
 
 // Learned patterns of one load (energyPatterns.js) from the last 8 weeks.
@@ -607,5 +779,6 @@ function invalidate() { rt.planAt = 0; }
 module.exports = {
   applyLive,
   KINDS, parseSettings, viName, toHours, effCost, planLoads, currentSignals, runStep, hourCost, quantile,
+  sourcesOf, parseStatusMap, loadState, statusKey, statusSummary, timeline, loadDetail, learnedStatus,
   listLoads, readLoad, sample, recalc, tick, getConfig, saveConfig, dailyReport, importHistory, learned, getRuntime, startEnergyManager, stopEnergyManager, invalidate,
 };

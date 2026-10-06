@@ -202,8 +202,27 @@ async function main() {
     [name, kind, priority, msId, uuid, JSON.stringify(s), 'shadow', iso(now - 40 * D)]
   );
   const dhw = await addLoad('Hot water', 'dhw', 1, CTL.dhw, { kw: 2.4, duration_h: 1.5, buffer_setpoint: 60 });
-  const hp = await addLoad('Heat pump', 'heatpump', 2, CTL.hp, { season: 'heating', kw: 1.6 });
-  const wm = await addLoad('Washing machine', 'appliance', 4, CTL.wm, {});
+  const hp = await addLoad('Heat pump', 'heatpump', 2, CTL.hp, { season: 'heating', kw: 1.6,
+    src: { onoff: fakeUuid('hp-on'), status: fakeUuid('hp-mode'), status_map: '0=Off\n1=Space heating\n2=Hot water\n3=Defrost', status_on: '1,2,3' } });
+  const wm = await addLoad('Washing machine', 'appliance', 4, CTL.wm, {
+    src: { status: fakeUuid('wm-status'), status_map: '0=Off\n1=Washing\n2=Spinning\n3=Done', status_on: '1,2' } });
+  // what was learned from those signals: minutes and kWh per status, and the changes of the last 2 days
+  const addStatus = (id, t, status, minutes, kwh) => db.prepare('INSERT INTO load_status_hourly (load_id, hour, status, minutes, kwh, measured) VALUES (?, ?, ?, ?, ?, 1)').run(id, iso(t), status, minutes, kwh);
+  const addEvent = (id, t, on, status, label, kw) => db.prepare('INSERT INTO load_events (load_id, ts, on_state, status, label, kw) VALUES (?, ?, ?, ?, ?, ?)').run(id, iso(t), on, status, label, kw);
+  for (let t = Math.floor((now - 21 * D) / H) * H; t < Math.floor(now / H) * H; t += H) {
+    const lh = localHour(t);
+    const heatMin = lh < 7 || lh > 21 ? 40 : 20;
+    const dhwMin = lh === 13 ? 25 : 0;
+    await addStatus(hp, t, 'Space heating', heatMin, r3(heatMin / 60 * 1.45));
+    if (dhwMin) await addStatus(hp, t, 'Hot water', dhwMin, r3(dhwMin / 60 * 2.3));
+    if (lh === 5 && rand() < 0.5) await addStatus(hp, t, 'Defrost', 6, 0.05);
+    await addStatus(hp, t, 'Off', 60 - heatMin - dhwMin, 0);
+    if (t >= now - 49 * H) {
+      await addEvent(hp, t, 1, '1', 'Space heating', 1.45);
+      if (dhwMin) { await addEvent(hp, t + heatMin * 60000, 1, '2', 'Hot water', 2.3); await addEvent(hp, t + (heatMin + dhwMin) * 60000, 0, '0', 'Off', 0); }
+      else await addEvent(hp, t + heatMin * 60000, 0, '0', 'Off', 0);
+    }
+  }
   for (let t = Math.floor((now - 21 * D) / H) * H; t < Math.floor(now / H) * H; t += H) {
     const lh = localHour(t);
     if (lh === 13) await db.prepare('INSERT INTO load_hourly (load_id, hour, kwh, source) VALUES (?, ?, ?, ?)').run(dhw, iso(t), r3(2.1 + rand() * 0.6), 'live');
@@ -219,6 +238,9 @@ async function main() {
     await db.prepare('INSERT INTO load_hourly (load_id, hour, kwh, source) VALUES (?, ?, ?, ?)').run(wm, iso(Math.floor(s / H) * H), kwh, 'live');
     await db.prepare('INSERT INTO load_runs (load_id, start_at, end_at, kwh, cost_eur, best_start, best_cost_eur, ready_by, duration_h, label, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(wm, iso(s), iso(s + 1.6 * H), kwh, r2(kwh * 0.21), iso(s + 2 * H), r2(kwh * 0.12), null, 1.6, null, 'run');
+    await addStatus(wm, Math.floor(s / H) * H, 'Washing', 80, r3(kwh * 0.85));
+    await addStatus(wm, Math.floor(s / H) * H + H, 'Spinning', 16, r3(kwh * 0.15));
+    if (day <= 2) { await addEvent(wm, s, 1, '1', 'Washing', 1.9); await addEvent(wm, s + 80 * 60000, 1, '2', 'Spinning', 0.6); await addEvent(wm, s + 96 * 60000, 0, '3', 'Done', 0); }
   }
 
   // ---- OCPP bridge (dry run) with eight weeks of sessions, a tariff and finance settings ----

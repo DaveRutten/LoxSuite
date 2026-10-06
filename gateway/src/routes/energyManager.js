@@ -15,8 +15,27 @@ router.get('/', asyncHandler(async (req, res) => {
   try { meters = (await require('../energyMeters').candidateMeters()).filter((m) => m.type === 'Meter'); } catch { meters = []; }
   res.render('energy-manager', {
     loads: loads.map((l) => ({ ...l, signals: (em.KINDS[l.kind]?.signals || []).map((s) => ({ ...s, vi: em.viName(l, s) })) })),
-    kinds: em.KINDS, meters, cfg: await em.getConfig(), saved: req.query.saved || null, error: req.query.error || null,
+    kinds: em.KINDS, meters, miniservers: await db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all().catch(() => []), cfg: await em.getConfig(), saved: req.query.saved || null, error: req.query.error || null,
   });
+}));
+
+// The readable states of a Miniserver, for the signal pickers of a consumer.
+router.get('/states/:miniserverId', asyncHandler(async (req, res) => {
+  const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(Number(req.params.miniserverId));
+  if (!ms) return res.status(404).json({ error: 'Miniserver not found' });
+  try { res.json({ states: await require('../loxoneStructure').getMonitorableStates(ms, { forceRefresh: req.query.refresh === '1' }) }); } catch (err) { res.status(502).json({ error: err.message }); }
+}));
+
+// One consumer in detail: its state now, the timeline, kWh per hour and per status, runs.
+router.get('/loads/:id', asyncHandler(async (req, res) => {
+  const load = (await em.listLoads()).find((l) => l.id === Number(req.params.id));
+  if (!load) return res.redirect('/energy-manager');
+  res.render('energy-load', { load, kinds: em.KINDS, src: em.sourcesOf(load.settings), learned: await em.learned(load), detail: await em.loadDetail(load) });
+}));
+router.get('/loads/:id/detail.json', asyncHandler(async (req, res) => {
+  const load = (await em.listLoads()).find((l) => l.id === Number(req.params.id));
+  if (!load) return res.status(404).json({ error: 'not found' });
+  res.json({ load: { id: load.id, name: load.name, kind: load.kind }, learned: await em.learned(load), detail: await em.loadDetail(load) });
 }));
 
 router.get('/data.json', asyncHandler(async (req, res) => {
@@ -47,6 +66,19 @@ router.get('/data.json', asyncHandler(async (req, res) => {
   res.json({ loads: out, hours: rt.plan?.hours || [], carKwh: rt.plan?.carKwh || {}, status: rt.status, live: rt.plan?.live || null, planAt: rt.plan?.at || null, cfg: await em.getConfig() });
 }));
 
+// The Loxone signals of a consumer (state uuids): on/off, status (+ value labels and which values mean
+// "running"), power (W/kW) and an energy counter (kWh/Wh). Null when none is chosen.
+function readSources(b) {
+  const uuid = (v) => { const x = String(v || '').trim(); return /^[0-9a-f-]{20,}$/i.test(x) ? x : null; };
+  const src = {
+    onoff: uuid(b.src_onoff), onoff_invert: !!b.src_onoff_invert,
+    status: uuid(b.src_status), status_map: String(b.src_status_map || '').slice(0, 600), status_on: String(b.src_status_on || '').slice(0, 120),
+    power: uuid(b.src_power), power_unit: b.src_power_unit === 'kW' ? 'kW' : 'W',
+    energy: uuid(b.src_energy), energy_unit: b.src_energy_unit === 'Wh' ? 'Wh' : 'kWh',
+  };
+  return src.onoff || src.status || src.power || src.energy ? src : null;
+}
+
 function readLoadForm(b) {
   const kind = em.KINDS[b.kind] ? b.kind : 'appliance';
   const [msId, uuid] = String(b.meter || '').split('|');
@@ -60,9 +92,12 @@ function readLoadForm(b) {
   const vi = {};
   for (const sig of em.KINDS[kind].signals) { const v = String(b[`vi_${sig.key}`] || '').trim(); if (v) vi[sig.key] = v; }
   if (Object.keys(vi).length) s.vi = vi;
+  const src = readSources(b);
+  if (src) s.src = src;
+  const srcMs = num(b.src_ms);
   return {
     name: String(b.name || '').trim() || em.KINDS[kind].label, kind, enabled: b.enabled ? 1 : 0, priority: Math.max(1, Math.min(9, num(b.priority, 5))),
-    miniserver_id: msId ? Number(msId) : null, meter_uuid: uuid || null, settings: JSON.stringify(s),
+    miniserver_id: msId ? Number(msId) : srcMs, meter_uuid: uuid || null, settings: JSON.stringify(s),
   };
 }
 
@@ -81,7 +116,7 @@ router.post('/loads', requirePermission('energy_manager', 'edit'), asyncHandler(
 
 router.post('/loads/:id/delete', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-  for (const t of ['em_log', 'load_runs', 'load_hourly']) await db.prepare(`DELETE FROM ${t} WHERE load_id = ?`).run(id);
+  for (const t of ['em_log', 'load_runs', 'load_hourly', 'load_status_hourly', 'load_events']) await db.prepare(`DELETE FROM ${t} WHERE load_id = ?`).run(id).catch(() => {});
   await db.prepare('DELETE FROM energy_loads WHERE id = ?').run(id);
   em.invalidate();
   res.redirect('/energy-manager?saved=deleted');

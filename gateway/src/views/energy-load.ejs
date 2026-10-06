@@ -1,0 +1,121 @@
+<%- include('partials/head', { pageTitle: 'Energy manager', active: 'energymanager' }) %>
+
+<p style="margin:0 0 0.6rem;"><a href="/energy-manager">&larr; <%= t('Energy manager') %></a></p>
+
+<div class="card">
+  <h2 style="margin:0;"><%= load.name %></h2>
+  <p class="hint" style="margin:0.15rem 0 0;"><%= t(kinds[load.kind] ? kinds[load.kind].label : load.kind) %> · <span id="el-updated"></span></p>
+  <div id="el-tiles" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:0.8rem; margin-top:0.6rem;"></div>
+  <p class="hint" style="margin:0.6rem 0 0;">
+    <%= t('Signals:') %>
+    <%= [load.meter_uuid ? t('Loxone meter') : null, src.onoff ? t('on/off') : null, src.status ? t('status') : null, src.power ? t('power') : null, src.energy ? t('energy counter') : null].filter(Boolean).join(' · ') || t('none yet — add them under Consumers') %>
+  </p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;"><%= t('Last 48 hours') %></h2>
+  <div id="el-timeline"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;"><%= t('kWh per hour — last 7 days') %></h2>
+  <div id="el-hourly"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;"><%= t('Per status — last 4 weeks') %></h2>
+  <div id="el-status"></div>
+</div>
+
+<% if (load.kind === 'appliance') { %>
+<div class="card">
+  <h2 style="margin-top:0;"><%= t('Runs') %></h2>
+  <div id="el-runs"></div>
+</div>
+<% } %>
+
+<script>
+(function () {
+  var ID = <%- JSON.stringify(load.id) %>;
+  var data = <%- JSON.stringify({ learned, detail }).replace(/</g, '\\u003c') %>;
+  var TL = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function hh(t) { return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  function dur(min) { return min >= 60 ? Math.floor(min / 60) + ' h ' + String(Math.round(min % 60)).padStart(2, '0') : Math.round(min) + ' min'; }
+  var PALETTE = ['#4caf50', '#4a7bd0', '#e67e22', '#9b59b6', '#16a085', '#d4a017', '#e5534b', '#7f8c8d'];
+  var colorOf = {};
+  function color(key) {
+    if (/^(off|uit|0)$/i.test(key)) return '#9aa5b1';
+    if (!colorOf[key]) colorOf[key] = PALETTE[Object.keys(colorOf).length % PALETTE.length];
+    return colorOf[key];
+  }
+  function tile(label, value, sub) {
+    return '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">' + esc(label) + '</div><div style="font-size:1.15rem; font-weight:700;">' + value + '</div>' + (sub ? '<div class="hint" style="margin:0; font-size:0.75rem;">' + sub + '</div>' : '') + '</div>';
+  }
+
+  function render() {
+    var d = data.detail, lr = data.learned || {}, now = d.now;
+    var state = '—';
+    if (now && (now.on != null || now.status != null)) {
+      var txt = now.status != null ? (now.label || now.status) : (now.on ? TL('on') : TL('off'));
+      state = '<span style="display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; background:' + color(now.status != null ? txt : (now.on ? 'on' : 'off')) + ';"></span>' + esc(txt);
+    }
+    var since = now && now.since ? TL('in this state for {0}').replace('{0}', dur((Date.now() - now.since) / 60000)) : '';
+    document.getElementById('el-tiles').innerHTML =
+      tile(TL('State now'), state, since) +
+      tile(TL('Power now'), now && now.kw != null ? nf(now.kw, 2) + ' kW' : '—', now && now.total != null ? TL('counter {0} kWh').replace('{0}', nf(now.total, 1)) : '') +
+      tile(TL('Last 24 hours'), nf(d.last24.kwh, 2) + ' kWh', TL('on for {0}').replace('{0}', dur(d.last24.onHours * 60))) +
+      tile(TL('Learned'), lr.kwOn != null ? nf(lr.kwOn, 2) + ' kW' : (lr.kwh != null ? TL('{0} kWh per run').replace('{0}', nf(lr.kwh, 2)) : '—'), lr.kwhPerDay != null ? TL('{0} kWh per day').replace('{0}', nf(lr.kwhPerDay, 1)) : (lr.runs ? TL('{0} runs measured').replace('{0}', lr.runs) : ''));
+    document.getElementById('el-updated').textContent = now && now.at ? TL('last read {0}').replace('{0}', hh(now.at)) : '';
+
+    // timeline
+    var el = document.getElementById('el-timeline');
+    var segs = d.timeline || [];
+    if (!segs.length) el.innerHTML = '<p class="hint" style="margin:0;">' + esc(TL('No on/off or status changes recorded yet — they appear once an on/off or status signal is chosen.')) + '</p>';
+    else {
+      var W = lsChartW(el, 900), H = 36, t1 = Date.now(), t0 = t1 - 48 * 3600000;
+      var X = function (ms) { return (ms - t0) / (t1 - t0) * W; };
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 18) + '" width="100%" style="display:block;">';
+      segs.forEach(function (sg) { var x = X(sg.from), w = Math.max(1, X(sg.to) - x); svg += '<rect x="' + x + '" y="4" width="' + w + '" height="' + (H - 8) + '" fill="' + color(sg.key) + '" opacity="0.9"><title>' + esc(sg.key + ' · ' + hh(sg.from) + '–' + hh(sg.to) + ' (' + dur((sg.to - sg.from) / 60000) + ')') + '</title></rect>'; });
+      for (var t = Math.ceil(t0 / 3600000) * 3600000; t < t1; t += 3600000) { var dt = new Date(t); if (dt.getHours() % 6 === 0) svg += '<line x1="' + X(t) + '" y1="0" x2="' + X(t) + '" y2="' + H + '" stroke="currentColor" opacity="0.15"/><text x="' + (X(t) + 2) + '" y="' + (H + 13) + '" font-size="10" fill="currentColor" opacity="0.6">' + (dt.getHours() === 0 ? dt.toLocaleDateString([], { weekday: 'short' }) : String(dt.getHours()).padStart(2, '0') + ':00') + '</text>'; }
+      var keys = []; segs.forEach(function (sg) { if (keys.indexOf(sg.key) < 0) keys.push(sg.key); });
+      el.innerHTML = svg + '</svg><div class="hint" style="margin:0.3rem 0 0;">' + keys.map(function (k) { return '<span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:' + color(k) + '; margin:0 4px 0 10px;"></span>' + esc(k); }).join('') + '</div>';
+    }
+
+    // kWh per hour, 7 days
+    var hel = document.getElementById('el-hourly');
+    var rows = d.hourly || [];
+    if (!rows.length) hel.innerHTML = '<p class="hint" style="margin:0;">' + esc(TL('No measurements yet.')) + '</p>';
+    else {
+      var W2 = lsChartW(hel, 900), H2 = 120, e1 = Math.floor(Date.now() / 3600000) * 3600000 + 3600000, e0 = e1 - 7 * 24 * 3600000;
+      var X2 = function (ms) { return (ms - e0) / (e1 - e0) * W2; }, bw = W2 / (7 * 24);
+      var max = Math.max.apply(null, rows.map(function (r) { return r.kwh; }).concat([0.1]));
+      var s2 = '<svg viewBox="0 0 ' + W2 + ' ' + (H2 + 16) + '" width="100%" style="display:block;">';
+      rows.forEach(function (r) { var ms = Date.parse(r.hour), h = r.kwh / max * H2; s2 += '<rect x="' + X2(ms) + '" y="' + (H2 - h) + '" width="' + Math.max(1, bw - 0.5) + '" height="' + h + '" fill="var(--accent, #5CA83F)" opacity="0.85"><title>' + esc(new Date(ms).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ': ' + nf(r.kwh, 2) + ' kWh') + '</title></rect>'; });
+      for (var t2 = Math.ceil(e0 / 86400000) * 86400000; t2 < e1; t2 += 86400000) s2 += '<text x="' + (X2(t2) + 2) + '" y="' + (H2 + 12) + '" font-size="10" fill="currentColor" opacity="0.6">' + new Date(t2).toLocaleDateString([], { weekday: 'short', day: 'numeric' }) + '</text>';
+      hel.innerHTML = s2 + '</svg><div class="hint" style="margin:0.3rem 0 0;">' + esc(TL('Highest hour: {0} kWh').replace('{0}', nf(max, 2))) + '</div>';
+    }
+
+    // per status
+    var sel = document.getElementById('el-status');
+    var ps = d.perStatus || [];
+    sel.innerHTML = ps.length ? '<div style="overflow-x:auto;"><table><thead><tr><th>' + esc(TL('Status')) + '</th><th>' + esc(TL('Hours')) + '</th><th>' + esc(TL('Per day')) + '</th><th>kWh</th><th>' + esc(TL('Typical power')) + '</th></tr></thead><tbody>' +
+      ps.map(function (x) { return '<tr><td><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:' + color(x.status) + '; margin-right:6px;"></span>' + esc(x.status) + '</td><td>' + nf(x.hours, 1) + '</td><td>' + nf(x.hoursPerDay, 1) + ' h</td><td>' + nf(x.kwh, 1) + (x.measured ? '' : ' <span class="hint">' + esc(TL('(estimated)')) + '</span>') + '</td><td>' + (x.kw > 0.005 ? nf(x.kw, 2) + ' kW' : '—') + '</td></tr>'; }).join('') + '</tbody></table></div>'
+      : '<p class="hint" style="margin:0;">' + esc(TL('Nothing learned per status yet.')) + '</p>';
+
+    var rel = document.getElementById('el-runs');
+    if (rel) {
+      var runs = d.runs || [];
+      rel.innerHTML = runs.length ? '<div style="overflow-x:auto;"><table><thead><tr><th>' + esc(TL('Start')) + '</th><th>' + esc(TL('Duration')) + '</th><th>kWh</th><th>' + esc(TL('Cost')) + '</th><th>' + esc(TL('Best start (hindsight)')) + '</th></tr></thead><tbody>' +
+        runs.map(function (r) { return '<tr><td>' + esc(new Date(r.start_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + dur((Date.parse(r.end_at) - Date.parse(r.start_at)) / 60000) + '</td><td>' + nf(r.kwh, 2) + '</td><td>' + (r.cost_eur != null ? '€ ' + nf(r.cost_eur, 2) : '—') + '</td><td>' + (r.best_start ? hh(r.best_start) : '—') + '</td></tr>'; }).join('') + '</tbody></table></div>'
+        : '<p class="hint" style="margin:0;">' + esc(TL('No runs measured yet.')) + '</p>';
+    }
+  }
+  render();
+  lsOnResize(render);
+  setInterval(function () { fetch('/energy-manager/loads/' + ID + '/detail.json').then(function (r) { return r.json(); }).then(function (d) { if (d.detail) { data = d; render(); } }).catch(function () {}); }, 60000);
+})();
+</script>
+
+<%- include('partials/foot') %>
