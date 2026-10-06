@@ -85,7 +85,7 @@
 <% if (canView('charging')) { %>
 <div class="card" id="calendars">
   <h2 style="margin-top:0;"><%= t('Calendars') %></h2>
-  <% if (!site.lat) { %><p class="hint" style="color:#b8860b;"><%= t('Set the home location under') %> <a href="/planner#settings"><%= t('Planner → Settings') %></a> <%= t('so distances can be calculated.') %></p><% } %>
+  <% if (!site.lat) { %><p class="hint" style="color:#b8860b;"><%= t('Set the home location under') %> <a href="/settings/energy#prices"><%= t('Administration → Energy & charging') %></a> <%= t('so distances can be calculated.') %></p><% } %>
   <% if (calendars.length) { %>
     <table>
       <thead><tr><th><%= t('Name') %></th><th><%= t('Address') %></th><th><%= t('Car') %></th><th><%= t('Last sync') %></th><th></th></tr></thead>
@@ -208,6 +208,126 @@
     if (ms.value) load();
   })();
   </script>
+</div>
+<% if (canEdit('charging')) { %>
+<div class="card" id="charging">
+  <h2 style="margin-top:0;"><%= t('Smart charging') %></h2>
+
+  <details <%= chargingSaved === 'charging' ? 'open' : '' %>>
+    <summary><strong><%= t('Charging & output to Loxone') %></strong></summary>
+    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+      <input type="hidden" name="section" value="charging">
+      <div class="form-grid">
+        <div><label><%= t('Minimum power (kW)') %></label><input type="text" name="min_kw" value="<%= cfg.min_kw %>"></div>
+        <div><label><%= t('Maximum power (kW)') %></label><input type="text" name="max_kw" value="<%= cfg.max_kw %>"></div>
+        <div><label><%= t('Grid connection limit (kW)') %></label><input type="text" name="grid_limit_kw" value="<%= cfg.grid_limit_kw %>"></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div><label><%= t('Output') %></label><select name="output"><option value="advise" <%= cfg.output !== 'live' ? 'selected' : '' %>><%= t('Advise (don\'t control the Wallbox)') %></option><option value="live" <%= cfg.output === 'live' ? 'selected' : '' %>><%= t('Live (write to Loxone)') %></option></select></div>
+        <div><label><%= t('Virtual input for the power (kW, 0 = stop)') %></label><input type="text" name="vi_setpoint" value="<%= cfg.vi_setpoint %>" placeholder="<%= t('LoxSuite laadvermogen') %>"></div>
+        <% if (miniservers.length > 1) { %><div><label><%= t('Miniserver with the virtual inputs') %></label><select name="vi_miniserver_id"><% miniservers.forEach(m => { %><option value="<%= m.id %>" <%= Number(cfg.vi_miniserver_id || miniservers[0].id) === m.id ? 'selected' : '' %>><%= m.name %></option><% }) %></select></div><% } %>
+        <div><label><%= t('Virtual input "charging allowed" (optional, 1/0)') %></label><input type="text" name="vi_enable" value="<%= cfg.vi_enable %>" placeholder="<%= t('LoxSuite laden') %>"></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;">
+        <strong><%= t('Wiring in Loxone Config') %></strong> <%= t('(Wallbox block):') %>
+      </p>
+      <ol class="hint" style="margin:0.3rem 0 0; padding-left:1.2rem; line-height:1.55;">
+        <li><%= t('Create the virtual inputs on the Miniserver LoxSuite sends to') %><% if (miniservers.length > 1) { %> <%= t('(chosen above)') %><% } %> <%= t('— in a gateway/client project that is usually the gateway; the Wallbox block may sit on a client, Loxone Config links across.') %></li>
+        <li><%= t('Virtual input (analog, kW) with the power name above → input') %> <strong><%= t('Lm1') %></strong> (<em><%= t('Limit charging mode 1') %></em><%= t('). Mode 1 then becomes the mode "set by logic"; LoxSuite sends 0 to stop and otherwise a value between the block\'s min and max.') %></li>
+        <li><%= t('Optional: virtual input (digital) with the "charging allowed" name → input') %> <strong><%= t('Ec') %></strong> (<em><%= t('Enable charging') %></em><%= t('). LoxSuite keeps it at 1 while it wants to charge and 0 to stop (a falling edge stops the session\'s charging). Note: once Ec is wired, charging needs LoxSuite (or other logic) to set it — leave it unwired until Output is') %> <em><%= t('Live') %></em> <%= t('and tested.') %></li>
+        <li><%= t('Parameter') %> <strong><%= t('Muv') %></strong> (<em><%= t('Mode after unplugging vehicle') %></em>) = <strong>1</strong><%= t(', so every new session starts in the LoxSuite-controlled mode. With 0 the Wallbox keeps the last mode, e.g. "Max power", and charges straight away.') %></li>
+        <li><%= t('Save to the Miniserver, keep Output on') %> <em><%= t('Advise') %></em><%= t(', and test with') %> <em><%= t('Send test value') %></em> <%= t('while no car is connected: the value of mode 1 in the Loxone app should follow it.') %></li>
+      </ol>
+      <p class="hint" style="margin:0.3rem 0 0;"><%= t('Every value sent and what the Wallbox and the car did with it is recorded in the') %>
+        <a href="/planner/log"><%= t('Charge log') %></a><%= t(', with automatic checks per session — test whenever it suits you and look later. LoxSuite writes the power on every change and at least every 5 minutes; it never controls the Wallbox directly, only through these virtual inputs.') %>
+      </p>
+      <div class="btn-row" style="margin-top:0.5rem; align-items:flex-end;">
+        <div><label><%= t('Test value (kW)') %></label><input type="text" id="pl-test-kw" value="0" style="width:6rem;"></div>
+        <button type="button" class="btn-soft" id="pl-test-btn"><%= t('Send test value') %></button>
+        <span class="hint" id="pl-test-msg" style="margin:0;"></span>
+        <a href="/planner/log" class="btn-soft" style="margin-left:auto;"><%= t('Charge log →') %></a>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div><label><%= t('Solar: start at surplus (kW)') %></label><input type="text" name="pv_start_kw" value="<%= cfg.pv_start_kw ?? '' %>" placeholder="<%= t('= minimum power') %>"></div>
+        <div><label><%= t('Solar: start after (s)') %></label><input type="text" name="pv_start_delay_s" value="<%= cfg.pv_start_delay_s %>"></div>
+        <div><label><%= t('Solar: stop after shortfall for (s)') %></label><input type="text" name="pv_stop_delay_s" value="<%= cfg.pv_stop_delay_s %>"></div>
+        <div><label><%= t('Solar: grid import allowed (kW)') %></label><input type="text" name="pv_allowed_import_kw" value="<%= cfg.pv_allowed_import_kw %>"></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div><label><%= t('Use solar outside the plan too') %></label><%- toggleSwitch('pv_opportunistic', !!cfg.pv_opportunistic) %></div>
+        <div><label><%= t('Count on solar when planning') %></label><select name="solar_trust">
+          <option value="low" <%= cfg.solar_trust === 'low' ? 'selected' : '' %>><%= t('Careful (70% of the forecast)') %></option>
+          <option value="expected" <%= cfg.solar_trust === 'expected' ? 'selected' : '' %>><%= t('As forecast') %></option>
+          <option value="bonus" <%= cfg.solar_trust === 'bonus' ? 'selected' : '' %>><%= t('Not at all (solar is a bonus)') %></option></select></div>
+        <div><label><%= t('Max. price (€/kWh, optional)') %></label><input type="text" name="max_price_eur_kwh" value="<%= cfg.max_price_eur_kwh ?? '' %>"></div>
+        <div><label><%= t('Battery full, still plugged in') %></label><select name="full_hold"><option value="release" <%= cfg.full_hold !== 'off' ? 'selected' : '' %>><%= t('Keep the Wallbox open at the minimum (the car tops itself up and pre-heats from the grid)') %></option><option value="off" <%= cfg.full_hold === 'off' ? 'selected' : '' %>><%= t('Nothing until unplugged') %></option></select></div>
+        <div><label><%= t('Ready before a learned departure') %></label><select name="depart_certainty">
+          <option value="safe" <%= cfg.depart_certainty === 'safe' ? 'selected' : '' %>><%= t('Safe: 9 in 10 times') %></option>
+          <option value="normal" <%= !cfg.depart_certainty || cfg.depart_certainty === 'normal' ? 'selected' : '' %>><%= t('Normal: 3 in 4 times') %></option>
+          <option value="relaxed" <%= cfg.depart_certainty === 'relaxed' ? 'selected' : '' %>><%= t('Relaxed: half of the times (cheapest)') %></option></select></div>
+        <div><label><%= t('No grid top-up below (kWh)') %></label><input type="text" name="min_topup_kwh" value="<%= cfg.min_topup_kwh ?? 1 %>"></div>
+        <div><label><%= t('Too few cheap intervals (full electric)') %></label><select name="insufficient"><option value="charge" <%= cfg.insufficient !== 'stop' ? 'selected' : '' %>><%= t('Charge anyway') %></option><option value="stop" <%= cfg.insufficient === 'stop' ? 'selected' : '' %>><%= t('Stop at the max. price') %></option></select></div>
+        <div><label><%= t('Value of exported solar') %></label><select name="feed_in"><option value="saldering" <%= cfg.feed_in !== 'fixed' ? 'selected' : '' %>><%= t('Net metering (price of that moment)') %></option><option value="fixed" <%= cfg.feed_in === 'fixed' ? 'selected' : '' %>><%= t('Fixed feed-in tariff') %></option></select></div>
+        <div><label><%= t('Feed-in tariff (€/kWh)') %></label><input type="text" name="feed_in_eur_kwh" value="<%= cfg.feed_in_eur_kwh %>"></div>
+      </div>
+      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
+    </form>
+  </details>
+
+
+  <details style="margin-top:0.6rem;" <%= chargingSaved === 'reminders' ? 'open' : '' %>>
+    <summary><strong><%= t('Reminders') %></strong></summary>
+    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+      <input type="hidden" name="section" value="reminders">
+      <div class="form-grid">
+        <div><label><%= t('"Plug in" reminders') %></label><%- toggleSwitch('enabled', !!remCfg.enabled) %></div>
+        <div data-show-if="enabled"><label><%= t('Only when it saves at least (€)') %></label><input type="text" name="threshold_eur" value="<%= remCfg.threshold_eur %>"></div>
+        <div data-show-if="enabled"><label><%= t('Evening starts at') %></label><input type="text" name="evening_from" value="<%= remCfg.evening_from %>"></div>
+      </div>
+      <div class="form-grid" style="margin-top:0.8rem;">
+        <div data-show-if="enabled"><label><%= t('Quiet from') %></label><input type="text" name="quiet_from" value="<%= remCfg.quiet_from %>"></div>
+        <div data-show-if="enabled"><label><%= t('Quiet until') %></label><input type="text" name="quiet_until" value="<%= remCfg.quiet_until %>"></div>
+        <div data-show-if="enabled"><label><%= t('"Remind me later" at') %></label><input type="text" name="snooze_to" value="<%= remCfg.snooze_to %>"></div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0;"><%= t('Reminders go through notification rules of type') %> <a href="/admin/notifications?trigger_type=car_reminder"><%= t('Car: plug in / swap reminders') %></a> and <a href="/admin/notifications?trigger_type=charging_plan"><%= t('Car: charging plan warnings') %></a> <%= t('— with the') %> <a href="/app"><%= t('LoxSuite app') %></a> <%= t('channel they arrive as push messages with buttons.') %></p>
+      <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
+    </form>
+  </details>
+</div>
+<script>
+(function () {
+  var tb = document.getElementById('pl-test-btn');
+  if (tb) tb.addEventListener('click', function () {
+    if (!confirm('Send this value to the Loxone virtual input now? Do this with no car connected.')) return;
+    fetch('/planner/test-output.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kw: document.getElementById('pl-test-kw').value }) }).then(function (r) { return r.json(); }).then(function (d) { document.getElementById('pl-test-msg').textContent = d.message || ''; });
+  });
+})();
+</script>
+
+<% } %>
+
+<% } %>
+<% if (typeof emLoads !== 'undefined' && emLoads && canEdit('energy_manager')) { %>
+<div class="card" id="energy-manager">
+  <h2 style="margin-top:0;"><%= t('Energy manager — consumers') %></h2>
+  <p class="hint"><%= t('Output: shadow mode — LoxSuite measures, plans and shows on the Energy manager page what it would send to Loxone; nothing is sent yet. Switching a consumer to live (through the virtual inputs below) comes in a later version.') %></p>
+  <p class="hint"><%= t('Priority 1 is served first when there is solar surplus. The car (Smart charging) takes its place at the priority set below.') %></p>
+  <% emLoads.forEach(l => { %>
+    <details style="border-top:1px solid var(--border); padding:0.5rem 0;">
+      <summary style="cursor:pointer;"><strong><%= l.name %></strong> <span class="hint">· <%= emKinds[l.kind].label %> <%= t('· priority') %> <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
+      <%- include('partials/energy-load-form', { l, kinds: emKinds, meters: emMeters, miniservers }) %>
+      <form method="post" action="/energy-manager/loads/<%= l.id %>/delete" style="margin-top:0.4rem;" onsubmit="return confirm(<%= JSON.stringify(t('Delete {name} and its history?', { name: l.name })) %>);"><button type="submit" class="btn-soft"><%= t('Delete') %></button></form>
+    </details>
+  <% }) %>
+  <details style="border-top:1px solid var(--border); padding:0.5rem 0;" <%= emLoads.length ? '' : 'open' %>>
+    <summary style="cursor:pointer;"><strong><%= t('+ Add a consumer') %></strong></summary>
+    <%- include('partials/energy-load-form', { l: null, kinds: emKinds, meters: emMeters, miniservers }) %>
+  </details>
+  <form method="post" action="/energy-manager/settings" class="form-grid" style="margin-top:0.8rem; border-top:1px solid var(--border); padding-top:0.8rem;">
+    <div><label><%= t('Priority of the car') %></label><input type="text" name="car_priority" value="<%= emCfg.car_priority %>"></div>
+    <div><label><%= t('Prefer own solar (€/kWh bonus)') %></label><input type="text" name="solar_bonus_eur" value="<%= emCfg.solar_bonus_eur %>"></div>
+    <div style="align-self:end;"><button type="submit" class="btn-soft"><%= t('Save') %></button></div>
+  </form>
 </div>
 <% } %>
 

@@ -2,13 +2,13 @@
 
 <p class="hint">
   <%= t('Every charging session is recorded here automatically: what the Wallbox did, what LoxSuite sent to the virtual inputs and what the car reported. LoxSuite checks per session whether the control works. You can test at any moment and look at the result later — no need to watch.') %>
-  <a href="/planner#settings"><%= t('← Smart charging') %></a>
+  <a href="/planner"><%= t('← Smart charging') %></a>
 </p>
 
 <details class="card" style="padding-bottom:0.6rem;">
   <summary style="cursor:pointer; font-weight:600;"><%= t('How to test the Wallbox control') %></summary>
   <ol class="hint" style="margin:0.5rem 0 0; padding-left:1.2rem; line-height:1.6;">
-    <li><%= t('Under') %> <a href="/planner#settings"><%= t('Smart charging → Output') %></a><%= t(', send') %> <strong>0</strong> <%= t('with') %> <em><%= t('Send test value') %></em> <%= t('(Output can stay on') %> <em><%= t('Advise') %></em>).</li>
+    <li><%= t('Under') %> <a href="/settings/energy#charging"><%= t('Administration → Energy & charging → Smart charging') %></a><%= t(', send') %> <strong>0</strong> <%= t('with') %> <em><%= t('Send test value') %></em> <%= t('(Output can stay on') %> <em><%= t('Advise') %></em>).</li>
     <li><%= t('Plug the car in (battery not full) and leave it at 0 for at least') %> <strong><%= t('10 minutes') %></strong><%= t(': it should not charge and the car should just wait.') %></li>
     <li><%= t('Send') %> <strong>6</strong><%= t(': it should start within 2 minutes at about 6 kW.') %></li>
     <li><%= t('Send') %> <strong>0</strong><%= t(': it should stop within a minute. Then send the value you want to charge at, or switch Output to') %> <em><%= t('Live') %></em> <%= t('once everything passed.') %></li>

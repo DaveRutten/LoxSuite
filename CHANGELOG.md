@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.40.1-alpha.1] - 2026-10-06
+
+### Changed
+- **Advise/live and the other settings out of the overviews**: Smart charging's settings (charging, *Output*
+  advise or live with the virtual inputs and the test value, reminders) and the energy manager's consumers (their
+  signals, priority, settings, shadow mode) plus the car's priority moved to Administration → Energy & charging.
+  The Smart charging and Energy manager pages are overviews only: no "Advise mode" banner, no "advise only" /
+  "shadow" labels, no "later, to let LoxSuite drive it" lines — just a link to where it is set.
+
 ## [0.40.0-alpha.1] - 2026-10-06
 
 ### Added

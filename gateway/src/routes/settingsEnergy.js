@@ -29,6 +29,8 @@ router.get('/', asyncHandler(async (req, res) => {
     calendars: await agenda.listCalendars(), vehicles,
     climateRuns: await require('../carClimate').recent(8),
     skodaCars: vehicles.some((v) => vehiclesMod.sourceKind(v) === 'skoda'),
+    remCfg: await require('../reminders').getConfig().catch(() => ({})), chargingSaved: req.query.saved || null,
+    ...(await energyManagerData(req)),
     dayCfg: await require('../dayType').getConfig(),
     dayTypes: [...(await require('../dayType').typesBetween(Date.now(), Date.now() + 14 * 86400000).catch(() => new Map()))].map(([day, v]) => ({ day, ...v })),
     miniservers: await db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all().catch(() => []),
@@ -56,6 +58,22 @@ router.get('/states/:miniserverId', asyncHandler(async (req, res) => {
   if (!ms) return res.status(404).json({ error: 'Miniserver not found' });
   try { res.json({ states: await require('../loxoneStructure').getMonitorableStates(ms) }); } catch (err) { res.status(502).json({ error: err.message }); }
 }));
+
+// The energy manager's consumers (their settings live here, the overview on the Energy manager page).
+async function energyManagerData(req) {
+  try {
+    const mods = require('../modules');
+    if (!mods.isOn('energy_manager')) return {};
+  } catch { /* modules not loaded */ }
+  const em = require('../energyManager');
+  const loads = await em.listLoads().catch(() => []);
+  let meters = [];
+  try { meters = (await require('../energyMeters').candidateMeters()).filter((m) => m.type === 'Meter'); } catch { meters = []; }
+  return {
+    emLoads: loads.map((l) => ({ ...l, signals: (em.KINDS[l.kind]?.signals || []).map((x) => ({ ...x, vi: em.viName(l, x) })) })),
+    emKinds: em.KINDS, emMeters: meters, emCfg: await em.getConfig(),
+  };
+}
 
 module.exports = router;
 

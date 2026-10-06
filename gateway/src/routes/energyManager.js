@@ -127,7 +127,7 @@ router.post('/loads', requirePermission('energy_manager', 'edit'), asyncHandler(
       .run(v.name, v.kind, v.enabled, v.priority, v.miniserver_id, v.meter_uuid, v.settings, new Date().toISOString());
   }
   em.invalidate();
-  res.redirect('/energy-manager?saved=load');
+  res.redirect('/settings/energy?saved=load#energy-manager');
 }));
 
 router.post('/loads/:id/delete', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
@@ -135,7 +135,7 @@ router.post('/loads/:id/delete', requirePermission('energy_manager', 'edit'), as
   for (const t of ['em_log', 'load_runs', 'load_hourly', 'load_status_hourly', 'load_events']) await db.prepare(`DELETE FROM ${t} WHERE load_id = ?`).run(id).catch(() => {});
   await db.prepare('DELETE FROM energy_loads WHERE id = ?').run(id);
   em.invalidate();
-  res.redirect('/energy-manager?saved=deleted');
+  res.redirect('/settings/energy?saved=deleted#energy-manager');
 }));
 
 // "Not right": leave a learned pattern out (or put them all back).
@@ -167,7 +167,7 @@ router.post('/unknown.json', requirePermission('energy_manager', 'edit'), asyncH
 
 router.post('/settings', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   await em.saveConfig({ car_priority: Math.max(1, Math.min(9, num(req.body.car_priority, 3))), solar_bonus_eur: Math.max(0, num(req.body.solar_bonus_eur, 0.05)) });
-  res.redirect('/energy-manager?saved=settings');
+  res.redirect('/settings/energy?saved=settings#energy-manager');
 }));
 
 // "Ready by": plan a run of an appliance (shadow: LoxSuite shows and notifies the best start).

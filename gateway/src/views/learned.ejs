@@ -120,7 +120,7 @@
   function renderSolar(d) {
     var s = d.solar;
     var el = document.getElementById('ln-solar');
-    if (!s.config.kwp) { el.innerHTML = '<p class="hint" style="margin:0;">Set your solar array (kWp, tilt, direction) and home location under <a href="/planner#settings">Planner &rarr; Settings</a>.</p>'; return; }
+    if (!s.config.kwp) { el.innerHTML = '<p class="hint" style="margin:0;">Set your solar array (kWp, tilt, direction) and home location under <a href="/settings/energy#prices">Administration &rarr; Energy &amp; charging</a>.</p>'; return; }
     var hours = s.tomorrow.hours;
     var html = '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700; color:#d4a017;">' + nf(s.tomorrow.total_kwh, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh</span></div>' +
       '<div class="hint" style="margin:0;">range ' + nf(s.tomorrow.low_kwh, 0) + ' – ' + nf(s.tomorrow.high_kwh, 0) + ' kWh' + (s.status && s.status.ok ? ' · updated ' + new Date(s.status.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : s.status && s.status.error ? ' · <span style="color:var(--danger);">' + esc(s.status.error) + '</span>' : '') + '</div></div>';

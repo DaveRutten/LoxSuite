@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.40.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.40.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -692,7 +692,9 @@ and alerting are independent.
 ### Smart charging (Wallbox menu)
 
 Charges the car on time in the cheapest way, from your own data. Starts in **Advise** mode (it shows what it
-would do); set *Output* to *Live* to let it control the Wallbox through a Loxone virtual input.
+would do); set *Output* to *Live* under Administration → Energy & charging → Smart charging to let it control the
+Wallbox through a Loxone virtual input. Its settings (charging, output, reminders) all live there; the Smart
+charging page itself is the overview.
 
 - **Modes**: *Off*, *Now* (full power), *Solar* (only solar surplus, with start/stop delays), *Min + Solar*
   (minimum power plus surplus) and *Smart plan* (ready by the deadline at the lowest cost). *Charge now* / *Pause*
@@ -833,7 +835,8 @@ The other big consumers — **hot water**, a **heat pump** (heating/cooling) and
 dryer…) — planned together with the car from the prices, the solar forecast and the learned house load, in
 priority order for the solar surplus (the car takes its own place). Runs in **shadow mode**: it measures, plans and
 shows per load what it would send to Loxone (virtual inputs) and why, so you can compare with your own Loxone
-logic first. It learns usage **patterns** (hot water every day around 07:00, the washing machine on Wednesday
+logic first. The consumers themselves are set up under Administration → Energy & charging; the Energy manager page
+is the overview. It learns usage **patterns** (hot water every day around 07:00, the washing machine on Wednesday
 morning) and plans ahead of them, works with the **real values** as well as the forecast (the current hour from
 the meters, the next hours corrected when the solar forecast is off; an hour planned on solar that isn't there
 waits), and shows per day what each load cost and what better timing would have saved.

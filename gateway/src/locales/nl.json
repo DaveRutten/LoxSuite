@@ -4042,5 +4042,13 @@
   "When": "Wanneer",
   "Words for \"away\" in the agenda": "Woorden voor \"weg\" in de agenda",
   "Words for \"working from home\"": "Woorden voor \"thuiswerken\"",
-  "standby": "stand-by"
+  "standby": "stand-by",
+  "{0} · prio {1}": "{0} · prio {1}",
+  "Administration → Energy & charging → Smart charging": "Beheer → Energie & laden → Slim laden",
+  "Charging, the output to Loxone (advise or live) and reminders are set under": "Laden, de uitgang naar Loxone (advies of live) en herinneringen stel je in onder",
+  "Consumers (their Loxone signals, priority and settings) and the car's priority are set under": "Verbruikers (hun Loxone-signalen, prioriteit en instellingen) en de prioriteit van de auto stel je in onder",
+  "Energy manager — consumers": "Energiemanager — verbruikers",
+  "Output: shadow mode — LoxSuite measures, plans and shows on the Energy manager page what it would send to Loxone; nothing is sent yet. Switching a consumer to live (through the virtual inputs below) comes in a later version.": "Uitgang: schaduwmodus — LoxSuite meet, plant en laat op de pagina Energiemanager zien wat hij naar Loxone zou sturen; er wordt nog niets verstuurd. Een verbruiker live zetten (via de virtuele ingangen hieronder) komt in een volgende versie.",
+  "The other big consumers, planned together with the car from the prices, the solar forecast and your house load.": "De andere grote verbruikers, samen met de auto gepland op de prijzen, de zonnevoorspelling en je huisverbruik.",
+  "Updated {0}": "Bijgewerkt {0}"
 }

@@ -182,3 +182,16 @@ test('agenda page: Sync sits left of Day / Week / Month / Year', () => {
   const views = v.indexOf('id="ag-views"');
   assert.ok(sync > 0 && views > 0 && sync < views);
 });
+
+test('advise/live switches live in Administration → Energy & charging, not on the overview pages', () => {
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', 'src', 'views', f), 'utf8');
+  const planner = read('planner.ejs');
+  assert.ok(!/Advise mode\./.test(planner), 'no advise banner on Smart charging');
+  assert.ok(!/name="output"/.test(planner), 'no output switch on Smart charging');
+  const em = read('energy-manager.ejs');
+  assert.ok(!/'shadow'/.test(em), 'no shadow/live tag in the energy manager overview');
+  assert.ok(!/action="\/energy-manager\/loads"/.test(em) && !/energy-load-form/.test(em), 'consumer settings are not on the overview');
+  const se = read('settings-energy.ejs');
+  assert.ok(/id="charging"[\s\S]*name="output"/.test(se), 'output (advise/live) under Energy & charging');
+  assert.ok(/id="energy-manager"[\s\S]*energy-load-form/.test(se), 'consumers under Energy & charging');
+});
