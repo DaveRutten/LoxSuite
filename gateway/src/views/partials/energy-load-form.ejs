@@ -28,6 +28,7 @@
       <div><label><%= t('Power') %></label><div style="display:flex; gap:0.3rem;"><select name="src_power" data-state-pick="power" data-current="<%= src.power || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.power) { %><option value="<%= src.power %>" selected><%= src.power %></option><% } %></select><select name="src_power_unit" style="width:6em;"><option value="W" <%= src.power_unit !== 'kW' ? 'selected' : '' %>>W</option><option value="kW" <%= src.power_unit === 'kW' ? 'selected' : '' %>>kW</option></select></div></div>
       <div><label><%= t('Temperature (room or tank)') %></label><select name="src_temp" data-state-pick="temp" data-current="<%= src.temp || '' %>"><option value=""><%= t('— none —') %></option><% if (src.temp) { %><option value="<%= src.temp %>" selected><%= src.temp %></option><% } %></select></div>
       <div><label><%= t('Ready to start (1/0)') %></label><select name="src_ready" data-state-pick="ready" data-current="<%= src.ready || '' %>"><option value=""><%= t('— none —') %></option><% if (src.ready) { %><option value="<%= src.ready %>" selected><%= src.ready %></option><% } %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('Optional: Home Connect "remote start allowed". A status text like "Startklaar" works too.') %></p></div>
+      <div><label><%= t('Remaining program time (s)') %></label><select name="src_remaining" data-state-pick="remaining" data-current="<%= src.remaining || '' %>"><option value=""><%= t('— none —') %></option><% if (src.remaining) { %><option value="<%= src.remaining %>" selected><%= src.remaining %></option><% } %></select></div>
       <div><label><%= t('Start in (scheduled start)') %></label><div style="display:flex; gap:0.3rem;"><select name="src_start_in" data-state-pick="startIn" data-current="<%= src.start_in || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.start_in) { %><option value="<%= src.start_in %>" selected><%= src.start_in %></option><% } %></select><select name="src_start_in_unit" style="width:6em;"><% [['h', 'h'], ['min', 'min'], ['s', 's']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= (src.start_in_unit || 'h') === v ? 'selected' : '' %>><%= lbl %></option><% }) %></select></div><p class="hint" style="margin:0.2rem 0 0;"><%= t('Optional: time until a delayed start (Home Connect). A status text like "Ingepland – start over 3 uur" works too.') %></p></div>
       <div><label><%= t('Energy counter') %></label><div style="display:flex; gap:0.3rem;"><select name="src_energy" data-state-pick="energy" data-current="<%= src.energy || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.energy) { %><option value="<%= src.energy %>" selected><%= src.energy %></option><% } %></select><select name="src_energy_unit" style="width:6.5em;"><option value="kWh" <%= src.energy_unit !== 'Wh' ? 'selected' : '' %>>kWh</option><option value="Wh" <%= src.energy_unit === 'Wh' ? 'selected' : '' %>>Wh</option></select></div></div>
     </div>
@@ -61,11 +62,21 @@
     <div><label><%= t('Typical power (kW)') %></label><input type="text" name="s_kw" value="<%= s.kw ?? kinds.appliance.defaults.kw %>"></div>
     <div><label><%= t('Look for a better start up to (h later)') %></label><input type="text" name="s_flex_h" value="<%= s.flex_h ?? 8 %>"></div>
     <div><label><%= t('Start via LoxSuite') %></label><select name="s_start_mode"><% [['off', 'Off'], ['log', 'Log only (default)'], ['on', 'On — start in the best hour']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= (s.start_mode || 'log') === v ? 'selected' : '' %>><%= t(lbl) %></option><% }) %></select></div>
+    <div><label><%= t('Control via') %></label><select name="s_control_via"><option value="vi" <%= s.control_via !== 'device' ? 'selected' : '' %>><%= t('virtual inputs (LoxSuite_<name>_Start …)') %></option><option value="device" <%= s.control_via === 'device' ? 'selected' : '' %>><%= t('the linked device directly (its Start / Pause / Verder)') %></option></select></div>
     <div><label><%= t('Pause in between: at most (h, 0 = never)') %></label><input type="text" name="s_max_pause_h" value="<%= s.max_pause_h ?? 0 %>"></div>
     <div data-show-if="!s_max_pause_h=0|"><label><%= t('Pauses per run (at most)') %></label><input type="text" name="s_max_pauses" value="<%= s.max_pauses ?? 2 %>"></div>
     <div><label><%= t('When ready to start: done within (h)') %></label><input type="text" name="s_ready_within_h" value="<%= s.ready_within_h ?? '' %>" placeholder="<%= s.flex_h ?? 8 %>"></div>
     <p class="hint" style="grid-column:1/-1; margin:0;"><%= t('When the machine is loaded and set to remote start, LoxSuite picks the cheapest / sunniest hour and — with Start via LoxSuite on — sends one pulse to the virtual input') %> <code><%= l ? (l.signals && (l.signals.find(x => x.key === 'start') || {}).vi) || 'LoxSuite_<name>_Start' : 'LoxSuite_<name>_Start' %></code><%= t(', only while the machine still says it is ready. In Loxone Config: that virtual input → the Home Connect block\'s input "Start geselecteerd programma"; status = "Bedrijfstoestand", ready to start = "Starten op afstand actief".') %> <%= t('With pausing allowed the run may be split over cheaper hours: _Pauze and _Verder (wire them to "Pause" and "Verder") — mind wet laundry in a paused washer and creases in a paused dryer.') %></p>
   </div>
+  <% if (l && l.kind === 'appliance') { %>
+  <div data-kind="appliance" data-for="<%= fid %>" style="margin-top:0.5rem;">
+    <div class="btn-row" style="margin:0; align-items:center;">
+      <span class="hint"><%= t('Test a command now (as saved):') %></span>
+      <% [['pause', 'Pause'], ['resume', 'Resume'], ['stop', 'Stop'], ['start', 'Start']].forEach(([k, lbl]) => { %><button type="button" class="btn-test" data-em-cmd="<%= k %>" data-load="<%= l.id %>"><%= t(lbl) %></button><% }) %>
+    </div>
+    <p class="hint" data-em-cmd-msg style="margin:0.3rem 0 0;"><%= t('Save first. A pause while the machine is off does nothing on the machine but shows whether the Miniserver accepts the command. Start really starts it when it is ready.') %></p>
+  </div>
+  <% } %>
   <p class="hint" style="margin:0.5rem 0 0.2rem;"><input type="hidden" name="s_use_patterns_sent" value="1"><label style="display:inline-flex; gap:0.3rem; font-weight:normal;"><input type="checkbox" name="s_use_patterns" value="1" <%= s.use_patterns !== false ? 'checked' : '' %>> <%= t('Use learned patterns') %></label> <%= t('(tap water hot before its usual use; an appliance\'s usual run gets a best start)') %></p>
   <p class="hint" style="margin:0.2rem 0 0.2rem;"><%= t('The kW is learned from the meter after a few days (tick to keep your own value):') %> <label style="display:inline-flex; gap:0.3rem; font-weight:normal;"><input type="checkbox" name="s_kw_fixed" value="1" <%= s.kw_fixed ? 'checked' : '' %>> <%= t('keep my kW') %></label></p>
   <details style="margin-top:0.3rem;"><summary class="hint" style="cursor:pointer;"><%= t('Virtual input names (for later)') %></summary>
@@ -107,6 +118,7 @@
     energy: function (x) { return /^(total|energy|e)$/i.test(x.state || '') ? 2 : 0; },
     onoff: function (x) { return /^(active|on|value|state)$/i.test(x.state || '') ? 1 : 0; },
     temp: function (x) { return /temp/i.test(x.state || '') ? 2 : 0; },
+    remaining: function (x) { return /resterende|remaining|restzeit/i.test((x.state || '') + ' ' + (x.control || '')) ? 2 : 0; },
     ready: function (x) { return /op afstand|remote|ready|allowed|startklaar|gereed|fernstart/i.test((x.state || '') + ' ' + (x.control || '')) ? 2 : 0; },
     startIn: function (x) { var n = (x.state || '') + ' ' + (x.control || ''); return /resterende|remaining|restzeit|voortgang|progress/i.test(n) ? 0 : /start ?in|starttijd|start time|delay|uitstel|verzögert/i.test(n) ? 2 : 0; },
   };
@@ -228,6 +240,18 @@
     if (sx && sx.type !== 'TextState' && /bedrijfstoestand|operation|betriebs/i.test((sx.state || '') + ' ' + (sx.control || ''))) fillHomeConnect(false);
   }
   if (devSel) devSel.addEventListener('change', applyDevice);
+  Array.prototype.forEach.call(form.querySelectorAll('[data-em-cmd]'), function (btn) {
+    btn.addEventListener('click', function () {
+      var key = btn.getAttribute('data-em-cmd'), msg = form.querySelector('[data-em-cmd-msg]');
+      if (key === 'start' && !window.confirm(TLs('Really start the machine now?'))) return;
+      btn.disabled = true; msg.textContent = '…';
+      fetch('/energy-manager/loads/' + btn.getAttribute('data-load') + '/command.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: key }) })
+        .then(function (r) { return r.json(); })
+        .then(function (r) { msg.textContent = r.ok ? TLs('Sent to {0} — the Miniserver accepted it.').replace('{0}', r.target) : r.message; })
+        .catch(function (e) { msg.textContent = e.message; })
+        .finally(function () { btn.disabled = false; });
+    });
+  });
   function loadDevices() {
     if (!devSel || !msSel || !msSel.value) return;
     var id = msSel.value;

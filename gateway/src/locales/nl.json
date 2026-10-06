@@ -4168,5 +4168,19 @@
   "No known signals in this device — choose them one by one below.": "Geen bekende signalen in dit device — kies ze hieronder los.",
   "show what the device offers": "laat zien wat het device aanbiedt",
   "Signals one by one (set by the device — change one here if needed)": "Signalen los (ingevuld door het device — pas er hier een aan als dat nodig is)",
-  "Linked:": "Gekoppeld:"
+  "Linked:": "Gekoppeld:",
+  "Control via": "Sturen via",
+  "done at ~{0} (in {1})": "klaar ~{0} (over {1})",
+  "Link a Loxone device first (or control it through virtual inputs).": "Koppel eerst een Loxone-device (of stuur via virtuele ingangen).",
+  "No \"{0}\" signal.": "Geen signaal \"{0}\".",
+  "Really start the machine now?": "De machine nu echt starten?",
+  "Remaining program time (s)": "Resterende programmatijd (s)",
+  "Resume": "Verder",
+  "Save first. A pause while the machine is off does nothing on the machine but shows whether the Miniserver accepts the command. Start really starts it when it is ready.": "Eerst opslaan. Een pauze terwijl de machine uit staat doet niets op de machine, maar laat zien of de Miniserver het commando aanneemt. Start start hem echt als hij klaarstaat.",
+  "Sent to {0} — the Miniserver accepted it.": "Gestuurd naar {0} — de Miniserver heeft het aangenomen.",
+  "Test a command now (as saved):": "Test een commando nu (zoals opgeslagen):",
+  "The device has no \"{0}\" input.": "Het device heeft geen ingang \"{0}\".",
+  "the linked device directly (its Start / Pause / Verder)": "het gekoppelde device rechtstreeks (zijn Start / Pause / Verder)",
+  "Unknown consumer or command.": "Onbekende verbruiker of commando.",
+  "virtual inputs (LoxSuite_<name>_Start …)": "virtuele ingangen (LoxSuite_<naam>_Start …)"
 }

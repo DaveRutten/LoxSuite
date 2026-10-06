@@ -4356,8 +4356,9 @@
  },
  {
   "key": "Device",
-  "module": "core",
+  "module": "energy_manager",
   "where": [
+   "src/energyManager.js",
    "src/notifications.js"
   ]
  },
@@ -4508,6 +4509,13 @@
    "planner (script)",
    "settings-energy (script)",
    "src/reminders.js"
+  ]
+ },
+ {
+  "key": "done at ~{0} (in {1})",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
   ]
  },
  {
@@ -6771,6 +6779,13 @@
   ]
  },
  {
+  "key": "Link a Loxone device first (or control it through virtual inputs).",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
+  ]
+ },
+ {
   "key": "live",
   "module": "ocpp",
   "where": [
@@ -8211,6 +8226,13 @@
    "driving (script)",
    "incoming-schedules",
    "profile"
+  ]
+ },
+ {
+  "key": "No \"{0}\" signal.",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
   ]
  },
  {
@@ -9657,6 +9679,13 @@
   ]
  },
  {
+  "key": "Pause",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form"
+  ]
+ },
+ {
   "key": "Pause auto-refresh",
   "module": "core",
   "where": [
@@ -10315,6 +10344,13 @@
   ]
  },
  {
+  "key": "Really start the machine now?",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form (script)"
+  ]
+ },
+ {
   "key": "Reason",
   "module": "core",
   "where": [
@@ -10540,6 +10576,13 @@
   "module": "core",
   "where": [
    "src/routes/backup.js"
+  ]
+ },
+ {
+  "key": "Resume",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form"
   ]
  },
  {
@@ -10962,6 +11005,13 @@
   "module": "mqtt",
   "where": [
    "public/mappings-loxone-to-mqtt-tabulator.js"
+  ]
+ },
+ {
+  "key": "Sent to {0} — the Miniserver accepted it.",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form (script)"
   ]
  },
  {
@@ -11522,6 +11572,7 @@
   "where": [
    "energy-load (script)",
    "ocpp-bridge-edit (script)",
+   "partials/energy-load-form",
    "src/energyManager.js"
   ]
  },
@@ -11669,7 +11720,8 @@
   "key": "Stop",
   "module": "ocpp",
   "where": [
-   "ocpp-bridge-edit (script)"
+   "ocpp-bridge-edit (script)",
+   "partials/energy-load-form"
   ]
  },
  {
@@ -12104,6 +12156,13 @@
   "module": "core",
   "where": [
    "src/i18n.js"
+  ]
+ },
+ {
+  "key": "The device has no \"{0}\" input.",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
   ]
  },
  {
@@ -13032,6 +13091,13 @@
   "where": [
    "src/routes/incoming.js",
    "src/vehicles.js"
+  ]
+ },
+ {
+  "key": "Unknown consumer or command.",
+  "module": "energy_manager",
+  "where": [
+   "src/routes/energyManager.js"
   ]
  },
  {

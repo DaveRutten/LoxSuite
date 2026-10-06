@@ -87,6 +87,7 @@
       state = '<span class="ls-dot" style="background:' + color(now.status != null ? txt : (now.on ? 'on' : 'off')) + ';"></span>' + esc(txt);
     }
     var since = now && now.since ? TL('in this state for {0}').replace('{0}', dur((Date.now() - now.since) / 60000)) : '';
+    if (now && now.endAt && now.endAt > Date.now()) since = TL('done at ~{0} (in {1})').replace('{0}', hh(now.endAt)).replace('{1}', dur((now.endAt - Date.now()) / 60000)) + (since ? ' · ' + since : '');
     if (now && now.readyToStart) since = TL('ready to start — LoxSuite picks the best hour') + (since ? ' · ' + since : '');
     if (now && now.startAt && now.startAt > Date.now() - 15 * 60000) since = TL('starts at ~{0} (in {1})').replace('{0}', hh(now.startAt)).replace('{1}', dur(Math.max(0, now.startAt - Date.now()) / 60000)) + (since ? ' · ' + since : '');
     document.getElementById('el-tiles').innerHTML =

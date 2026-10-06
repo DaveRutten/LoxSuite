@@ -73,7 +73,7 @@ function sourcesOf(settings = {}) {
     power: src.power || null, powerUnit: src.power_unit === 'kW' ? 'kW' : 'W',
     energy: src.energy || null, energyUnit: src.energy_unit === 'Wh' ? 'Wh' : 'kWh',
     temp: src.temp || null,
-    ready: src.ready || null,
+    ready: src.ready || null, remaining: src.remaining || null,
     startIn: src.start_in || null, startInUnit: ['min', 's'].includes(src.start_in_unit) ? src.start_in_unit : 'h',
   };
 }
@@ -139,6 +139,14 @@ const DEVICE_SIGNALS = [
   ['power', /^(actual|actualpower|power|p|leistung|vermogen)$/i],
   ['energy', /^(total|totalenergy|energy|energie|zähler|teller)$/i],
   ['temp', /^(tempactual|temperature|temp|watertemp)$/i],
+  ['remaining', /resterende programmatijd|remaining.?(program.?)?time|restzeit|programmrestzeit/i],
+];
+// The commands of a device (its inputs, by name): what LoxSuite sends when it controls it directly.
+const DEVICE_COMMANDS = [
+  ['start', /^(start geselecteerd programma|start selected program|start|starten|ausgewähltes programm starten)$/i],
+  ['pause', /^(pause|pauze|pauzeren|pausieren)$/i],
+  ['resume', /^(verder|hervatten|resume|fortsetzen)$/i],
+  ['stop', /^(stop|stoppen|abbrechen)$/i],
 ];
 function mapDeviceStates(control) {
   const states = [];
@@ -178,7 +186,9 @@ function devicesFromStructure(structure) {
     const name = named ? named[2] : `${rooms[first.room]?.name || 'Device'} (${prefix})`;
     const states = {};
     for (const [, c] of members) { const u = Object.values(c.states || {}).find((x) => typeof x === 'string'); if (u && !states[c.name]) states[c.name] = u; }
-    out.push({ uuid: `group:${prefix}`, name, type: 'Device', room: rooms[first.room]?.name || null, category: cats[first.cat]?.name || null, states: Object.keys(states).length, signals: mapDeviceStates({ states }), members: members.map(([u, c]) => ({ uuid: u, name: c.name, type: c.type })) });
+    const commands = {};
+    for (const [key, re] of DEVICE_COMMANDS) { const m = members.find(([, c]) => re.test(String(c.name).trim())); if (m) commands[key] = { uuid: m[1].uuidAction || m[0], name: m[1].name }; }
+    out.push({ uuid: `group:${prefix}`, name, type: 'Device', room: rooms[first.room]?.name || null, category: cats[first.cat]?.name || null, states: Object.keys(states).length, signals: mapDeviceStates({ states }), commands, members: members.map(([u, c]) => ({ uuid: u, name: c.name, type: c.type })) });
   }
   return out.sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
@@ -238,7 +248,10 @@ function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05, nam
   }
   else if (src.status && (typeof raw.status === 'string' || label)) readyToStart = isReadyText(typeof raw.status === 'string' ? raw.status : label);
   if (on || startAt) readyToStart = false; // running, or already scheduled on the machine itself
-  return { kw, total, on, status, label, measured: total !== null || kw !== null, temp, startAt, readyToStart };
+  // a running program's end from its remaining time (Home Connect: seconds)
+  const rem = src.remaining ? num(raw.remaining) : null;
+  const endAt = on && rem !== null && rem > 0 ? nowMs + rem * 1000 : null;
+  return { kw, total, on, status, label, measured: total !== null || kw !== null, temp, startAt, readyToStart, endAt };
 }
 
 // Pure: the key a minute is booked under — the status label/value, else 'on'/'off'.
@@ -590,7 +603,7 @@ async function readLoad(load) {
     const ms = m?.ms || await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(load.miniserver_id);
     if (ms) {
       ws.ensureConnection(ms);
-      for (const k of ['onoff', 'status', 'power', 'energy', 'temp', 'startIn', 'ready']) if (src[k]) raw[k] = ws.getLiveValue(ms.id, src[k]);
+      for (const k of ['onoff', 'status', 'power', 'energy', 'temp', 'startIn', 'ready', 'remaining']) if (src[k]) raw[k] = ws.getLiveValue(ms.id, src[k]);
     }
   }
   const st = loadState({ meter, raw, src, name: load.name });
@@ -1032,17 +1045,42 @@ async function tick(nowMs = Date.now()) {
 async function pulse(load, key, why, nowMs) {
   const mode = load.settings?.start_mode || 'log';
   if (mode === 'off') return false;
-  const vi = viName(load, KINDS.appliance.signals.find((x) => x.key === key));
   if (mode !== 'on') {
-    await db.prepare('INSERT INTO em_log (ts, load_id, signal_name, value, reason) VALUES (?, ?, ?, ?, ?)').run(new Date(nowMs).toISOString(), load.id, `${key}_sent`, 'log', `would ${why} now (${vi} = pulse) — Start via LoxSuite is on "log only"`).catch(() => {});
+    const t = await commandTarget(load, key).catch((e) => ({ label: `? (${e.message})` }));
+    await db.prepare('INSERT INTO em_log (ts, load_id, signal_name, value, reason) VALUES (?, ?, ?, ?, ?)').run(new Date(nowMs).toISOString(), load.id, `${key}_sent`, 'log', `would ${why} now (${t.label} = pulse) — Start via LoxSuite is on "log only"`).catch(() => {});
     return true;
   }
+  const sent = await sendCommand(load, key);
+  await db.prepare('INSERT INTO em_log (ts, load_id, signal_name, value, reason) VALUES (?, ?, ?, ?, ?)').run(new Date(nowMs).toISOString(), load.id, `${key}_sent`, 'pulse', `${why} (${sent.target} = pulse)`).catch(() => {});
+  require('./auditLog').logSystemEvent(`Energy manager: ${why} ${load.name} (${sent.target} = pulse)`).catch(() => {});
+  return true;
+}
+
+// The command (start / pause / resume / stop) of a consumer and where it goes: its own virtual input
+// (control_via 'vi', default), or straight to the linked device's input ('device', e.g. a Home Connect
+// washer's "Start geselecteerd programma"). Pure for the VI; the device is looked up in the structure.
+async function commandTarget(load, key) {
+  const s = load.settings || parseSettings(load);
   const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(load.miniserver_id);
   if (!ms) throw new Error('No Miniserver for this consumer.');
-  await require('./loxone').sendHttpVirtualInput(ms, vi, 'pulse');
-  await db.prepare('INSERT INTO em_log (ts, load_id, signal_name, value, reason) VALUES (?, ?, ?, ?, ?)').run(new Date(nowMs).toISOString(), load.id, `${key}_sent`, 'pulse', `${why} (${vi} = pulse)`).catch(() => {});
-  require('./auditLog').logSystemEvent(`Energy manager: ${why} ${load.name} (${vi} = pulse)`).catch(() => {});
-  return true;
+  if (s.control_via === 'device') {
+    const dev = s.src?.device;
+    if (!dev) throw new Error('Link a Loxone device first (or control it through virtual inputs).');
+    const structure = await require('./loxoneStructure').getStructure(ms);
+    const d = devicesFromStructure(structure).find((x) => x.uuid === dev);
+    const cmd = d?.commands?.[key];
+    if (!cmd) throw new Error(`The device has no "${key}" input.`);
+    return { ms, target: cmd.uuid, label: `${d.name} / ${cmd.name}` };
+  }
+  const sig = KINDS.appliance.signals.find((x) => x.key === key);
+  if (!sig) throw new Error(`No "${key}" signal.`);
+  const vi = viName(load, sig);
+  return { ms, target: vi, label: vi };
+}
+async function sendCommand(load, key) {
+  const t = await commandTarget(load, key);
+  await require('./loxone').sendHttpVirtualInput(t.ms, t.target, 'pulse');
+  return { target: t.label };
 }
 
 // Runs a waiting appliance by the plan, minute by minute:
@@ -1197,7 +1235,7 @@ function stopEnergyManager() {
 function invalidate() { rt.planAt = 0; }
 
 module.exports = {
-  HOME_CONNECT_STATUS, HOME_CONNECT_RUNNING, mapDeviceStates, devicesFromStructure, cleanStatusText, isOffText, bucket, seenStatuses, runsFromHourly, scheduledFromText, isReadyText, bestSteps, applianceStep,
+  HOME_CONNECT_STATUS, HOME_CONNECT_RUNNING, mapDeviceStates, devicesFromStructure, cleanStatusText, isOffText, bucket, seenStatuses, runsFromHourly, scheduledFromText, isReadyText, bestSteps, applianceStep, sendCommand, commandTarget,
   applyLive,
   KINDS, parseSettings, viName, toHours, effCost, planLoads, currentSignals, runStep, hourCost, quantile,
   runProgress, anomalies, unknownPatterns, weatherFor, sourcesOf, parseStatusMap, loadState, statusKey, statusSummary, timeline, loadDetail, learnedStatus,

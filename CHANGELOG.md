@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.44.2-alpha.1] - 2026-10-06
+
+### Added
+- **Control an appliance through its device, not virtual inputs** (switchable per appliance, *Control via*):
+  *virtual inputs* (`LoxSuite_<name>_Start/_Pauze/_Verder`, as before) or *the linked device directly* — the
+  pulse goes straight to the device's own input (Home Connect: *Start geselecteerd programma*, *Pause*,
+  *Verder*, *Stop*, found by name in the linked device), no wiring in Loxone Config.
+- **Test a command** (Pause / Resume / Stop / Start) from the appliance's settings — sent at once, as saved,
+  whatever *Start via LoxSuite* says, and logged. A pause while the machine is off does nothing on the machine
+  but shows whether the Miniserver accepts the command; Start asks first.
+- **Remaining program time** (Home Connect, seconds) as a signal: the consumer's page shows "done at ~14:30".
+
 ## [0.44.1-alpha.1] - 2026-10-06
 
 ### Fixed

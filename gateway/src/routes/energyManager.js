@@ -122,10 +122,10 @@ function readSources(b) {
     power: uuid(b.src_power), power_unit: b.src_power_unit === 'kW' ? 'kW' : 'W',
     energy: uuid(b.src_energy), energy_unit: b.src_energy_unit === 'Wh' ? 'Wh' : 'kWh',
     temp: uuid(b.src_temp),
-    ready: uuid(b.src_ready), device: /^(group:)?[0-9a-f-]{8,}$/i.test(String(b.src_device || '').trim()) ? String(b.src_device).trim() : null,
+    ready: uuid(b.src_ready), remaining: uuid(b.src_remaining), device: /^(group:)?[0-9a-f-]{8,}$/i.test(String(b.src_device || '').trim()) ? String(b.src_device).trim() : null,
     start_in: uuid(b.src_start_in), start_in_unit: ['min', 's'].includes(b.src_start_in_unit) ? b.src_start_in_unit : 'h',
   };
-  return src.onoff || src.status || src.power || src.energy || src.temp || src.start_in || src.ready ? src : null;
+  return src.onoff || src.status || src.power || src.energy || src.temp || src.start_in || src.ready || src.remaining || src.device ? src : null;
 }
 
 function readLoadForm(b) {
@@ -141,6 +141,7 @@ function readLoadForm(b) {
   if (b.s_use_patterns_sent) s.use_patterns = !!b.s_use_patterns;
   if (kind === 'appliance') {
     s.start_mode = ['off', 'log', 'on'].includes(b.s_start_mode) ? b.s_start_mode : 'log';
+    s.control_via = b.s_control_via === 'device' ? 'device' : 'vi';
     if (b.s_ready_within_h !== undefined && b.s_ready_within_h !== '') s.ready_within_h = Math.max(1, Math.min(36, num(b.s_ready_within_h, 8)));
   }
   const vi = {};
@@ -223,6 +224,19 @@ router.post('/requests/:id/delete.json', requirePermission('energy_manager', 'ed
   res.json({ ok: true });
 }));
 
+// Send one command now (start / pause / resume / stop) — a test the user asks for, whatever "Start via
+// LoxSuite" says. Logged like every command.
+router.post('/loads/:id/command.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
+  const load = (await em.listLoads()).find((l) => l.id === Number(req.params.id));
+  const key = String(req.body?.key || '');
+  if (!load || !['start', 'pause', 'resume', 'stop'].includes(key)) return res.status(400).json({ ok: false, message: 'Unknown consumer or command.' });
+  try {
+    const r = await em.sendCommand(load, key);
+    await db.prepare('INSERT INTO em_log (ts, load_id, signal_name, value, reason) VALUES (?, ?, ?, ?, ?)').run(new Date().toISOString(), load.id, `${key}_sent`, 'pulse', `test by ${req.session?.username || 'user'} (${r.target} = pulse)`).catch(() => {});
+    require('../auditLog').logSystemEvent(`Energy manager: test command ${key} to ${load.name} (${r.target}) by ${req.session?.username || 'user'}`).catch(() => {});
+    res.json({ ok: true, target: r.target });
+  } catch (err) { res.json({ ok: false, message: err.message }); }
+}));
 router.post('/loads/:id/import.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   try {
     const report = await em.importHistory(Number(req.body?.days) || 30, { loadId: Number(req.params.id) });

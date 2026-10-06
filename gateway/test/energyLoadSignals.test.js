@@ -221,6 +221,12 @@ test('devices: loose Home Connect outputs grouped per appliance by their uuid st
       '1e2d2089-0069-b0e3-ffff1': { ...io('Online status Wasmachine', 'InfoOnlyDigital'), states: { active: 'w-online' } },
       '1e2d2089-0069-b100-ffff1': { ...io('Bedrijfstoestand'), states: { value: 'w-state' } },
       '1e2d2089-0069-b104-ffff1': { ...io('Starten op afstand actief', 'InfoOnlyDigital'), states: { active: 'w-ready' } },
+      '1bdf6893-0264-b484-ffff1': { ...io('Start geselecteerd programma', 'InfoOnlyDigital'), uuidAction: 'd-start', states: { active: 'd-start' } },
+      '1bdf6893-0264-b487-ffff1': { ...io('Pause', 'InfoOnlyDigital'), uuidAction: 'd-pause', states: { active: 'd-pause' } },
+      '1bdf6893-0265-b48a-ffff1': { ...io('Verder', 'InfoOnlyDigital'), uuidAction: 'd-resume', states: { active: 'd-resume' } },
+      '1bdf6893-0263-b481-ffff1': { ...io('Stop', 'InfoOnlyDigital'), uuidAction: 'd-stop', states: { active: 'd-stop' } },
+      '1bdf6893-0269-b49a-ffff1': { ...io('Resterende programmatijd'), states: { value: 'd-rem' } },
+      '1bdf6893-0260-b478-ffff1': { ...io('Start Katoen', 'InfoOnlyDigital'), uuidAction: 'd-katoen', states: { active: 'd-katoen' } },
       'aaaa0000-0000-0000-ffff1': { name: 'Droger', type: 'TextState', room: 'r', cat: 'c', states: { textAndIcon: 't' } },
     },
   };
@@ -231,4 +237,11 @@ test('devices: loose Home Connect outputs grouped per appliance by their uuid st
   assert.equal(dryer.signals.status.uuid, 'd-state'); assert.equal(dryer.signals.ready.uuid, 'd-ready');
   assert.equal(washer.signals.status.uuid, 'w-state'); assert.equal(washer.signals.ready.uuid, 'w-ready');
   assert.ok(ds.find((d) => d.name === 'Droger' && d.type === 'TextState')); // the Status block stays its own device
+  // its inputs are the commands (not "Start Katoen": a fixed program, the selected one is started)
+  assert.deepEqual(Object.fromEntries(Object.entries(dryer.commands).map(([k, v]) => [k, v.uuid])), { start: 'd-start', pause: 'd-pause', resume: 'd-resume', stop: 'd-stop' });
+  assert.equal(dryer.signals.remaining.uuid, 'd-rem');
+  // remaining time in seconds -> the end of the running program
+  const now = Date.parse('2026-10-06T12:00:00Z');
+  const st = em.loadState({ raw: { status: 3, remaining: 3600 }, src: SRC({ status: 'u', status_map: em.HOME_CONNECT_STATUS, status_on: '3', remaining: 'r' }), nowMs: now });
+  assert.equal(st.endAt, now + 3600000);
 });
