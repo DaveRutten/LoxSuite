@@ -206,8 +206,6 @@ async function main() {
     // Long pages are captured whole (fullPage) so the charts below the fold are in the picture.
     await page.goto(`${BASE}/planner`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(2500);
-    await fold(page, ['Settings']);
-    await page.waitForTimeout(300);
     await shoot(page, 'smart-charging', theme, { fullPage: true });
 
     await page.goto(`${BASE}/energy`, { waitUntil: 'networkidle' });
@@ -242,7 +240,7 @@ async function main() {
 
     await page.goto(`${BASE}/energy-manager`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(3000);
-    await fold(page, ['Hot water', 'Heat pump', 'Washing machine']);
+    await fold(page, ['Hot water', 'Washing machine']);
     await shoot(page, 'energy-manager', theme, { fullPage: true });
 
     // one consumer in detail: the heat pump with its on/off and mode signals (load 2 in the seed)

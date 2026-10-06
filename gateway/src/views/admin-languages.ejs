@@ -35,7 +35,7 @@
                 <a class="btn-soft" href="/translations?lang=<%= l.code %>"><%= t('Translate') %></a>
                 <a class="btn-soft" href="/admin/languages/<%= l.code %>/export"><%- icon('download') %> <%= t('JSON') %></a>
                 <% if (!l.isDefault) { %>
-                <form method="post" action="/admin/languages/<%= l.code %>/delete" style="margin:0;" onsubmit="return confirm(<%= JSON.stringify(t('Remove {language} and its own translations?', { language: l.name })) %>);"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form>
+                <form method="post" action="/admin/languages/<%= l.code %>/delete" style="margin:0;" onsubmit="return confirm(<%= JSON.stringify(t('Remove {language} and its own translations?', { language: l.name })) %>);"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="danger"><%- icon('trash') %></button></form>
                 <% } %>
               <% } %>
             </div>

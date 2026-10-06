@@ -34,7 +34,7 @@
   <% if (trips.length) { %>
     <table><thead><tr><th><%= t('Trip') %></th><th><%= t('Leaves') %></th><th><%= t('Back') %></th><th><%= t('Where / how much') %></th><th></th></tr></thead><tbody>
       <% trips.forEach(tt => { %><tr><td><%= tt.title %><%= tt.weekly ? ' (' + t('weekly') + ')' : '' %></td><td><%= formatDateTime(tt.depart_at) %></td><td><%= tt.return_at ? formatDateTime(tt.return_at) : '—' %></td><td><%= tt.location || '' %> <%= tt.own_value || '' %><%= tt.climate_c != null ? ' · 🌡️ ' + tt.climate_c + ' °C' : '' %></td>
-        <td><form method="post" action="/agenda/trips/<%= tt.id %>/delete" style="margin:0;"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form></td></tr><% }) %>
+        <td><form method="post" action="/agenda/trips/<%= tt.id %>/delete" style="margin:0;"><button type="submit" class="danger"><%- icon('trash') %></button></form></td></tr><% }) %>
     </tbody></table>
   <% } %>
   <details style="margin-top:0.6rem;" <%= trips.length ? '' : 'open' %>>
@@ -124,7 +124,7 @@
   document.querySelectorAll('#ag-views button').forEach(function (b) { b.onclick = function () { view = b.dataset.view; try { localStorage.setItem('agenda-view', view); } catch (e) { /* ignore */ } load(); }; });
 
   document.getElementById('ag-legend').innerHTML = '<span style="margin-right:0.9rem;">🚗 = car needed</span><span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; border:1.5px dashed #9aa4b2; border-radius:2px;"></span> ready by (learned)</span>' +
-    '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; background:var(--accent); border-radius:2px;"></span> planned charging</span><span><span style="display:inline-block; width:10px; height:10px; background:#9aa4b2; opacity:0.6; border-radius:2px;"></span> charged</span>';
+    '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; background:var(--accent); border-radius:2px;"></span> planned charging</span><span><span style="display:inline-block; width:10px; height:10px; background:#9aa4b2; opacity:0.6; border-radius:2px;"></span> charged earlier</span>';
 
   function itemColor(i) { return i.color || '#3b82c4'; }
   var textOn = AgendaLayout.textOn, lanes = AgendaLayout.lanes;

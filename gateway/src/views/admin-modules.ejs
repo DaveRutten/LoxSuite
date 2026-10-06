@@ -53,7 +53,7 @@
                 onsubmit="return confirm(<%= JSON.stringify(t('Permanently delete the data of {module}? Export it first if you may want it back.', { module: t(m.label) })) %>);">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <div><label style="font-size:0.8rem;"><%- t('Type {key} to wipe its data', { key: '<code>' + m.key + '</code>' }) %></label><input type="text" name="confirm" autocomplete="off" style="width:11rem;"></div>
-            <button type="submit" class="btn-soft"><%- icon('trash') %> <%= t('Wipe data') %></button>
+            <button type="submit" class="danger"><%- icon('trash') %> <%= t('Wipe data') %></button>
           </form>
           <% } else { %>
           <p class="hint" style="margin:0.5rem 0 0; font-size:0.8rem;"><%= t('Wiping its data is possible once the module is switched off.') %></p>

@@ -1,12 +1,24 @@
 <%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
 <%- include('partials/tabs-admin', { active: 'energy' }) %>
 
+<nav class="section-nav" id="se-nav" aria-label="<%= t('On this page') %>">
+  <a href="#prices"><%= t('Prices, solar & fuel') %></a>
+  <% if (canView('charging')) { %>
+    <a href="#calendars"><%= t('Calendars') %></a>
+    <a href="#agenda-settings"><%= t('Agenda & climate') %></a>
+    <a href="#day-types"><%= t('Days away & holidays') %></a>
+    <% if (canEdit('charging')) { %><a href="#charging"><%= t('Smart charging') %></a><% } %>
+  <% } %>
+  <% if (typeof emLoads !== 'undefined' && emLoads && canEdit('energy_manager')) { %><a href="#energy-manager"><%= t('Energy manager') %></a><% } %>
+</nav>
+
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
 
 <div class="card" id="prices">
   <h2 style="margin-top:0;"><%= t('Prices, solar & fuel') %></h2>
-  <p class="hint" style="margin:0 0 0.4rem;"><%= t('Used by Smart charging, the energy manager, Driving & costs and OCPP costs.') %></p>
+  <p class="hint" style="margin:0 0 0.6rem;"><%= t('Used by Smart charging, the energy manager, Driving & costs and OCPP costs.') %></p>
+  <div class="ls-fold-list">
   <details <%= saved === 'prices' ? 'open' : '' %>>
     <summary><strong><%= t('Electricity price') %></strong> <span class="hint"><%= priceStatus ? (priceStatus.ok ? '· ' + t('{0} intervals, until {1}', [priceStatus.count, formatDateTime(priceStatus.until)]) + (priceStatus.basis ? ' · ' + t('estimate from {0} Spot Price Optimizer values', [priceStatus.basis]) : '') : '· ' + t(priceStatus.error)) : '' %></span></summary>
     <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
@@ -44,7 +56,7 @@
     </form>
   </details>
 
-  <details style="margin-top:0.6rem;" <%= saved === 'solar' ? 'open' : '' %>>
+  <details <%= saved === 'solar' ? 'open' : '' %>>
     <summary><strong><%= t('Home & solar forecast') %></strong> <span class="hint"><%= solarStatus ? (solarStatus.ok ? `· updated ${formatDateTime(solarStatus.at)}` : `· ${solarStatus.error}`) : '' %></span></summary>
     <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
       <input type="hidden" name="section" value="solar">
@@ -64,7 +76,7 @@
     </form>
   </details>
 
-  <details style="margin-top:0.6rem;" <%= saved === 'fuel' ? 'open' : '' %>>
+  <details <%= saved === 'fuel' ? 'open' : '' %>>
     <summary><strong><%= t('Fuel (plug-in hybrid)') %></strong> <span class="hint">· <%= fuel.label %> € <%= fuel.eur_l.toFixed(3) %>/l (<%= fuel.source === 'auto' ? t('CBS') + (fuel.date ? ' ' + fuel.date.split('-').reverse().join('-') : '') + (fuel.markup ? ', ' + t('incl. surcharge') + ' € ' + Number(fuel.markup).toFixed(3) : '') : t('manual') %>)</span></summary>
     <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
       <input type="hidden" name="section" value="fuel">
@@ -79,6 +91,7 @@
       <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-recalc="fuel"><%= t('Fetch fuel price now') %></button></div>
     </form>
   </details>
+  </div>
 
 </div>
 
@@ -96,14 +109,15 @@
             <td class="hint"><%= c.kind === 'caldav' ? (/icloud\.com$/.test(c.urlHost) ? 'iCloud' : 'CalDAV') + ' · ' + (c.username || '') : c.urlHost %></td>
             <td><%= (vehicles.find(v => v.id === c.vehicle_id) || {}).name || '—' %></td>
             <td class="hint"><%= c.last_sync_at ? formatDateTime(c.last_sync_at) : '—' %><% if (c.last_error) { %> <span style="color:var(--danger);"><%= c.last_error %></span><% } %></td>
-            <td><form method="post" action="/agenda/calendars/<%= c.id %>/delete" onsubmit="return confirm(<%= JSON.stringify(t('Remove this calendar from LoxSuite?')) %>);" style="margin:0;"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form></td>
+            <td><form method="post" action="/agenda/calendars/<%= c.id %>/delete" onsubmit="return confirm(<%= JSON.stringify(t('Remove this calendar from LoxSuite?')) %>);" style="margin:0;"><button type="submit" class="danger"><%- icon('trash') %></button></form></td>
           </tr>
         <% }) %>
       </tbody>
     </table>
     <div class="btn-row" style="margin-top:0.5rem;"><button type="button" class="btn-soft" id="ag-sync"><%- icon('refresh') %> <%= t('Sync now') %></button><span class="hint" id="ag-sync-msg" style="margin:0;"></span></div>
   <% } %>
-  <details style="margin-top:0.8rem;" <%= calendars.length ? '' : 'open' %>>
+  <div class="ls-fold-list" style="margin-top:0.9rem;">
+  <details <%= calendars.length ? '' : 'open' %>>
     <summary><strong><%= t('Add calendar') %></strong> <span class="hint"><%= t('— as many as you like: ICS links, iCloud or CalDAV') %></span></summary>
     <form method="post" action="/agenda/calendars" style="margin-top:0.6rem;" id="ag-cal-form">
       <div class="form-grid">
@@ -137,6 +151,7 @@
       <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="primary" id="ag-cal-add"><%- icon('plus') %> <%= t('Add') %></button></div>
     </form>
   </details>
+  </div>
 </div>
 
 <div class="card" id="agenda-settings">
@@ -148,7 +163,7 @@
       <div><label><%= t('Ready this long before leaving (min)') %></label><input type="number" min="0" max="180" step="1" name="ready_margin_min" value="<%= cfg.ready_margin_min ?? 15 %>"></div>
       <div><label><%= t('Calculate distances (OpenStreetMap)') %></label><%- toggleSwitch('geo', !!cfg.geo) %></div>
     </div>
-    <h3 style="margin:1.1rem 0 0.4rem;">🌡️ <%= t('Climate at departure') %></h3>
+    <h3 class="subhead"><%= t('Climate at departure') %></h3>
     <div class="form-grid">
       <div><label><%= t('Climate at departure') %></label><select name="climate_mode">
         <% [['off', 'Off'], ['log', 'Log only (send nothing)'], ['on', 'On: start the air conditioning']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= (cfg.climate_mode || 'log') === v ? 'selected' : '' %>><%= t(lbl) %></option><% }) %>
@@ -172,9 +187,9 @@
 <div class="card" id="day-types">
   <h2 style="margin-top:0;"><%= t('Days away & holidays') %></h2>
   <p class="hint"><%= t('Not every Tuesday is a normal Tuesday. On a day away LoxSuite plans no tap water, no appliance runs and no learned departure, only the house\'s base load — and leaves the day out of what it learns. A public holiday is planned like a weekend day.') %></p>
-  <div style="display:flex; gap:0.3rem; flex-wrap:wrap; margin:0.3rem 0 0.8rem;">
+  <div style="display:flex; flex-wrap:wrap; margin:0.3rem 0 0.8rem;">
     <% const typeLabel = { away: t('away'), holiday: t('holiday'), home: t('home'), weekend: t('weekend'), workday: t('workday') }; const typeColor = { away: '#e67e22', holiday: '#9b59b6', home: '#16a085', weekend: '#7f8c8d', workday: '#4a7bd0' }; %>
-    <% dayTypes.forEach(d => { %><span title="<%= d.why || '' %>" style="display:inline-block; padding:2px 7px; border-radius:8px; font-size:0.78rem; border:1px solid <%= typeColor[d.type] %>; color:<%= typeColor[d.type] %>;"><%= new Date(d.day + 'T12:00:00Z').toLocaleDateString(typeof uiLocale !== 'undefined' ? uiLocale : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) %> · <%= typeLabel[d.type] %></span><% }) %>
+    <% dayTypes.forEach(d => { %><span class="chip" title="<%= d.why || '' %>" style="color:<%= typeColor[d.type] %>;"><%= new Date(d.day + 'T12:00:00Z').toLocaleDateString(typeof uiLocale !== 'undefined' ? uiLocale : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) %> · <%= typeLabel[d.type] %></span><% }) %>
   </div>
   <form method="post" action="/settings/energy/day-types">
     <div class="form-grid">
@@ -184,7 +199,7 @@
       <div><label><%= t('Away until (including)') %></label><input type="date" name="away_to" value="<%= dayCfg.away_to %>"></div>
       <div><label><%= t('Dutch public holidays') %></label><%- toggleSwitch('holidays', dayCfg.holidays !== false) %></div>
     </div>
-    <h3 style="margin:1rem 0 0.4rem;"><%= t('Presence from Loxone (optional)') %></h3>
+    <h3 class="subhead"><%= t('Presence from Loxone (optional)') %></h3>
     <div class="form-grid">
       <div><label><%= t('Miniserver') %></label><select name="presence_ms" id="dt-ms"><option value=""><%= t('— none —') %></option><% miniservers.forEach(m => { %><option value="<%= m.id %>" <%= String(dayCfg.presence_ms) === String(m.id) ? 'selected' : '' %>><%= m.name %></option><% }) %></select></div>
       <div><label><%= t('State (someone home)') %></label><input type="text" id="dt-filter" placeholder="<%= t('search: presence, alarm…') %>" style="margin-bottom:0.3rem;"><select name="presence_uuid" id="dt-state" data-current="<%= dayCfg.presence_uuid %>"><option value=""><%= t('— none —') %></option><% if (dayCfg.presence_uuid) { %><option value="<%= dayCfg.presence_uuid %>" selected><%= dayCfg.presence_uuid %></option><% } %></select></div>
@@ -212,7 +227,8 @@
 <% if (canEdit('charging')) { %>
 <div class="card" id="charging">
   <h2 style="margin-top:0;"><%= t('Smart charging') %></h2>
-
+  <p class="hint" style="margin:0 0 0.6rem;"><%= t('How the car is charged, what LoxSuite sends to Loxone and when it reminds you to plug in.') %></p>
+  <div class="ls-fold-list">
   <details <%= chargingSaved === 'charging' ? 'open' : '' %>>
     <summary><strong><%= t('Charging & output to Loxone') %></strong></summary>
     <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
@@ -222,15 +238,14 @@
         <div><label><%= t('Maximum power (kW)') %></label><input type="text" name="max_kw" value="<%= cfg.max_kw %>"></div>
         <div><label><%= t('Grid connection limit (kW)') %></label><input type="text" name="grid_limit_kw" value="<%= cfg.grid_limit_kw %>"></div>
       </div>
-      <div class="form-grid" style="margin-top:0.8rem;">
+      <h3 class="subhead"><%= t('Output to Loxone') %></h3>
+      <div class="form-grid">
         <div><label><%= t('Output') %></label><select name="output"><option value="advise" <%= cfg.output !== 'live' ? 'selected' : '' %>><%= t('Advise (don\'t control the Wallbox)') %></option><option value="live" <%= cfg.output === 'live' ? 'selected' : '' %>><%= t('Live (write to Loxone)') %></option></select></div>
         <div><label><%= t('Virtual input for the power (kW, 0 = stop)') %></label><input type="text" name="vi_setpoint" value="<%= cfg.vi_setpoint %>" placeholder="<%= t('LoxSuite laadvermogen') %>"></div>
         <% if (miniservers.length > 1) { %><div><label><%= t('Miniserver with the virtual inputs') %></label><select name="vi_miniserver_id"><% miniservers.forEach(m => { %><option value="<%= m.id %>" <%= Number(cfg.vi_miniserver_id || miniservers[0].id) === m.id ? 'selected' : '' %>><%= m.name %></option><% }) %></select></div><% } %>
         <div><label><%= t('Virtual input "charging allowed" (optional, 1/0)') %></label><input type="text" name="vi_enable" value="<%= cfg.vi_enable %>" placeholder="<%= t('LoxSuite laden') %>"></div>
       </div>
-      <p class="hint" style="margin:0.5rem 0 0;">
-        <strong><%= t('Wiring in Loxone Config') %></strong> <%= t('(Wallbox block):') %>
-      </p>
+      <h3 class="subhead"><%= t('Wiring in Loxone Config') %> <span class="hint" style="font-weight:400;"><%= t('(Wallbox block):') %></span></h3>
       <ol class="hint" style="margin:0.3rem 0 0; padding-left:1.2rem; line-height:1.55;">
         <li><%= t('Create the virtual inputs on the Miniserver LoxSuite sends to') %><% if (miniservers.length > 1) { %> <%= t('(chosen above)') %><% } %> <%= t('— in a gateway/client project that is usually the gateway; the Wallbox block may sit on a client, Loxone Config links across.') %></li>
         <li><%= t('Virtual input (analog, kW) with the power name above → input') %> <strong><%= t('Lm1') %></strong> (<em><%= t('Limit charging mode 1') %></em><%= t('). Mode 1 then becomes the mode "set by logic"; LoxSuite sends 0 to stop and otherwise a value between the block\'s min and max.') %></li>
@@ -247,7 +262,8 @@
         <span class="hint" id="pl-test-msg" style="margin:0;"></span>
         <a href="/planner/log" class="btn-soft" style="margin-left:auto;"><%= t('Charge log →') %></a>
       </div>
-      <div class="form-grid" style="margin-top:0.8rem;">
+      <h3 class="subhead"><%= t('Solar and planning') %></h3>
+      <div class="form-grid">
         <div><label><%= t('Solar: start at surplus (kW)') %></label><input type="text" name="pv_start_kw" value="<%= cfg.pv_start_kw ?? '' %>" placeholder="<%= t('= minimum power') %>"></div>
         <div><label><%= t('Solar: start after (s)') %></label><input type="text" name="pv_start_delay_s" value="<%= cfg.pv_start_delay_s %>"></div>
         <div><label><%= t('Solar: stop after shortfall for (s)') %></label><input type="text" name="pv_stop_delay_s" value="<%= cfg.pv_stop_delay_s %>"></div>
@@ -275,7 +291,7 @@
   </details>
 
 
-  <details style="margin-top:0.6rem;" <%= chargingSaved === 'reminders' ? 'open' : '' %>>
+  <details <%= chargingSaved === 'reminders' ? 'open' : '' %>>
     <summary><strong><%= t('Reminders') %></strong></summary>
     <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
       <input type="hidden" name="section" value="reminders">
@@ -293,6 +309,7 @@
       <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
     </form>
   </details>
+  </div>
 </div>
 <script>
 (function () {
@@ -312,24 +329,46 @@
   <h2 style="margin-top:0;"><%= t('Energy manager — consumers') %></h2>
   <p class="hint"><%= t('Output: shadow mode — LoxSuite measures, plans and shows on the Energy manager page what it would send to Loxone; nothing is sent yet. Switching a consumer to live (through the virtual inputs below) comes in a later version.') %></p>
   <p class="hint"><%= t('Priority 1 is served first when there is solar surplus. The car (Smart charging) takes its place at the priority set below.') %></p>
+  <div class="ls-fold-list">
   <% emLoads.forEach(l => { %>
-    <details style="border-top:1px solid var(--border); padding:0.5rem 0;">
-      <summary style="cursor:pointer;"><strong><%= l.name %></strong> <span class="hint">· <%= emKinds[l.kind].label %> <%= t('· priority') %> <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
+    <details>
+      <summary><strong><%= l.name %></strong> <span class="hint">· <%= t(emKinds[l.kind].label) %> <%= t('· priority') %> <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
       <%- include('partials/energy-load-form', { l, kinds: emKinds, meters: emMeters, miniservers }) %>
-      <form method="post" action="/energy-manager/loads/<%= l.id %>/delete" style="margin-top:0.4rem;" onsubmit="return confirm(<%= JSON.stringify(t('Delete {name} and its history?', { name: l.name })) %>);"><button type="submit" class="btn-soft"><%= t('Delete') %></button></form>
+      <form method="post" action="/energy-manager/loads/<%= l.id %>/delete" style="margin-top:0.6rem;" onsubmit="return confirm(<%= JSON.stringify(t('Delete {name} and its history?', { name: l.name })) %>);"><button type="submit" class="danger"><%- icon('trash') %> <%= t('Delete') %></button></form>
     </details>
   <% }) %>
-  <details style="border-top:1px solid var(--border); padding:0.5rem 0;" <%= emLoads.length ? '' : 'open' %>>
-    <summary style="cursor:pointer;"><strong><%= t('+ Add a consumer') %></strong></summary>
+  <details <%= emLoads.length ? '' : 'open' %>>
+    <summary><strong><%= t('+ Add a consumer') %></strong></summary>
     <%- include('partials/energy-load-form', { l: null, kinds: emKinds, meters: emMeters, miniservers }) %>
   </details>
-  <form method="post" action="/energy-manager/settings" class="form-grid" style="margin-top:0.8rem; border-top:1px solid var(--border); padding-top:0.8rem;">
-    <div><label><%= t('Priority of the car') %></label><input type="text" name="car_priority" value="<%= emCfg.car_priority %>"></div>
-    <div><label><%= t('Prefer own solar (€/kWh bonus)') %></label><input type="text" name="solar_bonus_eur" value="<%= emCfg.solar_bonus_eur %>"></div>
-    <div style="align-self:end;"><button type="submit" class="btn-soft"><%= t('Save') %></button></div>
+  </div>
+  <h3 class="subhead"><%= t('The car among the consumers') %></h3>
+  <form method="post" action="/energy-manager/settings">
+    <div class="form-grid">
+      <div><label><%= t('Priority of the car') %></label><input type="text" name="car_priority" value="<%= emCfg.car_priority %>"></div>
+      <div><label><%= t('Prefer own solar (€/kWh bonus)') %></label><input type="text" name="solar_bonus_eur" value="<%= emCfg.solar_bonus_eur %>"></div>
+    </div>
+    <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
   </form>
 </div>
 <% } %>
+
+<script>
+// The jump links: the part that is on screen is marked.
+(function () {
+  var nav = document.getElementById('se-nav');
+  if (!nav || !('IntersectionObserver' in window)) return;
+  var links = Array.prototype.slice.call(nav.querySelectorAll('a'));
+  var seen = {};
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { seen[e.target.id] = e.isIntersecting ? e.intersectionRatio : 0; });
+    var best = null, bestR = 0;
+    links.forEach(function (a) { var r = seen[a.getAttribute('href').slice(1)] || 0; if (r > bestR) { bestR = r; best = a; } });
+    links.forEach(function (a) { a.classList.toggle('on', a === best); });
+  }, { threshold: [0, 0.15, 0.4, 0.7, 1] });
+  links.forEach(function (a) { var el = document.getElementById(a.getAttribute('href').slice(1)); if (el) io.observe(el); });
+})();
+</script>
 
 <script>
 (function () {

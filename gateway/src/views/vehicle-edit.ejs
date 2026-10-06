@@ -1,6 +1,6 @@
-<%- include('partials/head', { pageTitle: 'Vehicle: ' + v.name, active: 'vehicles' }) %>
+<%- include('partials/head', { pageTitle: v.name, active: 'vehicles' }) %>
 
-<p><a href="/vehicles"><%= t('← All vehicles') %></a></p>
+<p style="margin:0 0 0.8rem;"><a href="/vehicles"><%= t('← All vehicles') %></a></p>
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
 
@@ -25,16 +25,16 @@
 <% } %>
 
 <% if (canEdit('vehicles')) { %>
-<div class="card">
-  <form method="post" action="/vehicles/<%= v.id %>/update">
+<div class="card" data-card-key="settings">
+  <h2 style="margin-top:0;"><%= t('Settings') %></h2>
+  <form method="post" action="/vehicles/<%= v.id %>/update" id="veh-form">
     <%- include('partials/vehicle-fields', { v, fields, presets }) %>
-    <div class="btn-row" style="margin-top:0.9rem;">
-      <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
-    </div>
   </form>
-  <form method="post" action="/vehicles/<%= v.id %>/delete" style="margin-top:0.8rem;" onsubmit="return confirm(<%= JSON.stringify(t('Delete this vehicle and its history?')) %>);">
-    <button type="submit" class="btn-soft"><%- icon('trash') %> <%= t('Delete') %></button>
-  </form>
+  <form method="post" action="/vehicles/<%= v.id %>/delete" id="veh-delete" onsubmit="return confirm(<%= JSON.stringify(t('Delete this vehicle and its history?')) %>);"></form>
+  <div class="form-actions">
+    <button type="submit" form="veh-form" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
+    <button type="submit" form="veh-delete" class="danger push-right"><%- icon('trash') %> <%= t('Delete') %></button>
+  </div>
 </div>
 <% } %>
 
@@ -46,9 +46,7 @@
   function dt(s) { return s ? new Date(s).toLocaleString() : '—'; }
   function yn(b, yes, no) { return b === true ? yes : b === false ? no : 'unknown'; }
   function tile(label, value, sub) {
-    return '<div style="flex:1; min-width:140px; border:1px solid var(--border); border-radius:10px; padding:0.6rem 0.8rem;">' +
-      '<div class="hint" style="margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;">' + esc(label) + '</div>' +
-      '<div style="font-size:1.3rem; font-weight:700;">' + value + '</div>' + (sub ? '<div class="hint" style="margin:0; font-size:0.75rem;">' + sub + '</div>' : '') + '</div>';
+    return '<div class="ls-tile"><div class="ls-tile-label">' + esc(label) + '</div><div class="ls-tile-value">' + value + '</div>' + (sub ? '<div class="ls-tile-sub">' + sub + '</div>' : '') + '</div>';
   }
   function render(s) {
     if (s.sourceType === 'none') { el.innerHTML = '<p class="hint" style="margin:0;">No data source: the charging planner estimates the battery level.</p>'; return; }
@@ -60,7 +58,7 @@
       : '<span class="hint">● ' + esc(h.detail || 'not read yet') + '</span>';
     var html = '<p style="margin:0 0 0.6rem;">' + esc(srcLabels[s.sourceKind || s.sourceType] || s.sourceType) + ': ' + badge + '</p>';
     var soc = r.soc != null ? r.soc + '%' : '—';
-    html += '<div style="display:flex; gap:0.7rem; flex-wrap:wrap;">' +
+    html += '<div class="ls-tiles">' +
       tile('Battery', soc, r.energy_kwh != null ? r.energy_kwh + ' kWh' + (r.limit_soc != null ? ' · limit ' + r.limit_soc + '%' : '') : (r.limit_soc != null ? 'limit ' + r.limit_soc + '%' : '')) +
       tile('Electric range', r.range_km != null ? (r.range_estimated ? '≈ ' : '') + r.range_km + ' km' : '—', r.total_range_km != null ? 'total incl. fuel ' + r.total_range_km + ' km' : '') +
       tile('Plugged in', yn(r.plugged, 'yes', 'no'), r.charging === true ? 'charging' : r.charging === false ? 'not charging' : '') +

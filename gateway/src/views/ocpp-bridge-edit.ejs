@@ -1,6 +1,6 @@
 <%- include('partials/head', { pageTitle: 'OCPP bridge: ' + bridge.name, active: 'ocpp' }) %>
 
-<p><a href="/ocpp"><%= t('← All OCPP bridges') %></a></p>
+<p style="margin:0 0 0.8rem;"><a href="/ocpp"><%= t('← All OCPP bridges') %></a></p>
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
 
@@ -17,7 +17,8 @@
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0;"><%= t('Charging statistics') %> <span class="hint" style="font-weight:normal; font-size:0.8rem;"><%= t('(MID meter, kWh)') %></span></h2>
+  <h2 style="margin-top:0;"><%= t('Charging statistics') %></h2>
+  <p class="hint" style="margin:-0.5rem 0 0.7rem;"><%= t('(MID meter, kWh)') %></p>
   <div id="ocpp-stats"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
   <p class="hint" style="margin:0.6rem 0 0;">
     <%= t('Today / week / month / year come straight from the Wallbox\'s own counters in Loxone; quarters and the monthly chart are built from the charging sessions (this bridge\'s own, else the Wallbox\'s session log on the Miniserver, which reaches back about 100 sessions — older months show as "no data").') %>
@@ -60,22 +61,22 @@
         <div><label><%= t('Show amounts') %></label><select name="show_vat"><option value="incl" <%= finance.show_vat !== 'excl' ? 'selected' : '' %>><%= t('incl. VAT') %></option><option value="excl" <%= finance.show_vat === 'excl' ? 'selected' : '' %>><%= t('excl. VAT') %></option></select></div>
         <div><label><%= t('VAT (%)') %></label><input type="text" name="vat_pct" value="<%= finance.vat_pct %>"></div>
       </div>
-      <div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit"><%= t('Save') %></button></div>
+      <div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
     </form>
   </details>
   <% } %>
-  <h3 style="margin:1rem 0 0.4rem; font-size:1rem;"><%= t('Reimbursement tariffs') %></h3>
+  <h3 class="subhead"><%= t('Reimbursement tariffs') %></h3>
   <% if (!tariffs.length) { %><p class="hint" style="margin:0;"><%= t('No tariff yet — add the rate you get per kWh (and a new row when it changes, e.g. per 1 January).') %></p><% } else { %>
   <table class="table"><thead><tr><th><%= t('From') %></th><th><%= t('€ / kWh') %></th><th><%= t('Note') %></th><th></th></tr></thead><tbody>
     <% tariffs.forEach(tr => { %><tr><td><%= tr.valid_from %></td><td>€ <%= Number(tr.eur_per_kwh).toLocaleString(uiLocale, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) %></td><td><%= tr.note || '' %></td>
-      <td><% if (canEdit('ocpp')) { %><form method="post" action="/ocpp/<%= bridge.id %>/tariffs/<%= tr.id %>/delete" style="margin:0;" onsubmit="return confirm(<%= JSON.stringify(t('Delete this tariff?')) %>);"><button type="submit" class="btn-soft"><%- icon('trash') %></button></form><% } %></td></tr><% }) %>
+      <td><% if (canEdit('ocpp')) { %><form method="post" action="/ocpp/<%= bridge.id %>/tariffs/<%= tr.id %>/delete" style="margin:0;" onsubmit="return confirm(<%= JSON.stringify(t('Delete this tariff?')) %>);"><button type="submit" class="danger"><%- icon('trash') %></button></form><% } %></td></tr><% }) %>
   </tbody></table><% } %>
   <% if (canEdit('ocpp')) { %>
   <form method="post" action="/ocpp/<%= bridge.id %>/tariffs" class="btn-row" style="align-items:flex-end; gap:0.6rem; margin-top:0.6rem;">
     <div><label><%= t('From') %></label><input type="date" name="valid_from" value="<%= new Date().toISOString().slice(0, 10) %>"></div>
     <div><label><%= t('€ / kWh') %></label><input type="text" name="eur_per_kwh" placeholder="e.g. 0,23" style="width:7rem;"></div>
     <div><label><%= t('Note') %></label><input type="text" name="note" placeholder="<%= t('optional') %>"></div>
-    <button type="submit" class="btn-soft"><%- icon('plus') %> <%= t('Add tariff') %></button>
+    <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add tariff') %></button>
   </form>
   <% } %>
 </div>
@@ -102,25 +103,25 @@
   </form>
 </div>
 
-<% if (canEdit('ocpp')) { %>
-<div class="card">
-  <form method="post" action="/ocpp/<%= bridge.id %>/update">
-    <%- include('partials/ocpp-bridge-fields', { b: bridge, wallboxes, isNew: false }) %>
-    <div class="btn-row" style="margin-top:0.9rem;">
-      <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
-    </div>
-  </form>
-  <form method="post" action="/ocpp/<%= bridge.id %>/delete" style="margin-top:0.8rem;"
-        onsubmit="return confirm(<%= JSON.stringify(t('Delete this OCPP bridge and its session history?')) %>);">
-    <button type="submit" class="btn-soft"><%- icon('trash') %> <%= t('Delete') %></button>
-  </form>
-</div>
-<% } %>
 
 <div class="card">
   <h2 style="margin-top:0;"><%= t('Sessions') %></h2>
   <div id="ocpp-sessions"></div>
 </div>
+
+<% if (canEdit('ocpp')) { %>
+<div class="card" data-card-key="settings">
+  <h2 style="margin-top:0;"><%= t('Settings') %></h2>
+  <form method="post" action="/ocpp/<%= bridge.id %>/update" id="ocpp-form">
+    <%- include('partials/ocpp-bridge-fields', { b: bridge, wallboxes, isNew: false }) %>
+  </form>
+  <form method="post" action="/ocpp/<%= bridge.id %>/delete" id="ocpp-delete" onsubmit="return confirm(<%= JSON.stringify(t('Delete this OCPP bridge and its session history?')) %>);"></form>
+  <div class="form-actions">
+    <button type="submit" form="ocpp-form" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
+    <button type="submit" form="ocpp-delete" class="danger push-right"><%- icon('trash') %> <%= t('Delete') %></button>
+  </div>
+</div>
+<% } %>
 
 <div class="card">
   <h2 style="margin-top:0;"><%= t('Log') %></h2>
@@ -160,13 +161,14 @@
     }
     var ses = data.sessions || [];
     document.getElementById('ocpp-sessions').innerHTML = ses.length
-      ? '<table><thead><tr><th>Start</th><th>Stop</th><th>Meter start</th><th>Meter stop</th><th>kWh</th><th>ID tag</th><th>Transaction</th><th>Mode</th></tr></thead><tbody>' +
+      ? '<table id="ocpp-ses-table"><thead><tr><th>Start</th><th>Stop</th><th>Meter start</th><th>Meter stop</th><th>kWh</th><th>ID tag</th><th>Transaction</th><th>Mode</th></tr></thead><tbody>' +
         ses.map(function (x) {
           return '<tr><td>' + esc(dt(x.started_at)) + '</td><td>' + esc(x.stopped_at ? dt(x.stopped_at) : 'running') +
             '</td><td>' + kwh(x.meter_start_wh) + '</td><td>' + kwh(x.meter_stop_wh) + '</td><td>' + (x.meter_stop_wh == null ? '' : ((x.meter_stop_wh - x.meter_start_wh) / 1000).toFixed(3)) +
             '</td><td>' + esc(x.id_tag ? x.id_tag + ' (' + x.id_tag_source + ')' : '') + '</td><td>' + esc(x.transaction_id == null ? '' : x.transaction_id) + '</td><td>' + esc(x.mode) + '</td></tr>';
         }).join('') + '</tbody></table>'
       : '<p class="hint" style="margin:0;">No sessions recorded yet.</p>';
+    lsMoreRows(document.getElementById('ocpp-ses-table'), 10);
     document.getElementById('ocpp-log').textContent = (data.log || []).slice().reverse().map(function (l) {
       var rest = Object.assign({}, l); delete rest.ts; delete rest.kind;
       return tm(l.ts) + '  ' + l.kind + (Object.keys(rest).length ? '  ' + JSON.stringify(rest) : '');
@@ -197,14 +199,13 @@
     if (!d || d.error || !d.stats) { el.innerHTML = '<p class="hint" style="margin:0;">' + esc(d && d.error ? d.error : 'No data yet.') + '</p>'; return; }
     var st = d.stats;
     var tile = function (label, v, sub) {
-      return '<div style="border:1px solid var(--border, #e3e6ea); border-radius:10px; padding:0.8rem 0.9rem; background:var(--surface-2, rgba(0,0,0,0.02));">' +
-        '<div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em;">' + label + '</div>' +
-        '<div style="font-size:1.6rem; font-weight:700; margin-top:0.2rem;">' + nf(v, 2) + ' <span style="font-size:0.85rem; font-weight:500;">kWh</span></div>' +
-        '<div class="hint" style="margin:0.15rem 0 0; font-size:0.75rem;">' + (sub || '&nbsp;') + '</div></div>';
+      return '<div class="ls-tile"><div class="ls-tile-label">' + label + '</div>' +
+        '<div class="ls-tile-value">' + nf(v, 2) + ' <small>kWh</small></div>' +
+        '<div class="ls-tile-sub">' + (sub || '&nbsp;') + '</div></div>';
     };
     var qSub = function (q) { return esc(q.name.replace(/(\d{4})Q(\d)/, 'Q$2 $1')) + (q.incomplete ? ' · incomplete' : ''); };
     var exportLink = '/ocpp/<%= bridge.id %>/export?quarter=' + encodeURIComponent(st.prevQuarter.name) + '&format=xlsx';
-    var html = '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:0.75rem;">' +
+    var html = '<div class="ls-tiles">' +
       tile('Today', st.today) + tile('This week', st.week) + tile('This month', st.month) +
       tile('This quarter', st.quarter.kwh, qSub(st.quarter)) +
       tile('Previous quarter', st.prevQuarter.kwh, qSub(st.prevQuarter) + ' · <a href="' + exportLink + '">export</a>') +
@@ -214,13 +215,12 @@
       var eur = function (v) { return v == null ? '—' : '€ ' + nf(v, 2); };
       var ftile = function (label, o) {
         var sal = o.saldo;
-        return '<div style="border:1px solid var(--border, #e3e6ea); border-radius:10px; padding:0.8rem 0.9rem; background:var(--surface-2, rgba(0,0,0,0.02));">' +
-          '<div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em;">' + label + '</div>' +
-          '<div style="font-size:1.4rem; font-weight:700; margin-top:0.2rem; color:' + (sal == null ? 'inherit' : sal >= 0 ? 'var(--ok, #2e7d32)' : 'var(--danger, #c62828)') + ';">' + (sal == null ? eur(o.cost) : (sal >= 0 ? '+' : '') + eur(sal)) + '</div>' +
-          '<div class="hint" style="margin:0.15rem 0 0; font-size:0.75rem;">' + (sal == null ? 'cost' : 'balance') + ' · cost ' + eur(o.cost) + (o.reimbursement != null ? ' · back ' + eur(o.reimbursement) : '') + (o.eurPerKwh != null ? ' · ' + eur(o.eurPerKwh) + '/kWh' : '') + '</div></div>';
+        return '<div class="ls-tile"><div class="ls-tile-label">' + label + '</div>' +
+          '<div class="ls-tile-value" style="color:' + (sal == null ? 'inherit' : sal >= 0 ? 'var(--ok, #2e7d32)' : 'var(--danger, #c62828)') + ';">' + (sal == null ? eur(o.cost) : (sal >= 0 ? '+' : '') + eur(sal)) + '</div>' +
+          '<div class="ls-tile-sub">' + (sal == null ? 'cost' : 'balance') + ' · cost ' + eur(o.cost) + (o.reimbursement != null ? ' · back ' + eur(o.reimbursement) : '') + (o.eurPerKwh != null ? ' · ' + eur(o.eurPerKwh) + '/kWh' : '') + '</div></div>';
       };
       html += '<div class="hint" style="margin:1rem 0 0.3rem; font-size:0.8rem;">Costs &amp; reimbursement' + (f.showVat === 'excl' ? ' (excl. VAT)' : '') + (f.hasTariff ? '' : ' &mdash; no reimbursement tariff yet, <a href="#finance">add one</a>') + '</div>' +
-        '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:0.75rem;">' +
+        '<div class="ls-tiles">' +
         ftile('This month', f.month) + ftile('This quarter', f.quarter) + ftile('This year', f.year) + '</div>';
     }
     var ms = (st.months || []).slice();

@@ -32,12 +32,14 @@ router.get('/loads/:id', asyncHandler(async (req, res) => {
   if (!load) return res.redirect('/energy-manager');
   const lp = (em.getRuntime().loads || []).find((x) => x.id === load.id) || {};
   const weather = lp.weather ? { model: lp.weather.model, todayC: lp.weather.todayC, factorToday: lp.weather.factorToday, factorTomorrow: lp.weather.factorTomorrow } : null;
-  res.render('energy-load', { load, kinds: em.KINDS, src: em.sourcesOf(load.settings), learned: { ...(await em.learned(load)), weather, cooling: lp.cooling || null }, detail: await em.loadDetail(load) });
+  const daily = load.kind === 'appliance' ? [] : await em.dailyReport(load, 14).catch(() => []);
+  res.render('energy-load', { load, kinds: em.KINDS, src: em.sourcesOf(load.settings), learned: { ...(await em.learned(load)), weather, cooling: lp.cooling || null }, detail: { ...(await em.loadDetail(load)), daily } });
 }));
 router.get('/loads/:id/detail.json', asyncHandler(async (req, res) => {
   const load = (await em.listLoads()).find((l) => l.id === Number(req.params.id));
   if (!load) return res.status(404).json({ error: 'not found' });
-  res.json({ load: { id: load.id, name: load.name, kind: load.kind }, learned: await em.learned(load), detail: await em.loadDetail(load) });
+  const daily = load.kind === 'appliance' ? [] : await em.dailyReport(load, 14).catch(() => []);
+  res.json({ load: { id: load.id, name: load.name, kind: load.kind }, learned: await em.learned(load), detail: { ...(await em.loadDetail(load)), daily } });
 }));
 
 router.get('/data.json', asyncHandler(async (req, res) => {

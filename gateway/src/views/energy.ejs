@@ -9,7 +9,7 @@
 
 <div class="card">
   <h2 style="margin-top:0;"><%= t('Now') %></h2>
-  <div id="en-live" style="display:flex; gap:0.7rem; flex-wrap:wrap;"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
+  <div id="en-live" class="ls-tiles"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
 </div>
 
 <div class="card">
@@ -95,9 +95,8 @@
   function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
   function tile(label, value, sub, color, health) {
     var dot = health === 'failing' ? '<span style="color:var(--danger);" title="no data">●</span> ' : health === 'ok' ? '<span style="color:var(--success);">●</span> ' : '';
-    return '<div style="flex:1; min-width:150px; border:1px solid var(--border); border-radius:10px; padding:0.6rem 0.8rem;">' +
-      '<div class="hint" style="margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;">' + dot + esc(label) + '</div>' +
-      '<div style="font-size:1.35rem; font-weight:700; color:' + color + ';">' + value + '</div>' + (sub ? '<div class="hint" style="margin:0; font-size:0.75rem;">' + sub + '</div>' : '') + '</div>';
+    return '<div class="ls-tile"><div class="ls-tile-label">' + dot + esc(label) + '</div>' +
+      '<div class="ls-tile-value" style="color:' + color + ';">' + value + '</div>' + (sub ? '<div class="ls-tile-sub">' + sub + '</div>' : '') + '</div>';
   }
   function renderLive(d) {
     var el = document.getElementById('en-live');
@@ -114,9 +113,9 @@
       var td = t[k];
       if (td) sub += (sub ? ' · ' : '') + 'today ' + nf(td.import_kwh, 1) + (td.export_kwh ? ' / ' + nf(td.export_kwh, 1) : '') + ' kWh';
       if (!r.found) sub = 'control not found on the Miniserver';
-      html += tile(LABELS[k], nf(r.power_kw, 2) + ' <span style="font-size:0.8rem; font-weight:500;">kW</span>', sub, COLORS[k], d.health[k]);
+      html += tile(LABELS[k], nf(r.power_kw, 2) + ' <small>kW</small>', sub, COLORS[k], d.health[k]);
     });
-    html += tile('House', nf(d.house_kw, 2) + ' <span style="font-size:0.8rem; font-weight:500;">kW</span>', t.house ? 'today ' + nf(t.house.import_kwh, 1) + ' kWh' : 'calculated', COLORS.house);
+    html += tile('House', nf(d.house_kw, 2) + ' <small>kW</small>', t.house ? 'today ' + nf(t.house.import_kwh, 1) + ' kWh' : 'calculated', COLORS.house);
     el.innerHTML = html;
   }
   function liveTick() { fetch('/energy/live.json').then(function (r) { return r.json(); }).then(renderLive).catch(function () {}); }

@@ -12,7 +12,7 @@
   <div><label><%= t('Enabled') %></label><%- toggleSwitch('enabled', !!b.enabled) %></div>
 </div>
 
-<h2 style="margin-top:1.3rem;"><%= t('OCPP backend') %></h2>
+<h3 class="subhead"><%= t('OCPP backend') %></h3>
 <div class="form-grid">
   <div>
     <label><%= t('Mode') %></label>
@@ -65,7 +65,7 @@
   <strong><%= t('Automatic') %></strong> <%= t('uses the tag of a badge read on the chosen NFC Code Touch around plug-in (normalised like Loxone\'s own OCPP connector does: hex, without the "EC" specifier and trailing zeros), else the tag mapped to the Loxone user the Wallbox reports for the session, else the fixed tag. The session start is reported after the authorization arrives (or the wait time passes), but with the plug-in time and meter reading. The bridge identifies itself as') %> <code>Loxone / WallboxTree-LoxSuite</code>.
 </p>
 
-<h2 style="margin-top:1.3rem;"><%= t('Details') %></h2>
+<h3 class="subhead"><%= t('Details') %></h3>
 <div class="form-grid">
   <% const serialSug = typeof serialSuggestion !== 'undefined' ? serialSuggestion : null; %>
   <div>

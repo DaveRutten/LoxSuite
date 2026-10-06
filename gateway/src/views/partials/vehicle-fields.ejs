@@ -26,7 +26,7 @@
   <%= t('A plug-in hybrid can run empty without harm (it drives on fuel), so its reserve is normally 0. The battery size and charge limit turn a state of charge into kWh; without a data source the charging planner estimates it.') %>
 </p>
 
-<h2 style="margin-top:1.3rem;"><%= t('Data source') %></h2>
+<h3 class="subhead"><%= t('Data source') %></h3>
 <div class="form-grid">
   <div>
     <label><%= t('Source') %></label>
@@ -172,7 +172,7 @@
   </p>
 </div>
 
-<h2 style="margin-top:1.3rem;"><%= t('Which car is plugged in') %></h2>
+<h3 class="subhead"><%= t('Which car is plugged in') %></h3>
 <div class="form-grid">
   <div><label><%= t('NFC tags of this car (one per line)') %></label><textarea name="id_tags" rows="2" placeholder="04A1B2C3D4E5F6"><%= v.id_tags || '' %></textarea></div>
   <div><label><%= t('Loxone users of this car (one per line)') %></label><textarea name="loxone_users" rows="2" placeholder="<%= t('Alex') %>"><%= v.loxone_users || '' %></textarea></div>
@@ -182,7 +182,7 @@
   <%= t('Only needed with more than one car on the same Wallbox. A session belongs to this car when its NFC tag or the Loxone user of the session matches, or when this car\'s data source says it is plugged in. Switch') %> <em><%= t('Report over OCPP') %></em> <%= t('off for a car whose charging isn\'t reimbursed (e.g. the private car next to the company car): its sessions are then not sent to the backend and left out of the quarterly export.') %>
 </p>
 
-<h2 style="margin-top:1.3rem;"><%= t('At home') %></h2>
+<h3 class="subhead"><%= t('At home') %></h3>
 <div class="form-grid">
   <div><label><%= t('Home latitude') %></label><input type="text" name="home_lat" value="<%= val(v.home_lat) %>" placeholder="52.09"></div>
   <div><label><%= t('Home longitude') %></label><input type="text" name="home_lon" value="<%= val(v.home_lon) %>" placeholder="5.12"></div>

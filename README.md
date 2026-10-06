@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.40.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.41.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -86,7 +86,7 @@ It provides:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/smart-charging-dark.png">
-  <img src="docs/screenshots/smart-charging-light.png" alt="Smart charging with the car away: what it needs, ready by, expected home, the plan with its solar and grid part, and the price chart with planned hours">
+  <img src="docs/screenshots/smart-charging-light.png" alt="Smart charging in two cards: Now (mode, session buttons and the live figures) and Plan (what fits in the battery, ready by, expected home, the plan with its solar and grid part, and the price chart with planned hours)">
 </picture>
 
 </td>
@@ -130,7 +130,7 @@ It provides:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/energy-manager-dark.png">
-  <img src="docs/screenshots/energy-manager-light.png" alt="The energy manager: what it would send now, and a 36-hour plan of prices, solar, car charging, hot water, heat pump and washing machine">
+  <img src="docs/screenshots/energy-manager-light.png" alt="The energy manager: what it would send now, a 36-hour plan of prices, solar, car charging, hot water, heat pump and washing machine, and a compact card per consumer with what it learned, the last 7 days, its own-solar share and what it could save">
 </picture>
 
 </td>
@@ -184,7 +184,7 @@ It provides:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/settings-energy-dark.png">
-  <img src="docs/screenshots/settings-energy-light.png" alt="Administration, Energy and charging tab: prices, solar and fuel, the linked calendars and the agenda and climate settings">
+  <img src="docs/screenshots/settings-energy-light.png" alt="Administration, Energy and charging tab: jump links over the page, prices, solar and fuel as fold-outs, the linked calendars and the agenda and climate settings">
 </picture>
 
 </td>

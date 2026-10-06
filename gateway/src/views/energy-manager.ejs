@@ -5,24 +5,22 @@
 
 <p class="hint"><%= t('The other big consumers, planned together with the car from the prices, the solar forecast and your house load.') %></p>
 
-<div class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+<div class="card" data-card-key="now">
+  <div>
     <h2 style="margin:0;"><%= t('Now') %></h2>
-    <div class="btn-row" style="margin:0;">
-      <span class="hint" id="em-status" style="margin:0;"></span>
-      <% if (canEdit('energy_manager')) { %><button type="button" class="btn-soft" id="em-recalc"><%= t('Recalculate') %></button><button type="button" class="btn-soft" id="em-import"><%= t('Import 30 days from Loxone') %></button><% } %>
-    </div>
+    <% if (canEdit('energy_manager')) { %><div class="btn-row" style="margin:0;"><button type="button" class="btn-soft" id="em-recalc"><%- icon('refresh') %> <%= t('Recalculate') %></button><button type="button" class="btn-soft" id="em-import"><%= t('Import 30 days from Loxone') %></button></div><% } %>
   </div>
+  <p class="hint" id="em-status" style="margin:0.3rem 0 0;"></p>
   <div id="em-now" style="margin-top:0.6rem;"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
 </div>
 
-<div class="card">
+<div class="card" data-card-key="plan">
   <h2 style="margin-top:0;"><%= t('Plan — next 36 hours') %></h2>
   <div id="em-daytypes" style="margin:-0.3rem 0 0.5rem;"></div>
   <div id="em-plan"></div>
 </div>
 
-<div class="card">
+<div class="card" data-card-key="unknown">
   <h2 style="margin-top:0;"><%= t('Unknown consumers') %></h2>
   <p class="hint"><%= t('What the house uses beyond the known consumers, above its base load, coming back at about the same time. Give it a name so you know what it is — or add it as a consumer.') %></p>
   <div id="em-unknown"></div>
@@ -105,14 +103,12 @@
     if (!el) return;
     var map = d.dayTypes || {}, keys = Object.keys(map).sort().slice(0, 3);
     var col = { away: '#e67e22', holiday: '#9b59b6', home: '#16a085', weekend: '#7f8c8d', workday: '#4a7bd0' };
-    el.innerHTML = keys.map(function (k) { var t = map[k].type, p = k.split('-'); return '<span style="display:inline-block; padding:1px 7px; border-radius:8px; font-size:0.75rem; margin-right:0.3rem; border:1px solid ' + col[t] + '; color:' + col[t] + ';">' + esc(new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { weekday: 'short' })) + ' · ' + esc(TLx(t)) + '</span>'; }).join('') + '<a href="/settings/energy#day-types" class="hint" style="font-size:0.75rem;">' + esc(TLx('days away & holidays')) + '</a>';
+    el.innerHTML = keys.map(function (k) { var t = map[k].type, p = k.split('-'); return '<span class="chip" style="color:' + col[t] + ';">' + esc(new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { weekday: 'short' })) + ' · ' + esc(TLx(t)) + '</span>'; }).join('') + '<a href="/settings/energy#day-types" class="hint" style="font-size:0.75rem;">' + esc(TLx('days away & holidays')) + '</a>';
   }
-  function perStatusHtml(lr) {
-    var ps = (lr && lr.perStatus) || [];
-    if (!ps.length) return '';
-    return '<div style="overflow-x:auto; margin:0.4rem 0;"><table><thead><tr><th>Status</th><th>Hours (4 weeks)</th><th>Per day</th><th>kWh</th><th>Typical power</th></tr></thead><tbody>' +
-      ps.map(function (x) { return '<tr><td>' + esc(x.status) + '</td><td>' + nf(x.hours, 1) + '</td><td>' + nf(x.hoursPerDay, 1) + ' h</td><td>' + nf(x.kwh, 1) + (x.measured ? '' : ' <span class="hint">(estimated)</span>') + '</td><td>' + (x.kw > 0.005 ? nf(x.kw, 2) + ' kW' : '—') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  function tile(label, value, sub, color) {
+    return '<div class="ls-tile"><div class="ls-tile-label">' + esc(label) + '</div><div class="ls-tile-value"' + (color ? ' style="color:' + color + ';"' : '') + '>' + value + '</div>' + (sub ? '<div class="ls-tile-sub">' + sub + '</div>' : '') + '</div>';
   }
+  function sum(list, k) { return list.reduce(function (a, x) { return a + (Number(x[k]) || 0); }, 0); }
 
   function planChart(d) {
     var el = document.getElementById('em-plan');
@@ -148,18 +144,31 @@
 
   // Learned patterns: when it usually runs, how long, how much — and what usually follows what.
   function patternsHtml(l) {
-    var h = '<div style="margin-top:0.8rem;"><div class="hint" style="margin:0 0 0.3rem; font-size:0.8rem;"><strong>Patterns</strong> (last 8 weeks, ' + l.patternDays + ' days measured' + (l.usePatterns ? '' : ' &mdash; not used in the plan') + ')</div>';
+    var h = '<h3 class="subhead">Patterns <span class="hint" style="font-weight:400;">(last 8 weeks, ' + l.patternDays + ' days measured' + (l.usePatterns ? '' : ' &mdash; not used in the plan') + ')</span></h3>';
     var list = (l.patterns || []).concat(l.follows || []);
     if (!list.length) h += '<p class="hint" style="margin:0;">' + (l.patternDays < 7 ? 'Not enough days measured yet (patterns appear after about a week).' : 'No clear pattern yet.') + '</p>';
     else h += '<ul style="margin:0 0 0.4rem; padding-left:1.1rem;">' + list.map(function (p) { return '<li>' + esc(p.text) + (CAN && p.key ? ' <a href="#" class="hint" data-ignore="' + esc(p.key) + '" data-load="' + l.id + '">' + esc(TLx('not right')) + '</a>' : '') + '</li>'; }).join('') + '</ul>';
     if (l.ignoredPatterns && CAN) h += '<p class="hint" style="margin:0 0 0.3rem;">' + esc(TLx('{0} pattern(s) left out by you').replace('{0}', l.ignoredPatterns)) + ' <a href="#" data-restore="' + l.id + '">' + esc(TLx('put back')) + '</a></p>';
-    var ex = l.expected || [], max = Math.max.apply(null, ex.map(function (x) { return x.kwh; }).concat([0.01]));
-    if (ex.some(function (x) { return x.kwh > 0; })) {
-      var w = 100 / ex.length;
-      h += '<div class="hint" style="margin:0.3rem 0 0.2rem; font-size:0.75rem;">Expected use, next 24 h (kWh per hour)</div><svg viewBox="0 0 100 34" preserveAspectRatio="none" width="100%" height="48" style="display:block;">' +
-        ex.map(function (x, i) { var bh = Math.round(x.kwh / max * 26); return '<rect x="' + (i * w + 0.3) + '" y="' + (28 - bh) + '" width="' + (w - 0.6) + '" height="' + bh + '" fill="var(--accent, #5CA83F)" opacity="0.7"><title>' + hh(x.ms) + ': ' + nf(x.kwh, 2) + ' kWh</title></rect>' + (i % 3 === 0 ? '<text x="' + (i * w + w / 2) + '" y="33.5" font-size="3.4" text-anchor="middle" fill="currentColor" opacity="0.6">' + String(new Date(x.ms).getHours()).padStart(2, '0') + '</text>' : ''); }).join('') + '</svg>';
-    }
-    return h + '</div>';
+    var ex = l.expected || [];
+    if (ex.some(function (x) { return x.kwh > 0; })) h += '<div class="hint" style="margin:0.4rem 0 0.2rem; font-size:0.75rem;">Expected use, next 24 h (kWh per hour)</div><div class="em-expected" data-load="' + l.id + '"></div>';
+    return h;
+  }
+  // the expected kWh per hour, drawn at the real width of the card (redrawn on resize)
+  function drawExpected() {
+    if (!last) return;
+    Array.prototype.forEach.call(document.querySelectorAll('.em-expected'), function (el) {
+      var l = last.loads.find(function (x) { return String(x.id) === el.dataset.load; });
+      var ex = (l && l.expected) || [];
+      if (!ex.length) return;
+      var W = lsChartW(el, 600), H = 46, bw = W / ex.length, max = Math.max.apply(null, ex.map(function (x) { return x.kwh || 0; }).concat([0.01]));
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 14) + '" width="100%" style="display:block;">';
+      ex.forEach(function (x, i) {
+        var bh = Math.round((x.kwh || 0) / max * H);
+        svg += '<rect x="' + (i * bw + 1) + '" y="' + (H - bh) + '" width="' + Math.max(1, bw - 2) + '" height="' + bh + '" rx="1.5" fill="var(--accent, #5CA83F)" opacity="0.75"><title>' + hh(x.ms) + ': ' + nf(x.kwh, 2) + ' kWh</title></rect>';
+        if (i % 3 === 0) svg += '<text x="' + (i * bw + bw / 2) + '" y="' + (H + 11) + '" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.6">' + String(new Date(x.ms).getHours()).padStart(2, '0') + '</text>';
+      });
+      el.innerHTML = svg + '</svg>';
+    });
   }
   function render(d) {
     last = d;
@@ -178,23 +187,35 @@
     unknownHtml(d);
     dayTypesHtml(d);
     document.getElementById('em-loads').innerHTML = d.loads.map(function (l) {
-      var lr = l.learned || {}, h = '<div class="card"><h2 style="margin-top:0;">' + esc(l.name) + '</h2><p class="hint" style="margin:-0.4rem 0 0.5rem;">' + esc(l.kindLabel) + ' · <a href="/energy-manager/loads/' + l.id + '">' + esc((window.LS_I18N && window.LS_I18N['Details →']) || 'Details →') + '</a></p>' + perStatusHtml(lr);
+      var lr = l.learned || {}, h = '<div class="card" data-card-key="load-' + l.id + '"><h2 style="margin-top:0;">' + esc(l.name) + '</h2><p class="hint" style="margin:-0.5rem 0 0.7rem;">' + esc(l.kindLabel) + ' · prio ' + l.priority + '</p>';
+      var tiles = '';
       if (l.kind === 'appliance') {
-        h += '<p class="hint" style="margin:0 0 0.5rem;">Learned: ' + (lr.runs ? lr.runs + ' run(s), typically ' + nf(lr.kwh, 2) + ' kWh in ' + nf(lr.durationH, 1) + ' h' : 'no runs measured yet') + '.</p>';
-        if (CAN) h += '<div class="btn-row" style="align-items:flex-end;"><div><label>Ready by</label><input type="datetime-local" id="em-ready-' + l.id + '"></div><div><label>Label</label><input type="text" id="em-label-' + l.id + '" placeholder="e.g. 40° wash"></div><button type="button" class="btn-soft" data-req="' + l.id + '">Plan the best start</button></div>';
-        if (l.requests.length) h += '<ul style="margin:0.5rem 0;">' + l.requests.map(function (q) { return '<li>' + esc(q.label) + (q.expected ? ': usually ' + hh(q.usualStart) : ': ready by ' + esc(new Date(q.readyBy).toLocaleString())) + ' &rarr; <strong>' + (q.plannedStart ? 'start at ' + hh(q.plannedStart) : 'no start found') + '</strong>' + (q.plannedCost != null ? ' (' + eur(q.plannedCost) + ')' : '') + (CAN && q.id ? ' <a href="#" data-delreq="' + q.id + '">remove</a>' : '') + (q.expected ? ' <span class="badge">expected</span>' : '') + '</li>'; }).join('') + '</ul>';
-        h += '<div style="overflow-x:auto;"><table><thead><tr><th>Run</th><th>Duration</th><th>kWh</th><th>Cost</th><th>Best start (hindsight)</th><th>Then</th><th>Saving</th></tr></thead><tbody>' +
-          (l.runs.length ? l.runs.map(function (r) { var dur = (Date.parse(r.end_at) - Date.parse(r.start_at)) / 60000; var sav = r.cost_eur != null && r.best_cost_eur != null ? r.cost_eur - r.best_cost_eur : null; return '<tr><td>' + esc(new Date(r.start_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + Math.round(dur) + ' min</td><td>' + nf(r.kwh, 2) + '</td><td>' + eur(r.cost_eur) + '</td><td>' + (r.best_start ? hh(r.best_start) : '—') + '</td><td>' + eur(r.best_cost_eur) + '</td><td style="color:' + (sav > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(sav) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No runs measured yet.</td></tr>') + '</tbody></table></div>';
+        var runs = l.runs || [], saved = runs.reduce(function (a, r) { return a + (r.cost_eur != null && r.best_cost_eur != null ? r.cost_eur - r.best_cost_eur : 0); }, 0);
+        tiles += tile('Learned', lr.runs ? nf(lr.kwh, 2) + ' <small>' + esc(TLx('kWh per run')) + '</small>' : '—', lr.runs ? TLx('{0} runs, typically {1} h').replace('{0}', lr.runs).replace('{1}', nf(lr.durationH, 1)) : TLx('no runs measured yet'));
+        tiles += tile('Runs', String(runs.length), runs.length ? TLx('last one {0}').replace('{0}', esc(new Date(runs[0].start_at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }))) : '');
+        tiles += tile('Costs of these runs', eur(sum(runs, 'cost_eur')), nf(sum(runs, 'kwh'), 1) + ' kWh');
+        tiles += tile('Could have saved', eur(saved), TLx('at the best start in hindsight'), saved > 0.01 ? 'var(--success)' : null);
       } else {
-        h += weatherHtml(l) + anomaliesHtml(lr);
-        if (lr.change && lr.change.changed) h += '<p class="hint" style="margin:0 0 0.4rem; color:#b8860b;">' + esc(TLx('Use changed: last week {0} kWh/day against {1} before — LoxSuite now learns mostly from the last week.').replace('{0}', nf(lr.change.recent, 1)).replace('{1}', nf(lr.change.before, 1))) + '</p>';
-        h += '<p class="hint" style="margin:0 0 0.5rem;">Learned: ' + (lr.kwhPerDay != null ? nf(lr.kwhPerDay, 1) + ' kWh/day, about ' + nf(lr.kwPeak, 1) + ' kW while running' : 'no measurements yet') + '. "In advised hours" = share of the kWh that fell in hours LoxSuite would have released; "could save" = moving the rest there.</p>';
-        h += '<div style="overflow-x:auto;"><table><thead><tr><th>Day</th><th>kWh</th><th>Cost</th><th>€/kWh</th><th>Solar</th><th>In advised hours</th><th>Could save</th></tr></thead><tbody>' +
-          (l.daily.length ? l.daily.map(function (x) { return '<tr><td>' + esc(dayLabel(x.day)) + '</td><td>' + nf(x.kwh, 1) + '</td><td>' + eur(x.cost) + '</td><td>' + eur(x.eurPerKwh, 3) + '</td><td>' + (x.solarShare == null ? '—' : x.solarShare + '%') + '</td><td>' + (x.advisedShare == null ? '<span class="hint">not logged yet</span>' : x.advisedShare + '%') + '</td><td style="color:' + (x.potential > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(x.potential) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No measurements yet.</td></tr>') + '</tbody></table></div>';
+        var wk = (l.daily || []).slice(0, 7), kwh7 = sum(wk, 'kwh'), cost7 = sum(wk, 'cost'), pot = sum(l.daily || [], 'potential');
+        var solar7 = kwh7 > 0 ? Math.round(wk.reduce(function (a, x) { return a + (x.solarShare == null ? 0 : x.solarShare * x.kwh); }, 0) / kwh7) : null;
+        tiles += tile('Learned', lr.kwhPerDay != null ? nf(lr.kwhPerDay, 1) + ' <small>' + esc(TLx('kWh per day')) + '</small>' : '—', lr.kwPeak != null ? TLx('about {0} kW while running').replace('{0}', nf(lr.kwPeak, 1)) : TLx('no measurements yet'));
+        tiles += tile('Last 7 days', nf(kwh7, 1) + ' <small>kWh</small>', eur(cost7) + (kwh7 > 0 ? ' · ' + eur(cost7 / kwh7, 3) + '/kWh' : ''));
+        tiles += tile('From own solar', solar7 == null ? '—' : solar7 + '%', TLx('of the last 7 days'), solar7 > 0 ? '#d4a017' : null);
+        tiles += tile('Could save', eur(pot), TLx('in 14 days, by running in the advised hours'), pot > 0.01 ? 'var(--success)' : null);
+      }
+      h += '<div class="ls-tiles">' + tiles + '</div>';
+      var notes = weatherHtml(l) + anomaliesHtml(lr);
+      if (lr.change && lr.change.changed) notes += '<p class="hint" style="margin:0 0 0.4rem; color:#b8860b;">' + esc(TLx('Use changed: last week {0} kWh/day against {1} before — LoxSuite now learns mostly from the last week.').replace('{0}', nf(lr.change.recent, 1)).replace('{1}', nf(lr.change.before, 1))) + '</p>';
+      if (notes) h += '<div style="margin-top:0.7rem;">' + notes + '</div>';
+      if (l.kind === 'appliance') {
+        if (CAN) h += '<h3 class="subhead">' + esc(TLx('Plan the next run')) + '</h3><div class="btn-row" style="align-items:flex-end;"><div><label>Ready by</label><input type="datetime-local" id="em-ready-' + l.id + '"></div><div><label>Label</label><input type="text" id="em-label-' + l.id + '" placeholder="e.g. 40° wash"></div><button type="button" class="btn-edit" data-req="' + l.id + '">Plan the best start</button></div>';
+        if (l.requests.length) h += '<ul style="margin:0.5rem 0;">' + l.requests.map(function (q) { return '<li>' + esc(q.label) + (q.expected ? ': usually ' + hh(q.usualStart) : ': ready by ' + esc(new Date(q.readyBy).toLocaleString())) + ' &rarr; <strong>' + (q.plannedStart ? 'start at ' + hh(q.plannedStart) : 'no start found') + '</strong>' + (q.plannedCost != null ? ' (' + eur(q.plannedCost) + ')' : '') + (CAN && q.id ? ' <a href="#" data-delreq="' + q.id + '">remove</a>' : '') + (q.expected ? ' <span class="badge">expected</span>' : '') + '</li>'; }).join('') + '</ul>';
       }
       h += patternsHtml(l);
+      h += '<div class="btn-row" style="margin-top:0.9rem;"><a class="btn-soft" href="/energy-manager/loads/' + l.id + '">' + esc((window.LS_I18N && window.LS_I18N['Details →']) || 'Details →') + '</a></div>';
       return h + '</div>';
     }).join('');
+    drawExpected();
     Array.prototype.forEach.call(document.querySelectorAll('[data-req]'), function (b) {
       b.addEventListener('click', function () {
         var id = b.dataset.req, v = document.getElementById('em-ready-' + id).value;
@@ -216,7 +237,7 @@
   if (rc) rc.addEventListener('click', function () { rc.disabled = true; post('/energy-manager/recalc.json').then(load).finally(function () { rc.disabled = false; }); });
   var im = document.getElementById('em-import');
   if (im) im.addEventListener('click', function () { im.disabled = true; im.textContent = 'Importing…'; post('/energy-manager/import.json', { days: 30 }).then(function (r) { im.textContent = r.ok ? r.report.map(function (x) { return x.load + ': ' + (x.ok ? x.hours + ' h' : x.message); }).join(' · ') : r.message; load(); }).finally(function () { im.disabled = false; }); });
-  lsOnResize(function () { if (last) planChart(last); });
+  lsOnResize(function () { if (last) { planChart(last); drawExpected(); } });
   load();
   setInterval(load, 60000);
 })();

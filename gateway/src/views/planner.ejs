@@ -4,18 +4,18 @@
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
 
 
-<div class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
-    <h2 style="margin:0;"><%= t('Smart charging') %></h2>
-    <span class="hint" style="margin:0;" id="pl-updated"></span>
+<div class="card" data-card-key="now">
+  <div>
+    <h2 style="margin:0;"><%= t('Now') %></h2>
+    <span class="card-head-sub" id="pl-updated"></span>
   </div>
-  <div style="display:flex; gap:0.8rem; flex-wrap:wrap; align-items:center; margin-top:0.8rem;">
-    <div id="pl-modes" style="display:inline-flex; border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+  <div class="toolbar" style="margin-top:0.8rem;">
+    <div id="pl-modes" class="segmented" role="group" aria-label="<%= t('Mode') %>">
       <% [['off', 'Off'], ['now', 'Now'], ['pv', 'Solar'], ['minpv', 'Min + Solar'], ['plan', 'Smart plan']].forEach(([k, l]) => { %>
-        <button type="button" data-mode="<%= k %>" style="border:0; padding:0.55rem 1rem; font-weight:600; cursor:pointer; background:<%= cfg.mode === k ? 'var(--accent)' : 'transparent' %>; color:<%= cfg.mode === k ? '#fff' : 'inherit' %>;"><%= l %></button>
+        <button type="button" data-mode="<%= k %>" class="<%= cfg.mode === k ? 'on' : '' %>"><%= t(l) %></button>
       <% }) %>
     </div>
-    <div class="btn-row" style="margin:0;" id="pl-session">
+    <div class="btn-row" id="pl-session">
       <button type="button" class="btn-soft" data-ov="now"><%= t('Charge now') %></button>
       <button type="button" class="btn-soft" data-ov="off"><%= t('Pause') %></button>
       <button type="button" class="btn-soft" data-ov=""><%= t('Back to mode') %></button>
@@ -25,11 +25,25 @@
     <strong><%= t('Now') %></strong><%= t(': full power.') %> <strong><%= t('Solar') %></strong><%= t(': only with solar surplus.') %> <strong><%= t('Min + Solar') %></strong><%= t(': minimum power plus surplus.') %>
     <strong><%= t('Smart plan') %></strong><%= t(': ready on time in the cheapest way — solar first, then the cheapest hours. The session buttons only apply until the car is unplugged.') %>
   </p>
+  <div id="pl-tiles" class="ls-tiles" style="margin-top:1rem;"></div>
+  <p class="hint" id="pl-reason" style="margin:0.6rem 0 0;"></p>
+</div>
 
-  <div id="pl-tiles" style="display:flex; gap:0.7rem; flex-wrap:wrap; margin-top:1rem;"></div>
-  <div id="pl-target" style="margin-top:1rem;"></div>
-  <div id="pl-plan" style="margin-top:0.8rem;"></div>
-  <div style="margin-top:0.8rem;">
+<div class="card" data-card-key="plan">
+  <h2 style="margin-top:0;"><%= t('Plan') %></h2>
+  <div id="pl-target" class="ls-tiles"></div>
+  <% if (canEdit('charging')) { %>
+  <details class="ls-more" id="pl-ready-box">
+    <summary><span id="pl-ready-label"><%= t('Ready by (when it is back, one time)') %></span> <span id="pl-ready-set" class="hint" style="margin:0;"></span></summary>
+    <div class="form-grid" style="margin-top:0.5rem; align-items:end;">
+      <div><label><%= t('Ready by') %></label><input type="datetime-local" id="pl-ready"></div>
+      <div><label><%= t('How far') %></label><input type="text" id="pl-ready-own" placeholder="<%= t('how far: 120 km, 30 kWh or full') %>"></div>
+      <div class="btn-row"><button type="button" class="btn-edit" id="pl-ready-btn"><%- icon('edit') %> <%= t('Set') %></button><button type="button" class="btn-soft" id="pl-ready-clear" hidden><%= t('Clear') %></button></div>
+    </div>
+  </details>
+  <% } %>
+  <div id="pl-plan" style="margin-top:1rem;"></div>
+  <div style="margin-top:1rem;">
     <div class="hint" style="margin:0 0 0.2rem; font-size:0.8rem;"><%= t('Price per interval (all-in) —') %> <span style="color:var(--accent); font-weight:700;">■</span> <%= t('planned') %> &nbsp;<span style="color:#d4a017; font-weight:700;">━</span> <%= t('expected solar surplus (kW)') %> &nbsp;<span style="color:#e5534b; font-weight:700;">┆</span> <%= t('ready by') %> &nbsp;<span style="color:#d4a017; font-weight:700;">■</span> <%= t('solar part') %> &nbsp;<span style="color:#3b82f6; font-weight:700;">┆</span> <%= t('expected home') %> &nbsp;<span style="color:var(--accent); font-weight:700;">⬚</span> <%= t('if it came home now') %></div>
     <div id="pl-chart"></div>
   </div>
@@ -47,9 +61,8 @@
   function dtm(s) { if (!s) return '—'; var d = new Date(s); var today = new Date(); var day = d.toDateString() === today.toDateString() ? '' : d.toLocaleDateString([], { weekday: 'short' }) + ' '; return day + tm(s); }
   function post(url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); }
   function tile(label, value, sub, color) {
-    return '<div style="flex:1; min-width:140px; border:1px solid var(--border); border-radius:10px; padding:0.6rem 0.8rem;">' +
-      '<div class="hint" style="margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;">' + esc(label) + '</div>' +
-      '<div style="font-size:1.3rem; font-weight:700;' + (color ? ' color:' + color + ';' : '') + '">' + value + '</div>' + (sub ? '<div class="hint" style="margin:0; font-size:0.75rem;">' + sub + '</div>' : '') + '</div>';
+    return '<div class="ls-tile"><div class="ls-tile-label">' + esc(label) + '</div>' +
+      '<div class="ls-tile-value"' + (color ? ' style="color:' + color + ';"' : '') + '>' + value + '</div>' + (sub ? '<div class="ls-tile-sub">' + sub + '</div>' : '') + '</div>';
   }
   // Adjacent intervals with the same source shown as one block.
   function mergeSlots(slots) {
@@ -74,50 +87,42 @@
     return dtm(x.start) + '–' + tm(x.end) + ' ' + nf(x.kwh, 1) + ' kWh' + mix;
   }
   var MODE_LABEL = { off: 'Off', now: 'Now', pv: 'Solar', minpv: 'Min + Solar', plan: 'Smart plan' };
+  var readyFilled = false;
 
   function render(d) {
     var s = d.status || {};
     var p = d.plan;
     document.getElementById('pl-updated').textContent = s.at ? 'Updated ' + tm(s.at) : (s.error || '');
-    document.querySelectorAll('#pl-modes button').forEach(function (b) { var on = b.dataset.mode === d.cfg.mode; b.style.background = on ? 'var(--accent)' : 'transparent'; b.style.color = on ? '#fff' : 'inherit'; });
+    document.querySelectorAll('#pl-modes button').forEach(function (b) { b.classList.toggle('on', b.dataset.mode === d.cfg.mode); });
     document.querySelectorAll('#pl-session button').forEach(function (b) { b.style.outline = (b.dataset.ov || '') === (d.override || '') && d.override ? '2px solid var(--accent)' : ''; });
     var wb = s.wallbox || {};
     var t = '';
     t += tile('Car', s.connected ? 'connected' : 'not connected', s.connected ? (p && p.target && p.target.vehicle ? esc(p.target.vehicle.name) + ' · ' : '') + nf(wb.sessionKwh, 1) + ' kWh this session' : '', s.connected ? 'var(--accent)' : '');
-    t += tile('Charging', nf(wb.kw, 2) + ' <span style="font-size:0.8rem; font-weight:500;">kW</span>', 'setpoint ' + nf(s.setpointKw, 2) + ' kW' + (d.override ? ' · ' + esc(MODE_LABEL[d.override]) + ' for this session' : ''));
-    t += tile('Solar surplus', nf(s.surplusKw, 2) + ' <span style="font-size:0.8rem; font-weight:500;">kW</span>', 'export + what the car uses', '#d4a017');
-    if (p && p.fuelBreakEven) t += tile('Fuel break-even', eur(p.fuelBreakEven, 3) + '<span style="font-size:0.8rem; font-weight:500;">/kWh</span>', 'above this, fuel is cheaper');
-    document.getElementById('pl-tiles').innerHTML = t + '<div class="hint" style="flex-basis:100%; margin:0.2rem 0 0;">' + esc(s.reason || '') + (s.outputResult && s.outputResult.error ? ' <span style="color:var(--danger);">Output: ' + esc(s.outputResult.error) + '</span>' : '') + (s.done ? ' <strong>Car is full.</strong>' : '') + '</div>';
+    t += tile('Charging', nf(wb.kw, 2) + ' <small>kW</small>', 'setpoint ' + nf(s.setpointKw, 2) + ' kW' + (d.override ? ' · ' + esc(MODE_LABEL[d.override]) + ' for this session' : ''));
+    t += tile('Solar surplus', nf(s.surplusKw, 2) + ' <small>kW</small>', 'export + what the car uses', '#d4a017');
+    if (p && p.fuelBreakEven) t += tile('Fuel break-even', eur(p.fuelBreakEven, 3) + '<small>/kWh</small>', 'above this, fuel is cheaper');
+    document.getElementById('pl-tiles').innerHTML = t;
+    document.getElementById('pl-reason').innerHTML = esc(s.reason || '') + (s.outputResult && s.outputResult.error ? ' <span style="color:var(--danger);">Output: ' + esc(s.outputResult.error) + '</span>' : '') + (s.done ? ' <strong>Car is full.</strong>' : '');
 
     var tg = p && p.target ? p.target : null;
     var th = '';
     if (tg) {
-      th = '<div class="form-grid" style="align-items:end;">' +
-        (p.split
-          ? '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Needs before leaving</div><div style="font-size:1.15rem; font-weight:700;">' + nf(p.split.mustKwh, 1) + ' kWh</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(T('trip {0} kWh + reserve {1} kWh; room in the battery {2} kWh, the rest after it is back ({3})', nf(p.split.tripKwh, 1), nf(p.split.reserveKwh, 1), nf(p.split.mustKwh + p.split.restKwh, 1), dtm(p.split.backAt))) + '</div></div>'
-          : '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">' + esc(T(/^car reports/.test(tg.needSource || '') ? 'Room in the battery' : 'To charge (estimate)')) + '</div><div style="font-size:1.15rem; font-weight:700;">' + nf(p.needKwh, 1) + ' kWh</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.needSource) + '</div></div>') +
-        '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Ready by</div><div style="font-size:1.15rem; font-weight:700;">' + dtm(p.readyAt) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(tg.readySource || 'no departure known — within 24 h') + '</div></div>' +
-        (p.arrival ? '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">Expected home</div><div style="font-size:1.15rem; font-weight:700; color:#3b82f6;">' + dtm(p.arrival.at) + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(p.arrival.label) + '</div></div>' : '') +
-        (canEdit ? '<div><label>' + esc(T(s.connected ? 'Ready by (this session)' : 'Ready by (when it is back, one time)')) + '</label><input type="datetime-local" id="pl-ready">' +
-          '<input type="text" id="pl-ready-own" placeholder="' + esc(T('how far: 120 km, 30 kWh or full')) + '" style="margin-top:0.3rem;" value="' + esc(d.readyOverrideOwn || '') + '">' +
-          '<div class="btn-row" style="margin-top:0.3rem;"><button type="button" class="btn-soft" id="pl-ready-btn">' + esc(T('Set')) + '</button>' +
-          (d.readyOverride ? '<button type="button" class="btn-soft" id="pl-ready-clear">' + esc(T('Clear')) + '</button>' : '') + '</div>' +
-          (d.readyOverride ? '<div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;">' + esc(T('Set by you: {0}', dtm(new Date(d.readyOverride).toISOString()) + (d.readyOverrideOwn ? ' · ' + d.readyOverrideOwn : ''))) + '</div>' : '') +
-          '</div>' : '') +
-        '</div>';
+      th = (p.split
+          ? tile('Needs before leaving', nf(p.split.mustKwh, 1) + ' <small>kWh</small>', esc(T('trip {0} kWh + reserve {1} kWh; room in the battery {2} kWh, the rest after it is back ({3})', nf(p.split.tripKwh, 1), nf(p.split.reserveKwh, 1), nf(p.split.mustKwh + p.split.restKwh, 1), dtm(p.split.backAt))))
+          : tile(T(/^car reports/.test(tg.needSource || '') ? 'Room in the battery' : 'To charge (estimate)'), nf(p.needKwh, 1) + ' <small>kWh</small>', esc(tg.needSource))) +
+        tile('Ready by', dtm(p.readyAt), esc(tg.readySource || 'no departure known — within 24 h')) +
+        (p.arrival ? tile('Expected home', dtm(p.arrival.at), esc(p.arrival.label), '#3b82f6') : '');
     }
-    // don't wipe what is being typed in the "ready by" fields on the 30 s refresh
-    var tgEl = document.getElementById('pl-target');
-    var keep = { at: (document.getElementById('pl-ready') || {}).value, own: (document.getElementById('pl-ready-own') || {}).value };
-    var typing = tgEl.contains(document.activeElement) && /INPUT/.test(document.activeElement.tagName);
-    if (!typing) {
-      tgEl.innerHTML = th;
-      if (keep.at && document.getElementById('pl-ready')) document.getElementById('pl-ready').value = keep.at;
-      if (keep.own && document.getElementById('pl-ready-own')) document.getElementById('pl-ready-own').value = keep.own;
-      var rb = document.getElementById('pl-ready-btn');
-      if (rb) rb.addEventListener('click', function () { var v = document.getElementById('pl-ready').value; post('/planner/ready.json', { at: v ? new Date(v).toISOString() : null, own: document.getElementById('pl-ready-own').value }).then(load); });
-      var rc = document.getElementById('pl-ready-clear');
-      if (rc) rc.addEventListener('click', function () { post('/planner/ready.json', { at: null }).then(load); });
+    document.getElementById('pl-target').innerHTML = th;
+    // the one-time "ready by" (the fields themselves are not redrawn, so typing is never lost)
+    var box = document.getElementById('pl-ready-box');
+    if (box) {
+      document.getElementById('pl-ready-label').textContent = T(s.connected ? 'Ready by (this session)' : 'Ready by (when it is back, one time)');
+      document.getElementById('pl-ready-set').textContent = d.readyOverride ? '· ' + T('Set by you: {0}', dtm(new Date(d.readyOverride).toISOString()) + (d.readyOverrideOwn ? ' · ' + d.readyOverrideOwn : '')) : '';
+      document.getElementById('pl-ready-clear').hidden = !d.readyOverride;
+      var own = document.getElementById('pl-ready-own');
+      if (!readyFilled && own && document.activeElement !== own) { own.value = d.readyOverrideOwn || ''; readyFilled = true; }
+      if (d.readyOverride && !box.dataset.touched) box.open = true;
     }
 
     var ph = '';
@@ -202,6 +207,12 @@
   setInterval(load, 30000);
 
   if (canEdit) {
+    var rb = document.getElementById('pl-ready-btn');
+    if (rb) rb.addEventListener('click', function () { var v = document.getElementById('pl-ready').value; post('/planner/ready.json', { at: v ? new Date(v).toISOString() : null, own: document.getElementById('pl-ready-own').value }).then(load); });
+    var rcl = document.getElementById('pl-ready-clear');
+    if (rcl) rcl.addEventListener('click', function () { post('/planner/ready.json', { at: null }).then(function () { document.getElementById('pl-ready').value = ''; document.getElementById('pl-ready-own').value = ''; load(); }); });
+    var rbox = document.getElementById('pl-ready-box');
+    if (rbox) rbox.querySelector('summary').addEventListener('click', function () { rbox.dataset.touched = '1'; });
     document.querySelectorAll('#pl-modes button').forEach(function (b) { b.addEventListener('click', function () { post('/planner/mode.json', { mode: b.dataset.mode }).then(load); }); });
     document.querySelectorAll('#pl-session button').forEach(function (b) { b.addEventListener('click', function () { post('/planner/override.json', { mode: b.dataset.ov || null }).then(load); }); });
     document.querySelectorAll('[data-recalc]').forEach(function (b) {

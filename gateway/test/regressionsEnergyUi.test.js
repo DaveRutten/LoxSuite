@@ -195,3 +195,46 @@ test('advise/live switches live in Administration → Energy & charging, not on 
   assert.ok(/id="charging"[\s\S]*name="output"/.test(se), 'output (advise/live) under Energy & charging');
   assert.ok(/id="energy-manager"[\s\S]*energy-load-form/.test(se), 'consumers under Energy & charging');
 });
+
+// ---------------------------------------------------------------- v0.41: one look on every page
+
+test('figures look the same everywhere: the shared .ls-tile, no hand-styled tiles', () => {
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', 'src', 'views', f), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  for (const c of ['.ls-tiles', '.ls-tile', '.ls-tile-label', '.ls-tile-value', '.ls-tile-sub', '.subhead', '.section-nav', '.form-actions', '.segmented']) assert.ok(css.includes(c + ' {') || css.includes(c + ',') || css.includes(c + ' '), `style.css defines ${c}`);
+  for (const f of ['planner.ejs', 'driving.ejs', 'energy.ejs', 'energy-load.ejs', 'energy-manager.ejs', 'vehicle-edit.ejs', 'ocpp-bridge-edit.ejs', 'learned.ejs']) {
+    const v = read(f);
+    assert.ok(v.includes('ls-tile'), `${f} uses the shared tiles`);
+    assert.ok(!/text-transform:uppercase; letter-spacing:0\.04em;">' \+ (esc\()?label/.test(v), `${f} has no hand-styled tile label`);
+  }
+});
+
+test('delete buttons are red (danger) and the long settings page has jump links', () => {
+  const dir = path.join(__dirname, '..', 'src', 'views');
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.ejs'))) {
+    assert.ok(!/class="btn-soft"><%- icon\('trash'\)/.test(fs.readFileSync(path.join(dir, f), 'utf8')), `${f}: a delete button uses class="danger"`);
+  }
+  const se = fs.readFileSync(path.join(dir, 'settings-energy.ejs'), 'utf8');
+  const nav = se.slice(se.indexOf('class="section-nav"'), se.indexOf('</nav>'));
+  for (const id of ['prices', 'calendars', 'agenda-settings', 'day-types', 'charging', 'energy-manager']) {
+    assert.ok(nav.includes(`href="#${id}"`), `jump link to #${id}`);
+    assert.ok(se.includes(`id="${id}"`), `card #${id} exists`);
+  }
+});
+
+test('energy manager overview stays compact: the day-by-day table lives on the consumer page', () => {
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', 'src', 'views', f), 'utf8');
+  const em = read('energy-manager.ejs');
+  assert.ok(!/In advised hours/.test(em), 'no per-day table on the overview');
+  assert.ok(!/preserveAspectRatio="none"/.test(em), 'charts are drawn at their real width (no stretched text)');
+  const el = read('energy-load.ejs');
+  assert.ok(/id="el-daily"/.test(el) && /In advised hours/.test(el), 'per-day table on the consumer page');
+  const route = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'energyManager.js'), 'utf8');
+  assert.ok(/dailyReport\(load, 14\)/.test(route), 'the consumer page gets the daily report');
+});
+
+test('a link to a card unfolds it, and a header row keeps its fold button at the end', () => {
+  const cc = fs.readFileSync(path.join(__dirname, '..', 'public', 'card-collapse.js'), 'utf8');
+  assert.ok(/hashchange/.test(cc) && /targeted\(card\)/.test(cc), 'unfolds the card a link points to');
+  assert.ok(/hd\.head\.appendChild\(btn\)/.test(cc), 'header rows get the chevron at the end of the row');
+});

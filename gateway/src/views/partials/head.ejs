@@ -56,6 +56,26 @@
         t = setTimeout(function () { if (Math.abs(window.innerWidth - last) >= 16) { last = window.innerWidth; fn(); } }, 180);
       });
     };
+    // A long table shows its first n rows; a button under it shows the rest (and folds them again).
+    window.lsMoreRows = function (table, n) {
+      if (!table || !table.tBodies[0]) return;
+      var host = table.parentElement && table.parentElement.children.length === 1 ? table.parentElement : table;
+      var old = host.nextElementSibling;
+      if (old && old.classList.contains('ls-more-btn')) old.remove();
+      var rows = Array.prototype.slice.call(table.tBodies[0].rows);
+      var mem = window.lsShowAll || (window.lsShowAll = {});
+      if (table.id && mem[table.id]) table.classList.add('ls-show-all');
+      rows.forEach(function (r, i) { r.classList.toggle('ls-extra', i >= n); });
+      if (rows.length <= n) return;
+      var TL = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn-soft ls-more-btn';
+      var label = function () { b.textContent = table.classList.contains('ls-show-all') ? TL('Show fewer') : TL('Show all ({0})').replace('{0}', rows.length); };
+      b.addEventListener('click', function () { var on = table.classList.toggle('ls-show-all'); if (table.id) mem[table.id] = on; label(); });
+      label();
+      host.insertAdjacentElement('afterend', b);
+    };
   </script>
 </head>
 <body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>" data-page-size="<%= tablePageSize %>">

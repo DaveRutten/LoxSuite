@@ -275,8 +275,9 @@
  },
  {
   "key": "· {0}/kWh",
-  "module": "ocpp",
+  "module": "energy_manager",
   "where": [
+   "energy-manager (script)",
    "ocpp-bridge-edit (script)"
   ]
  },
@@ -643,8 +644,7 @@
   "key": "(estimated)",
   "module": "energy",
   "where": [
-   "energy-load (script)",
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -1125,13 +1125,6 @@
   ]
  },
  {
-  "key": "{0} kWh/day, about {1} kW while running",
-  "module": "energy_manager",
-  "where": [
-   "energy-manager (script)"
-  ]
- },
- {
   "key": "{0} MB / {1} MB",
   "module": "core",
   "where": [
@@ -1201,6 +1194,13 @@
   "module": "energy",
   "where": [
    "energy-load (script)"
+  ]
+ },
+ {
+  "key": "{0} runs, typically {1} h",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -1611,7 +1611,7 @@
   "module": "vehicles",
   "where": [
    "driving (script)",
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -1859,6 +1859,13 @@
   "module": "core",
   "where": [
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "about {0} kW while running",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -2452,6 +2459,13 @@
   ]
  },
  {
+  "key": "at the best start in hindsight",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Audio",
   "module": "core",
   "where": [
@@ -2834,8 +2848,7 @@
   "key": "Best start (hindsight)",
   "module": "energy",
   "where": [
-   "energy-load (script)",
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -3186,6 +3199,13 @@
   ]
  },
  {
+  "key": "charged earlier",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "ChargePoint ID is required.",
   "module": "ocpp",
   "where": [
@@ -3384,13 +3404,6 @@
   "module": "core",
   "where": [
    "partials/panel-grid (script)"
-  ]
- },
- {
-  "key": "Clear",
-  "module": "charging",
-  "where": [
-   "planner (script)"
   ]
  },
  {
@@ -3790,8 +3803,9 @@
  },
  {
   "key": "cost",
-  "module": "ocpp",
+  "module": "energy_manager",
   "where": [
+   "energy-manager (script)",
    "ocpp-bridge-edit (script)"
   ]
  },
@@ -3799,8 +3813,7 @@
   "key": "Cost",
   "module": "energy",
   "where": [
-   "energy-load (script)",
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -3836,6 +3849,20 @@
   "module": "charging",
   "where": [
    "planner (script)"
+  ]
+ },
+ {
+  "key": "Costs of these runs",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "Could have saved",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -3938,8 +3965,9 @@
  },
  {
   "key": "Could save",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "energy-manager (script)"
   ]
  },
@@ -4199,7 +4227,7 @@
   "module": "charging",
   "where": [
    "agenda",
-   "energy-manager (script)",
+   "energy-load (script)",
    "learned (script)"
   ]
  },
@@ -4556,8 +4584,7 @@
   "module": "vehicles",
   "where": [
    "driving (script)",
-   "energy-load (script)",
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -4767,9 +4794,8 @@
  },
  {
   "key": "Energy manager",
-  "module": "energy",
+  "module": "energy_manager",
   "where": [
-   "energy-load",
    "energy-manager",
    "src/modules.js",
    "src/permissionAreas.js"
@@ -5466,6 +5492,13 @@
   ]
  },
  {
+  "key": "From own solar",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Fuel",
   "module": "vehicles",
   "where": [
@@ -5934,13 +5967,6 @@
   ]
  },
  {
-  "key": "Hours (4 weeks)",
-  "module": "energy_manager",
-  "where": [
-   "energy-manager (script)"
-  ]
- },
- {
   "key": "House",
   "module": "energy",
   "where": [
@@ -5974,13 +6000,6 @@
   "module": "charging",
   "where": [
    "learned (script)"
-  ]
- },
- {
-  "key": "how far: 120 km, 30 kWh or full",
-  "module": "charging",
-  "where": [
-   "planner (script)"
   ]
  },
  {
@@ -6063,10 +6082,17 @@
   ]
  },
  {
-  "key": "In advised hours",
+  "key": "in 14 days, by running in the advised hours",
   "module": "energy_manager",
   "where": [
    "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "In advised hours",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
   ]
  },
  {
@@ -6288,6 +6314,20 @@
   ]
  },
  {
+  "key": "kWh per day",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "kWh per run",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "kWh/100 km",
   "module": "vehicles",
   "where": [
@@ -6342,8 +6382,9 @@
  },
  {
   "key": "Last 7 days",
-  "module": "core",
+  "module": "energy_manager",
   "where": [
+   "energy-manager (script)",
    "live-data (script)",
    "src/chartFieldHelpers.js"
   ]
@@ -6371,6 +6412,13 @@
   "where": [
    "live-data (script)",
    "src/chartFieldHelpers.js"
+  ]
+ },
+ {
+  "key": "last one {0}",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -6421,6 +6469,7 @@
   "module": "energy",
   "where": [
    "energy-load (script)",
+   "energy-manager (script)",
    "learned"
   ]
  },
@@ -6457,20 +6506,6 @@
   "module": "charging",
   "where": [
    "src/learning.js"
-  ]
- },
- {
-  "key": "Learned: {0}.",
-  "module": "energy_manager",
-  "where": [
-   "energy-manager (script)"
-  ]
- },
- {
-  "key": "Learned: {0}. \"In advised hours\" = share of the kWh that fell in hours LoxSuite would have released; \"could save\" = moving the rest there.",
-  "module": "energy_manager",
-  "where": [
-   "energy-manager (script)"
   ]
  },
  {
@@ -8332,8 +8367,7 @@
   "key": "No measurements yet.",
   "module": "energy",
   "where": [
-   "energy-load (script)",
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -8524,8 +8558,7 @@
   "key": "No runs measured yet.",
   "module": "energy",
   "where": [
-   "energy-load (script)",
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -8746,9 +8779,9 @@
  },
  {
   "key": "not logged yet",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -9037,6 +9070,13 @@
   ]
  },
  {
+  "key": "of the last 7 days",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "off",
   "module": "charging",
   "where": [
@@ -9148,6 +9188,13 @@
   "module": "mqtt",
   "where": [
    "incoming-messages"
+  ]
+ },
+ {
+  "key": "on electricity",
+  "module": "vehicles",
+  "where": [
+   "driving (script)"
   ]
  },
  {
@@ -9464,8 +9511,7 @@
   "key": "Per day",
   "module": "energy",
   "where": [
-   "energy-load (script)",
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -9613,6 +9659,13 @@
  },
  {
   "key": "Plan the best start",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "Plan the next run",
   "module": "energy_manager",
   "where": [
    "energy-manager (script)"
@@ -10371,13 +10424,6 @@
   ]
  },
  {
-  "key": "Run",
-  "module": "energy_manager",
-  "where": [
-   "energy-manager (script)"
-  ]
- },
- {
   "key": "Run \"Check for update\" first — Loxone doesn't expose a plain update-available flag over HTTP, so this only unlocks once you've looked at the current release channel yourself",
   "module": "core",
   "where": [
@@ -10425,6 +10471,13 @@
   "module": "core",
   "where": [
    "src/notifications.js"
+  ]
+ },
+ {
+  "key": "Runs",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -10513,9 +10566,9 @@
  },
  {
   "key": "Saving",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -10677,13 +10730,6 @@
   ]
  },
  {
-  "key": "Set",
-  "module": "charging",
-  "where": [
-   "planner (script)"
-  ]
- },
- {
   "key": "Set a remote (e.g. \"myremote:loxsuite-backups\") before enabling the offsite copy.",
   "module": "core",
   "where": [
@@ -10810,6 +10856,20 @@
   "module": "charging",
   "where": [
    "learned (script)"
+  ]
+ },
+ {
+  "key": "Show all ({0})",
+  "module": "core",
+  "where": [
+   "partials/head (script)"
+  ]
+ },
+ {
+  "key": "Show fewer",
+  "module": "core",
+  "where": [
+   "partials/head (script)"
   ]
  },
  {
@@ -10981,7 +11041,7 @@
   "where": [
    "driving (script)",
    "energy (script)",
-   "energy-manager (script)",
+   "energy-load (script)",
    "planner",
    "planner (script)"
   ]
@@ -11309,9 +11369,9 @@
   "where": [
    "admin-notifications (script)",
    "energy-load (script)",
-   "energy-manager (script)",
    "live-data (script)",
-   "public/dashboard-miniservers-tabulator.js"
+   "public/dashboard-miniservers-tabulator.js",
+   "public/mappings-loxone-to-mqtt-tabulator.js"
   ]
  },
  {
@@ -11939,9 +11999,9 @@
  },
  {
   "key": "Then",
-  "module": "energy_manager",
+  "module": "energy",
   "where": [
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -12532,8 +12592,7 @@
   "key": "Typical power",
   "module": "energy",
   "where": [
-   "energy-load (script)",
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {

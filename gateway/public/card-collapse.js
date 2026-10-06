@@ -51,9 +51,22 @@
       store(key, folded);
     });
     hd.h2.classList.add('card-collapse-title');
-    hd.h2.appendChild(btn);
-    apply(stored(key));
+    // A title on its own gets the chevron at its end; a header row (title + controls) at the row's end.
+    if (hd.head === hd.h2) hd.h2.appendChild(btn); else hd.head.appendChild(btn);
+    card._lsUnfold = function () { if (card.classList.contains('card-collapsed')) apply(false); };
+    apply(stored(key) && !targeted(card));
   }
+
+  // A link to a card (#charging) unfolds it for this visit, without changing what is remembered.
+  function targeted(card) {
+    var id = decodeURIComponent((location.hash || '').slice(1));
+    if (!id) return false;
+    var el = document.getElementById(id);
+    return !!el && (el === card || card.contains(el));
+  }
+  window.addEventListener('hashchange', function () {
+    Array.prototype.forEach.call(document.querySelectorAll('.card.card-collapsed'), function (c) { if (targeted(c) && c._lsUnfold) c._lsUnfold(); });
+  });
 
   function scan() {
     var cards = document.querySelectorAll('main .card, .content .card, .main .card');

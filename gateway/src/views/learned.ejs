@@ -170,9 +170,9 @@
       row(T('House, the day before'), a.house.d1, 'kWh') + row(T('House, an hour ahead'), a.house.h1, 'kWh') +
       (a.loads || []).map(function (l) { return row(l.name + ' — ' + T('the day before'), l.d1, 'kWh'); }).join('') + '</tbody></table></div>';
     var dep = a.depart || {}, arr = a.arrive || {};
-    html += '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:0.8rem; margin-top:0.7rem;">' +
-      '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">' + esc(T('Car ready on time')) + '</div><div style="font-size:1.2rem; font-weight:700;">' + (dep.n ? pct(dep.onTime) : '—') + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + (dep.n ? esc(T('{0} departures, on average {1} min from the deadline').replace('{0}', dep.n).replace('{1}', dep.maeMin)) : esc(T('measured from the next departures'))) + '</div></div>' +
-      '<div><div class="hint" style="margin:0; font-size:0.75rem; text-transform:uppercase;">' + esc(T('Expected home')) + '</div><div style="font-size:1.2rem; font-weight:700;">' + (arr.n ? signedMin(arr.biasMin) : '—') + '</div><div class="hint" style="margin:0; font-size:0.75rem;">' + (arr.n ? esc(T('{0} times, on average {1} min off').replace('{0}', arr.n).replace('{1}', arr.maeMin)) : esc(T('measured from the next homecomings'))) + '</div></div></div>';
+    html += '<div class="ls-tiles" style="margin-top:0.8rem;">' +
+      '<div class="ls-tile"><div class="ls-tile-label">' + esc(T('Car ready on time')) + '</div><div class="ls-tile-value">' + (dep.n ? pct(dep.onTime) : '—') + '</div><div class="ls-tile-sub">' + (dep.n ? esc(T('{0} departures, on average {1} min from the deadline').replace('{0}', dep.n).replace('{1}', dep.maeMin)) : esc(T('measured from the next departures'))) + '</div></div>' +
+      '<div class="ls-tile"><div class="ls-tile-label">' + esc(T('Expected home')) + '</div><div class="ls-tile-value">' + (arr.n ? signedMin(arr.biasMin) : '—') + '</div><div class="ls-tile-sub">' + (arr.n ? esc(T('{0} times, on average {1} min off').replace('{0}', arr.n).replace('{1}', arr.maeMin)) : esc(T('measured from the next homecomings'))) + '</div></div></div>';
     var c = a.corrections || {};
     var lines = [];
     if (c.houseFactor && Math.abs(c.houseFactor - 1) > 0.02) lines.push(T('house use × {0}').replace('{0}', nf(c.houseFactor, 2)));

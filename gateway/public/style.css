@@ -4765,3 +4765,168 @@ details > summary + p.hint { margin-top: 0.5rem; }
 
 /* show-if.js: a field that doesn't apply to the current choice is hidden, whatever its own display. */
 [data-show-if][hidden] { display: none !important; }
+
+/* ---- Shared page building blocks ----
+   The same few pieces on every page, so a figure, a sub-heading or a fold-out looks the same
+   wherever it is:
+     .ls-tiles / .ls-tile    figures in a row (label, value, a line below) — Smart charging, Meters,
+                             Vehicles, Driving & costs, the energy manager, OCPP
+     .subhead                a heading inside a card that starts a new part of it
+     details > summary       a chevron instead of the browser's own triangle
+     .form-actions           Save on the left, Delete pushed to the right
+     .section-nav            jump links over a long page (Administration → Energy & charging)
+     .toolbar                a row of controls under a card's title */
+.ls-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(165px, 100%), 1fr));
+  gap: 0.7rem;
+}
+.ls-tile {
+  min-width: 0;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.ls-tile-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+}
+.ls-tile-value { font-size: 1.3rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.ls-tile-value small, .ls-tile-unit { font-size: 0.78rem; font-weight: 500; }
+.ls-tile-sub { font-size: 0.75rem; color: var(--text-muted); line-height: 1.35; margin-top: 0.1rem; }
+.ls-tile-sub a { color: inherit; }
+.ls-tiles + .hint, .ls-tiles + p { margin-top: 0.6rem; }
+.ls-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 0.35rem; vertical-align: 0.05em; background: #9aa5b1; }
+.ls-dot.on { background: var(--success, #4caf50); }
+
+/* A sub-heading inside a card: the same size everywhere, with a thin line above it when it isn't
+   the first thing in the card. */
+.subhead { font-size: 0.92rem; font-weight: 600; margin: 1.1rem 0 0.6rem; color: var(--text); }
+.subhead:not(:first-child) { padding-top: 0.9rem; border-top: 1px solid var(--border); }
+
+/* Plain fold-outs: details > summary without a class of its own. */
+details:not([class]) > summary:not([class]),
+details.card > summary:not([class]),
+details.em-signals > summary:not([class]),
+details.ls-more > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  border-radius: 6px;
+  transition: color 0.15s var(--ease);
+}
+details:not([class]) > summary:not([class])::-webkit-details-marker,
+details.card > summary:not([class])::-webkit-details-marker,
+details.em-signals > summary:not([class])::-webkit-details-marker,
+details.ls-more > summary::-webkit-details-marker { display: none; }
+details:not([class]) > summary:not([class])::before,
+details.card > summary:not([class])::before,
+details.em-signals > summary:not([class])::before,
+details.ls-more > summary::before {
+  content: '';
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin: 0 0.6rem 0 0.1rem;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg);
+  vertical-align: 0.12em;
+  transition: transform 0.15s var(--ease);
+}
+details[open]:not([class]) > summary:not([class])::before,
+details.card[open] > summary:not([class])::before,
+details.em-signals[open] > summary:not([class])::before,
+details.ls-more[open] > summary::before { transform: rotate(45deg); vertical-align: 0.25em; }
+details:not([class]) > summary:not([class]):hover,
+details.card > summary:not([class]):hover,
+details.ls-more > summary:hover { color: var(--accent); }
+details.card > summary:not([class]) { font-weight: 600; }
+details.card[open] > summary:not([class]) { margin-bottom: 0.8rem; }
+/* A list of fold-outs (prices, consumers ...): one per line, a thin line between them. */
+.ls-fold-list > details { border-top: 1px solid var(--border); padding: 0.35rem 0; }
+.ls-fold-list > details:last-child { border-bottom: 1px solid var(--border); }
+.ls-fold-list > details[open] { padding-bottom: 0.9rem; }
+details.ls-more { margin-top: 0.6rem; }
+details.ls-more > summary { font-size: 0.85rem; color: var(--text-muted); }
+
+/* Save on the left, Delete pushed to the far right. */
+.form-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+.form-actions > form { margin: 0; }
+.form-actions > button, .form-actions > form > button { margin-right: 0; }
+.form-actions .push-right { margin-left: auto; }
+
+a.btn-soft, a.btn-edit, a.btn-test, a.primary { text-decoration: none; }
+/* A button's own display:inline-flex must not beat the hidden attribute. */
+.btn-soft[hidden], .btn-edit[hidden], .btn-test[hidden], button.primary[hidden], button.danger[hidden] { display: none !important; }
+/* A field label in a row of controls looks like the labels in a form grid. */
+.btn-row > div > label:not(.switch) { display: block; font-size: 0.78rem; font-weight: 500; margin-bottom: 0.3rem; color: var(--text-muted); }
+
+/* A row of controls under a card's title (modes, session buttons ...). */
+.toolbar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.toolbar .btn-row { margin: 0; }
+
+/* Segmented control (Smart charging modes). */
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); max-width: 100%; }
+.segmented button { border: 0; padding: 0.5rem 0.95rem; font-weight: 600; font-size: 0.88rem; cursor: pointer; background: transparent; color: inherit; transition: background 0.15s var(--ease), color 0.15s var(--ease); }
+.segmented button + button { border-left: 1px solid var(--border); }
+.segmented button:hover:not(.on):not(:disabled) { background: var(--surface-alt); }
+.segmented button.on { background: var(--accent); color: #fff; }
+.segmented button:disabled { cursor: default; }
+
+/* Jump links over a long page; sticks under the top while scrolling. */
+.section-nav {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center;
+  margin: -0.4rem 0 1.1rem; padding: 0.5rem 0;
+  background: color-mix(in srgb, var(--bg, #f3f4f6) 88%, transparent);
+  backdrop-filter: blur(6px);
+}
+.section-nav a {
+  font-size: 0.8rem; font-weight: 500; color: var(--text-muted); text-decoration: none;
+  padding: 0.25rem 0.65rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface);
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+.section-nav a:hover, .section-nav a.on { color: var(--accent); border-color: var(--accent); }
+[id] { scroll-margin-top: 4rem; }
+
+/* A card's header row (a title with extra controls next to it): the title on the left, the
+   controls and the fold chevron on the right. */
+.card-head:not(h2) { display: flex; align-items: center; gap: 0.5rem 0.75rem; flex-wrap: wrap; }
+.card-head:not(h2) > h2 { flex: 1 1 auto; min-width: 0; }
+.card-head:not(h2) > .card-collapse-btn { margin-left: 0; order: 99; }
+.card-head-sub { font-size: 0.8rem; color: var(--text-muted); }
+
+/* A note next to a card title ("always on") sits on the title's line, not pulled up like a hint. */
+h2 > .hint, .card-collapse-title > .hint { margin: 0; font-size: 0.8rem; font-weight: 400; }
+details.mod-status > summary { list-style: none; cursor: pointer; }
+details.mod-status > summary::-webkit-details-marker { display: none; }
+details.mod-status > summary::before {
+  content: ''; display: inline-block; width: 0.38rem; height: 0.38rem; margin: 0 0.55rem 0 0.1rem;
+  border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg); vertical-align: 0.12em; transition: transform 0.15s var(--ease);
+}
+details.mod-status[open] > summary::before { transform: rotate(45deg); vertical-align: 0.25em; }
+
+/* Chips: small rounded labels (kind of day, status ...). */
+.chip { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.74rem; border: 1px solid currentColor; line-height: 1.5; margin: 0 0.25rem 0.25rem 0; white-space: nowrap; }
+
+/* A wide table shows its first rows; the rest folds out (show more). */
+tr.ls-extra { display: none; }
+.ls-show-all tr.ls-extra { display: table-row; }
+.ls-more-btn { margin-top: 0.5rem; }
+
+.tabs { flex-wrap: wrap; }
+@media (max-width: 768px) {
+  .tabs { flex-wrap: nowrap; }
+  .section-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: -1rem; margin-right: -1rem; padding-left: 1rem; padding-right: 1rem; }
+  .section-nav a { flex: none; }
+  .segmented { width: 100%; }
+  .segmented button { flex: 1; padding: 0.55rem 0.4rem; font-size: 0.82rem; }
+  .ls-tile-value { font-size: 1.15rem; }
+}

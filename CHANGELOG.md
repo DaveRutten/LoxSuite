@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.41.0-alpha.1] - 2026-10-06
+
+### Changed
+- **One look on every page**: shared building blocks in `style.css`, used by all energy pages:
+  - figures in a row (`.ls-tile`): the same label, value and line below on Smart charging, Meters, Vehicles,
+    Driving & costs, the energy manager, the consumer page, OCPP and Learned (they were styled by hand per page,
+    in five slightly different ways);
+  - sub-headings inside a card (`.subhead`) with a thin line above, instead of big headings and emoji;
+  - fold-outs with a chevron instead of the browser's triangle, and lists of fold-outs with a line between them;
+  - Save on the left and a red Delete on the right (`.form-actions`); every delete button is red now, as the
+    button colours already promised (green adds, yellow changes, red deletes, purple tests, grey looks);
+  - a card's header row keeps its title on the left and its buttons and fold chevron on the right; labels in a
+    row of fields look like the labels in a form.
+- **Smart charging** in two cards: *Now* (mode as a segmented control, the session buttons, the live figures and
+  why) and *Plan* (what fits in the battery or is needed before leaving, ready by, expected home — as figures —
+  the plan and the chart). The one-time "ready by" is a fold-out that is no longer redrawn while you type.
+- **Energy manager**: a consumer's card is compact — what it learned, the last 7 days (kWh and costs), its share
+  of own solar and what it could save (for an appliance: runs, their costs and what the best start would have
+  saved), its notes, patterns and the expected use for the next 24 hours, and a *Details* button. The day-by-day
+  table and the runs with their savings moved to the consumer's page. The expected-use chart is drawn at the
+  card's real width (its hour labels were stretched unreadably wide).
+- **Administration → Energy & charging**: jump links over the page (they stick while scrolling and mark the part
+  on screen); Smart charging's settings split into *Output to Loxone*, *Wiring in Loxone Config* and *Solar and
+  planning*; the car's priority among the consumers has its own heading and a proper Save button.
+- **Vehicles, OCPP**: the settings form has a title (*Settings*), Save and Delete on one line; on the OCPP page it
+  moved below the sessions. Long tables (recent trips, OCPP sessions) show 10 rows with *Show all*.
+- A link to a card (e.g. *Administration → Energy & charging* from Smart charging) unfolds it when it was folded.
+- Page titles of a vehicle and a consumer are just their name; tab rows wrap on a narrow window; untranslated bits
+  fixed (legend in Driving and the agenda, consumer kinds in the settings, "Runs").
+
 ## [0.40.1-alpha.1] - 2026-10-06
 
 ### Changed
