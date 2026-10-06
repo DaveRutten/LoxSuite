@@ -168,6 +168,47 @@
     <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
   </form>
 </div>
+
+<div class="card" id="day-types">
+  <h2 style="margin-top:0;"><%= t('Days away & holidays') %></h2>
+  <p class="hint"><%= t('Not every Tuesday is a normal Tuesday. On a day away LoxSuite plans no tap water, no appliance runs and no learned departure, only the house\'s base load — and leaves the day out of what it learns. A public holiday is planned like a weekend day.') %></p>
+  <div style="display:flex; gap:0.3rem; flex-wrap:wrap; margin:0.3rem 0 0.8rem;">
+    <% const typeLabel = { away: t('away'), holiday: t('holiday'), home: t('home'), weekend: t('weekend'), workday: t('workday') }; const typeColor = { away: '#e67e22', holiday: '#9b59b6', home: '#16a085', weekend: '#7f8c8d', workday: '#4a7bd0' }; %>
+    <% dayTypes.forEach(d => { %><span title="<%= d.why || '' %>" style="display:inline-block; padding:2px 7px; border-radius:8px; font-size:0.78rem; border:1px solid <%= typeColor[d.type] %>; color:<%= typeColor[d.type] %>;"><%= new Date(d.day + 'T12:00:00Z').toLocaleDateString(typeof uiLocale !== 'undefined' ? uiLocale : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) %> · <%= typeLabel[d.type] %></span><% }) %>
+  </div>
+  <form method="post" action="/settings/energy/day-types">
+    <div class="form-grid">
+      <div><label><%= t('Words for "away" in the agenda') %></label><input type="text" name="away_words" value="<%= dayCfg.away_words %>"></div>
+      <div><label><%= t('Words for "working from home"') %></label><input type="text" name="home_words" value="<%= dayCfg.home_words %>"></div>
+      <div><label><%= t('Away from') %></label><input type="date" name="away_from" value="<%= dayCfg.away_from %>"></div>
+      <div><label><%= t('Away until (including)') %></label><input type="date" name="away_to" value="<%= dayCfg.away_to %>"></div>
+      <div><label><%= t('Dutch public holidays') %></label><%- toggleSwitch('holidays', dayCfg.holidays !== false) %></div>
+    </div>
+    <h3 style="margin:1rem 0 0.4rem;"><%= t('Presence from Loxone (optional)') %></h3>
+    <div class="form-grid">
+      <div><label><%= t('Miniserver') %></label><select name="presence_ms" id="dt-ms"><option value=""><%= t('— none —') %></option><% miniservers.forEach(m => { %><option value="<%= m.id %>" <%= String(dayCfg.presence_ms) === String(m.id) ? 'selected' : '' %>><%= m.name %></option><% }) %></select></div>
+      <div><label><%= t('State (someone home)') %></label><input type="text" id="dt-filter" placeholder="<%= t('search: presence, alarm…') %>" style="margin-bottom:0.3rem;"><select name="presence_uuid" id="dt-state" data-current="<%= dayCfg.presence_uuid %>"><option value=""><%= t('— none —') %></option><% if (dayCfg.presence_uuid) { %><option value="<%= dayCfg.presence_uuid %>" selected><%= dayCfg.presence_uuid %></option><% } %></select></div>
+      <div><label><%= t('Value when someone is home') %></label><input type="text" name="presence_home_value" value="<%= dayCfg.presence_home_value %>"></div>
+    </div>
+    <p class="hint" style="margin:0.4rem 0 0;"><%= t('A day on which nobody was home for 20 hours or more counts as away (and is left out of what is learned).') %></p>
+    <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
+  </form>
+  <script>
+  (function () {
+    var ms = document.getElementById('dt-ms'), sel = document.getElementById('dt-state'), f = document.getElementById('dt-filter'), states = [];
+    function fill() {
+      var q = (f.value || '').toLowerCase(), cur = sel.value || sel.dataset.current || '';
+      var none = sel.options[0] ? sel.options[0].textContent : '—';
+      sel.innerHTML = '<option value="">' + none + '</option>';
+      states.filter(function (x) { return !q || x.uuid === cur || x.label.toLowerCase().indexOf(q) !== -1; }).slice(0, 300).forEach(function (x) { var o = document.createElement('option'); o.value = x.uuid; o.textContent = x.label; if (x.uuid === cur) o.selected = true; sel.appendChild(o); });
+    }
+    function load() { if (!ms.value) return; fetch('/settings/energy/states/' + ms.value).then(function (r) { return r.json(); }).then(function (d) { states = d.states || []; fill(); }).catch(function () {}); }
+    ms.addEventListener('change', function () { sel.dataset.current = ''; load(); });
+    f.addEventListener('input', fill);
+    if (ms.value) load();
+  })();
+  </script>
+</div>
 <% } %>
 
 <script>

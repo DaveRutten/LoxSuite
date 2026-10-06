@@ -108,9 +108,10 @@ function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {}, cert
 
 // The next time the car should be ready, from now: the first weekday "ready" time (learned or
 // overridden) that is at least `minLeadMin` ahead. Null when no weekday has one.
-function nextReadyTime(stats, nowMs, { tz, horizonDays = 8, minLeadMin = 30 } = {}) {
+function nextReadyTime(stats, nowMs, { tz, horizonDays = 8, minLeadMin = 30, skip = null } = {}) {
   for (let i = 0; i < horizonDays; i++) {
     const dayMs = localMidnight(nowMs, tz, i) + 12 * 3600000;
+    if (skip && skip(dayMs)) continue; // away or a public holiday: no usual departure
     const wd = localParts(dayMs, tz).weekday;
     const st = stats[wd];
     if (!st?.ready) continue;
@@ -210,9 +211,11 @@ function houseProfile(hourly, { tz, nowMs = Date.now(), halfLifeDays = 10 } = {}
 }
 
 // Expected house kWh for one future hour.
-function expectedHouseKwh(profile, hourMs, { tz } = {}) {
+// dayType (dayType.js): a holiday is planned like a weekend day, an away day as the base load only.
+function expectedHouseKwh(profile, hourMs, { tz, dayType = null } = {}) {
   const p = localParts(hourMs, tz);
-  const arr = p.weekday >= 5 ? profile.weekend : profile.workday;
+  if (dayType === 'away' && profile.baseLoadKw !== null && profile.baseLoadKw !== undefined) return profile.baseLoadKw;
+  const arr = p.weekday >= 5 || dayType === 'holiday' ? profile.weekend : profile.workday;
   return arr?.[p.hour] ?? null;
 }
 
@@ -288,7 +291,9 @@ async function learnedTrips(vehicle = null) {
 async function learnedHouse(days = 28) {
   const { displayTz } = require('./localTime');
   const from = new Date(Date.now() - days * 86400000).toISOString();
-  const rows = await db.prepare("SELECT hour, import_kwh AS kwh FROM energy_hourly WHERE role = 'house' AND hour >= ? ORDER BY hour").all(from);
+  const away = await require('./dayType').awayDays(Date.now(), days).catch(() => new Set());
+  const dayKey = (iso) => { const p = localParts(Date.parse(iso), displayTz()); return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`; };
+  const rows = (await db.prepare("SELECT hour, import_kwh AS kwh FROM energy_hourly WHERE role = 'house' AND hour >= ? ORDER BY hour").all(from)).filter((r) => !away.has(dayKey(r.hour)));
   // a clear change in daily use (new appliance, other season): learn from the last week only
   const byDay = new Map();
   for (const r of rows) { const k = r.hour.slice(0, 10); byDay.set(k, (byDay.get(k) || 0) + (r.kwh || 0)); }

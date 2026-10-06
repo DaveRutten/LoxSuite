@@ -159,6 +159,8 @@ function demoCalendar() {
     ev('e2', 1, 14, 0, 16, 0, '🚗 Customer visit', 'Amersfoort'),
     ev('e3', 2, 19, 0, 21, 0, 'Sports', 'Sports park'),
     ev('e4', 3, 12, 0, 13, 0, 'Lunch', null),
+    ev('e8', 3, 8, 0, 17, 0, 'Thuiswerken', null),
+    ev('e9', 9, 8, 0, 20, 0, 'Vakantie Texel', 'Texel'),
     ev('e5', 4, 15, 30, 16, 30, 'Dentist', 'High Street 3'),
     ev('e6', 5, 10, 0, 18, 0, '🚗 Birthday party', 'Eindhoven'),
     ['BEGIN:VEVENT', 'UID:e7@demo', `DTSTART:${at(0, 19, 0)}`, `DTEND:${at(0, 20, 0)}`, 'RRULE:FREQ=WEEKLY;COUNT=8', 'SUMMARY:Hockey training kids', 'LOCATION:Sports park', 'END:VEVENT'].join('\r\n'),

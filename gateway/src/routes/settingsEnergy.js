@@ -29,8 +29,32 @@ router.get('/', asyncHandler(async (req, res) => {
     calendars: await agenda.listCalendars(), vehicles,
     climateRuns: await require('../carClimate').recent(8),
     skodaCars: vehicles.some((v) => vehiclesMod.sourceKind(v) === 'skoda'),
+    dayCfg: await require('../dayType').getConfig(),
+    dayTypes: [...(await require('../dayType').typesBetween(Date.now(), Date.now() + 14 * 86400000).catch(() => new Map()))].map(([day, v]) => ({ day, ...v })),
+    miniservers: await db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all().catch(() => []),
     saved: req.query.saved || null, error: req.query.error || null,
   });
+}));
+
+// Days away & holidays (dayType.js).
+router.post('/day-types', require('../middleware/requirePermission').requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
+  const b = req.body || {};
+  const date = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+  const uuid = String(b.presence_uuid || '').trim();
+  await require('../dayType').saveConfig({
+    away_words: String(b.away_words || '').slice(0, 400), home_words: String(b.home_words || '').slice(0, 400),
+    away_from: date(b.away_from), away_to: date(b.away_to), holidays: !!b.holidays,
+    presence_ms: Number(b.presence_ms) || null, presence_uuid: /^[0-9a-f-]{20,}$/i.test(uuid) ? uuid : '', presence_home_value: String(b.presence_home_value ?? '1').slice(0, 20) || '1',
+  });
+  for (const m of ['../planner', '../energyManager']) { try { const x = require(m); if (x.invalidate) x.invalidate(); } catch { /* not loaded */ } }
+  res.redirect('/settings/energy?saved=1#day-types');
+}));
+
+// States of a Miniserver for the presence picker.
+router.get('/states/:miniserverId', asyncHandler(async (req, res) => {
+  const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(Number(req.params.miniserverId));
+  if (!ms) return res.status(404).json({ error: 'Miniserver not found' });
+  try { res.json({ states: await require('../loxoneStructure').getMonitorableStates(ms) }); } catch (err) { res.status(502).json({ error: err.message }); }
 }));
 
 module.exports = router;

@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.40.0-alpha.1] - 2026-10-06
+
+### Added
+- **Kind of day** (`dayType.js`, Administration → Energy & charging → *Days away & holidays*): away (an agenda
+  appointment with an "away" word — vakantie, holiday, op reis…, a period you set, or a Loxone presence state that
+  said nobody was home for 20+ hours), Dutch public holidays (Easter, King's Day, Ascension, Whitsun, Christmas…),
+  working from home (agenda words), weekend, workday. The next two weeks are shown there and above the energy
+  manager's plan. Away days are left out of what is learned (house profile, consumer patterns and runs); in the
+  plan an away day gets no tap water, no usual appliance run, no learned departure and only the house's base
+  load; a holiday is planned like a weekend day.
+- **Recognising what is going on**:
+  - a running appliance shows how long and how many kWh are still to come (from its usual run), or that it takes
+    longer than usual;
+  - **standby**: on, but using much less than when it runs;
+  - **something off**: a status that draws clearly more power than in the weeks before, or a heat pump that uses
+    more than the weather explains — shown on the card and the consumer's page;
+  - **unknown consumers**: what the house uses beyond the known consumers, above each day's base load, coming
+    back at about the same time ("every day 18:00–19:00, ~1.6 kWh") — give it a name.
+- Tests: `dayTypeRecognition.test.js` (Easter and holidays, day types, house profile per day type, run progress,
+  anomalies, unknown consumers against a real database).
+
 ## [0.39.0-alpha.1] - 2026-10-06
 
 ### Added

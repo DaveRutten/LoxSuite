@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.39.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.40.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -845,6 +845,20 @@ minutes and kWh per status, keeps every change, and learns the typical power per
 hot water 2.3 kW*); without power or energy it estimates from the consumer's kW. An appliance's runs follow its
 on/off or status when it has one. Every consumer has its own page with its state now, a 48-hour timeline, kWh per
 hour over a week and what it learned per status.
+
+**It keeps learning, and checks itself.** Every plan writes down what it expects (solar, house and each
+consumer per hour, when the car is ready and home) and compares it with what really happened — the Learned page
+shows *How good are my predictions?* — and LoxSuite corrects itself with it (house and consumers scaled,
+learned departures earlier when the car often left too early). Newer data counts more, and a clear change in use
+(a new appliance, another season) makes it learn from the last week. The **weather** is part of it: a heat
+pump's and the house's use follow the heating degrees of the forecast, and with a room or tank temperature it
+learns how fast it cools down — a heat pump is never held off longer than the room keeps half a degree. It
+knows the **kind of day**: away (agenda words like *vakantie*, a period you set, or Loxone presence), Dutch
+public holidays (planned like a weekend), working from home — away days are left out of what is learned and
+planned with the base load only. While an appliance runs it shows how long and how many kWh are still to come;
+it flags a consumer that uses clearly more than before or than the weather explains, finds **unknown
+consumers** in the house use (a recurring block you can name), and you can mark a learned pattern as *not
+right*.
 
 ### OCPP (Loxone Wallbox → OCPP backend)
 

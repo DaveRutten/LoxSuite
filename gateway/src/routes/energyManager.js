@@ -59,6 +59,14 @@ router.get('/data.json', asyncHandler(async (req, res) => {
     out.push({
       id: l.id, name: l.name, kind: l.kind, kindLabel: em.KINDS[l.kind]?.label, priority: l.priority, enabled: !!l.enabled, output: l.output,
       settings: l.settings, live: rt.samples[l.id] || null, running: rt.runs[l.id]?.running || false,
+      progress: await (async () => {
+        const run = rt.runs[l.id];
+        if (l.kind !== 'appliance' || !run?.running) return null;
+        const lr0 = await em.learned(l);
+        const live = rt.samples[l.id];
+        const used = live && live.total !== null && live.total !== undefined && run.startTotal !== null && run.startTotal !== undefined ? live.total - run.startTotal : null;
+        return em.runProgress({ sinceMs: run.since, nowMs: Date.now(), typicalH: lr0.durationH, typicalKwh: lr0.kwh, usedKwh: used });
+      })(),
       reason: rt.signals.find((x) => x.id === l.id)?.reason || null, signals, learned: await em.learned(l),
       plan: plan ? plan.hours.map((h) => ({ hour: h.hour, values: h.values, reason: h.reason })) : [],
       requests: (plan?.requests || []).map((q) => ({ id: q.id, expected: !!q.expected, usualStart: q.usualStart || null, readyBy: q.readyBy, label: q.label, plannedStart: q.plannedStart || null, plannedCost: q.plannedCost ?? null, kwh: q.kwh, durationH: q.durationH })),
@@ -69,7 +77,7 @@ router.get('/data.json', asyncHandler(async (req, res) => {
       runs: runs.filter((r) => r.kind === 'run').slice(0, 15),
     });
   }
-  res.json({ loads: out, hours: rt.plan?.hours || [], carKwh: rt.plan?.carKwh || {}, status: rt.status, live: rt.plan?.live || null, planAt: rt.plan?.at || null, cfg: await em.getConfig() });
+  res.json({ unknown: rt.unknown || [], dayTypes: rt.plan?.dayTypes || {}, loads: out, hours: rt.plan?.hours || [], carKwh: rt.plan?.carKwh || {}, status: rt.status, live: rt.plan?.live || null, planAt: rt.plan?.at || null, cfg: await em.getConfig() });
 }));
 
 // The Loxone signals of a consumer (state uuids): on/off, status (+ value labels and which values mean
@@ -140,6 +148,19 @@ router.post('/loads/:id/patterns.json', requirePermission('energy_manager', 'edi
   else if (req.body?.ignore) list.add(String(req.body.ignore).slice(0, 60));
   raw.ignored_patterns = [...list].slice(-50);
   await db.prepare('UPDATE energy_loads SET settings = ? WHERE id = ?').run(JSON.stringify(raw), load.id);
+  em.invalidate();
+  res.json({ ok: true });
+}));
+
+// Give an unknown consumer (a recurring block of house use) a name.
+router.post('/unknown.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
+  const settings = require('../wallboxSettings');
+  const names = (await settings.get('unknown_names', {})) || {};
+  const key = String(req.body?.key || '').slice(0, 60);
+  const name = String(req.body?.name || '').trim().slice(0, 60);
+  if (!key) return res.json({ ok: false });
+  if (name) names[key] = name; else delete names[key];
+  await settings.set('unknown_names', names);
   em.invalidate();
   res.json({ ok: true });
 }));

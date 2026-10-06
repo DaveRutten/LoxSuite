@@ -21,7 +21,14 @@
 
 <div class="card">
   <h2 style="margin-top:0;"><%= t('Plan — next 36 hours') %></h2>
+  <div id="em-daytypes" style="margin:-0.3rem 0 0.5rem;"></div>
   <div id="em-plan"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;"><%= t('Unknown consumers') %></h2>
+  <p class="hint"><%= t('What the house uses beyond the known consumers, above its base load, coming back at about the same time. Give it a name so you know what it is — or add it as a consumer.') %></p>
+  <div id="em-unknown"></div>
 </div>
 
 <div id="em-loads"></div>
@@ -87,6 +94,43 @@
     if (l.effective && l.effective.release_share != null && l.weather && l.weather.model && l.weather.model.usable) out.push(TLx('released in {0}% of the hours today').replace('{0}', Math.round(l.effective.release_share * 100)));
     return out.length ? '<p class="hint" style="margin:0 0 0.4rem;">' + out.map(esc).join('<br>') + '</p>' : '';
   }
+  function progressHtml(p) {
+    if (!p) return '';
+    var t = p.overdue ? TLx('taking longer than usual') : TLx('about {0} min to go').replace('{0}', p.remainingMin) + (p.remainingKwh != null ? ', ' + nf(p.remainingKwh, 2) + ' kWh' : '');
+    return '<div class="hint" style="margin:0; font-size:0.75rem;">' + esc(t) + ' (' + p.pct + '%)</div>';
+  }
+  function standbyHtml(l) {
+    var lv = l.live, kwOn = l.learned && l.learned.kwOn;
+    return lv && lv.on && lv.kw != null && kwOn && lv.kw < 0.15 * kwOn ? ' <span class="badge" title="' + esc(TLx('on, but using much less than when it runs')) + '">' + esc(TLx('standby')) + '</span>' : '';
+  }
+  function anomaliesHtml(lr) {
+    var a = (lr && lr.anomalies) || [];
+    return a.map(function (x) {
+      var txt = x.kind === 'weather'
+        ? TLx('Uses {0}% more than expected for this weather (last week {1} kWh/day, expected {2}) — worth a look (filter, defrosting, settings).').replace('{0}', Math.round((x.ratio - 1) * 100)).replace('{1}', nf(x.recent, 1)).replace('{2}', nf(x.expected, 1))
+        : TLx('"{0}" draws {1}% more power than in the weeks before ({2} kW against {3} kW).').replace('{0}', x.status).replace('{1}', Math.round((x.ratio - 1) * 100)).replace('{2}', nf(x.recent, 2)).replace('{3}', nf(x.before, 2));
+      return '<p class="hint" style="margin:0 0 0.4rem; color:var(--danger, #e5534b);">⚠ ' + esc(txt) + '</p>';
+    }).join('');
+  }
+  function unknownHtml(d) {
+    var el = document.getElementById('em-unknown');
+    if (!el) return;
+    var list = d.unknown || [];
+    if (!list.length) { el.innerHTML = '<p class="hint" style="margin:0;">' + esc(TLx('Nothing recurring found beyond the known consumers (yet).')) + '</p>'; return; }
+    el.innerHTML = '<div style="overflow-x:auto;"><table><thead><tr><th>' + esc(TLx('When')) + '</th><th>' + esc(TLx('Name')) + '</th></tr></thead><tbody>' + list.map(function (u) {
+      return '<tr><td>' + esc(u.text) + '</td><td>' + (CAN ? '<div style="display:flex; gap:0.3rem;"><input type="text" value="' + esc(u.name || '') + '" placeholder="' + esc(TLx('e.g. oven, dryer')) + '" data-uname="' + esc(u.key) + '" style="max-width:14em;"><button type="button" class="btn-soft" data-usave="' + esc(u.key) + '">' + esc(TLx('Save')) + '</button></div>' : esc(u.name || '—')) + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+    Array.prototype.forEach.call(el.querySelectorAll('[data-usave]'), function (b) {
+      b.addEventListener('click', function () { var inp = el.querySelector('[data-uname="' + b.dataset.usave + '"]'); post('/energy-manager/unknown.json', { key: b.dataset.usave, name: inp.value }).then(load); });
+    });
+  }
+  function dayTypesHtml(d) {
+    var el = document.getElementById('em-daytypes');
+    if (!el) return;
+    var map = d.dayTypes || {}, keys = Object.keys(map).sort().slice(0, 3);
+    var col = { away: '#e67e22', holiday: '#9b59b6', home: '#16a085', weekend: '#7f8c8d', workday: '#4a7bd0' };
+    el.innerHTML = keys.map(function (k) { var t = map[k].type, p = k.split('-'); return '<span style="display:inline-block; padding:1px 7px; border-radius:8px; font-size:0.75rem; margin-right:0.3rem; border:1px solid ' + col[t] + '; color:' + col[t] + ';">' + esc(new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { weekday: 'short' })) + ' · ' + esc(TLx(t)) + '</span>'; }).join('') + '<a href="/settings/energy#day-types" class="hint" style="font-size:0.75rem;">' + esc(TLx('days away & holidays')) + '</a>';
+  }
   function perStatusHtml(lr) {
     var ps = (lr && lr.perStatus) || [];
     if (!ps.length) return '';
@@ -151,10 +195,12 @@
       (d.live && d.live.ratio != null && Math.abs(d.live.ratio - 1) > 0.15 ? ' · ' + TL('plan adjusted to the real values') : '') : '';
     if (!d.loads.length) { document.getElementById('em-now').innerHTML = '<p class="hint" style="margin:0;">No consumers yet &mdash; add one below.</p>'; }
     else document.getElementById('em-now').innerHTML = '<div style="overflow-x:auto;"><table><thead><tr><th>Consumer</th><th>State</th><th>Power now</th><th>Would send (virtual input = value)</th><th>Why</th></tr></thead><tbody>' + d.loads.map(function (l) {
-      return '<tr><td><a href="/energy-manager/loads/' + l.id + '"><strong>' + esc(l.name) + '</strong></a><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(l.kindLabel) + ' · prio ' + l.priority + ' · ' + (l.output === 'live' ? 'live' : 'shadow') + '</div></td><td>' + stateHtml(l.live) + '</td><td>' + (l.live && l.live.kw != null ? nf(l.live.kw, 2) + ' kW' : (l.live && l.live.found === false ? '<span class="hint">not found</span>' : '—')) + (l.running ? ' <span class="badge">running</span>' : '') + '</td><td>' +
+      return '<tr><td><a href="/energy-manager/loads/' + l.id + '"><strong>' + esc(l.name) + '</strong></a><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(l.kindLabel) + ' · prio ' + l.priority + ' · ' + (l.output === 'live' ? 'live' : 'shadow') + '</div></td><td>' + stateHtml(l.live) + '</td><td>' + (l.live && l.live.kw != null ? nf(l.live.kw, 2) + ' kW' : (l.live && l.live.found === false ? '<span class="hint">not found</span>' : '—')) + (l.running ? ' <span class="badge">running</span>' : '') + standbyHtml(l) + progressHtml(l.progress) + '</td><td>' +
         l.signals.map(function (s) { return '<code>' + esc(s.vi) + '</code> = ' + val(s); }).join('<br>') + '</td><td class="hint">' + esc(l.reason || '') + '</td></tr>';
     }).join('') + '</tbody></table></div>';
     planChart(d);
+    unknownHtml(d);
+    dayTypesHtml(d);
     document.getElementById('em-loads').innerHTML = d.loads.map(function (l) {
       var lr = l.learned || {}, h = '<div class="card"><h2 style="margin-top:0;">' + esc(l.name) + '</h2><p class="hint" style="margin:-0.4rem 0 0.5rem;">' + esc(l.kindLabel) + ' · <a href="/energy-manager/loads/' + l.id + '">' + esc((window.LS_I18N && window.LS_I18N['Details →']) || 'Details →') + '</a></p>' + perStatusHtml(lr);
       if (l.kind === 'appliance') {
@@ -164,7 +210,7 @@
         h += '<div style="overflow-x:auto;"><table><thead><tr><th>Run</th><th>Duration</th><th>kWh</th><th>Cost</th><th>Best start (hindsight)</th><th>Then</th><th>Saving</th></tr></thead><tbody>' +
           (l.runs.length ? l.runs.map(function (r) { var dur = (Date.parse(r.end_at) - Date.parse(r.start_at)) / 60000; var sav = r.cost_eur != null && r.best_cost_eur != null ? r.cost_eur - r.best_cost_eur : null; return '<tr><td>' + esc(new Date(r.start_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + Math.round(dur) + ' min</td><td>' + nf(r.kwh, 2) + '</td><td>' + eur(r.cost_eur) + '</td><td>' + (r.best_start ? hh(r.best_start) : '—') + '</td><td>' + eur(r.best_cost_eur) + '</td><td style="color:' + (sav > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(sav) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No runs measured yet.</td></tr>') + '</tbody></table></div>';
       } else {
-        h += weatherHtml(l);
+        h += weatherHtml(l) + anomaliesHtml(lr);
         if (lr.change && lr.change.changed) h += '<p class="hint" style="margin:0 0 0.4rem; color:#b8860b;">' + esc(TLx('Use changed: last week {0} kWh/day against {1} before — LoxSuite now learns mostly from the last week.').replace('{0}', nf(lr.change.recent, 1)).replace('{1}', nf(lr.change.before, 1))) + '</p>';
         h += '<p class="hint" style="margin:0 0 0.5rem;">Learned: ' + (lr.kwhPerDay != null ? nf(lr.kwhPerDay, 1) + ' kWh/day, about ' + nf(lr.kwPeak, 1) + ' kW while running' : 'no measurements yet') + '. "In advised hours" = share of the kWh that fell in hours LoxSuite would have released; "could save" = moving the rest there.</p>';
         h += '<div style="overflow-x:auto;"><table><thead><tr><th>Day</th><th>kWh</th><th>Cost</th><th>€/kWh</th><th>Solar</th><th>In advised hours</th><th>Could save</th></tr></thead><tbody>' +

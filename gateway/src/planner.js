@@ -419,7 +419,11 @@ async function computeTarget(nowMs, wb) {
   // The learned weekday pattern counts too: whichever comes first (unless set by hand).
   if (!rt.readyOverride || rt.readyOverride <= nowMs) {
     const stats = await learning.learnedDepartures(vehicle?.id || null);
-    const nx = learning.nextReadyTime(stats, nowMs, { tz });
+    // away or a public holiday (dayType.js): that day has no usual departure
+    const dts = await require('./dayType').typesBetween(nowMs, nowMs + 8 * 86400000).catch(() => new Map());
+    const { localParts: lp } = require('./localTime');
+    const skip = (ms) => { const p = lp(ms, tz); const t = dts.get(`${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`)?.type; return t === 'away' || t === 'holiday'; };
+    const nx = learning.nextReadyTime(stats, nowMs, { tz, skip });
     // it often left before it was ready: the learned time moves earlier (forecastLog.js)
     const shift = nx && nx.source !== 'override' ? (await require('./forecastLog').corrections(nowMs).catch(() => ({}))).departShiftMin || 0 : 0;
     const nxAt = nx ? nx.at - shift * 60000 : null;
@@ -621,6 +625,7 @@ async function buildSlots(nowMs, untilMs) {
   }
   const { localParts } = require('./localTime');
   const dayOf = (ms) => { const p = localParts(ms, tz); return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`; };
+  const types = await require('./dayType').typesBetween(nowMs, untilMs).catch(() => new Map());
   const weatherFactor = (ms) => require('./temperature').dayFactor(rt.houseWeather.model, rt.houseWeather.means.get(dayOf(ms)) ?? null, { min: 0.6, max: 1.8 });
   const slots = [];
   const covered = rows.length ? Date.parse(rows[rows.length - 1].end_at) : nowMs;
@@ -628,7 +633,7 @@ async function buildSlots(nowMs, untilMs) {
     const hour = new Date(Math.floor(s / 3600000) * 3600000).toISOString();
     const pvKwh = pv.get(hour) || 0;
     // houseRaw: the learned profile with the weather (what the error correction is learned on)
-    const houseRaw = round3((learning.expectedHouseKwh(house, s, { tz }) ?? 0.4) * weatherFactor(s));
+    const houseRaw = round3((learning.expectedHouseKwh(house, s, { tz, dayType: types.get(dayOf(s))?.type || null }) ?? 0.4) * weatherFactor(s));
     const houseKwh = round3(houseRaw * (corr.houseFactor || 1));
     slots.push({ start: new Date(s).toISOString(), end: new Date(e).toISOString(), price, pvKw: round3(Math.max(0, pvKwh - houseKwh)), pvKwh, houseKwh, houseRaw });
   };

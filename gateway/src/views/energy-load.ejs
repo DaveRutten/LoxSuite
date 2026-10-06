@@ -72,6 +72,11 @@
     if (lr.weather && lr.weather.model && lr.weather.model.usable) wl.push(TL('Weather: +{0} kWh per degree colder (fits {1}%)').replace('{0}', nf(lr.weather.model.b, 2)).replace('{1}', Math.round(lr.weather.model.r2 * 100)) + (lr.weather.todayC != null ? ' · ' + TL('today {0} °C → ×{1}').replace('{0}', nf(lr.weather.todayC, 1)).replace('{1}', nf(lr.weather.factorToday, 2)) : ''));
     if (lr.cooling && lr.cooling.k) wl.push(TL('Cools down {0} °C per hour per 10 °C difference with outside').replace('{0}', nf(lr.cooling.k * 10, 2)) + (lr.cooling.holdH ? ' → ' + TL('held off at most {0} h').replace('{0}', nf(lr.cooling.holdH, 1)) : ''));
     if (now && now.temp != null) wl.push(TL('temperature now {0} °C').replace('{0}', nf(now.temp, 1)));
+    (lr.anomalies || []).forEach(function (x) {
+      wl.push('⚠ ' + (x.kind === 'weather'
+        ? TL('Uses {0}% more than expected for this weather (last week {1} kWh/day, expected {2}) — worth a look (filter, defrosting, settings).').replace('{0}', Math.round((x.ratio - 1) * 100)).replace('{1}', nf(x.recent, 1)).replace('{2}', nf(x.expected, 1))
+        : TL('"{0}" draws {1}% more power than in the weeks before ({2} kW against {3} kW).').replace('{0}', x.status).replace('{1}', Math.round((x.ratio - 1) * 100)).replace('{2}', nf(x.recent, 2)).replace('{3}', nf(x.before, 2))));
+    });
     var wel = document.getElementById('el-weather');
     if (wel) wel.innerHTML = wl.length ? wl.map(esc).join('<br>') : '';
     document.getElementById('el-updated').textContent = now && now.at ? TL('last read {0}').replace('{0}', hh(now.at)) : '';

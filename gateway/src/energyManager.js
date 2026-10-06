@@ -186,7 +186,7 @@ function effCost(h, kwh, surplus, opts) {
 
 // loads: [{ id, kind, name, priority, settings (object), requests: [{ id, readyBy (ms), kwh, durationH }] }]
 // carKwh: { [hourMs]: kWh the car plan takes }; localOf(ms) -> { day: 'YYYY-MM-DD', hour: 0..23 }
-function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf, feedIn = 'saldering', feedInEur = 0.05, solarBonus = 0.05 }) {
+function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf, feedIn = 'saldering', feedInEur = 0.05, solarBonus = 0.05, awayDays = new Set() }) {
   const opts = { feedIn, feedInEur, solarBonus };
   const left = new Map(hours.map((h) => [h.ms, h.surplusKwh]));
   const nowHour = Math.floor(nowMs / HOUR) * HOUR;
@@ -215,6 +215,7 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
       for (const day of days) {
         const win = H.filter((h) => { const l = localOf(h.ms); return l.day === day && l.hour >= (s.earliest ?? 0) && l.hour < latest; });
         if (load.doneToday && day === localOf(nowMs).day) continue;
+        if (awayDays.has(day)) continue; // nobody home: no tap water planned (surplus may still heat it)
         let best = null;
         for (let i = 0; i + dur <= win.length; i++) {
           const block = win.slice(i, i + dur);
@@ -281,7 +282,7 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
         const end = H.length ? H[H.length - 1].ms + HOUR : nowMs;
         for (const p of (load.patterns || []).filter((x) => x.type === 'run')) {
           const occ = ep.nextOccurrence(p, nowMs, end, localOf);
-          if (occ === null) continue;
+          if (occ === null || awayDays.has(localOf(occ).day)) continue; // nobody home that day: no usual run
           const dur = Math.max(1, Math.ceil(p.durationH || 2));
           load.requests = [...(load.requests || []), {
             id: null, expected: true, label: `usual run (${ep.describe(p)})`, notBefore: Math.floor(occ / HOUR) * HOUR,
@@ -540,7 +541,7 @@ async function learned(load) {
   for (const r of rows) byDay.set(r.hour.slice(0, 10), (byDay.get(r.hour.slice(0, 10)) || 0) + r.kwh);
   const change = require('./learning').detectChange([...byDay.entries()].slice(0, -1).map(([day, kwh]) => ({ day, kwh })));
   const kwhPerDay = change.changed ? change.recent : (days ? r2(rows.reduce((a, r) => a + r.kwh, 0) / days) : null);
-  return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay, change, hours: rows.length, ...(await learnedStatus(load)) };
+  return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay, change, hours: rows.length, ...(await learnedStatus(load)), anomalies: await loadAnomalies(load).catch(() => []) };
 }
 
 // The weather side of a heat pump / boiler: its kWh against heating degrees (a cold day needs more), and
@@ -567,6 +568,80 @@ async function weatherFor(load, nowMs, localOf) {
   return out;
 }
 const DAY_MS = 86400000;
+
+// Pure: how far a running appliance is, from its usual run: { elapsedMin, remainingMin, remainingKwh, pct }.
+function runProgress({ sinceMs, nowMs, typicalH, typicalKwh, usedKwh = null }) {
+  if (!sinceMs || !(typicalH > 0)) return null;
+  const elapsedMin = Math.max(0, (nowMs - sinceMs) / 60000);
+  const totalMin = typicalH * 60;
+  const remainingMin = Math.max(0, totalMin - elapsedMin);
+  let remainingKwh = null;
+  if (typicalKwh > 0) remainingKwh = usedKwh !== null && usedKwh !== undefined ? Math.max(0, typicalKwh - usedKwh) : typicalKwh * (remainingMin / totalMin);
+  return { elapsedMin: Math.round(elapsedMin), remainingMin: Math.round(remainingMin), remainingKwh: remainingKwh === null ? null : r2(remainingKwh), pct: Math.min(100, Math.round((elapsedMin / totalMin) * 100)), overdue: elapsedMin > totalMin * 1.3 };
+}
+
+// Pure: something off? kW per status in the last 7 days against the 21 before (rows from
+// load_status_hourly), and the last 7 days' kWh against what the weather model expects.
+//   -> [{ kind: 'status'|'weather', status?, recent, before|expected, ratio }]
+function anomalies({ rows = [], nowMs = Date.now(), weatherDays = [], model = null, threshold = 1.3 }) {
+  const out = [];
+  const cut = new Date(nowMs - 7 * 86400000).toISOString();
+  const by = new Map();
+  for (const r of rows) {
+    if (!r.measured || /^(off|uit|0)$/i.test(r.status)) continue;
+    const g = by.get(r.status) || { rMin: 0, rKwh: 0, bMin: 0, bKwh: 0 };
+    if (r.hour >= cut) { g.rMin += r.minutes; g.rKwh += r.kwh; } else { g.bMin += r.minutes; g.bKwh += r.kwh; }
+    by.set(r.status, g);
+  }
+  for (const [status, g] of by) {
+    if (g.rMin < 60 || g.bMin < 180) continue;
+    const recent = g.rKwh / (g.rMin / 60);
+    const before = g.bKwh / (g.bMin / 60);
+    if (before > 0.05 && recent / before >= threshold) out.push({ kind: 'status', status, recent: r2(recent), before: r2(before), ratio: r2(recent / before) });
+  }
+  if (model?.usable && weatherDays.length >= 5) {
+    const T = require('./temperature');
+    let act = 0; let exp = 0;
+    for (const d of weatherDays) { act += d.kwh; exp += Math.max(0.05, model.a + model.b * T.heatingDegrees(d.meanC)); }
+    if (exp > 1 && act / exp >= threshold) out.push({ kind: 'weather', recent: r2(act / weatherDays.length), expected: r2(exp / weatherDays.length), ratio: r2(act / exp) });
+  }
+  return out;
+}
+
+async function loadAnomalies(load, nowMs = Date.now()) {
+  const rows = await db.prepare('SELECT hour, status, minutes, kwh, measured FROM load_status_hourly WHERE load_id = ? AND hour >= ?').all(load.id, new Date(nowMs - 28 * 86400000).toISOString()).catch(() => []);
+  let weatherDays = [];
+  let model = null;
+  if (load.kind === 'heatpump') {
+    const T = require('./temperature');
+    model = await T.loadModel(load.id, nowMs).catch(() => null);
+    const hourly = await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ?').all(load.id, new Date(nowMs - 8 * 86400000).toISOString()).catch(() => []);
+    const means = await T.dailyMeans(nowMs - 8 * 86400000, nowMs).catch(() => new Map());
+    weatherDays = T.dailyKwh(hourly).map((d) => ({ ...d, meanC: means.get(d.day) })).filter((d) => Number.isFinite(d.meanC)).slice(-7);
+  }
+  return anomalies({ rows, nowMs, weatherDays, model });
+}
+
+// Unknown consumers: what the house uses beyond the known consumers, above each day's base load —
+// recurring blocks of it are patterns ("every day 18:00–19:00, ~1.6 kWh": an oven?) that you can name.
+async function unknownPatterns(nowMs = Date.now(), localOf) {
+  const from = new Date(nowMs - 42 * 86400000).toISOString();
+  const house = await db.prepare("SELECT hour, import_kwh AS kwh FROM energy_hourly WHERE role = 'house' AND hour >= ?").all(from).catch(() => []);
+  if (house.length < 24 * 7) return [];
+  const known = await db.prepare('SELECT hour, SUM(kwh) AS kwh FROM load_hourly WHERE hour >= ? GROUP BY hour').all(from).catch(() => []);
+  const k = new Map(known.map((r) => [r.hour, r.kwh || 0]));
+  const residual = house.map((r) => ({ hour: r.hour, kwh: Math.max(0, (r.kwh || 0) - (k.get(r.hour) || 0)) }));
+  // minus each day's base (its quietest hours)
+  const byDay = new Map();
+  for (const r of residual) { const d = localOf(Date.parse(r.hour)).day; if (!byDay.has(d)) byDay.set(d, []); byDay.get(d).push(r.kwh); }
+  const base = new Map([...byDay].map(([d, xs]) => [d, quantile(xs, 0.2) || 0]));
+  const spikes = residual.map((r) => ({ hour: r.hour, kwh: Math.round(Math.max(0, r.kwh - (base.get(localOf(Date.parse(r.hour)).day) || 0)) * 1000) / 1000 }));
+  const ep = require('./energyPatterns');
+  const prof = ep.profile({ hourly: spikes, localOf, nowMs, threshold: 0.4 });
+  const names = (await require('./wallboxSettings').get('unknown_names', {})) || {};
+  return ep.hourPatterns(prof, { minProb: 0.5, lift: 0.25 }).filter((p) => p.kwh >= 0.5).slice(0, 8)
+    .map((p) => ({ ...p, key: ep.patternKey(p), name: names[ep.patternKey(p)] || null, text: ep.describe(p) }));
+}
 
 // Pure: per status (or on/off) from the hourly bookings: hours in it, kWh, the typical kW (only from
 // measured kWh) and hours per day.
@@ -633,11 +708,12 @@ function timeline(events, fromMs, toMs) {
 }
 
 // Learned patterns of one load (energyPatterns.js) from the last 8 weeks.
-async function loadPatterns(load, nowMs, localOf) {
+async function loadPatterns(load, nowMs, localOf, { away = new Set() } = {}) {
   const ep = require('./energyPatterns');
   const from = new Date(nowMs - 56 * 86400000).toISOString();
-  const hourly = await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ?').all(load.id, from).catch(() => []);
-  const runs = load.kind === 'appliance' ? await db.prepare("SELECT start_at, end_at, kwh FROM load_runs WHERE load_id = ? AND kind = 'run' AND start_at >= ?").all(load.id, from).catch(() => []) : [];
+  // days nobody was home are left out: they would make the normal pattern look emptier (dayType.js)
+  const hourly = (await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ?').all(load.id, from).catch(() => [])).filter((r) => !away.has(localOf(Date.parse(r.hour)).day));
+  const runs = load.kind === 'appliance' ? (await db.prepare("SELECT start_at, end_at, kwh FROM load_runs WHERE load_id = ? AND kind = 'run' AND start_at >= ?").all(load.id, from).catch(() => [])).filter((r) => !away.has(localOf(Date.parse(r.start_at)).day)) : [];
   const r = ep.findPatterns({ kind: load.kind, hourly, runs, localOf, nowMs });
   // patterns you marked as "not right" are left out (and not planned for)
   const ignored = new Set(load.settings?.ignored_patterns || []);
@@ -677,6 +753,10 @@ async function recalc(nowMs = Date.now()) {
   }
   const loads = (await listLoads()).filter((l) => l.enabled);
   const today = localOf(nowMs).day;
+  const dt = require('./dayType');
+  const awayPast = await dt.awayDays(nowMs).catch(() => new Set());
+  const types = await dt.typesBetween(nowMs, nowMs + 36 * HOUR).catch(() => new Map());
+  const awayAhead = new Set([...types].filter(([, v]) => v.type === 'away').map(([d]) => d));
   for (const l of loads) {
     const lr = await learned(l);
     if (l.kind !== 'appliance' && lr.kwPeak && !l.settings.kw_fixed) l.settings.kw = Math.max(0.3, lr.kwPeak);
@@ -687,18 +767,19 @@ async function recalc(nowMs = Date.now()) {
       l.doneToday = (row?.k || 0) >= Math.max(0.5, (l.settings.kw || 2) * (l.settings.duration_h || 1) * 0.7);
     }
     l.learned = lr;
-    Object.assign(l, await loadPatterns(l, nowMs, localOf));
+    Object.assign(l, await loadPatterns(l, nowMs, localOf, { away: awayPast }));
     if (l.kind === 'heatpump' || l.kind === 'dhw') Object.assign(l, await weatherFor(l, nowMs, localOf));
     // write down the expected kWh per hour, to compare with what it really uses (forecastLog.js)
     if (l.profile) {
       const ep = require('./energyPatterns');
-      const exp = hours.slice(0, 36).map((h) => ({ ms: h.ms, kwh: ep.expectedKwh(l.profile, h.ms, localOf) * (l.weather?.factorOf?.(h.ms) ?? 1) })).filter((x) => Number.isFinite(x.kwh));
+      const exp = hours.slice(0, 36).map((h) => ({ ms: h.ms, kwh: awayAhead.has(localOf(h.ms).day) && l.kind !== 'heatpump' ? 0 : ep.expectedKwh(l.profile, h.ms, localOf) * (l.weather?.factorOf?.(h.ms) ?? 1) })).filter((x) => Number.isFinite(x.kwh));
       require('./forecastLog').recordLoad(l.id, exp, nowMs).catch(() => {});
     }
   }
   rt.follows = await followsFor(loads);
-  const plan = planLoads({ hours, loads, carKwh, carPriority: cfg.car_priority, nowMs, localOf, feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, solarBonus: cfg.solar_bonus_eur });
-  rt.plan = { ...plan, hours, carKwh, at: new Date(nowMs).toISOString(), today, live: corrected.live, pvF };
+  rt.unknown = await unknownPatterns(nowMs, localOf).catch(() => []);
+  const plan = planLoads({ hours, loads, carKwh, carPriority: cfg.car_priority, nowMs, localOf, feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, solarBonus: cfg.solar_bonus_eur, awayDays: awayAhead });
+  rt.plan = { ...plan, hours, carKwh, at: new Date(nowMs).toISOString(), today, live: corrected.live, pvF, dayTypes: Object.fromEntries(types) };
   rt.loads = loads;
   rt.localOf = localOf;
   rt.planAt = nowMs;
@@ -707,6 +788,7 @@ async function recalc(nowMs = Date.now()) {
 
 async function tick(nowMs = Date.now()) {
   await sample(nowMs).catch((e) => console.error(`[energy manager] sample: ${e.message}`));
+  await require('./dayType').samplePresence(nowMs, 1).catch(() => {});
   const live = await require('./energyMeters').live().catch(() => ({ roles: {} }));
   // Re-plan every 15 min — every 5 min while the solar forecast is far off from what the meters say.
   const pvNow = live.roles?.pv?.power_kw;
@@ -804,7 +886,7 @@ async function importHistory(days = 30, { callTool } = {}) {
   return report;
 }
 
-function getRuntime() { return { loads: rt.loads || [], follows: rt.follows || [], localOf: rt.localOf || null, plan: rt.plan, signals: rt.signals, status: rt.status, samples: Object.fromEntries(rt.samples), runs: Object.fromEntries(rt.runs) }; }
+function getRuntime() { return { unknown: rt.unknown || [], loads: rt.loads || [], follows: rt.follows || [], localOf: rt.localOf || null, plan: rt.plan, signals: rt.signals, status: rt.status, samples: Object.fromEntries(rt.samples), runs: Object.fromEntries(rt.runs) }; }
 
 function startEnergyManager() {
   if (rt.timer) return;
@@ -822,6 +904,6 @@ function invalidate() { rt.planAt = 0; }
 module.exports = {
   applyLive,
   KINDS, parseSettings, viName, toHours, effCost, planLoads, currentSignals, runStep, hourCost, quantile,
-  weatherFor, sourcesOf, parseStatusMap, loadState, statusKey, statusSummary, timeline, loadDetail, learnedStatus,
+  runProgress, anomalies, unknownPatterns, weatherFor, sourcesOf, parseStatusMap, loadState, statusKey, statusSummary, timeline, loadDetail, learnedStatus,
   listLoads, readLoad, sample, recalc, tick, getConfig, saveConfig, dailyReport, importHistory, learned, getRuntime, startEnergyManager, stopEnergyManager, invalidate,
 };

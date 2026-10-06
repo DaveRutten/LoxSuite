@@ -161,6 +161,13 @@
   ]
  },
  {
+  "key": ", {0} kWh",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": ", bidirectional",
   "module": "energy",
   "where": [
@@ -355,6 +362,14 @@
   "module": "core",
   "where": [
    "src/loxone.js"
+  ]
+ },
+ {
+  "key": "\"{0}\" draws {1}% more power than in the weeks before ({2} kW against {3} kW).",
+  "module": "energy",
+  "where": [
+   "energy-load (script)",
+   "energy-manager (script)"
   ]
  },
  {
@@ -1861,6 +1876,13 @@
   ]
  },
  {
+  "key": "about {0} min to go",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "about right",
   "module": "charging",
   "where": [
@@ -2393,6 +2415,13 @@
   ]
  },
  {
+  "key": "Ascension",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
+  ]
+ },
+ {
   "key": "Asking permission…",
   "module": "core",
   "where": [
@@ -2856,6 +2885,13 @@
   "module": "core",
   "where": [
    "src/format.js"
+  ]
+ },
+ {
+  "key": "Boxing Day",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
   ]
  },
  {
@@ -3341,6 +3377,13 @@
   "module": "vehicles",
   "where": [
    "src/routes/vehicles.js"
+  ]
+ },
+ {
+  "key": "Christmas",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
   ]
  },
  {
@@ -4168,6 +4211,13 @@
   ]
  },
  {
+  "key": "days away & holidays",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Default",
   "module": "core",
   "where": [
@@ -4537,6 +4587,27 @@
   "module": "mqtt",
   "where": [
    "public/mappings-loxone-to-mqtt-tabulator.js"
+  ]
+ },
+ {
+  "key": "e.g. oven, dryer",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "Easter",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
+  ]
+ },
+ {
+  "key": "Easter Monday",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
   ]
  },
  {
@@ -6196,6 +6267,13 @@
   ]
  },
  {
+  "key": "King's Day",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
+  ]
+ },
+ {
   "key": "Kitchen Shelly",
   "module": "core",
   "where": [
@@ -6493,6 +6571,13 @@
   "module": "ocpp",
   "where": [
    "src/ocppExport.js"
+  ]
+ },
+ {
+  "key": "Liberation Day",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
   ]
  },
  {
@@ -7400,7 +7485,8 @@
    "src/routes/energyManager.js",
    "src/routes/liveData.js",
    "src/routes/miniservers.js",
-   "src/routes/monitor.js"
+   "src/routes/monitor.js",
+   "src/routes/settingsEnergy.js"
   ]
  },
  {
@@ -7817,8 +7903,9 @@
  },
  {
   "key": "Name",
-  "module": "monitor",
+  "module": "energy_manager",
   "where": [
+   "energy-manager (script)",
    "public/dashboard-miniservers-tabulator.js",
    "public/miniservers-tabulator.js",
    "src/routes/miniservers.js"
@@ -7935,6 +8022,13 @@
   "module": "core",
   "where": [
    "src/notifications.js"
+  ]
+ },
+ {
+  "key": "New Year",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
   ]
  },
  {
@@ -8787,6 +8881,13 @@
   ]
  },
  {
+  "key": "Nothing recurring found beyond the known consumers (yet).",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Nothing selected.",
   "module": "core",
   "where": [
@@ -9097,6 +9198,13 @@
   "module": "core",
   "where": [
    "src/carEta.js"
+  ]
+ },
+ {
+  "key": "on, but using much less than when it runs",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -10382,7 +10490,8 @@
   "key": "Save",
   "module": "charging",
   "where": [
-   "agenda (script)"
+   "agenda (script)",
+   "energy-manager (script)"
   ]
  },
  {
@@ -11391,6 +11500,13 @@
   ]
  },
  {
+  "key": "taking longer than usual",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Tap water",
   "module": "energy_manager",
   "where": [
@@ -12030,6 +12146,13 @@
   "module": "mqtt",
   "where": [
    "incoming-schedules"
+  ]
+ },
+ {
+  "key": "thuiswerken, thuiswerk, wfh, home office, thuis",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
   ]
  },
  {
@@ -12843,6 +12966,14 @@
   ]
  },
  {
+  "key": "Uses {0}% more than expected for this weather (last week {1} kWh/day, expected {2}) — worth a look (filter, defrosting, settings).",
+  "module": "energy",
+  "where": [
+   "energy-load (script)",
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "usual {0} km",
   "module": "charging",
   "where": [
@@ -12868,6 +12999,13 @@
   "module": "core",
   "where": [
    "src/notifications.js"
+  ]
+ },
+ {
+  "key": "vakantie, holiday, vacation, op reis, weg, afwezig, away",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
   ]
  },
  {
@@ -13161,6 +13299,13 @@
   ]
  },
  {
+  "key": "When",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "WHERE h.miniserver_id = ?",
   "module": "core",
   "where": [
@@ -13179,6 +13324,20 @@
   "module": "charging",
   "where": [
    "src/planner.js"
+  ]
+ },
+ {
+  "key": "Whit Monday",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
+  ]
+ },
+ {
+  "key": "Whitsun",
+  "module": "core",
+  "where": [
+   "src/dayType.js"
   ]
  },
  {
