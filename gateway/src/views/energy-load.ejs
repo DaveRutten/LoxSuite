@@ -14,7 +14,7 @@
 </div>
 
 <% if (canEdit('energy_manager')) { %>
-<div class="card" data-card-key="history">
+<div class="card" id="history" data-card-key="history">
   <h2 style="margin-top:0;"><%= t('History from Loxone') %></h2>
   <p class="hint" style="margin:-0.4rem 0 0.6rem;"><%= t('Reads the kWh per hour from the Miniserver\'s own statistics (its meter block) and learns from it straight away — for an appliance its runs as well. Hours LoxSuite measured itself are kept.') %></p>
   <% if (!load.meter_uuid) { %><p class="hint" style="margin:0;"><%= t('Choose a Loxone meter for this consumer first (Administration → Energy & charging → Energy manager).') %></p><% } else { %>

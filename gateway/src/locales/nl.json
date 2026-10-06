@@ -4161,5 +4161,12 @@
   "Pauses per run (at most)": "Pauzes per ronde (maximaal)",
   "run in progress": "ronde bezig",
   "Verder": "Verder",
-  "With pausing allowed the run may be split over cheaper hours: _Pauze and _Verder (wire them to \"Pause\" and \"Verder\") — mind wet laundry in a paused washer and creases in a paused dryer.": "Mag hij pauzeren, dan kan de ronde over goedkopere uren verdeeld worden: _Pauze en _Verder (verbind ze met \"Pause\" en \"Verder\") — let op natte was in een gepauzeerde wasmachine en kreuken in een gepauzeerde droger."
+  "With pausing allowed the run may be split over cheaper hours: _Pauze and _Verder (wire them to \"Pause\" and \"Verder\") — mind wet laundry in a paused washer and creases in a paused dryer.": "Mag hij pauzeren, dan kan de ronde over goedkopere uren verdeeld worden: _Pauze en _Verder (verbind ze met \"Pause\" en \"Verder\") — let op natte was in een gepauzeerde wasmachine en kreuken in een gepauzeerde droger.",
+  "Device not found": "Device niet gevonden",
+  "History from Loxone (last days, weeks or a year) and what it learned →": "Geschiedenis uit Loxone (afgelopen dagen, weken of een jaar) en wat hij geleerd heeft →",
+  "Loxone device (links its signals in one go)": "Loxone-device (koppelt de signalen in één keer)",
+  "No known signals in this device — choose them one by one below.": "Geen bekende signalen in dit device — kies ze hieronder los.",
+  "show what the device offers": "laat zien wat het device aanbiedt",
+  "Signals one by one (set by the device — change one here if needed)": "Signalen los (ingevuld door het device — pas er hier een aan als dat nodig is)",
+  "Linked:": "Gekoppeld:"
 }

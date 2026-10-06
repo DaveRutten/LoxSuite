@@ -167,8 +167,13 @@ test('Home Connect operation state: running only while the program runs, Gereed 
   assert.equal(d.startAt, now + 3 * 3600000); assert.equal(d.readyToStart, false);
   // without a numbered list nothing is "running" by mistake: voltooid/fout/actie vereist are not running
   for (const t of ['Programma voltooid', 'Fout', 'Actie vereist', 'Programma afgebroken', 'Inactief']) assert.equal(em.isOffText(t), true, t);
-  // a ready signal of its own wins
-  assert.equal(em.loadState({ raw: { status: 0, ready: 1 }, src: SRC({ status: 'u', ready: 'r' }), nowMs: now }).readyToStart, true);
+  // "Starten op afstand actief" alone isn't enough while the machine is off (Inactief): the status must say Gereed
+  const hcr = SRC({ status: 'u', status_map: em.HOME_CONNECT_STATUS, status_on: '3', ready: 'r' });
+  assert.equal(em.loadState({ raw: { status: 0, ready: 1 }, src: hcr, nowMs: now }).readyToStart, false);
+  assert.equal(em.loadState({ raw: { status: 1, ready: 1 }, src: hcr, nowMs: now }).readyToStart, true);
+  assert.equal(em.loadState({ raw: { status: 1, ready: 0 }, src: hcr, nowMs: now }).readyToStart, false);
+  // without a status the ready signal decides
+  assert.equal(em.loadState({ raw: { ready: 1 }, src: SRC({ ready: 'r' }), nowMs: now }).readyToStart, true);
 });
 
 test('appliance in steps: cheapest hours with pauses of at most maxGapH, one block when pausing is off', () => {
@@ -191,4 +196,39 @@ test('appliance in steps: cheapest hours with pauses of at most maxGapH, one blo
   const early = em.bestSteps(H, { dur: 2, readyBy: t0 + 3 * 3600000, maxGapH: 2, maxPauses: 2, costOf });
   assert.ok(early.idx.every((i) => i < 3));
   assert.equal(em.bestSteps(H, { dur: 9, readyBy: t0 + 8 * 3600000, costOf }), null);
+});
+
+test('link a device: its states become the signals by name', () => {
+  const hc = { name: 'Wasmachine (Kelder)', type: 'X', states: { 'Bedrijfstoestand': 'u1', 'Starten op afstand actief': 'u2', 'Resterende programmatijd': 'u3', 'Deur': 'u4' } };
+  const m = em.mapDeviceStates(hc);
+  assert.equal(m.status.uuid, 'u1'); assert.equal(m.ready.uuid, 'u2'); assert.equal(m.startIn, undefined);
+  const block = em.mapDeviceStates({ type: 'TextState', states: { textAndIcon: 't1', iconAndColor: 't2' } });
+  assert.equal(block.status.uuid, 't1');
+  const meter = em.mapDeviceStates({ type: 'Meter', states: { actual: 'a', total: 'b' } });
+  assert.equal(meter.power.uuid, 'a'); assert.equal(meter.energy.uuid, 'b');
+  const en = em.mapDeviceStates({ states: { operationState: 'o', remoteStartAllowed: 'r', active: 'x' } });
+  assert.equal(en.status.uuid, 'o'); assert.equal(en.ready.uuid, 'r'); assert.equal(en.onoff.uuid, 'x');
+});
+
+test('devices: loose Home Connect outputs grouped per appliance by their uuid start, named after "Online status …"', () => {
+  const io = (name, type = 'InfoOnlyAnalog') => ({ name, type, room: 'r', cat: 'c', states: { value: name + '-state' } });
+  const structure = {
+    rooms: { r: { name: 'Visualisatie' } }, cats: { c: { name: 'Huishouden' } },
+    controls: {
+      '1bdf6893-025e-b475-ffff1': { ...io('Online status Droger', 'InfoOnlyDigital'), states: { active: 'd-online' } },
+      '1bdf6893-0267-b492-ffff1': { ...io('Bedrijfstoestand'), states: { value: 'd-state' } },
+      '1bdf6893-0268-b496-ffff1': { ...io('Starten op afstand actief', 'InfoOnlyDigital'), states: { active: 'd-ready' } },
+      '1e2d2089-0069-b0e3-ffff1': { ...io('Online status Wasmachine', 'InfoOnlyDigital'), states: { active: 'w-online' } },
+      '1e2d2089-0069-b100-ffff1': { ...io('Bedrijfstoestand'), states: { value: 'w-state' } },
+      '1e2d2089-0069-b104-ffff1': { ...io('Starten op afstand actief', 'InfoOnlyDigital'), states: { active: 'w-ready' } },
+      'aaaa0000-0000-0000-ffff1': { name: 'Droger', type: 'TextState', room: 'r', cat: 'c', states: { textAndIcon: 't' } },
+    },
+  };
+  const ds = em.devicesFromStructure(structure);
+  const dryer = ds.find((d) => d.uuid === 'group:1bdf6893');
+  const washer = ds.find((d) => d.uuid === 'group:1e2d2089');
+  assert.equal(dryer.name, 'Droger'); assert.equal(washer.name, 'Wasmachine');
+  assert.equal(dryer.signals.status.uuid, 'd-state'); assert.equal(dryer.signals.ready.uuid, 'd-ready');
+  assert.equal(washer.signals.status.uuid, 'w-state'); assert.equal(washer.signals.ready.uuid, 'w-ready');
+  assert.ok(ds.find((d) => d.name === 'Droger' && d.type === 'TextState')); // the Status block stays its own device
 });

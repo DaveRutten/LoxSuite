@@ -128,6 +128,61 @@ function scheduledFromText(text, nowMs = Date.now(), tz) {
   return { scheduled: true, startMs: null };
 }
 
+// Pure: a Loxone device (a control and its sub-controls: { states: { name: uuid } }) -> which of its
+// states is which signal, by the state's name (Dutch, English and German names of Home Connect, Status
+// blocks, meters and switches). One choice instead of picking every signal by hand.
+const DEVICE_SIGNALS = [
+  ['status', /^(textandicon|text)$|bedrijfstoestand|betriebszustand|operation.?state|operatingstate|^opstate$|^status$|^state$/i],
+  ['ready', /remote.?start|starten op afstand|op afstand|fernstart|startallowed|remotecontrolstart/i],
+  ['startIn', /start.?in$|starttime|start.?relative|delayed.?start|uitgesteld|startverz/i],
+  ['onoff', /^(active|on|ison|poweredon|power.?state|online)$/i],
+  ['power', /^(actual|actualpower|power|p|leistung|vermogen)$/i],
+  ['energy', /^(total|totalenergy|energy|energie|zähler|teller)$/i],
+  ['temp', /^(tempactual|temperature|temp|watertemp)$/i],
+];
+function mapDeviceStates(control) {
+  const states = [];
+  const add = (st, prefix) => { for (const [name, uuid] of Object.entries(st || {})) if (typeof uuid === 'string') states.push({ name, uuid, full: prefix ? `${prefix} / ${name}` : name }); };
+  add(control?.states, null);
+  for (const sub of Object.values(control?.subControls || {})) add(sub.states, sub.name);
+  const out = {};
+  for (const [key, re] of DEVICE_SIGNALS) {
+    const hit = states.find((s) => re.test(s.name)) || states.find((s) => re.test(s.full));
+    if (hit && !Object.values(out).some((x) => x.uuid === hit.uuid)) out[key] = { uuid: hit.uuid, state: hit.full };
+  }
+  return out;
+}
+
+// Pure: the devices of a structure file for "link a device". Every control is one; and the outputs of
+// one device that Loxone shows as loose controls (a Home Connect washer's Bedrijfstoestand, Deur,
+// Starten op afstand actief … each its own InfoOnly control, with the same names for the dryer) are
+// grouped into one device by their shared uuid start — the outputs of one Config object get
+// consecutive uuids — and named after a member such as "Online status Wasmachine".
+function devicesFromStructure(structure) {
+  const rooms = structure?.rooms || {}, cats = structure?.cats || {};
+  const controls = Object.entries(structure?.controls || {});
+  const countStates = (c) => Object.keys(c.states || {}).length + Object.values(c.subControls || {}).reduce((a, x) => a + Object.keys(x.states || {}).length, 0);
+  const out = controls.map(([uuid, c]) => ({ uuid, name: c.name, type: c.type, room: rooms[c.room]?.name || null, category: cats[c.cat]?.name || null, states: countStates(c), signals: mapDeviceStates(c) }))
+    .filter((d) => d.states > 0);
+  const byPrefix = new Map();
+  for (const [uuid, c] of controls) {
+    if (!/^InfoOnly/.test(c.type || '')) continue;
+    const k = uuid.split('-')[0];
+    if (!byPrefix.has(k)) byPrefix.set(k, []);
+    byPrefix.get(k).push([uuid, c]);
+  }
+  for (const [prefix, members] of byPrefix) {
+    if (members.length < 3) continue;
+    const named = members.map(([, c]) => /^(online status|status|power|online)\s+(.+)$/i.exec(String(c.name).trim())).find(Boolean);
+    const first = members[0][1];
+    const name = named ? named[2] : `${rooms[first.room]?.name || 'Device'} (${prefix})`;
+    const states = {};
+    for (const [, c] of members) { const u = Object.values(c.states || {}).find((x) => typeof x === 'string'); if (u && !states[c.name]) states[c.name] = u; }
+    out.push({ uuid: `group:${prefix}`, name, type: 'Device', room: rooms[first.room]?.name || null, category: cats[first.cat]?.name || null, states: Object.keys(states).length, signals: mapDeviceStates({ states }), members: members.map(([u, c]) => ({ uuid: u, name: c.name, type: c.type })) });
+  }
+  return out.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
 // Pure: does a status text say the appliance is loaded and may be started remotely?
 const READY_TEXT = /(start ?gereed|startklaar|klaar (voor|om te) start|gereed (voor|om te) start|ready to start|remote start|op afstand start|start op afstand|^\s*(gereed|ready)\s*$)/i;
 // Home Connect's operation state (BSH.Common.Status.OperationState) as Loxone gives it: a number.
@@ -174,7 +229,13 @@ function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05, nam
   else if (src.status && !on && (typeof raw.status === 'string' || label)) { const sc = scheduledFromText(typeof raw.status === 'string' ? raw.status : label, nowMs); if (sc.startMs) startAt = sc.startMs; }
   // ready to be started remotely: its own signal, else the status text
   let readyToStart = false;
-  if (src.ready && raw.ready !== undefined && raw.ready !== null && raw.ready !== '') { const v = num(raw.ready); readyToStart = v !== null ? v !== 0 : /^(on|aan|true|1)$/i.test(String(raw.ready)); }
+  if (src.ready && raw.ready !== undefined && raw.ready !== null && raw.ready !== '') {
+    const v = num(raw.ready);
+    readyToStart = v !== null ? v !== 0 : /^(on|aan|true|1)$/i.test(String(raw.ready));
+    // remote start allowed is not enough: with a status it must also say ready ("Gereed") — Home Connect
+    // keeps "Starten op afstand actief" on while the machine is off (Inactief)
+    if (readyToStart && status !== null) readyToStart = isReadyText(label || status);
+  }
   else if (src.status && (typeof raw.status === 'string' || label)) readyToStart = isReadyText(typeof raw.status === 'string' ? raw.status : label);
   if (on || startAt) readyToStart = false; // running, or already scheduled on the machine itself
   return { kw, total, on, status, label, measured: total !== null || kw !== null, temp, startAt, readyToStart };
@@ -1136,7 +1197,7 @@ function stopEnergyManager() {
 function invalidate() { rt.planAt = 0; }
 
 module.exports = {
-  HOME_CONNECT_STATUS, HOME_CONNECT_RUNNING, cleanStatusText, isOffText, bucket, seenStatuses, runsFromHourly, scheduledFromText, isReadyText, bestSteps, applianceStep,
+  HOME_CONNECT_STATUS, HOME_CONNECT_RUNNING, mapDeviceStates, devicesFromStructure, cleanStatusText, isOffText, bucket, seenStatuses, runsFromHourly, scheduledFromText, isReadyText, bestSteps, applianceStep,
   applyLive,
   KINDS, parseSettings, viName, toHours, effCost, planLoads, currentSignals, runStep, hourCost, quantile,
   runProgress, anomalies, unknownPatterns, weatherFor, sourcesOf, parseStatusMap, loadState, statusKey, statusSummary, timeline, loadDetail, learnedStatus,

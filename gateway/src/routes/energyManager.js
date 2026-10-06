@@ -20,6 +20,30 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 // The readable states of a Miniserver, for the signal pickers of a consumer.
+// The Miniserver's devices (controls) with which of their states is which signal — "link a device".
+router.get('/devices/:miniserverId', asyncHandler(async (req, res) => {
+  const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(Number(req.params.miniserverId));
+  if (!ms) return res.status(404).json({ error: 'Miniserver not found' });
+  try {
+    const s = await require('../loxoneStructure').getStructure(ms, { forceRefresh: req.query.refresh === '1' });
+    res.json({ devices: em.devicesFromStructure(s).map(({ members, ...d }) => d) });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+}));
+// One device as the Miniserver describes it (type, states, details, sub-controls) — to see what it offers.
+router.get('/devices/:miniserverId/:uuid', asyncHandler(async (req, res) => {
+  const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(Number(req.params.miniserverId));
+  if (!ms) return res.status(404).json({ error: 'Miniserver not found' });
+  const s = await require('../loxoneStructure').getStructure(ms).catch(() => null);
+  if (String(req.params.uuid).startsWith('group:')) {
+    const g = em.devicesFromStructure(s).find((d) => d.uuid === req.params.uuid);
+    if (!g) return res.status(404).json({ error: 'Device not found' });
+    return res.type('application/json').send(JSON.stringify({ ...g, members: g.members.map((m) => ({ ...m, ...s.controls[m.uuid] })) }, null, 2));
+  }
+  const c = s?.controls?.[req.params.uuid];
+  if (!c) return res.status(404).json({ error: 'Device not found' });
+  res.type('application/json').send(JSON.stringify({ uuid: req.params.uuid, ...c, signals: em.mapDeviceStates(c) }, null, 2));
+}));
+
 router.get('/states/:miniserverId', asyncHandler(async (req, res) => {
   const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(Number(req.params.miniserverId));
   if (!ms) return res.status(404).json({ error: 'Miniserver not found' });
@@ -98,7 +122,7 @@ function readSources(b) {
     power: uuid(b.src_power), power_unit: b.src_power_unit === 'kW' ? 'kW' : 'W',
     energy: uuid(b.src_energy), energy_unit: b.src_energy_unit === 'Wh' ? 'Wh' : 'kWh',
     temp: uuid(b.src_temp),
-    ready: uuid(b.src_ready),
+    ready: uuid(b.src_ready), device: /^(group:)?[0-9a-f-]{8,}$/i.test(String(b.src_device || '').trim()) ? String(b.src_device).trim() : null,
     start_in: uuid(b.src_start_in), start_in_unit: ['min', 's'].includes(b.src_start_in_unit) ? b.src_start_in_unit : 'h',
   };
   return src.onoff || src.status || src.power || src.energy || src.temp || src.start_in || src.ready ? src : null;

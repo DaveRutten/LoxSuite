@@ -4383,6 +4383,13 @@
   ]
  },
  {
+  "key": "Device not found",
+  "module": "energy_manager",
+  "where": [
+   "src/routes/energyManager.js"
+  ]
+ },
+ {
   "key": "Device online/offline",
   "module": "core",
   "where": [
@@ -4791,6 +4798,13 @@
   "module": "core",
   "where": [
    "src/modules.js"
+  ]
+ },
+ {
+  "key": "energy counter",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form (script)"
   ]
  },
  {
@@ -8427,6 +8441,13 @@
   ]
  },
  {
+  "key": "No known signals in this device — choose them one by one below.",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form (script)"
+  ]
+ },
+ {
   "key": "No live data yet (websocket still connecting?).",
   "module": "ocpp",
   "where": [
@@ -10275,6 +10296,7 @@
   "key": "ready to start",
   "module": "energy_manager",
   "where": [
+   "partials/energy-load-form (script)",
    "src/energyManager.js"
   ]
  },
@@ -10843,6 +10865,13 @@
   ]
  },
  {
+  "key": "scheduled start",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form (script)"
+  ]
+ },
+ {
   "key": "se, sw",
   "module": "core",
   "where": [
@@ -11104,6 +11133,13 @@
   "module": "core",
   "where": [
    "partials/foot (script)"
+  ]
+ },
+ {
+  "key": "show what the device offers",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form (script)"
   ]
  },
  {

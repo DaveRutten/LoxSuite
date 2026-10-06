@@ -8,10 +8,17 @@
     <div><label><%= t('Priority (1 = first)') %></label><input type="text" name="priority" value="<%= l ? l.priority : 5 %>"></div>
     <div style="align-self:end;"><label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" name="enabled" value="1" <%= !l || l.enabled ? 'checked' : '' %>> <%= t('Active') %></label></div>
   </div>
+  <% if (l) { %><p class="hint" style="margin:0.5rem 0 0;"><a href="/energy-manager/loads/<%= l.id %>#history"><%= t('History from Loxone (last days, weeks or a year) and what it learned →') %></a></p><% } %>
   <details class="em-signals" style="margin-top:0.6rem;" <%= src.onoff || src.status || src.power || src.energy || src.start_in || src.ready || !l ? 'open' : '' %>>
     <summary style="cursor:pointer;"><strong><%= t('Signals from Loxone') %></strong> <span class="hint"><%= t('— on/off, status, power and energy; LoxSuite learns from each of them') %></span></summary>
     <div class="form-grid" style="margin-top:0.5rem;">
       <div><label><%= t('Miniserver') %></label><select name="src_ms" data-ms-pick><% msList.forEach(m => { %><option value="<%= m.id %>" <%= String(msSel) === String(m.id) ? 'selected' : '' %>><%= m.name %></option><% }) %></select></div>
+      <div style="grid-column:span 2;"><label><%= t('Loxone device (links its signals in one go)') %></label><select name="src_device" data-device-pick data-current="<%= src.device || '' %>"><option value=""><%= t('— choose —') %></option><% if (src.device) { %><option value="<%= src.device %>" selected><%= src.device %></option><% } %></select>
+        <p class="hint" data-device-msg style="margin:0.2rem 0 0;"></p></div>
+    </div>
+    <details class="em-sig-more" style="margin-top:0.4rem;" <%= src.device ? '' : 'open' %>>
+    <summary class="hint" style="cursor:pointer;"><%= t('Signals one by one (set by the device — change one here if needed)') %></summary>
+    <div class="form-grid" style="margin-top:0.4rem;">
       <div style="grid-column:span 2;"><label><%= t('Search states') %></label><input type="text" data-state-filter placeholder="<%= t('room, name or state — e.g. washing machine') %>"><span class="hint" data-state-msg style="margin:0;"></span></div>
     </div>
     <div class="form-grid" style="margin-top:0.4rem;">
@@ -30,6 +37,7 @@
       <div><label><%= t('Values that mean running') %></label><input type="text" name="src_status_on" value="<%= src.status_on || '' %>" placeholder="1, 2"><p class="hint" style="margin:0.2rem 0 0;"><%= t('Empty: everything except off, idle, done, paused or waiting.') %></p>
         <% const seen = (typeof seenStatuses !== 'undefined' && l && seenStatuses[l.id]) || []; if (seen.length) { %><div class="hint" style="margin:0.3rem 0 0;"><%= t('Seen — tap what means running:') %><div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.2rem;"><% seen.forEach(x => { %><button type="button" class="chip" data-status-chip="<%= x.status %>" title="<%= x.hours %> h"><%= x.status %></button><% }) %></div></div><% } %></div>
     </div>
+    </details>
     <p class="hint" style="margin:0.4rem 0 0;"><%= t('On/off is the basis: LoxSuite learns when and how long it runs. A status tells it what it is doing (and how long each step takes); power or an energy counter gives the real kWh — without them it estimates from the kW above.') %></p>
   </details>
   <div class="form-grid" data-kind="dhw" data-for="<%= fid %>" style="margin-top:0.6rem;">
@@ -162,6 +170,7 @@
   function TLs(k) { return (window.LS_I18N && window.LS_I18N[k]) || k; }
   Array.prototype.forEach.call(picks, function (p) { p.addEventListener('change', function () { p.dataset.touched = '1'; if (p.getAttribute('data-state-pick') === 'status') statusHint(p, null); }); });
   if (nameIn) nameIn.addEventListener('change', function () {
+    if (devices.length) fillDevices();
     // a new consumer named like an appliance is one
     if (fid === 'new' && /was|droger|dryer|washer|vaatwas|dish|oven/i.test(nameIn.value || '') && sel.value !== 'appliance') { sel.value = 'appliance'; show(); }
     if (states.length) fill();
@@ -174,14 +183,66 @@
     b.addEventListener('click', function () { var v = b.getAttribute('data-status-chip'), l = list(), i = l.indexOf(v); if (i === -1) l.push(v); else l.splice(i, 1); inp.value = l.join(', '); paint(); });
     paint();
   });
+  // Link a device: its states fill the signal fields by name (mapDeviceStates on the server).
+  var devSel = form.querySelector('[data-device-pick]'), devMsg = form.querySelector('[data-device-msg]'), devices = [];
+  window.__emDevices = window.__emDevices || {};
+  var ROLE_LABEL = { status: TLs('status'), ready: TLs('ready to start'), startIn: TLs('scheduled start'), onoff: TLs('on/off'), power: TLs('power'), energy: TLs('energy counter'), temp: TLs('temperature') };
+  function fillDevices() {
+    if (!devSel) return;
+    var cur = devSel.value || devSel.dataset.current || '';
+    var none = devSel.options[0] ? devSel.options[0].textContent : '—';
+    devSel.innerHTML = '';
+    var o0 = document.createElement('option'); o0.value = ''; o0.textContent = none; devSel.appendChild(o0);
+    var ranked = devices.map(function (d) { return { d: d, s: nameScore({ control: d.name, label: d.name }) * 10 + Object.keys(d.signals || {}).length }; }).sort(function (a, b) { return b.s - a.s; });
+    var top = ranked.filter(function (x) { return x.s >= 10; }).map(function (x) { return x.d; });
+    var groups = {};
+    devices.forEach(function (d) { if (top.indexOf(d) !== -1) return; var k = (d.room || TLs('No room')) + ' → ' + (d.category || TLs('No category')); (groups[k] = groups[k] || []).push(d); });
+    function opt(d, parent) { var o = document.createElement('option'); o.value = d.uuid; o.textContent = d.name + ' (' + d.type + (d.room ? ', ' + d.room : '') + ')'; if (d.uuid === cur) o.selected = true; parent.appendChild(o); }
+    if (top.length) { var g0 = document.createElement('optgroup'); g0.label = TLs('Best matches'); top.forEach(function (d) { opt(d, g0); }); devSel.appendChild(g0); }
+    Object.keys(groups).sort().forEach(function (k) { var g = document.createElement('optgroup'); g.label = k; groups[k].forEach(function (d) { opt(d, g); }); devSel.appendChild(g); });
+    deviceSummary();
+  }
+  function deviceSummary() {
+    if (!devMsg) return;
+    var d = devices.find(function (x) { return x.uuid === devSel.value; });
+    if (!d) { devMsg.textContent = ''; return; }
+    var parts = Object.keys(d.signals || {}).map(function (k) { return (ROLE_LABEL[k] || k) + ' = ' + d.signals[k].state; });
+    devMsg.innerHTML = (parts.length ? esc2(TLs('Linked:')) + ' ' + esc2(parts.join(' · ')) : esc2(TLs('No known signals in this device — choose them one by one below.'))) +
+      ' · <a href="/energy-manager/devices/' + msSel.value + '/' + d.uuid + '" target="_blank" rel="noopener">' + esc2(TLs('show what the device offers')) + '</a>';
+  }
+  function esc2(x) { return String(x).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function applyDevice() {
+    var d = devices.find(function (x) { return x.uuid === devSel.value; });
+    deviceSummary();
+    if (!d) return;
+    Array.prototype.forEach.call(picks, function (p) {
+      var role = p.getAttribute('data-state-pick');
+      if (d.signals[role]) { p.dataset.current = d.signals[role].uuid; p.dataset.touched = '1'; p.value = ''; }
+    });
+    // a device that is a meter: its own meter field too
+    var meter = form.querySelector('select[name="meter"]');
+    if (meter) Array.prototype.forEach.call(meter.options, function (o) { if (o.value === msSel.value + '|' + d.uuid) meter.value = o.value; });
+    fill();
+    var st = form.querySelector('[name="src_status"]');
+    var sx = states.find(function (x) { return x.uuid === (st && st.value); });
+    if (sx && sx.type !== 'TextState' && /bedrijfstoestand|operation|betriebs/i.test((sx.state || '') + ' ' + (sx.control || ''))) fillHomeConnect(false);
+  }
+  if (devSel) devSel.addEventListener('change', applyDevice);
+  function loadDevices() {
+    if (!devSel || !msSel || !msSel.value) return;
+    var id = msSel.value;
+    var got = window.__emDevices[id] || (window.__emDevices[id] = fetch('/energy-manager/devices/' + id).then(function (r) { return r.json(); }));
+    got.then(function (d) { devices = d.devices || []; fillDevices(); }).catch(function () {});
+  }
   function loadStates() {
+    loadDevices();
     if (!msSel || !msSel.value) return;
     var id = msSel.value;
     var got = window.__emStates[id] || (window.__emStates[id] = fetch('/energy-manager/states/' + id).then(function (r) { return r.json(); }));
     msg.textContent = '…';
     got.then(function (d) { states = d.states || []; msg.textContent = d.error ? d.error : ''; fill(); }).catch(function (e) { msg.textContent = e.message; });
   }
-  if (msSel) msSel.addEventListener('change', function () { Array.prototype.forEach.call(picks, function (p) { p.dataset.current = ''; }); loadStates(); });
+  if (msSel) msSel.addEventListener('change', function () { Array.prototype.forEach.call(picks, function (p) { p.dataset.current = ''; }); if (devSel) devSel.dataset.current = ''; loadStates(); });
   if (filter) filter.addEventListener('input', fill);
   var det = form.querySelector('.em-signals');
   var started = false;

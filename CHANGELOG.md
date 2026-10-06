@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.44.1-alpha.1] - 2026-10-06
+
+### Fixed
+- **Ready to start needs a ready status**: Home Connect keeps *Starten op afstand actief* on while the machine
+  is off (*Inactief*); with a status it now also has to say *Gereed* before LoxSuite would start it.
+
+### Added
+- **Link a Loxone device to a consumer** (reported: "why so many fields when I can link the device"): choose
+  the device once (best matches by name on top, the rest per room → category) and its states fill the signals
+  by name — status (*Bedrijfstoestand*, a Status block's text, *operationState*), ready to start (*Starten op
+  afstand actief*), on/off, power, energy counter, temperature; a meter device fills the meter field too. The
+  separate signal fields fold away under *Signals one by one* (change one there if needed). *show what the
+  device offers* opens the device as the Miniserver describes it (type, states, details) — the base for
+  controlling Home Connect directly later.
+- **Home Connect appliances as one device**: Loxone shows a Home Connect washer's and dryer's outputs as loose
+  controls with the same names (*Bedrijfstoestand*, *Deur*, *Starten op afstand actief* … twice). LoxSuite
+  groups them per appliance by their shared uuid start and names the group after *Online status Wasmachine* —
+  so the device list has *Wasmachine* and *Droger*, and choosing one links status and ready to start.
+- The consumer's settings link to *History from Loxone* on its own page (that is where the import is).
+
 ## [0.44.0-alpha.1] - 2026-10-06
 
 ### Added
