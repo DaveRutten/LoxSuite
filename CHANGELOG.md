@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.43.2-alpha.1] - 2026-10-06
+
+### Changed
+- **OCPP → Costs & reimbursement: only the fields that count** (reported: a feed-in value next to "the price
+  of that hour (net metering)", where it does nothing): the fixed rate only with *Fixed rate*, the value of
+  solar kWh only with *Real hourly price + solar share*, and the feed-in value only when solar is valued at
+  *a fixed feed-in value*. `data-show-if` takes several rules joined with `&`.
+
 ## [0.43.1-alpha.1] - 2026-10-06
 
 ### Fixed

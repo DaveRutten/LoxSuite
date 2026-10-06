@@ -3,6 +3,7 @@
 //   data-show-if="!fuel_auto"           shown while it is off
 //   data-show-if="source=entsoe"        shown while select/radio "source" is entsoe
 //   data-show-if="climate_mode=log|on"  one of several values
+//   data-show-if="cost_mode=hourly&solar_value=fixed"  all of several rules
 // The control is looked up by name in the same form (else the page). Hidden fields keep their value.
 (function () {
   function ctrl(scope, name) { return scope.querySelector('[name="' + name + '"]') || document.querySelector('[name="' + name + '"]'); }
@@ -18,8 +19,10 @@
     return '';
   }
   function visible(el) {
-    var rule = el.getAttribute('data-show-if');
     var scope = el.closest('form') || document;
+    return el.getAttribute('data-show-if').split('&').every(function (r) { return ruleOn(scope, r.trim()); });
+  }
+  function ruleOn(scope, rule) {
     var neg = rule.charAt(0) === '!';
     if (neg) rule = rule.slice(1);
     var eq = rule.indexOf('=');
