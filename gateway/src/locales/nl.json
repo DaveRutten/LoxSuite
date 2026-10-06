@@ -4200,5 +4200,7 @@
   "Starts in": "Start over",
   "Test:": "Test:",
   "to the device's \"Start geselecteerd programma\" (and _Pauze / _Verder to \"Pause\" / \"Verder\").": "met \"Start geselecteerd programma\" van het device (en _Pauze / _Verder met \"Pause\" / \"Verder\").",
-  "Virtual inputs": "Virtuele ingangen"
+  "Virtual inputs": "Virtuele ingangen",
+  "Škoda gives no car data right now ({0}) — the car may be in deep sleep or without connection; LoxSuite keeps the last known values and tries again.": "Škoda geeft nu geen autogegevens ({0}) — de auto is misschien in diepe slaap of zonder verbinding; LoxSuite houdt de laatst bekende waarden en probeert het opnieuw.",
+  "empty answer": "leeg antwoord"
 }

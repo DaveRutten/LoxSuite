@@ -509,6 +509,14 @@ async function readSkoda(cfg, apiKey, { fetchFn = fetch } = {}) {
   }
   if (!body?.vehicle) throw new Error('Unexpected answer from the Škoda API.');
   const parsed = parseSkoda(body);
+  // An answer with the car's name but none of its data ("Vehicle status could not be retrieved" for every
+  // part): a failure, not "ok" — the last known values stay and it is tried again.
+  if (!Object.values(parsed.raw).some((x) => x !== null && x !== undefined)) {
+    const err = new Error(`Škoda gives no car data right now (${parsed.extra.errors.join(' ') || 'empty answer'}) — the car may be in deep sleep or without connection; LoxSuite keeps the last known values and tries again.`);
+    err.meta = meta;
+    err.extra = parsed.extra;
+    throw err;
+  }
   return { raw: parsed.raw, updatedAt: parsed.updatedAt || new Date().toISOString(), extra: parsed.extra, meta, body };
 }
 
@@ -569,7 +577,7 @@ async function readVehicle(vehicle, { getTopicValue } = {}) {
     }
     return { ok: true, raw: result.raw, reading: normalizeReading(result.raw, vehicle), sourceUpdatedAt: result.updatedAt, body: result.body, missing: result.missing || [], extra: result.extra || null, meta: result.meta || null };
   } catch (err) {
-    return { ok: false, error: err.message, raw: {}, reading: null, meta: err.meta || null };
+    return { ok: false, error: err.message, raw: {}, reading: null, meta: err.meta || null, extra: err.extra || null };
   }
 }
 

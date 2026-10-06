@@ -75,3 +75,9 @@ test('parseSkoda keeps the operations the car allows', () => {
   const { extra } = v.parseSkoda({ ...SAMPLE, operations: [{ id: 'startAirConditioning' }, 'stopAirConditioning'] });
   assert.deepEqual(extra.operations, ['startAirConditioning', 'stopAirConditioning']);
 });
+
+test('Škoda: the car known but none of its data (every part "could not be retrieved") is a failure, not ok', async () => {
+  const body = { vehicle: { vin: 'TMBJB9NY5RF999999', name: 'Kodiaq', licensePlate: 'JPG98N' }, errors: [{ description: 'Vehicle status could not be retrieved.' }, { description: 'Odometer reading could not be retrieved.' }] };
+  const empty = async () => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) });
+  await assert.rejects(v.readSkoda({ vin: 'TMBJB9NY5RF999999' }, 'k', { fetchFn: empty }), (e) => /no car data/.test(e.message) && /Vehicle status could not be retrieved/.test(e.message) && e.extra.name === 'Kodiaq');
+});

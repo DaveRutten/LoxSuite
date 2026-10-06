@@ -4740,6 +4740,13 @@
   ]
  },
  {
+  "key": "empty answer",
+  "module": "vehicles",
+  "where": [
+   "src/vehicles.js"
+  ]
+ },
+ {
   "key": "Enable",
   "module": "monitor",
   "where": [
@@ -11259,6 +11266,13 @@
  },
  {
   "key": "Škoda does not know this VIN for this API key.",
+  "module": "vehicles",
+  "where": [
+   "src/vehicles.js"
+  ]
+ },
+ {
+  "key": "Škoda gives no car data right now ({0}) — the car may be in deep sleep or without connection; LoxSuite keeps the last known values and tries again.",
   "module": "vehicles",
   "where": [
    "src/vehicles.js"

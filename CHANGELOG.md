@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.44.4-alpha.1] - 2026-10-06
+
+### Fixed
+- **Škoda source said "ok" while the car gave no data** (reported: "the car API doesn't work any more"): the
+  MyŠkoda API answered with the car's name and plate but "Vehicle status / Fuel status / Odometer reading /
+  Parking position could not be retrieved" for every part, and LoxSuite stored that as an empty reading. Now an
+  answer without any of the car's data is a failure with Škoda's own explanation ("the car may be in deep sleep
+  or without connection"): the last known values stay, it is tried again, and the *Vehicle data source failing*
+  notification can fire.
+
 ## [0.44.3-alpha.1] - 2026-10-06
 
 ### Changed
