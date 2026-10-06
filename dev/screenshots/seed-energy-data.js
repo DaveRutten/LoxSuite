@@ -22,6 +22,8 @@ function fakeUuid(seed) {
   const h = crypto.createHash('md5').update(seed).digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 32)}`;
 }
+let outC = () => null;
+let hdd = () => 8;
 const CTL = { grid: fakeUuid('control-6'), pv: fakeUuid('control-7'), wallbox: fakeUuid('control-8'), hp: fakeUuid('control-9'), dhw: fakeUuid('control-10'), wm: fakeUuid('control-11') };
 
 // deterministic pseudo-random, so every run gives the same pictures
@@ -148,6 +150,10 @@ async function main() {
   const houseProfile = [0.32, 0.28, 0.26, 0.25, 0.26, 0.3, 0.45, 0.7, 0.62, 0.48, 0.42, 0.45, 0.55, 0.5, 0.44, 0.46, 0.6, 0.85, 1.15, 1.05, 0.9, 0.72, 0.55, 0.4];
   const hourStart = Math.floor((now - 28 * D) / H) * H;
   let cloud = 1;
+  // outdoor temperature: a mild autumn with colder and warmer spells, a little warmer in the afternoon
+  const dayMean = (t) => Math.round((9 + 5 * Math.sin(Math.floor(t / D) / 4.5)) * 10) / 10;
+  outC = (t) => Math.round((dayMean(t) + 3 * Math.sin(((localHour(t) - 9) / 24) * 2 * Math.PI)) * 10) / 10;
+  hdd = (t) => Math.max(0, 18 - dayMean(t));
   for (let t = hourStart; t < Math.floor(now / H) * H; t += H) {
     const lh = localHour(t);
     if (lh === 0) cloud = 0.35 + rand() * 0.65;
@@ -161,10 +167,8 @@ async function main() {
     await db.prepare('INSERT INTO energy_hourly (hour, role, import_kwh, export_kwh, source) VALUES (?, ?, ?, ?, ?)').run(iso(t), 'pv', pv, 0, 'live');
     await db.prepare('INSERT INTO energy_hourly (hour, role, import_kwh, export_kwh, source) VALUES (?, ?, ?, ?, ?)').run(iso(t), 'wallbox', wb, 0, 'live');
     await db.prepare('INSERT INTO energy_hourly (hour, role, import_kwh, export_kwh, source) VALUES (?, ?, ?, ?, ?)').run(iso(t), 'house', house, 0, 'live');
-    if (sun > 0) {
-      const fc = r3(pv / (0.88 + rand() * 0.15));
-      await db.prepare('INSERT INTO solar_forecast (hour, raw_kwh, dayahead_raw_kwh, corrected_kwh, made_at) VALUES (?, ?, ?, ?, ?)').run(iso(t), fc, fc, r3(fc * 0.92), iso(t - D));
-    }
+    const fc = sun > 0 ? r3(pv / (0.88 + rand() * 0.15)) : 0;
+    await db.prepare('INSERT INTO solar_forecast (hour, raw_kwh, dayahead_raw_kwh, corrected_kwh, made_at, temp_c) VALUES (?, ?, ?, ?, ?, ?)').run(iso(t), fc, fc, r3(fc * 0.92), iso(t - D), outC(t));
   }
   // the last hours per 5 minutes, for the live charts
   for (let t = Math.floor((now - 10 * H) / 300000) * 300000; t < now; t += 300000) {
@@ -203,20 +207,24 @@ async function main() {
   );
   const dhw = await addLoad('Hot water', 'dhw', 1, CTL.dhw, { kw: 2.4, duration_h: 1.5, buffer_setpoint: 60 });
   const hp = await addLoad('Heat pump', 'heatpump', 2, CTL.hp, { season: 'heating', kw: 1.6,
-    src: { onoff: fakeUuid('hp-on'), status: fakeUuid('hp-mode'), status_map: '0=Off\n1=Space heating\n2=Hot water\n3=Defrost', status_on: '1,2,3' } });
+    src: { onoff: fakeUuid('hp-on'), temp: fakeUuid('living-temp-actual'), status: fakeUuid('hp-mode'), status_map: '0=Off\n1=Space heating\n2=Hot water\n3=Defrost', status_on: '1,2,3' } });
   const wm = await addLoad('Washing machine', 'appliance', 4, CTL.wm, {
     src: { status: fakeUuid('wm-status'), status_map: '0=Off\n1=Washing\n2=Spinning\n3=Done', status_on: '1,2' } });
   // what was learned from those signals: minutes and kWh per status, and the changes of the last 2 days
+  let roomC = 20.5;
   const addStatus = (id, t, status, minutes, kwh) => db.prepare('INSERT INTO load_status_hourly (load_id, hour, status, minutes, kwh, measured) VALUES (?, ?, ?, ?, ?, 1)').run(id, iso(t), status, minutes, kwh);
   const addEvent = (id, t, on, status, label, kw) => db.prepare('INSERT INTO load_events (load_id, ts, on_state, status, label, kw) VALUES (?, ?, ?, ?, ?, ?)').run(id, iso(t), on, status, label, kw);
   for (let t = Math.floor((now - 21 * D) / H) * H; t < Math.floor(now / H) * H; t += H) {
     const lh = localHour(t);
-    const heatMin = lh < 7 || lh > 21 ? 40 : 20;
+    const heatMin = lh < 7 || lh > 21 ? 40 : (lh >= 10 && lh < 16 ? 0 : 20);
     const dhwMin = lh === 13 ? 25 : 0;
     await addStatus(hp, t, 'Space heating', heatMin, r3(heatMin / 60 * 1.45));
     if (dhwMin) await addStatus(hp, t, 'Hot water', dhwMin, r3(dhwMin / 60 * 2.3));
     if (lh === 5 && rand() < 0.5) await addStatus(hp, t, 'Defrost', 6, 0.05);
     await addStatus(hp, t, 'Off', 60 - heatMin - dhwMin, 0);
+    // the living room: warms while heating, cools 3% of the difference with outside per hour while off
+    roomC = Math.min(22, Math.max(19, roomC + heatMin / 60 * 0.9 - 0.03 * (roomC - outC(t))));
+    await db.prepare('INSERT INTO load_temp_hourly (load_id, hour, temp_sum, temp_n, on_min) VALUES (?, ?, ?, 1, ?)').run(hp, iso(t), Math.round(roomC * 100) / 100, heatMin + dhwMin);
     if (t >= now - 49 * H) {
       await addEvent(hp, t, 1, '1', 'Space heating', 1.45);
       if (dhwMin) { await addEvent(hp, t + heatMin * 60000, 1, '2', 'Hot water', 2.3); await addEvent(hp, t + (heatMin + dhwMin) * 60000, 0, '0', 'Off', 0); }
@@ -226,7 +234,7 @@ async function main() {
   for (let t = Math.floor((now - 21 * D) / H) * H; t < Math.floor(now / H) * H; t += H) {
     const lh = localHour(t);
     if (lh === 13) await db.prepare('INSERT INTO load_hourly (load_id, hour, kwh, source) VALUES (?, ?, ?, ?)').run(dhw, iso(t), r3(2.1 + rand() * 0.6), 'live');
-    const hpK = r3((lh < 7 || lh > 21 ? 0.55 : 0.3) * (0.7 + rand() * 0.6));
+    const hpK = r3((lh < 7 || lh > 21 ? 0.55 : (lh >= 10 && lh < 16 ? 0.02 : 0.3)) * (0.35 + 0.09 * hdd(t)) * (0.9 + rand() * 0.2));
     await db.prepare('INSERT INTO load_hourly (load_id, hour, kwh, source) VALUES (?, ?, ?, ?)').run(hp, iso(t), hpK, 'live');
   }
   for (let day = 20; day >= 1; day--) {
@@ -241,6 +249,28 @@ async function main() {
     await addStatus(wm, Math.floor(s / H) * H, 'Washing', 80, r3(kwh * 0.85));
     await addStatus(wm, Math.floor(s / H) * H + H, 'Spinning', 16, r3(kwh * 0.15));
     if (day <= 2) { await addEvent(wm, s, 1, '1', 'Washing', 1.9); await addEvent(wm, s + 80 * 60000, 1, '2', 'Spinning', 0.6); await addEvent(wm, s + 96 * 60000, 0, '3', 'Done', 0); }
+  }
+
+  // ---- how good the predictions were (forecast_log): three weeks of solar, house and consumers, departures ----
+  const flog = (kind, target, horizon, predicted, actual) => db.prepare('INSERT INTO forecast_log (kind, target, horizon, predicted, actual, made_at) VALUES (?, ?, ?, ?, ?, ?)').run(kind, target, horizon, predicted, actual, iso(Date.parse(target) - (horizon === 'd1' ? D : H)));
+  {
+    const rows = await db.prepare("SELECT hour, role, import_kwh FROM energy_hourly WHERE role IN ('pv', 'house') AND hour >= ?").all(iso(now - 21 * D));
+    for (const r of rows) {
+      const noise = (w) => 1 + (rand() - 0.5) * w;
+      if (r.role === 'pv' && r.import_kwh > 0) { await flog('pv', r.hour, 'd1', r3(r.import_kwh * noise(0.5) * 1.06), r.import_kwh); await flog('pv', r.hour, 'h1', r3(r.import_kwh * noise(0.2)), r.import_kwh); }
+      if (r.role === 'house') { await flog('house', r.hour, 'd1', r3(r.import_kwh * noise(0.6) * 0.93), r.import_kwh); await flog('house', r.hour, 'h1', r3(r.import_kwh * noise(0.35)), r.import_kwh); }
+    }
+    const hpRows = await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ?').all(hp, iso(now - 21 * D));
+    for (const r of hpRows) await flog(`load:${hp}`, r.hour, 'd1', r3(r.kwh * (1 + (rand() - 0.5) * 0.5)), r.kwh);
+    for (let day = 20; day >= 1; day--) {
+      const m = localMidnight(now - day * D);
+      if ([0, 6].includes(localDay(m + 12 * H))) continue;
+      const ready = m + (7 - TZ_OFFSET_H) * H + 15 * 60000;
+      const left = ready + Math.round((rand() * 40 - 6) * 60000);
+      await flog('depart', iso(Math.floor(left / 60000) * 60000).replace(/\.\d{3}Z$/, '.000Z'), 'event', ready, left);
+      const exp = m + (17 - TZ_OFFSET_H) * H + 30 * 60000;
+      await flog('arrive', iso(exp + D / 3), 'event', exp, exp + Math.round((rand() * 50 - 15) * 60000));
+    }
   }
 
   // ---- OCPP bridge (dry run) with eight weeks of sessions, a tariff and finance settings ----

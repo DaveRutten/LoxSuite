@@ -3989,5 +3989,17 @@
   "Safe: 9 in 10 times": "Veilig: 9 van de 10 keer",
   "Normal: 3 in 4 times": "Normaal: 3 van de 4 keer",
   "Relaxed: half of the times (cheapest)": "Ruim: de helft van de keren (goedkoopst)",
-  "{0} pattern(s) left out by you": "{0} patroon/patronen door jou weggelaten"
+  "{0} pattern(s) left out by you": "{0} patroon/patronen door jou weggelaten",
+  "Cools down {0} °C per hour per 10 °C difference with outside": "Koelt {0} °C per uur af per 10 °C verschil met buiten",
+  "held off at most {0} h": "hooguit {0} u tegenhouden",
+  "released in {0}% of the hours today": "vandaag vrijgegeven in {0}% van de uren",
+  "temperature now {0} °C": "temperatuur nu {0} °C",
+  "the plan expects more on cold days.": "het plan verwacht meer op koude dagen.",
+  "The tank loses about {0} °C per hour": "De boiler verliest ongeveer {0} °C per uur",
+  "today {0} °C → ×{1}": "vandaag {0} °C → ×{1}",
+  "Weather: +{0} kWh per degree colder (fits {1}%)": "Weer: +{0} kWh per graad kouder (klopt voor {1}%)",
+  "Weather: no clear link with the temperature yet ({0} days)": "Weer: nog geen duidelijk verband met de temperatuur ({0} dagen)",
+  "from how fast the room cools down (with a room temperature)": "uit hoe snel de kamer afkoelt (met een kamertemperatuur)",
+  "Temperature (room or tank)": "Temperatuur (kamer of boiler)",
+  "temperature": "temperatuur"
 }

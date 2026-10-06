@@ -614,12 +614,21 @@ async function buildSlots(nowMs, untilMs) {
   const house = await learning.learnedHouse();
   // learned from the planner's own forecast errors (forecastLog.js): house kWh scaled with what it really used
   const corr = await require('./forecastLog').corrections(nowMs).catch(() => ({ houseFactor: 1 }));
+  // and with the weather: a cold day uses more when the house's use follows the temperature (temperature.js)
+  if (!rt.houseWeather || nowMs - rt.houseWeather.at > 3600000) {
+    const T = require('./temperature');
+    rt.houseWeather = { at: nowMs, model: await T.houseModel(nowMs).catch(() => null), means: await T.forecastMeans(nowMs).catch(() => new Map()) };
+  }
+  const { localParts } = require('./localTime');
+  const dayOf = (ms) => { const p = localParts(ms, tz); return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`; };
+  const weatherFactor = (ms) => require('./temperature').dayFactor(rt.houseWeather.model, rt.houseWeather.means.get(dayOf(ms)) ?? null, { min: 0.6, max: 1.8 });
   const slots = [];
   const covered = rows.length ? Date.parse(rows[rows.length - 1].end_at) : nowMs;
   const pushSlot = (s, e, price) => {
     const hour = new Date(Math.floor(s / 3600000) * 3600000).toISOString();
     const pvKwh = pv.get(hour) || 0;
-    const houseRaw = learning.expectedHouseKwh(house, s, { tz }) ?? 0.4;
+    // houseRaw: the learned profile with the weather (what the error correction is learned on)
+    const houseRaw = round3((learning.expectedHouseKwh(house, s, { tz }) ?? 0.4) * weatherFactor(s));
     const houseKwh = round3(houseRaw * (corr.houseFactor || 1));
     slots.push({ start: new Date(s).toISOString(), end: new Date(e).toISOString(), price, pvKw: round3(Math.max(0, pvKwh - houseKwh)), pvKwh, houseKwh, houseRaw });
   };
@@ -871,6 +880,7 @@ function setReadyOverride(ms, own = null) {
   settings.set('planner_ready_override', ms ? { at: ms, away: rt.readyOverrideAway, own: rt.readyOverrideOwn } : null).catch(() => {});
 }
 function setSessionVehicle(id) { rt.sessionVehicle = Number(id) || null; rt.planAt = 0; }
+function houseWeather() { return rt.houseWeather || null; }
 function getRuntime() { return { plan: rt.plan, status: rt.status, override: rt.override, readyOverride: rt.readyOverride, readyOverrideAway: !!rt.readyOverrideAway, readyOverrideOwn: rt.readyOverrideOwn || null }; }
 
 let timer = null;
@@ -889,5 +899,5 @@ function stopPlanner() {
 
 module.exports = {
   MODES, DEFAULTS, makePlan, withRest, planSplit, sameTrip, fuelBreakEven, activeSlot, controlStep,
-  getConfig, saveConfig, recalc, tick, outputMiniserver, sessionFull, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, stopPlanner, buildSlots, computeTarget, wallboxLive,
+  houseWeather, getConfig, saveConfig, recalc, tick, outputMiniserver, sessionFull, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, stopPlanner, buildSlots, computeTarget, wallboxLive,
 };

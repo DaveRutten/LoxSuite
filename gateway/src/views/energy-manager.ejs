@@ -73,6 +73,20 @@
     var mins = lv.since ? Math.round((Date.now() - lv.since) / 60000) : null;
     return dot + '<strong>' + esc(txt) + '</strong>' + (mins != null ? '<div class="hint" style="margin:0; font-size:0.75rem;">' + esc((window.LS_I18N && window.LS_I18N['in this state for {0}'] || 'in this state for {0}').replace('{0}', mins >= 60 ? Math.floor(mins / 60) + ' h ' + String(mins % 60).padStart(2, '0') : mins + ' min')) + '</div>' : '');
   }
+  // the weather side: kWh against the temperature, and how fast the room / tank cools down
+  function weatherHtml(l) {
+    var w = l.weather, c = l.cooling, out = [];
+    if (w && w.model) {
+      if (w.model.usable) out.push(TLx('Weather: +{0} kWh per degree colder (fits {1}%)').replace('{0}', nf(w.model.b, 2)).replace('{1}', Math.round(w.model.r2 * 100)) + (w.todayC != null ? ' · ' + TLx('today {0} °C → ×{1}').replace('{0}', nf(w.todayC, 1)).replace('{1}', nf(w.factorToday, 2)) : ''));
+      else if (w.model.days >= 3) out.push(TLx('Weather: no clear link with the temperature yet ({0} days)').replace('{0}', w.model.days));
+    }
+    if (c && c.k) {
+      if (l.kind === 'heatpump') out.push(TLx('Cools down {0} °C per hour per 10 °C difference with outside').replace('{0}', nf(c.k * 10, 2)) + (c.holdH ? ' → ' + TLx('held off at most {0} h').replace('{0}', nf(c.holdH, 1)) : ''));
+      else if (c.lossPerHourC != null) out.push(TLx('The tank loses about {0} °C per hour').replace('{0}', nf(c.lossPerHourC, 1)));
+    }
+    if (l.effective && l.effective.release_share != null && l.weather && l.weather.model && l.weather.model.usable) out.push(TLx('released in {0}% of the hours today').replace('{0}', Math.round(l.effective.release_share * 100)));
+    return out.length ? '<p class="hint" style="margin:0 0 0.4rem;">' + out.map(esc).join('<br>') + '</p>' : '';
+  }
   function perStatusHtml(lr) {
     var ps = (lr && lr.perStatus) || [];
     if (!ps.length) return '';
@@ -150,6 +164,7 @@
         h += '<div style="overflow-x:auto;"><table><thead><tr><th>Run</th><th>Duration</th><th>kWh</th><th>Cost</th><th>Best start (hindsight)</th><th>Then</th><th>Saving</th></tr></thead><tbody>' +
           (l.runs.length ? l.runs.map(function (r) { var dur = (Date.parse(r.end_at) - Date.parse(r.start_at)) / 60000; var sav = r.cost_eur != null && r.best_cost_eur != null ? r.cost_eur - r.best_cost_eur : null; return '<tr><td>' + esc(new Date(r.start_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + Math.round(dur) + ' min</td><td>' + nf(r.kwh, 2) + '</td><td>' + eur(r.cost_eur) + '</td><td>' + (r.best_start ? hh(r.best_start) : '—') + '</td><td>' + eur(r.best_cost_eur) + '</td><td style="color:' + (sav > 0.01 ? 'var(--success)' : 'inherit') + ';">' + eur(sav) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="hint">No runs measured yet.</td></tr>') + '</tbody></table></div>';
       } else {
+        h += weatherHtml(l);
         if (lr.change && lr.change.changed) h += '<p class="hint" style="margin:0 0 0.4rem; color:#b8860b;">' + esc(TLx('Use changed: last week {0} kWh/day against {1} before — LoxSuite now learns mostly from the last week.').replace('{0}', nf(lr.change.recent, 1)).replace('{1}', nf(lr.change.before, 1))) + '</p>';
         h += '<p class="hint" style="margin:0 0 0.5rem;">Learned: ' + (lr.kwhPerDay != null ? nf(lr.kwhPerDay, 1) + ' kWh/day, about ' + nf(lr.kwPeak, 1) + ' kW while running' : 'no measurements yet') + '. "In advised hours" = share of the kWh that fell in hours LoxSuite would have released; "could save" = moving the rest there.</p>';
         h += '<div style="overflow-x:auto;"><table><thead><tr><th>Day</th><th>kWh</th><th>Cost</th><th>€/kWh</th><th>Solar</th><th>In advised hours</th><th>Could save</th></tr></thead><tbody>' +

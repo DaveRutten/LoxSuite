@@ -31,6 +31,7 @@ function openMeteo() {
   const start = Math.floor(Date.now() / 86400000) * 86400000 - 86400000;
   const time = [];
   const gti = [];
+  const temp = [];
   for (let t = start; t < start + 5 * 86400000; t += HOUR) {
     const h = new Date(t).getUTCHours() + 2;
     const day = Math.floor((t - start) / 86400000);
@@ -38,8 +39,9 @@ function openMeteo() {
     const cloud = day === 2 ? 0.55 : day === 3 ? 0.8 : 1;
     time.push(new Date(t + HOUR).toISOString().slice(0, 16));
     gti.push(Math.round(620 * sun * cloud));
+    temp.push(Math.round((9 + 5 * Math.sin(((h - 9) / 24) * 2 * Math.PI) - day) * 10) / 10);
   }
-  return json({ hourly: { time, global_tilted_irradiance: gti } });
+  return json({ hourly: { time, global_tilted_irradiance: gti, temperature_2m: temp } });
 }
 
 function cbs() {

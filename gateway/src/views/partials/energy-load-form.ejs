@@ -19,6 +19,7 @@
         <label style="display:flex; gap:0.3rem; font-weight:normal; margin-top:0.2rem;"><input type="checkbox" name="src_onoff_invert" value="1" <%= src.onoff_invert ? 'checked' : '' %>> <%= t('inverted (0 = on)') %></label></div>
       <div><label><%= t('Status (enumerator)') %></label><select name="src_status" data-state-pick data-current="<%= src.status || '' %>"><option value=""><%= t('— none —') %></option><% if (src.status) { %><option value="<%= src.status %>" selected><%= src.status %></option><% } %></select></div>
       <div><label><%= t('Power') %></label><div style="display:flex; gap:0.3rem;"><select name="src_power" data-state-pick data-current="<%= src.power || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.power) { %><option value="<%= src.power %>" selected><%= src.power %></option><% } %></select><select name="src_power_unit" style="width:6em;"><option value="W" <%= src.power_unit !== 'kW' ? 'selected' : '' %>>W</option><option value="kW" <%= src.power_unit === 'kW' ? 'selected' : '' %>>kW</option></select></div></div>
+      <div><label><%= t('Temperature (room or tank)') %></label><select name="src_temp" data-state-pick data-current="<%= src.temp || '' %>"><option value=""><%= t('— none —') %></option><% if (src.temp) { %><option value="<%= src.temp %>" selected><%= src.temp %></option><% } %></select></div>
       <div><label><%= t('Energy counter') %></label><div style="display:flex; gap:0.3rem;"><select name="src_energy" data-state-pick data-current="<%= src.energy || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.energy) { %><option value="<%= src.energy %>" selected><%= src.energy %></option><% } %></select><select name="src_energy_unit" style="width:6.5em;"><option value="kWh" <%= src.energy_unit !== 'Wh' ? 'selected' : '' %>>kWh</option><option value="Wh" <%= src.energy_unit === 'Wh' ? 'selected' : '' %>>Wh</option></select></div></div>
     </div>
     <div class="form-grid" style="margin-top:0.4rem;">
@@ -39,7 +40,8 @@
     <div><label><%= t('Season') %></label><select name="s_season"><% [['heating','Heating'],['cooling','Cooling'],['off','Off (no influence)']].forEach(([v,lbl]) => { %><option value="<%= v %>" <%= (s.season || 'heating') === v ? 'selected' : '' %>><%= t(lbl) %></option><% }) %></select></div>
     <div><label><%= t('Typical power (kW)') %></label><input type="text" name="s_kw" value="<%= s.kw ?? kinds.heatpump.defaults.kw %>"></div>
     <div><label><%= t('Release in cheapest share of hours') %></label><input type="text" name="s_release_share" value="<%= s.release_share ?? 0.6 %>"></div>
-    <div><label><%= t('Never block longer than (h)') %></label><input type="text" name="s_max_block_h" value="<%= s.max_block_h ?? 3 %>"></div>
+    <div><label><%= t('Never block longer than (h)') %></label><input type="text" name="s_max_block_h" value="<%= s.max_block_h ?? 3 %>">
+      <input type="hidden" name="s_max_block_auto_sent" value="1"><label style="display:flex; gap:0.3rem; font-weight:normal; margin-top:0.2rem;"><input type="checkbox" name="s_max_block_auto" value="1" <%= s.max_block_auto !== false ? 'checked' : '' %>> <%= t('from how fast the room cools down (with a room temperature)') %></label></div>
     <div><label><%= t('Pre-heat/cool correction (°C)') %></label><input type="text" name="s_up" value="<%= s.up ?? 1 %>"></div>
     <div><label><%= t('Ease-off in expensive hours (°C)') %></label><input type="text" name="s_down" value="<%= s.down ?? 0.5 %>"></div>
   </div>

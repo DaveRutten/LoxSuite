@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.39.0-alpha.1] - 2026-10-06
+
+### Added
+- **Weather in the plan** (`temperature.js`): the outdoor temperature per hour comes with the solar forecast
+  (Open-Meteo, past hours included). A heat pump's — and the house's — kWh per day is fitted against heating
+  degrees (18 °C − the day's mean); when that explains enough (≥ 30%, ≥ 7 days) a cold day is expected to use
+  more and a mild one less: the house use in Smart charging and the energy manager, a consumer's expected use,
+  and a heat pump's share of released hours follow the forecast.
+- **How fast it cools down**: a consumer can have a **temperature** signal (living room for a heat pump, tank for
+  a boiler). From the hours it was off LoxSuite learns how many degrees per hour it loses per degree of
+  difference with outside. A heat pump is then never held off longer than the room keeps half a degree (in
+  place of the fixed "never block longer than", switchable); for a boiler it shows the loss per hour.
+- The energy manager cards, the consumer page and the Learned page (house) show the weather link (+kWh per
+  degree colder, how well it fits, today's factor) and the cooling.
+- Tests: `weatherModel.test.js` (line fit, heat model, day factor, no-link case, cooling and hold hours).
+
 ## [0.38.0-alpha.1] - 2026-10-06
 
 ### Added

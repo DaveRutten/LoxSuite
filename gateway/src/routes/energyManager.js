@@ -30,7 +30,9 @@ router.get('/states/:miniserverId', asyncHandler(async (req, res) => {
 router.get('/loads/:id', asyncHandler(async (req, res) => {
   const load = (await em.listLoads()).find((l) => l.id === Number(req.params.id));
   if (!load) return res.redirect('/energy-manager');
-  res.render('energy-load', { load, kinds: em.KINDS, src: em.sourcesOf(load.settings), learned: await em.learned(load), detail: await em.loadDetail(load) });
+  const lp = (em.getRuntime().loads || []).find((x) => x.id === load.id) || {};
+  const weather = lp.weather ? { model: lp.weather.model, todayC: lp.weather.todayC, factorToday: lp.weather.factorToday, factorTomorrow: lp.weather.factorTomorrow } : null;
+  res.render('energy-load', { load, kinds: em.KINDS, src: em.sourcesOf(load.settings), learned: { ...(await em.learned(load)), weather, cooling: lp.cooling || null }, detail: await em.loadDetail(load) });
 }));
 router.get('/loads/:id/detail.json', asyncHandler(async (req, res) => {
   const load = (await em.listLoads()).find((l) => l.id === Number(req.params.id));
@@ -60,7 +62,9 @@ router.get('/data.json', asyncHandler(async (req, res) => {
       reason: rt.signals.find((x) => x.id === l.id)?.reason || null, signals, learned: await em.learned(l),
       plan: plan ? plan.hours.map((h) => ({ hour: h.hour, values: h.values, reason: h.reason })) : [],
       requests: (plan?.requests || []).map((q) => ({ id: q.id, expected: !!q.expected, usualStart: q.usualStart || null, readyBy: q.readyBy, label: q.label, plannedStart: q.plannedStart || null, plannedCost: q.plannedCost ?? null, kwh: q.kwh, durationH: q.durationH })),
-      patterns, follows, expected, patternDays: lp.profile?.days || 0, ignoredPatterns: lp.ignoredPatterns || 0, usePatterns: l.settings.use_patterns !== false,
+      patterns, follows, expected, patternDays: lp.profile?.days || 0, ignoredPatterns: lp.ignoredPatterns || 0,
+      weather: lp.weather ? { model: lp.weather.model, todayC: lp.weather.todayC, factorToday: lp.weather.factorToday, factorTomorrow: lp.weather.factorTomorrow } : null,
+      cooling: lp.cooling || null, effective: lp.kind === 'heatpump' ? { release_share: lp.settings?.release_share, max_block_h: lp.settings?.max_block_h } : null, usePatterns: l.settings.use_patterns !== false,
       daily: await em.dailyReport(l, 14),
       runs: runs.filter((r) => r.kind === 'run').slice(0, 15),
     });
@@ -77,8 +81,9 @@ function readSources(b) {
     status: uuid(b.src_status), status_map: String(b.src_status_map || '').slice(0, 600), status_on: String(b.src_status_on || '').slice(0, 120),
     power: uuid(b.src_power), power_unit: b.src_power_unit === 'kW' ? 'kW' : 'W',
     energy: uuid(b.src_energy), energy_unit: b.src_energy_unit === 'Wh' ? 'Wh' : 'kWh',
+    temp: uuid(b.src_temp),
   };
-  return src.onoff || src.status || src.power || src.energy ? src : null;
+  return src.onoff || src.status || src.power || src.energy || src.temp ? src : null;
 }
 
 function readLoadForm(b) {
@@ -90,6 +95,7 @@ function readLoadForm(b) {
     s[k] = k === 'season' ? (['heating', 'cooling', 'off'].includes(b.s_season) ? b.s_season : 'heating') : num(b[`s_${k}`], em.KINDS[kind].defaults[k]);
   }
   if (b.s_kw_fixed) s.kw_fixed = true;
+  if (b.s_max_block_auto_sent) s.max_block_auto = !!b.s_max_block_auto;
   if (b.s_use_patterns_sent) s.use_patterns = !!b.s_use_patterns;
   const vi = {};
   for (const sig of em.KINDS[kind].signals) { const v = String(b[`vi_${sig.key}`] || '').trim(); if (v) vi[sig.key] = v; }

@@ -68,6 +68,7 @@ function sourcesOf(settings = {}) {
     status: src.status || null, statusMap: parseStatusMap(src.status_map), statusOn: parseList(src.status_on),
     power: src.power || null, powerUnit: src.power_unit === 'kW' ? 'kW' : 'W',
     energy: src.energy || null, energyUnit: src.energy_unit === 'Wh' ? 'Wh' : 'kWh',
+    temp: src.temp || null,
   };
 }
 
@@ -106,7 +107,8 @@ function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05 }) {
   } else if (status !== null) {
     on = src.statusOn.length ? src.statusOn.includes(status) || (label !== null && src.statusOn.includes(label)) : !(status === '0' || /^(off|uit|idle)$/i.test(label || status));
   } else if (kw !== null) on = kw >= onKw;
-  return { kw, total, on, status, label, measured: total !== null || kw !== null };
+  const temp = src.temp ? num(raw.temp) : null;
+  return { kw, total, on, status, label, measured: total !== null || kw !== null, temp };
 }
 
 // Pure: the key a minute is booked under — the status label/value, else 'on'/'off'.
@@ -395,12 +397,12 @@ async function readLoad(load) {
     name = m.control.name;
   }
   const raw = {};
-  const anySrc = src.onoff || src.status || src.power || src.energy;
+  const anySrc = src.onoff || src.status || src.power || src.energy || src.temp;
   if (anySrc && load.miniserver_id) {
     const ms = m?.ms || await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(load.miniserver_id);
     if (ms) {
       ws.ensureConnection(ms);
-      for (const k of ['onoff', 'status', 'power', 'energy']) if (src[k]) raw[k] = ws.getLiveValue(ms.id, src[k]);
+      for (const k of ['onoff', 'status', 'power', 'energy', 'temp']) if (src[k]) raw[k] = ws.getLiveValue(ms.id, src[k]);
     }
   }
   const st = loadState({ meter, raw, src });
@@ -448,6 +450,8 @@ async function sample(nowMs = Date.now(), { read = readLoad } = {}) {
     if (kwh > 0) await addHour(l.id, hour, kwh);
     const key = statusKey(r);
     await addStatus(l.id, hour, key, dtMin, kwh || 0, measured).catch(() => {});
+    // the room / tank temperature, with the minutes it was on (how fast it cools down)
+    if (r.temp !== null && r.temp !== undefined) await require('./temperature').addTemp(l.id, hour, r.temp, r.on ? dtMin : 0).catch(() => {});
     if (key !== null && (!prevS || statusKey(prevS) !== key)) {
       await db.prepare('INSERT INTO load_events (load_id, ts, on_state, status, label, kw) VALUES (?, ?, ?, ?, ?, ?)')
         .run(l.id, new Date(nowMs).toISOString(), r.on === null ? null : (r.on ? 1 : 0), r.status, r.label, r.kw).catch(() => {});
@@ -538,6 +542,31 @@ async function learned(load) {
   const kwhPerDay = change.changed ? change.recent : (days ? r2(rows.reduce((a, r) => a + r.kwh, 0) / days) : null);
   return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay, change, hours: rows.length, ...(await learnedStatus(load)) };
 }
+
+// The weather side of a heat pump / boiler: its kWh against heating degrees (a cold day needs more), and
+// with a room/tank temperature how fast it cools down. A heat pump's release share follows the forecast,
+// and (unless switched off) the longest block follows how long the room keeps its warmth.
+async function weatherFor(load, nowMs, localOf) {
+  const T = require('./temperature');
+  const model = await T.loadModel(load.id, nowMs).catch(() => null);
+  const means = await T.forecastMeans(nowMs).catch(() => new Map());
+  const factorOf = (ms) => T.dayFactor(model, means.get(localOf(ms).day) ?? null);
+  const cooling = await T.loadCooling(load.id, nowMs).catch(() => ({ k: null }));
+  const todayC = means.get(localOf(nowMs).day) ?? null;
+  const out = { weather: { model, todayC, factorToday: factorOf(nowMs), factorTomorrow: factorOf(nowMs + DAY_MS), factorOf }, cooling };
+  if (load.kind === 'heatpump') {
+    const s = load.settings;
+    const base = Number(s.release_share) || 0.6;
+    if (model?.usable) s.release_share = Math.min(0.95, Math.max(0.3, base * (factorOf(nowMs) + factorOf(nowMs + 12 * HOUR)) / 2));
+    if (cooling?.k && s.max_block_auto !== false) {
+      const hold = T.holdHours(cooling, cooling.lastTemp ?? 20.5, todayC ?? 8, Number(s.allowed_drop_c) || 0.5);
+      if (hold) { out.cooling.holdH = hold; s.max_block_h = Math.max(1, Math.round(hold)); }
+    }
+  }
+  if (load.kind === 'dhw' && cooling?.k) out.cooling.lossPerHourC = Math.round(cooling.k * Math.max(1, (cooling.lastTemp ?? 55) - 20) * 100) / 100;
+  return out;
+}
+const DAY_MS = 86400000;
 
 // Pure: per status (or on/off) from the hourly bookings: hours in it, kWh, the typical kW (only from
 // measured kWh) and hours per day.
@@ -659,10 +688,11 @@ async function recalc(nowMs = Date.now()) {
     }
     l.learned = lr;
     Object.assign(l, await loadPatterns(l, nowMs, localOf));
+    if (l.kind === 'heatpump' || l.kind === 'dhw') Object.assign(l, await weatherFor(l, nowMs, localOf));
     // write down the expected kWh per hour, to compare with what it really uses (forecastLog.js)
     if (l.profile) {
       const ep = require('./energyPatterns');
-      const exp = hours.slice(0, 36).map((h) => ({ ms: h.ms, kwh: ep.expectedKwh(l.profile, h.ms, localOf) })).filter((x) => x.kwh !== null && x.kwh !== undefined);
+      const exp = hours.slice(0, 36).map((h) => ({ ms: h.ms, kwh: ep.expectedKwh(l.profile, h.ms, localOf) * (l.weather?.factorOf?.(h.ms) ?? 1) })).filter((x) => Number.isFinite(x.kwh));
       require('./forecastLog').recordLoad(l.id, exp, nowMs).catch(() => {});
     }
   }
@@ -792,6 +822,6 @@ function invalidate() { rt.planAt = 0; }
 module.exports = {
   applyLive,
   KINDS, parseSettings, viName, toHours, effCost, planLoads, currentSignals, runStep, hourCost, quantile,
-  sourcesOf, parseStatusMap, loadState, statusKey, statusSummary, timeline, loadDetail, learnedStatus,
+  weatherFor, sourcesOf, parseStatusMap, loadState, statusKey, statusSummary, timeline, loadDetail, learnedStatus,
   listLoads, readLoad, sample, recalc, tick, getConfig, saveConfig, dailyReport, importHistory, learned, getRuntime, startEnergyManager, stopEnergyManager, invalidate,
 };

@@ -53,7 +53,10 @@ test('parseEntsoe: positions, resolution and repeated prices', () => {
 
 test('parseOpenMeteo shifts preceding-hour values and scales by kWp', () => {
   const rows = solar.parseOpenMeteo({ hourly: { time: ['2026-10-05T10:00', '2026-10-05T11:00'], global_tilted_irradiance: [500, 0] } }, { kwp: 10, efficiency: 0.8 });
-  assert.deepEqual(rows, [{ hour: '2026-10-05T09:00:00.000Z', raw_kwh: 4 }, { hour: '2026-10-05T10:00:00.000Z', raw_kwh: 0 }]);
+  assert.deepEqual(rows, [{ hour: '2026-10-05T09:00:00.000Z', raw_kwh: 4, temp_c: null }, { hour: '2026-10-05T10:00:00.000Z', raw_kwh: 0, temp_c: null }]);
+  // with temperatures: the hour gets the mean of its two ends
+  const t = solar.parseOpenMeteo({ hourly: { time: ['2026-10-05T10:00', '2026-10-05T11:00'], global_tilted_irradiance: [0, 0], temperature_2m: [10, 12] } }, { kwp: 10 });
+  assert.deepEqual(t.map((r) => r.temp_c), [10, 11]);
 });
 
 test('correctionFactors per hour of the day, with an overall fallback', () => {

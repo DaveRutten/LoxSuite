@@ -50,7 +50,7 @@ router.get('/data.json', asyncHandler(async (req, res) => {
   const firstSession = sessions.length ? new Date(sessions[0].connect).toISOString() : null;
   res.json({
     sessions: sessions.length, firstSession, departures, driving, trips: { classes: trips.classes, fallback: trips.fallback, count: trips.trips.length },
-    house, solar: { tomorrow: fc, history, status: await settings.get('solar_status', null), config: await solar.getConfig() },
+    house, houseWeather: await require('../temperature').houseModel().catch(() => null), solar: { tomorrow: fc, history, status: await settings.get('solar_status', null), config: await solar.getConfig() },
     surplus: { kwh: Math.round(surplus * 10) / 10, from, to, houseDay: Math.round((houseTomorrow || []).filter((x, i) => i >= 8 && i < 18).reduce((a, b) => a + (b || 0), 0) * 10) / 10 },
     vehicle: vehicle ? { name: vehicle.name, type: vehicle.type, battery_kwh: vehicle.battery_kwh } : null,
   });

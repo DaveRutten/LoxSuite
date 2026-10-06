@@ -6,9 +6,10 @@
   <h2 style="margin:0;"><%= load.name %></h2>
   <p class="hint" style="margin:0.15rem 0 0;"><%= t(kinds[load.kind] ? kinds[load.kind].label : load.kind) %> · <span id="el-updated"></span></p>
   <div id="el-tiles" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:0.8rem; margin-top:0.6rem;"></div>
+  <p class="hint" id="el-weather" style="margin:0.6rem 0 0;"></p>
   <p class="hint" style="margin:0.6rem 0 0;">
     <%= t('Signals:') %>
-    <%= [load.meter_uuid ? t('Loxone meter') : null, src.onoff ? t('on/off') : null, src.status ? t('status') : null, src.power ? t('power') : null, src.energy ? t('energy counter') : null].filter(Boolean).join(' · ') || t('none yet — add them under Consumers') %>
+    <%= [load.meter_uuid ? t('Loxone meter') : null, src.onoff ? t('on/off') : null, src.status ? t('status') : null, src.power ? t('power') : null, src.energy ? t('energy counter') : null, src.temp ? t('temperature') : null].filter(Boolean).join(' · ') || t('none yet — add them under Consumers') %>
   </p>
 </div>
 
@@ -67,6 +68,12 @@
       tile(TL('Power now'), now && now.kw != null ? nf(now.kw, 2) + ' kW' : '—', now && now.total != null ? TL('counter {0} kWh').replace('{0}', nf(now.total, 1)) : '') +
       tile(TL('Last 24 hours'), nf(d.last24.kwh, 2) + ' kWh', TL('on for {0}').replace('{0}', dur(d.last24.onHours * 60))) +
       tile(TL('Learned'), lr.kwOn != null ? nf(lr.kwOn, 2) + ' kW' : (lr.kwh != null ? TL('{0} kWh per run').replace('{0}', nf(lr.kwh, 2)) : '—'), lr.kwhPerDay != null ? TL('{0} kWh per day').replace('{0}', nf(lr.kwhPerDay, 1)) : (lr.runs ? TL('{0} runs measured').replace('{0}', lr.runs) : ''));
+    var wl = [];
+    if (lr.weather && lr.weather.model && lr.weather.model.usable) wl.push(TL('Weather: +{0} kWh per degree colder (fits {1}%)').replace('{0}', nf(lr.weather.model.b, 2)).replace('{1}', Math.round(lr.weather.model.r2 * 100)) + (lr.weather.todayC != null ? ' · ' + TL('today {0} °C → ×{1}').replace('{0}', nf(lr.weather.todayC, 1)).replace('{1}', nf(lr.weather.factorToday, 2)) : ''));
+    if (lr.cooling && lr.cooling.k) wl.push(TL('Cools down {0} °C per hour per 10 °C difference with outside').replace('{0}', nf(lr.cooling.k * 10, 2)) + (lr.cooling.holdH ? ' → ' + TL('held off at most {0} h').replace('{0}', nf(lr.cooling.holdH, 1)) : ''));
+    if (now && now.temp != null) wl.push(TL('temperature now {0} °C').replace('{0}', nf(now.temp, 1)));
+    var wel = document.getElementById('el-weather');
+    if (wel) wel.innerHTML = wl.length ? wl.map(esc).join('<br>') : '';
     document.getElementById('el-updated').textContent = now && now.at ? TL('last read {0}').replace('{0}', hh(now.at)) : '';
 
     // timeline

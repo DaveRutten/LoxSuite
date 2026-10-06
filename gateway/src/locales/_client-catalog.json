@@ -3672,6 +3672,14 @@
   ]
  },
  {
+  "key": "Cools down {0} °C per hour per 10 °C difference with outside",
+  "module": "energy",
+  "where": [
+   "energy-load (script)",
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Copied",
   "module": "charging",
   "where": [
@@ -5685,6 +5693,14 @@
   "module": "energy_manager",
   "where": [
    "partials/energy-load-form"
+  ]
+ },
+ {
+  "key": "held off at most {0} h",
+  "module": "energy",
+  "where": [
+   "energy-load (script)",
+   "energy-manager (script)"
   ]
  },
  {
@@ -10017,6 +10033,13 @@
   ]
  },
  {
+  "key": "released in {0}% of the hours today",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Remind me at {0}",
   "module": "charging",
   "where": [
@@ -11428,6 +11451,13 @@
   ]
  },
  {
+  "key": "temperature now {0} °C",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
+  ]
+ },
+ {
   "key": "Test",
   "module": "charging",
   "where": [
@@ -11702,6 +11732,13 @@
   ]
  },
  {
+  "key": "the plan expects more on cold days.",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "The power follows the value sent",
   "module": "charging",
   "where": [
@@ -11783,6 +11820,13 @@
   "module": "core",
   "where": [
    "partials/panel-grid"
+  ]
+ },
+ {
+  "key": "The tank loses about {0} °C per hour",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -12109,6 +12153,14 @@
   "module": "ocpp",
   "where": [
    "src/ocppStats.js"
+  ]
+ },
+ {
+  "key": "today {0} °C → ×{1}",
+  "module": "energy",
+  "where": [
+   "energy-load (script)",
+   "energy-manager (script)"
   ]
  },
  {
@@ -13037,6 +13089,22 @@
   "module": "charging",
   "where": [
    "learned (script)"
+  ]
+ },
+ {
+  "key": "Weather: +{0} kWh per degree colder (fits {1}%)",
+  "module": "energy",
+  "where": [
+   "energy-load (script)",
+   "energy-manager (script)",
+   "learned (script)"
+  ]
+ },
+ {
+  "key": "Weather: no clear link with the temperature yet ({0} days)",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
