@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.42.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.43.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -739,6 +739,11 @@ Wallbox → Meters: pick the Loxone grid (bidirectional), PV, Wallbox and option
 per-minute samples (14 days) and kWh per hour (kept); house load = grid + solar − Wallbox − battery. *Import*
 reads the Miniserver's own hourly statistics (via its MCP server) so learning doesn't start from zero. A meter
 that stops reporting for 10 minutes triggers *Energy meter failing/recovered*. MQTT: `loxsuite/energy/<role>/…`.
+**Import and export apart**: the grid tile shows what was taken from the grid (▲) and fed in (▼) today and this
+month, the chart per hour shows import as bars above zero and export below, and MQTT has
+`loxsuite/energy/grid/{today,week,month}_{import,export}_kwh` (today's import stays `grid/today_kwh`) for Monitor
+and dashboards. Smart charging's chart adds the expected import from the grid (house beyond the solar + the grid
+part of the planned charging) as a dashed line.
 
 ### Learned
 

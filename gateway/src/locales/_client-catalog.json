@@ -1275,6 +1275,13 @@
   ]
  },
  {
+  "key": "{0} Wallbox {1} kWh",
+  "module": "energy",
+  "where": [
+   "energy (script)"
+  ]
+ },
+ {
   "key": "{0}–{1} {2} kWh{3}",
   "module": "charging",
   "where": [
@@ -1392,13 +1399,6 @@
   "module": "core",
   "where": [
    "src/notifications.js"
-  ]
- },
- {
-  "key": "{0}{1} (kWh per hour)",
-  "module": "energy",
-  "where": [
-   "energy (script)"
   ]
  },
  {
@@ -5109,17 +5109,9 @@
  },
  {
   "key": "export",
-  "module": "energy",
+  "module": "ocpp",
   "where": [
-   "energy (script)",
    "ocpp-bridge-edit (script)"
-  ]
- },
- {
-  "key": "export {0} kWh",
-  "module": "energy",
-  "where": [
-   "energy (script)"
   ]
  },
  {
@@ -5127,6 +5119,41 @@
   "module": "charging",
   "where": [
    "planner (script)"
+  ]
+ },
+ {
+  "key": "export this month (kWh)",
+  "module": "energy",
+  "where": [
+   "src/routes/energy.js"
+  ]
+ },
+ {
+  "key": "export this week (kWh)",
+  "module": "energy",
+  "where": [
+   "src/routes/energy.js"
+  ]
+ },
+ {
+  "key": "Export to the grid",
+  "module": "energy",
+  "where": [
+   "energy (script)"
+  ]
+ },
+ {
+  "key": "export today (kWh)",
+  "module": "energy",
+  "where": [
+   "src/routes/energy.js"
+  ]
+ },
+ {
+  "key": "exporting now",
+  "module": "energy",
+  "where": [
+   "energy (script)"
   ]
  },
  {
@@ -6075,10 +6102,52 @@
   ]
  },
  {
+  "key": "import ~{0} kW",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Import failed: {0} __ERROR__",
   "module": "core",
   "where": [
    "src/routes/setup.js"
+  ]
+ },
+ {
+  "key": "Import from the grid",
+  "module": "energy",
+  "where": [
+   "energy (script)"
+  ]
+ },
+ {
+  "key": "import this month (kWh)",
+  "module": "energy",
+  "where": [
+   "src/routes/energy.js"
+  ]
+ },
+ {
+  "key": "import this week (kWh)",
+  "module": "energy",
+  "where": [
+   "src/routes/energy.js"
+  ]
+ },
+ {
+  "key": "import today (kWh)",
+  "module": "energy",
+  "where": [
+   "src/routes/energy.js"
+  ]
+ },
+ {
+  "key": "importing now",
+  "module": "energy",
+  "where": [
+   "energy (script)"
   ]
  },
  {
@@ -6325,6 +6394,13 @@
   "module": "energy_manager",
   "where": [
    "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "kWh per hour",
+  "module": "energy",
+  "where": [
+   "energy (script)"
   ]
  },
  {
@@ -12096,6 +12172,13 @@
   ]
  },
  {
+  "key": "this month",
+  "module": "energy",
+  "where": [
+   "energy (script)"
+  ]
+ },
+ {
   "key": "This month",
   "module": "ocpp",
   "where": [
@@ -12299,6 +12382,13 @@
   "module": "charging",
   "where": [
    "planner (script)"
+  ]
+ },
+ {
+  "key": "today",
+  "module": "energy",
+  "where": [
+   "energy (script)"
   ]
  },
  {

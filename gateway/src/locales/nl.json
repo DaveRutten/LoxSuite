@@ -4089,5 +4089,21 @@
   "nothing more to charge": "niets meer te laden",
   "Only what the next departure usually needs + buffer": "Alleen wat het volgende vertrek meestal nodig heeft + buffer",
   "Ready for the unexpected: {0} kWh ({1} km) by {2}": "Klaar voor onverwacht: {0} kWh ({1} km) om {2}",
-  "trip {0} kWh + reserve {1} kWh; after it is back ({2}) {3} kWh more to be full again": "rit {0} kWh + reserve {1} kWh; als hij terug is ({2}) nog {3} kWh om weer vol te zijn"
+  "trip {0} kWh + reserve {1} kWh; after it is back ({2}) {3} kWh more to be full again": "rit {0} kWh + reserve {1} kWh; als hij terug is ({2}) nog {3} kWh om weer vol te zijn",
+  "{0} Wallbox {1} kWh": "{0} Wallbox {1} kWh",
+  "expected import from the grid (kW)": "verwachte afname van het net (kW)",
+  "export this month (kWh)": "teruglevering deze maand (kWh)",
+  "export this week (kWh)": "teruglevering deze week (kWh)",
+  "Export to the grid": "Teruglevering aan het net",
+  "export today (kWh)": "teruglevering vandaag (kWh)",
+  "exporting now": "levert nu terug",
+  "import ~{0} kW": "afname ~{0} kW",
+  "Import from the grid": "Afname van het net",
+  "import this month (kWh)": "afname deze maand (kWh)",
+  "import this week (kWh)": "afname deze week (kWh)",
+  "import today (kWh)": "afname vandaag (kWh)",
+  "importing now": "neemt nu af",
+  "kWh per hour": "kWh per uur",
+  "this month": "deze maand",
+  "today": "vandaag"
 }

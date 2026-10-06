@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.43.0-alpha.1] - 2026-10-06
+
+### Added
+- **Import from the grid visible, apart from export**:
+  - Meters, tile *Grid*: importing or exporting now, and today and this month what was taken from the grid (▲)
+    and fed in (▼);
+  - Meters, chart per hour: import as bars above zero (the Wallbox in front of it), export as bars below zero,
+    with both totals in the legend (import used to be a thin dashed line);
+  - MQTT for Monitor and dashboards: `loxsuite/energy/grid/today_export_kwh`, `week_import_kwh`, `week_export_kwh`,
+    `month_import_kwh`, `month_export_kwh` (today's import stays `grid/today_kwh`), in the *Use in Monitor* picker;
+  - Smart charging chart: the expected import from the grid per interval (the house beyond the expected solar +
+    the grid part of the planned charging) as a dashed line, with a kW scale and the value on hover.
+
 ## [0.42.0-alpha.1] - 2026-10-06
 
 ### Changed

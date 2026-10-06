@@ -25,7 +25,8 @@ router.get('/', asyncHandler(async (req, res) => {
 
 router.get('/live.json', asyncHandler(async (req, res) => {
   const live = await energy.live();
-  res.json({ ...live, today: await energy.todayTotals() });
+  const per = await energy.periodTotals().catch(() => ({ week: {}, month: {} }));
+  res.json({ ...live, today: await energy.todayTotals(), week: per.week, month: per.month });
 }));
 
 // Hourly kWh for one local day (?day=YYYY-MM-DD, default today) or the last N days (?days=7).
@@ -84,7 +85,8 @@ router.post('/monitor', requirePermission('monitor', 'edit'), asyncHandler(async
     const exists = await db.prepare("SELECT id FROM monitors WHERE source_type = 'mqtt' AND mqtt_topic = ?").get(topics[key]);
     if (exists) { skipped.push(key); continue; }
     const [role, ...rest] = key.split('_');
-    const label = `${(energy.ROLES.find((r) => r.key === role) || { label: 'House' }).label} – ${rest.join('_') === 'power_kw' ? 'power (kW)' : 'today (kWh)'}`;
+    const what = { power_kw: 'power (kW)', today_kwh: role === 'grid' ? 'import today (kWh)' : 'today (kWh)', today_export_kwh: 'export today (kWh)', week_import_kwh: 'import this week (kWh)', week_export_kwh: 'export this week (kWh)', month_import_kwh: 'import this month (kWh)', month_export_kwh: 'export this month (kWh)' }[rest.join('_')] || rest.join('_');
+    const label = `${(energy.ROLES.find((r) => r.key === role) || { label: 'House' }).label} – ${what}`;
     await db.prepare("INSERT INTO monitors (source_type, label, mqtt_topic, enabled, created_at, config) VALUES ('mqtt', ?, ?, 1, ?, '{}')")
       .run(label, topics[key], new Date().toISOString());
     created.push(key);

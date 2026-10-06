@@ -252,12 +252,15 @@ function publish(topic, value) {
   client.publish(topic, s, { qos: 0, retain: true });
 }
 
+// The grid meter also gets import and export apart: today, this week and this month.
+const GRID_PERIOD_TOPICS = ['today_export_kwh', 'week_import_kwh', 'week_export_kwh', 'month_import_kwh', 'month_export_kwh'];
 function energyTopics() {
   const t = {};
   for (const r of [...ROLE_KEYS, 'house']) {
     t[`${r}_power_kw`] = `${TOPIC_PREFIX}/${r}/power_kw`;
     t[`${r}_today_kwh`] = `${TOPIC_PREFIX}/${r}/today_kwh`;
   }
+  for (const k of GRID_PERIOD_TOPICS) t[`grid_${k}`] = `${TOPIC_PREFIX}/grid/${k}`;
   return t;
 }
 
@@ -300,9 +303,42 @@ async function todayTotals(nowMs = Date.now()) {
   return out;
 }
 
+// Pure: local start of today, this week (Monday) and this month, for an instant.
+function periodStarts(nowMs, tz) {
+  const { localMidnight, localParts } = require('./localTime');
+  const p = localParts(nowMs, tz);
+  return { today: localMidnight(nowMs, tz), week: localMidnight(nowMs, tz, -p.weekday), month: localMidnight(nowMs, tz, -(p.d - 1)) };
+}
+
+// Import and export per role for today, this week and this month: { today|week|month: { role: { import_kwh, export_kwh } } }.
+async function periodTotals(nowMs = Date.now()) {
+  const starts = periodStarts(nowMs);
+  const rows = await db.prepare('SELECT hour, role, import_kwh, export_kwh FROM energy_hourly WHERE hour >= ?').all(new Date(Math.min(starts.week, starts.month)).toISOString());
+  const out = { today: {}, week: {}, month: {} };
+  for (const r of rows) {
+    const t = Date.parse(r.hour);
+    for (const k of ['today', 'week', 'month']) {
+      if (t < starts[k]) continue;
+      const g = out[k][r.role] || (out[k][r.role] = { import_kwh: 0, export_kwh: 0 });
+      g.import_kwh += Number(r.import_kwh) || 0; g.export_kwh += Number(r.export_kwh) || 0;
+    }
+  }
+  for (const k of Object.keys(out)) for (const g of Object.values(out[k])) { g.import_kwh = Math.round(g.import_kwh * 100) / 100; g.export_kwh = Math.round(g.export_kwh * 100) / 100; }
+  return out;
+}
+
 async function publishToday(nowMs) {
   const t = await todayTotals(nowMs);
   for (const [role, v] of Object.entries(t)) publish(`${TOPIC_PREFIX}/${role}/today_kwh`, v.import_kwh);
+  const per = await periodTotals(nowMs);
+  const g = (k) => per[k].grid || { import_kwh: 0, export_kwh: 0 };
+  if (per.today.grid || per.month.grid) {
+    publish(`${TOPIC_PREFIX}/grid/today_export_kwh`, g('today').export_kwh);
+    publish(`${TOPIC_PREFIX}/grid/week_import_kwh`, g('week').import_kwh);
+    publish(`${TOPIC_PREFIX}/grid/week_export_kwh`, g('week').export_kwh);
+    publish(`${TOPIC_PREFIX}/grid/month_import_kwh`, g('month').import_kwh);
+    publish(`${TOPIC_PREFIX}/grid/month_export_kwh`, g('month').export_kwh);
+  }
 }
 
 // Hourly series for a range (for the charts): { hours: [...], series: {role: [kWh...]}, exported: {...} }
@@ -435,6 +471,7 @@ function resetRuntime() {
 }
 
 module.exports = {
+  periodTotals, periodStarts,
   ROLES, ROLE_KEYS, meterStateUuids, totalStatGroup, meterCandidates, readingFromValues, housePower, houseHourKwh,
   safeDelta, hourStart, parseStatisticsResult, roleHealth,
   candidateMeters, loadMeters, live, sample, importHistory, hourlySeries, todayTotals, energyTopics,
