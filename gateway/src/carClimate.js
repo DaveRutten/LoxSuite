@@ -91,7 +91,7 @@ async function tick(nowMs = Date.now(), deps = {}) {
       const body = { targetTemperature: { value: item.climateC, unit: 'CELSIUS' }, airConditioningWithoutExternalPower: !!cfg.climate_on_battery };
       try {
         if (deps.command) await deps.command(vehicle, body);
-        else await vehicles.skodaCommand(vehicles.parseConfig(vehicle), vehicles.secretOf(vehicle), 'air-conditioning/start', body);
+        else { await vehicles.skodaSpend(vehicle.id); await vehicles.skodaCommand(vehicles.parseConfig(vehicle), vehicles.secretOf(vehicle), 'air-conditioning/start', body); }
         Object.assign(row, { status: 'sent', message: `Air conditioning started at ${item.climateC} °C for "${item.title}" (leave ${hhmm(leaveAt)}).` });
       } catch (err) {
         const waitS = Math.max(180, Number(err.retryAfterS) || 0);

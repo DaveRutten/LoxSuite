@@ -4202,5 +4202,7 @@
   "to the device's \"Start geselecteerd programma\" (and _Pauze / _Verder to \"Pause\" / \"Verder\").": "met \"Start geselecteerd programma\" van het device (en _Pauze / _Verder met \"Pause\" / \"Verder\").",
   "Virtual inputs": "Virtuele ingangen",
   "Škoda gives no car data right now ({0}) — the car may be in deep sleep or without connection; LoxSuite keeps the last known values and tries again.": "Škoda geeft nu geen autogegevens ({0}) — de auto is misschien in diepe slaap of zonder verbinding; LoxSuite houdt de laatst bekende waarden en probeert het opnieuw.",
-  "empty answer": "leeg antwoord"
+  "empty answer": "leeg antwoord",
+  "{0} (next try in {1} min)": "{0} (volgende poging over {1} min)",
+  "Škoda budget used ({0} requests per hour) — try again after {1}.": "Škoda-budget op ({0} verzoeken per uur) — probeer het opnieuw na {1}."
 }

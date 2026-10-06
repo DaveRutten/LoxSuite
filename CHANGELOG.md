@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.44.5-alpha.1] - 2026-10-06
+
+### Fixed
+- **Škoda: too many requests** (reported: the MyŠkoda app said "too many requests" and the car gave no data):
+  Škoda allows 20 requests per hour per car, failed ones included, and blocks the car — the app too — when
+  that is passed. LoxSuite went over it with a read at every restart (an update is a restart), three extra
+  reads at every plug-in and 15 reads per hour while plugged in. Now:
+  - a **budget of 12 requests per hour per car** (reads, the extra read at plug-in, climate commands and the
+    *Test* button), counted in the database so a restart or update doesn't read again within the interval —
+    the rest is left for the MyŠkoda app;
+  - every 10 min, every 6 min while plugged in (was 4);
+  - at a plug-in one extra read after 3 min (was now, after 1 and after 3 min);
+  - after "too many requests" or "no car data" it waits 30 min, then 1 h, then 2 h, until Škoda answers again.
+
 ## [0.44.4-alpha.1] - 2026-10-06
 
 ### Fixed

@@ -833,6 +833,13 @@
   ]
  },
  {
+  "key": "{0} (next try in {1} min)",
+  "module": "vehicles",
+  "where": [
+   "src/vehicles.js"
+  ]
+ },
+ {
   "key": "{0} {1}, skipped",
   "module": "core",
   "where": [
@@ -11262,6 +11269,13 @@
   "module": "vehicles",
   "where": [
    "src/vehicles.js"
+  ]
+ },
+ {
+  "key": "Škoda budget used ({0} requests per hour) — try again after {1}.",
+  "module": "vehicles",
+  "where": [
+   "src/routes/vehicles.js"
   ]
  },
  {

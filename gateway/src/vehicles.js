@@ -242,9 +242,12 @@ function sourceKind(vehicle, cfg = parseConfig(vehicle)) {
   return vehicle?.source_type === 'http' && cfg.provider === 'skoda' ? 'skoda' : (vehicle?.source_type || 'none');
 }
 
-// Škoda allows 20 requests per hour per car (failed ones count too): normally every 10 min, every
-// 4 min (15/h) while the car is plugged in or the Wallbox has a car, never more often than that.
-const SKODA_MIN_S = 240;
+// Škoda allows 20 requests per hour per car (failed ones count too) and blocks the car — the MyŠkoda
+// app too — when that is passed. LoxSuite stays well below: normally every 10 min, every 6 min (10/h)
+// while the car is plugged in or the Wallbox has a car, and never more than SKODA_BUDGET_PER_H
+// requests in any hour, counted over restarts (see skodaBudget below) — the rest is for the app.
+const SKODA_MIN_S = 360;
+const SKODA_BUDGET_PER_H = 12;
 function pollIntervalS(vehicle, cfg = parseConfig(vehicle), { fast = false } = {}) {
   if (sourceKind(vehicle, cfg) === 'skoda') {
     const own = Number(cfg.interval_s);
@@ -743,7 +746,19 @@ async function tick() {
       const st = state.get(v.id) || {};
       if (v.source_type !== 'mqtt' && st.nextPollAt && nowMs < st.nextPollAt) continue;
       const fast = wallboxConnected || st.reading?.plugged === true || st.reading?.charging === true;
-      st.nextPollAt = nowMs + pollIntervalS(v, parseConfig(v), { fast }) * 1000;
+      const interval = pollIntervalS(v, parseConfig(v), { fast }) * 1000;
+      const skoda = sourceKind(v) === 'skoda';
+      if (skoda) {
+        // within the budget, after a backoff, and — just after a (re)start — not again within the interval
+        const list = await skodaRequests(v.id, nowMs);
+        const bo = await skodaBackoff(v.id);
+        let earliest = Math.max(skodaNextFree(list, nowMs), bo.until || 0);
+        if (!st.started && list.length) earliest = Math.max(earliest, list[list.length - 1] + interval);
+        st.started = true;
+        if (earliest > nowMs) { st.nextPollAt = earliest; state.set(v.id, st); continue; }
+        await skodaSpend(v.id, nowMs);
+      }
+      st.nextPollAt = nowMs + interval;
       state.set(v.id, st);
       const result = await readVehicle(v);
       if (result.meta) {
@@ -751,6 +766,15 @@ async function tick() {
         if (result.meta.retryAfterS) st.nextPollAt = Math.max(st.nextPollAt || 0, nowMs + result.meta.retryAfterS * 1000);
       }
       if (result.extra) st.extra = result.extra;
+      if (skoda) {
+        if (!result.ok && SKODA_REFUSED.test(result.error || '')) {
+          const prev = await skodaBackoff(v.id);
+          const min = skodaBackoffMin(prev.min);
+          await setSkodaBackoff(v.id, { min, until: nowMs + min * 60000 });
+          st.nextPollAt = Math.max(st.nextPollAt, nowMs + min * 60000);
+          result.error = `${result.error} (next try in ${min} min)`;
+        } else if (result.ok) await setSkodaBackoff(v.id, {});
+      }
       if (result.ok) {
         st.failCount = 0;
         st.errorSince = null;
@@ -768,6 +792,34 @@ async function tick() {
   }
 }
 
+// ---- Škoda request budget: every request (read or command) per car, kept in the database so a
+// restart or an update doesn't read again — and a backoff after Škoda says no (too many requests, or
+// no car data): 30 min, then 1 h, then 2 h, until it answers again.
+const HOUR_MS = 3600000;
+const skodaLog = new Map(); // vehicle id -> [ms]
+async function skodaRequests(id, nowMs = Date.now()) {
+  const settings = require('./wallboxSettings');
+  if (!skodaLog.has(id)) { const saved = await settings.get(`skoda_requests_${id}`, []).catch(() => []); skodaLog.set(id, Array.isArray(saved) ? saved : []); }
+  const list = skodaLog.get(id).filter((t) => t > nowMs - HOUR_MS);
+  skodaLog.set(id, list);
+  return list;
+}
+async function skodaSpend(id, nowMs = Date.now()) {
+  const list = await skodaRequests(id, nowMs);
+  list.push(nowMs);
+  await require('./wallboxSettings').set(`skoda_requests_${id}`, list).catch(() => {});
+}
+// Pure: the earliest time a next request fits in the budget.
+function skodaNextFree(list, nowMs, max = SKODA_BUDGET_PER_H) {
+  const recent = (list || []).filter((t) => t > nowMs - HOUR_MS).sort((a, b) => a - b);
+  return recent.length < max ? nowMs : recent[recent.length - max] + HOUR_MS;
+}
+// Pure: the next backoff after a refusal (minutes): 30, 60, 120, 120 …
+function skodaBackoffMin(prevMin) { return prevMin ? Math.min(120, prevMin * 2) : 30; }
+async function skodaBackoff(id) { return (await require('./wallboxSettings').get(`skoda_backoff_${id}`, {}).catch(() => ({}))) || {}; }
+async function setSkodaBackoff(id, value) { await require('./wallboxSettings').set(`skoda_backoff_${id}`, value).catch(() => {}); }
+const SKODA_REFUSED = /rate limit|too many|no car data|not accepting requests/i;
+
 // Forget cached state for one vehicle (after its settings change) and read it right away.
 function refreshVehicle(id) {
   state.delete(Number(id));
@@ -780,10 +832,13 @@ function notifyWallbox(connected) {
   const c = !!connected;
   if (c === wallboxConnected) return;
   wallboxConnected = c;
-  const readAll = () => { for (const st of state.values()) st.nextPollAt = 0; tick().catch(() => {}); };
+  // a car cloud like Škoda's counts every request: one extra read after 3 min (within its budget);
+  // a local source (Homey, Home Assistant) now and after 1 and 3 min
+  const isCloud = (id) => { const v = vehicleCache.find((x) => x.id === id); return v ? sourceKind(v) === 'skoda' : false; };
+  const readAll = (cloudToo) => () => { for (const [id, st] of state) if (cloudToo || !isCloud(id)) st.nextPollAt = 0; tick().catch(() => {}); };
   burstTimers.forEach(clearTimeout);
-  burstTimers = [60 * 1000, 180 * 1000].map((ms) => { const t = setTimeout(readAll, ms); t.unref?.(); return t; });
-  readAll();
+  burstTimers = [[60 * 1000, false], [180 * 1000, true]].map(([ms, cloud]) => { const t = setTimeout(readAll(cloud), ms); t.unref?.(); return t; });
+  readAll(false)();
 }
 
 function getVehicleStatus(vehicle) {
@@ -842,7 +897,7 @@ module.exports = {
   sourceKind,
   parseSkoda,
   readSkoda,
-  skodaCommand,
+  skodaCommand, skodaSpend, skodaRequests, skodaNextFree, skodaBackoffMin, SKODA_BUDGET_PER_H,
   secretOf,
   skodaProblem,
   VIN_RE,

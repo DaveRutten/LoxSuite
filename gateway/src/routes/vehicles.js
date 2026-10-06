@@ -203,6 +203,13 @@ router.post('/test', requirePermission('vehicles', 'edit'), asyncHandler(async (
   if (values.source_type === 'none') return res.json({ ok: false, message: 'Choose a data source first.' });
   const existing = req.body?.vehicle_id ? await loadVehicle(req.body.vehicle_id) : null;
   const probe = { ...values, id: existing?.id || 0, secret: secretToStore(values, existing) };
+  if (vehicles.sourceKind(probe) === 'skoda' && probe.id) {
+    // a test counts toward the car's Škoda budget too — refuse it rather than get the car blocked
+    const list = await vehicles.skodaRequests(probe.id);
+    const free = vehicles.skodaNextFree(list, Date.now());
+    if (free > Date.now()) return res.json({ ok: false, message: `Škoda budget used (${vehicles.SKODA_BUDGET_PER_H} requests per hour) — try again after ${new Date(free).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}.` });
+    await vehicles.skodaSpend(probe.id);
+  }
   const result = await vehicles.readVehicle(probe);
   res.json({ ok: result.ok, message: result.error || null, raw: result.raw, reading: result.reading, missing: result.missing || [], sourceUpdatedAt: result.sourceUpdatedAt || null });
 }));

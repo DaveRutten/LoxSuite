@@ -52,7 +52,7 @@ test('Škoda: stored as http + provider, polled within the 20/h limit', () => {
   const car = { source_type: 'http', source_config: JSON.stringify({ provider: 'skoda', vin: 'TMBJB9NY5RF999999' }) };
   assert.equal(v.sourceKind(car), 'skoda');
   assert.equal(v.pollIntervalS(car), 600);
-  assert.equal(v.pollIntervalS(car, undefined, { fast: true }), 240);
+  assert.equal(v.pollIntervalS(car, undefined, { fast: true }), 360); // 10/h while plugged in, within the 12/h budget
   assert.equal(v.pollIntervalS({ ...car, source_config: JSON.stringify({ provider: 'skoda', interval_s: 60 }) }), 600);
   assert.equal(v.sourceKind({ source_type: 'http', source_config: '{}' }), 'http');
 });
@@ -80,4 +80,19 @@ test('Škoda: the car known but none of its data (every part "could not be retri
   const body = { vehicle: { vin: 'TMBJB9NY5RF999999', name: 'Kodiaq', licensePlate: 'JPG98N' }, errors: [{ description: 'Vehicle status could not be retrieved.' }, { description: 'Odometer reading could not be retrieved.' }] };
   const empty = async () => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) });
   await assert.rejects(v.readSkoda({ vin: 'TMBJB9NY5RF999999' }, 'k', { fetchFn: empty }), (e) => /no car data/.test(e.message) && /Vehicle status could not be retrieved/.test(e.message) && e.extra.name === 'Kodiaq');
+});
+
+test('Škoda budget: at most 12 requests in any hour (the rest is for the app), backoff 30 → 60 → 120 min', () => {
+  const now = Date.parse('2026-10-06T20:00:00Z');
+  const min = 60000;
+  assert.equal(v.SKODA_BUDGET_PER_H, 12);
+  assert.equal(v.skodaNextFree([], now), now);
+  const eleven = Array.from({ length: 11 }, (_, i) => now - (50 - i * 4) * min);
+  assert.equal(v.skodaNextFree(eleven, now), now);
+  const twelve = [...eleven, now - min];
+  // the 12th oldest-but-in-the-hour falls out of the hour first
+  assert.equal(v.skodaNextFree(twelve, now), now - 50 * min + 60 * min);
+  // requests older than an hour don't count
+  assert.equal(v.skodaNextFree(twelve.map((t) => t - 61 * min), now), now);
+  assert.deepEqual([undefined, 30, 60, 120].map((x) => v.skodaBackoffMin(x)), [30, 60, 120, 120]);
 });
