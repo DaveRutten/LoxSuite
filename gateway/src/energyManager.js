@@ -37,10 +37,11 @@ const KINDS = {
   },
   appliance: {
     label: 'Appliance (washer, dryer…)',
-    defaults: { kw: 1.0, flex_h: 8 },
+    defaults: { kw: 1.0, flex_h: 8, max_pause_h: 0, max_pauses: 2 },
     signals: [
       { key: 'start', suffix: 'Start', unit: 'pulse', hint: 'Home Connect start' },
-      { key: 'pause', suffix: 'Pauze', unit: '1/0', hint: 'Home Connect pause' },
+      { key: 'pause', suffix: 'Pauze', unit: 'pulse', hint: 'Home Connect pause (only when pausing is allowed)' },
+      { key: 'resume', suffix: 'Verder', unit: 'pulse', hint: 'Home Connect resume ("Verder")' },
     ],
   },
 };
@@ -61,6 +62,9 @@ function parseSettings(load) {
 //           that count as running (empty: everything except 0 / off)
 //   power   power in W or kW
 //   energy  an energy counter in kWh or Wh (when there is no Loxone meter block)
+//   start_in  time until a scheduled (delayed) start, in h / min / s (0 = not scheduled)
+//   ready   1 = ready to be started remotely (Home Connect "remote start allowed"); also read from the
+//           status text ("Startklaar", "Klaar voor start", "Op afstand starten")
 function sourcesOf(settings = {}) {
   const src = settings.src || {};
   return {
@@ -69,6 +73,8 @@ function sourcesOf(settings = {}) {
     power: src.power || null, powerUnit: src.power_unit === 'kW' ? 'kW' : 'W',
     energy: src.energy || null, energyUnit: src.energy_unit === 'Wh' ? 'Wh' : 'kWh',
     temp: src.temp || null,
+    ready: src.ready || null,
+    startIn: src.start_in || null, startInUnit: ['min', 's'].includes(src.start_in_unit) ? src.start_in_unit : 'h',
   };
 }
 
@@ -100,15 +106,46 @@ function cleanStatusText(text, name = '') {
   return (t.charAt(0).toUpperCase() + t.slice(1)).slice(0, 40);
 }
 // Pure: does a status (text or label) mean it is not running (off, idle, done, paused, waiting)?
-const OFF_TEXT = /(^|[^a-zà-ÿ])(uitgeschakeld|uit|off|switched off|idle|stand-?by|klaar|gereed|beëindigd|beeindigd|einde|afgelopen|finished|done|ready|offline|niet verbonden|disconnected|gepauzeerd|pauze|paused|uitgesteld|uitgestelde|delayed|wacht|wachten|waiting)($|[^a-zà-ÿ])/i;
+const OFF_TEXT = /(^|[^a-zà-ÿ])(uitgeschakeld|uit|off|switched off|idle|stand-?by|klaar|gereed|beëindigd|beeindigd|einde|afgelopen|finished|done|ready|offline|niet verbonden|disconnected|gepauzeerd|pauze|paused|uitgesteld|uitgestelde|delayed|wacht|wachten|waiting|ingepland|gepland|scheduled|startklaar|start gereed|startgereed|voltooid|afgebroken|fout|error|actie vereist|action required|aborted|aborting|inactief|inactive)($|[^a-zà-ÿ])/i;
 function isOffText(t) { return OFF_TEXT.test(String(t ?? '')); }
+// Pure: a scheduled (delayed) start in a status text — "Ingepland", "Uitgestelde start", "Start over
+// 2 uur 30 min", "start om 14:30" — as { scheduled, startMs } (startMs null when the text has no time).
+const SCHEDULED_TEXT = /(ingepland|gepland|uitgesteld|uitgestelde start|scheduled|delayed start|start over|starts in|start om|starts at|starttijd)/i;
+function scheduledFromText(text, nowMs = Date.now(), tz) {
+  const t = String(text ?? '');
+  if (!SCHEDULED_TEXT.test(t)) return { scheduled: false, startMs: null };
+  const lt = require('./localTime');
+  const dur = /(?:over|in|nog)\s+(?:(\d+)\s*(?:uur|u|h|hours?)\b)?\s*(?:(\d+)\s*(?:min|minuten|minutes|m)\b)?/i.exec(t);
+  if (dur && (dur[1] || dur[2])) return { scheduled: true, startMs: nowMs + ((Number(dur[1]) || 0) * 60 + (Number(dur[2]) || 0)) * 60000 };
+  const hm = /(?:over|in|nog)\s+(\d{1,2}):(\d{2})\b/i.exec(t);
+  if (hm) return { scheduled: true, startMs: nowMs + (Number(hm[1]) * 60 + Number(hm[2])) * 60000 };
+  const clock = /(?:om|at|start(?:tijd)?:?)\s*(\d{1,2})[:.](\d{2})\b/i.exec(t);
+  if (clock) {
+    let at = lt.localTimeOn(nowMs, `${clock[1]}:${clock[2]}`, tz);
+    if (at < nowMs - 5 * 60000) at = lt.localTimeOn(nowMs + DAY_MS, `${clock[1]}:${clock[2]}`, tz);
+    return { scheduled: true, startMs: at };
+  }
+  return { scheduled: true, startMs: null };
+}
+
+// Pure: does a status text say the appliance is loaded and may be started remotely?
+const READY_TEXT = /(start ?gereed|startklaar|klaar (voor|om te) start|gereed (voor|om te) start|ready to start|remote start|op afstand start|start op afstand|^\s*(gereed|ready)\s*$)/i;
+// Home Connect's operation state (BSH.Common.Status.OperationState) as Loxone gives it: a number.
+const HOME_CONNECT_STATUS = '0=Inactief\n1=Gereed\n2=Uitgestelde start\n3=Programma loopt\n4=Programma gepauzeerd\n5=Actie vereist\n6=Programma voltooid\n7=Fout\n8=Programma afgebroken';
+const HOME_CONNECT_RUNNING = '3';
+function isReadyText(t) { return READY_TEXT.test(String(t ?? '')); }
+
+// Pure: words that just mean "off" ("Uitgeschakeld", "Off", "Stand-by") are booked as 'off' — the same
+// bucket as the on/off signal's off. Done, paused or waiting stay their own (not running) status.
+const OFF_SYNONYM = /^(0|off|uit|uitgeschakeld|switched off|turned off|stand-?by|standby|idle|inactief|inactive)$/i;
+function bucket(key) { return key === null || key === undefined ? key : OFF_SYNONYM.test(String(key).trim()) ? 'off' : String(key); }
 
 const parseList = (text) => String(text || '').split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
 
 // Pure: one reading of a consumer from its signals -> { kw, total, on, status, label, measured }.
 //   meter: { kw, total } of the Loxone meter block (or nulls); raw: { onoff, status, power, energy }.
 // "on" comes from the on/off state, else from the status (running values), else from the power.
-function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05, name = '' }) {
+function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05, name = '', nowMs = Date.now() }) {
   const num = (v) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
   let kw = num(meter.kw);
   if (kw === null && src.power) { const p = num(raw.power); kw = p === null ? null : (src.powerUnit === 'kW' ? p : p / 1000); }
@@ -130,12 +167,22 @@ function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05, nam
     on = src.statusOn.length ? src.statusOn.includes(status) || (label !== null && src.statusOn.includes(label)) : !(status === '0' || isOffText(label || status));
   } else if (kw !== null) on = kw >= onKw;
   const temp = src.temp ? num(raw.temp) : null;
-  return { kw, total, on, status, label, measured: total !== null || kw !== null, temp };
+  // a scheduled start: from its own "start in" signal, else from the status text
+  let startAt = null;
+  const sIn = src.startIn ? num(raw.startIn) : null;
+  if (sIn !== null && sIn > 0) startAt = nowMs + sIn * (src.startInUnit === 'min' ? 60000 : src.startInUnit === 's' ? 1000 : HOUR);
+  else if (src.status && !on && (typeof raw.status === 'string' || label)) { const sc = scheduledFromText(typeof raw.status === 'string' ? raw.status : label, nowMs); if (sc.startMs) startAt = sc.startMs; }
+  // ready to be started remotely: its own signal, else the status text
+  let readyToStart = false;
+  if (src.ready && raw.ready !== undefined && raw.ready !== null && raw.ready !== '') { const v = num(raw.ready); readyToStart = v !== null ? v !== 0 : /^(on|aan|true|1)$/i.test(String(raw.ready)); }
+  else if (src.status && (typeof raw.status === 'string' || label)) readyToStart = isReadyText(typeof raw.status === 'string' ? raw.status : label);
+  if (on || startAt) readyToStart = false; // running, or already scheduled on the machine itself
+  return { kw, total, on, status, label, measured: total !== null || kw !== null, temp, startAt, readyToStart };
 }
 
 // Pure: the key a minute is booked under — the status label/value, else 'on'/'off'.
 function statusKey(st) {
-  if (st.status !== null && st.status !== undefined) return String(st.label || st.status).slice(0, 64);
+  if (st.status !== null && st.status !== undefined) return bucket(String(st.label || st.status).slice(0, 64));
   if (st.on === true) return 'on';
   if (st.on === false) return 'off';
   return null;
@@ -200,6 +247,46 @@ function applyLive(hours, { pvF = {}, houseF = {}, pvKw = null, houseKw = null, 
 }
 
 // Cost of using `kwh` in an hour with `surplus` kWh of solar left: solar at its value, the rest at the price.
+// Pure: the hours (indices into H, hourly and in order) for a run of `dur` hours between notBefore and
+// readyBy (the run done by then) at the lowest cost — in one block, or with pauses of at most maxGapH
+// hours (at most maxPauses of them) when the appliance may be paused. costOf(i) = cost of hour i.
+function bestSteps(H, { dur, notBefore = 0, readyBy = Infinity, maxGapH = 0, maxPauses = 0, costOf }) {
+  const ok = H.map((h) => h.ms >= (notBefore || 0) && h.ms + HOUR <= readyBy + 1);
+  const P = maxGapH > 0 ? Math.max(0, maxPauses) : 0;
+  // best[i][k][p]: lowest cost with k hours chosen, the last one i, p pauses so far
+  const best = H.map(() => Array.from({ length: dur + 1 }, () => new Array(P + 1).fill(null)));
+  let end = null;
+  for (let i = 0; i < H.length; i++) {
+    if (!ok[i]) continue;
+    const c = costOf(i);
+    best[i][1][0] = { cost: c, prev: null };
+    for (let j = i - 1; j >= 0; j--) {
+      const gap = Math.round((H[i].ms - H[j].ms) / HOUR) - 1;
+      if (gap > (P ? maxGapH : 0)) break;
+      if (!ok[j]) continue;
+      for (let k = 1; k < dur; k++) for (let p = 0; p <= P; p++) {
+        const b = best[j][k][p];
+        if (!b) continue;
+        const np = p + (gap > 0 ? 1 : 0);
+        if (np > P) continue;
+        const cand = b.cost + c;
+        const cur = best[i][k + 1][np];
+        if (!cur || cand < cur.cost - 1e-9 || (Math.abs(cand - cur.cost) <= 1e-9 && np < p)) best[i][k + 1][np] = { cost: cand, prev: [j, k, p] };
+      }
+    }
+    for (let p = 0; p <= P; p++) {
+      const b = best[i][dur][p];
+      // equal cost: fewer pauses, then earlier
+      if (b && (!end || b.cost < end.cost - 1e-9 || (Math.abs(b.cost - end.cost) <= 1e-9 && p < end.p))) end = { cost: b.cost, i, p };
+    }
+  }
+  if (!end) return null;
+  const idx = [];
+  let node = [end.i, dur, end.p];
+  while (node) { idx.unshift(node[0]); node = best[node[0]][node[1]][node[2]].prev; }
+  return { idx, cost: end.cost, pauses: end.p };
+}
+
 function effCost(h, kwh, surplus, opts) {
   const fromSolar = Math.min(kwh, Math.max(0, surplus));
   const solarValue = opts.feedIn === 'fixed' ? opts.feedInEur : (h.price ?? 0) - (opts.solarBonus || 0);
@@ -296,7 +383,7 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
         }
       }
     } else if (load.kind === 'appliance') {
-      for (const r of rows) { r.values.start = 0; r.values.pause = 0; }
+      for (const r of rows) { r.values.start = 0; r.values.pause = 0; r.values.resume = 0; }
       // No run asked for: expect its usual run(s) (learned pattern) and plan the best start from
       // the usual time up to flex_h later.
       if (!(load.requests || []).length && s.use_patterns !== false && localOf(nowMs).weekday !== undefined) {
@@ -316,18 +403,29 @@ function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf,
         const dur = Math.max(1, Math.ceil(Number(q.durationH) || 2));
         const kwh = Number(q.kwh) || kw * dur;
         let best = null;
-        for (let i = 0; i < H.length; i++) {
-          if (q.notBefore && H[i].ms < q.notBefore) continue;
-          const block = H.slice(i, i + dur);
-          if (block.length < dur || block[block.length - 1].ms + HOUR > q.readyBy + 1) break;
-          const cost = block.reduce((a, h) => a + effCost(h, kwh / dur, left.get(h.ms), opts), 0);
-          if (!best || cost < best.cost - 1e-9) best = { block, cost };
+        if (q.steps && q.steps.length) {
+          // a run LoxSuite already started: its hours stay as planned
+          const block = q.steps.map((ms) => H.find((h) => h.ms === ms)).filter(Boolean);
+          if (block.length) best = { block, cost: block.reduce((a, h) => a + effCost(h, kwh / dur, left.get(h.ms), opts), 0), running: true };
+        } else {
+          const pauseH = Number(s.max_pause_h) || 0;
+          const found = bestSteps(H, { dur, notBefore: q.notBefore, readyBy: q.readyBy, maxGapH: q.ready && pauseH > 0 ? pauseH : 0, maxPauses: Number(s.max_pauses ?? 2), costOf: (i) => effCost(H[i], kwh / dur, left.get(H[i].ms), opts) });
+          if (found) best = { block: found.idx.map((i) => H[i]), cost: found.cost, pauses: found.pauses };
         }
         if (!best) continue;
+        q.steps = best.block.map((h) => h.ms);
+        // pauses between the steps: Pause at the start of a gap, Verder (resume) at the next step
+        for (let b = 1; b < best.block.length; b++) {
+          const prev = best.block[b - 1].ms, next = best.block[b].ms;
+          if (next - prev <= HOUR) continue;
+          for (let t = prev + HOUR; t < next; t += HOUR) { const g = at.get(t); if (g) { g.values.pause = 1; g.reason = `paused: cheaper to go on at ${require('./localTime').hhmm(next)}`; } }
+          const rn = at.get(next); if (rn) rn.values.resume = 1;
+        }
         const r = at.get(best.block[0].ms);
-        r.values.start = 1;
-        r.reason = q.expected ? `best start for the ${q.label}` : `start for "${q.label || 'run'}" (ready by ${new Date(q.readyBy).toISOString()})`;
+        if (!best.running) r.values.start = 1;
+        r.reason = q.ready ? `best start for the waiting run (ready by ${require('./localTime').hhmm(q.readyBy)})` : q.scheduled ? `scheduled on the appliance (start ~${require('./localTime').hhmm(q.usualStart)})` : q.expected ? `best start for the ${q.label}` : `start for "${q.label || 'run'}" (ready by ${new Date(q.readyBy).toISOString()})`;
         q.plannedStart = best.block[0].ms;
+        q.pauses = best.pauses || 0;
         q.plannedCost = r2(best.cost);
         for (const h of best.block) consume(h.ms, kwh / dur);
       }
@@ -391,12 +489,12 @@ function hourCost(kwh, { gridImport = null, houseKwh = null, price = null, solar
 
 // --------------------------------------------------------------------------- runtime
 
-const rt = { plan: null, planAt: 0, signals: [], last: new Map(), samples: new Map(), runs: new Map(), prevTotals: new Map(), timer: null, status: null };
+const rt = { plan: null, planAt: 0, signals: [], last: new Map(), samples: new Map(), runs: new Map(), prevTotals: new Map(), readySince: new Map(), startSent: new Map(), active: new Map(), timer: null, status: null };
 
 // The statuses a consumer has been in (last 60 days, most time first), for "values that mean running".
 async function seenStatuses(loadId, nowMs = Date.now()) {
   const rows = await db.prepare('SELECT status, SUM(minutes) AS m FROM load_status_hourly WHERE load_id = ? AND hour >= ? GROUP BY status').all(loadId, new Date(nowMs - 60 * 86400000).toISOString()).catch(() => []);
-  return rows.filter((r) => r.status && r.status !== 'on' && r.status !== 'off').sort((a, b) => b.m - a.m).slice(0, 16).map((r) => ({ status: r.status, hours: Math.round((Number(r.m) || 0) / 6) / 10 }));
+  return rows.filter((r) => r.status && r.status !== 'on' && bucket(r.status) !== 'off').sort((a, b) => b.m - a.m).slice(0, 16).map((r) => ({ status: r.status, hours: Math.round((Number(r.m) || 0) / 6) / 10 }));
 }
 
 async function listLoads() {
@@ -426,12 +524,12 @@ async function readLoad(load) {
     name = m.control.name;
   }
   const raw = {};
-  const anySrc = src.onoff || src.status || src.power || src.energy || src.temp;
+  const anySrc = src.onoff || src.status || src.power || src.energy || src.temp || src.startIn || src.ready;
   if (anySrc && load.miniserver_id) {
     const ms = m?.ms || await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(load.miniserver_id);
     if (ms) {
       ws.ensureConnection(ms);
-      for (const k of ['onoff', 'status', 'power', 'energy', 'temp']) if (src[k]) raw[k] = ws.getLiveValue(ms.id, src[k]);
+      for (const k of ['onoff', 'status', 'power', 'energy', 'temp', 'startIn', 'ready']) if (src[k]) raw[k] = ws.getLiveValue(ms.id, src[k]);
     }
   }
   const st = loadState({ meter, raw, src, name: load.name });
@@ -637,7 +735,7 @@ function anomalies({ rows = [], nowMs = Date.now(), weatherDays = [], model = nu
 }
 
 async function loadAnomalies(load, nowMs = Date.now()) {
-  const rows = await db.prepare('SELECT hour, status, minutes, kwh, measured FROM load_status_hourly WHERE load_id = ? AND hour >= ?').all(load.id, new Date(nowMs - 28 * 86400000).toISOString()).catch(() => []);
+  const rows = (await db.prepare('SELECT hour, status, minutes, kwh, measured FROM load_status_hourly WHERE load_id = ? AND hour >= ?').all(load.id, new Date(nowMs - 28 * 86400000).toISOString()).catch(() => [])).map((r) => ({ ...r, status: bucket(r.status) }));
   let weatherDays = [];
   let model = null;
   if (load.kind === 'heatpump') {
@@ -676,10 +774,11 @@ async function unknownPatterns(nowMs = Date.now(), localOf) {
 function statusSummary(rows, days) {
   const by = new Map();
   for (const r of rows) {
-    const g = by.get(r.status) || { status: r.status, minutes: 0, kwh: 0, mMin: 0, mKwh: 0 };
+    const k = bucket(r.status); // older rows booked "Uitgeschakeld" apart from "off"
+    const g = by.get(k) || { status: k, minutes: 0, kwh: 0, mMin: 0, mKwh: 0 };
     g.minutes += r.minutes; g.kwh += r.kwh;
     if (r.measured) { g.mMin += r.minutes; g.mKwh += r.kwh; }
-    by.set(r.status, g);
+    by.set(k, g);
   }
   return [...by.values()].sort((a, b) => b.minutes - a.minutes).map((g) => ({
     status: g.status, hours: r2(g.minutes / 60), kwh: r2(g.kwh), kw: g.mMin >= 10 ? r2(g.mKwh / (g.mMin / 60)) : null,
@@ -694,7 +793,7 @@ async function learnedStatus(load, nowMs = Date.now()) {
   const days = Math.max(1, new Set(rows.map((r) => r.hour.slice(0, 10))).size);
   const perStatus = statusSummary(rows, days);
   // the kW while on, learned from measured minutes that aren't "off"
-  const on = rows.filter((r) => r.measured && !/^(off|uit|0)$/i.test(r.status));
+  const on = rows.filter((r) => r.measured && bucket(r.status) !== 'off' && !isOffText(r.status));
   const onMin = on.reduce((a, r) => a + r.minutes, 0);
   return { perStatus, kwOn: onMin >= 30 ? r2(on.reduce((a, r) => a + r.kwh, 0) / (onMin / 60)) : null };
 }
@@ -708,7 +807,7 @@ async function loadDetail(load, nowMs = Date.now()) {
   const hourly = await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ? ORDER BY hour').all(load.id, new Date(nowMs - 7 * 86400000).toISOString()).catch(() => []);
   const em = require('./energyMeters');
   const todayFrom = new Date(nowMs - 24 * HOUR).toISOString();
-  const last24 = await db.prepare('SELECT status, minutes, kwh FROM load_status_hourly WHERE load_id = ? AND hour >= ?').all(load.id, todayFrom).catch(() => []);
+  const last24 = (await db.prepare('SELECT status, minutes, kwh FROM load_status_hourly WHERE load_id = ? AND hour >= ?').all(load.id, todayFrom).catch(() => [])).map((r) => ({ ...r, status: bucket(r.status) }));
   const onMin24 = last24.filter((r) => !/^(off|uit|0)$/i.test(r.status)).reduce((a, r) => a + r.minutes, 0);
   return {
     now: rt.samples.get(load.id) || null, timeline: timeline(before ? [{ ...before, ts: since }, ...events] : events, Date.parse(since), nowMs),
@@ -726,7 +825,7 @@ function timeline(events, fromMs, toMs) {
     const a = Math.max(fromMs, Date.parse(e.ts));
     const b = Math.min(toMs, i + 1 < events.length ? Date.parse(events[i + 1].ts) : toMs);
     if (b <= a) continue;
-    const key = e.status !== null && e.status !== undefined ? String(e.label || e.status) : e.on_state === 1 ? 'on' : e.on_state === 0 ? 'off' : null;
+    const key = e.status !== null && e.status !== undefined ? bucket(String(e.label || e.status)) : e.on_state === 1 ? 'on' : e.on_state === 0 ? 'off' : null;
     if (key === null) continue;
     const last = out[out.length - 1];
     if (last && last.key === key && last.to === a) last.to = b;
@@ -788,7 +887,26 @@ async function recalc(nowMs = Date.now()) {
   for (const l of loads) {
     const lr = await learned(l);
     if (l.kind !== 'appliance' && lr.kwPeak && !l.settings.kw_fixed) l.settings.kw = Math.max(0.3, lr.kwPeak);
-    if (l.kind === 'appliance') l.requests = (await requestsFor(l.id, nowMs)).map((q) => ({ ...q, kwh: q.kwh || lr.kwh || l.settings.kw * 2, durationH: q.durationH || lr.durationH || 2 }));
+    if (l.kind === 'appliance') {
+      l.requests = (await requestsFor(l.id, nowMs)).map((q) => ({ ...q, kwh: q.kwh || lr.kwh || l.settings.kw * 2, durationH: q.durationH || lr.durationH || 2 }));
+      // scheduled on the appliance itself ("Ingepland", start in 3 h): that run is known — its kWh go
+      // in that hour, and no usual run or best start is planned besides it
+      const smp = rt.samples.get(l.id);
+      const act = rt.active.get(l.id);
+      if (act && nowMs < act.steps[act.steps.length - 1] + HOUR) {
+        // a run LoxSuite started (or would have, log only): its steps and pauses stay as planned
+        l.requests = [{ id: null, ready: true, label: 'run in progress', notBefore: act.steps[0], readyBy: act.steps[act.steps.length - 1] + HOUR, kwh: act.kwh, durationH: act.steps.length, steps: act.steps }];
+      } else if (smp && smp.startAt && smp.startAt > nowMs - 15 * 60000 && smp.startAt < nowMs + 36 * HOUR) {
+        const at = Math.floor(smp.startAt / HOUR) * HOUR, dur = Math.max(1, Math.ceil(lr.durationH || 2));
+        l.requests = [{ id: null, scheduled: true, label: 'scheduled on the appliance', notBefore: at, readyBy: at + dur * HOUR, kwh: lr.kwh || l.settings.kw * dur, durationH: dur, usualStart: smp.startAt }];
+      } else if (smp && smp.readyToStart && !l.requests.length) {
+        // loaded and ready for a remote start: the best start from now within "ready within" hours
+        const since = rt.readySince.get(l.id) || nowMs;
+        const dur = Math.max(1, Math.ceil(lr.durationH || 2));
+        const within = Math.max(dur, Number(l.settings.ready_within_h) || Number(l.settings.flex_h) || 8);
+        l.requests = [{ id: null, ready: true, label: 'ready to start', notBefore: Math.floor(nowMs / HOUR) * HOUR, readyBy: Math.max(since + within * HOUR, Math.floor(nowMs / HOUR) * HOUR + dur * HOUR), kwh: lr.kwh || l.settings.kw * dur, durationH: dur }];
+      }
+    }
     if (l.kind === 'dhw') {
       const from = new Date(require('./localTime').localMidnight(nowMs, tz)).toISOString();
       const row = await db.prepare('SELECT SUM(kwh) AS k FROM load_hourly WHERE load_id = ? AND hour >= ?').get(l.id, from);
@@ -840,7 +958,64 @@ async function tick(nowMs = Date.now()) {
         .run(new Date(nowMs).toISOString(), s.id, key, v, s.reason || null).catch(() => {});
       if (load && load.output === 'live') { /* Live output comes in a later version: shadow only. */ }
     }
+    if (load && load.kind === 'appliance') await applianceStep(load, s.values, nowMs).catch((e) => { rt.status = { ...rt.status, error: `${load.name}: ${e.message}` }; });
   }
+  for (const l of rt.loads || []) {
+    const smp = rt.samples.get(l.id);
+    if (smp && smp.readyToStart) { if (!rt.readySince.has(l.id)) rt.readySince.set(l.id, nowMs); } else rt.readySince.delete(l.id);
+  }
+}
+
+// One pulse on an appliance's virtual input (start / pause / resume), or — with Start via LoxSuite on
+// "log only" (the default) — just written down. 'off' does nothing.
+async function pulse(load, key, why, nowMs) {
+  const mode = load.settings?.start_mode || 'log';
+  if (mode === 'off') return false;
+  const vi = viName(load, KINDS.appliance.signals.find((x) => x.key === key));
+  if (mode !== 'on') {
+    await db.prepare('INSERT INTO em_log (ts, load_id, signal_name, value, reason) VALUES (?, ?, ?, ?, ?)').run(new Date(nowMs).toISOString(), load.id, `${key}_sent`, 'log', `would ${why} now (${vi} = pulse) — Start via LoxSuite is on "log only"`).catch(() => {});
+    return true;
+  }
+  const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(load.miniserver_id);
+  if (!ms) throw new Error('No Miniserver for this consumer.');
+  await require('./loxone').sendHttpVirtualInput(ms, vi, 'pulse');
+  await db.prepare('INSERT INTO em_log (ts, load_id, signal_name, value, reason) VALUES (?, ?, ?, ?, ?)').run(new Date(nowMs).toISOString(), load.id, `${key}_sent`, 'pulse', `${why} (${vi} = pulse)`).catch(() => {});
+  require('./auditLog').logSystemEvent(`Energy manager: ${why} ${load.name} (${vi} = pulse)`).catch(() => {});
+  return true;
+}
+
+// Runs a waiting appliance by the plan, minute by minute:
+//   start   in the planned hour, only while the machine says it is ready (at most once per 30 min);
+//           the run's steps are kept from then on (a re-plan doesn't move a running wash)
+//   pause   at the start of a planned gap, only while it is running and only if pausing is allowed
+//   resume  at the next step — and always once a pause has lasted its maximum (+15 min), never later
+// In "log only" the machine's state isn't checked for pause/resume (it was never started): what it
+// would do is written down by the plan alone.
+async function applianceStep(load, values, nowMs) {
+  const s = load.settings || {};
+  const mode = s.start_mode || 'log';
+  if (mode === 'off') { rt.active.delete(load.id); return; }
+  const smp = rt.samples.get(load.id) || {};
+  const hour = Math.floor(nowMs / HOUR) * HOUR;
+  let act = rt.active.get(load.id);
+  if (!act && values.start === 1 && smp.readyToStart && nowMs - (rt.startSent.get(load.id) || 0) >= 30 * 60000) {
+    const q = (rt.plan?.loads || []).find((p) => p.id === load.id)?.requests?.find((x) => x.ready && x.steps && x.steps[0] === hour);
+    rt.startSent.set(load.id, nowMs);
+    if (await pulse(load, 'start', 'start', nowMs)) rt.active.set(load.id, { steps: q ? q.steps : [hour], kwh: q ? q.kwh : null, pausedAt: null });
+    return;
+  }
+  if (!act) return;
+  const last = act.steps[act.steps.length - 1];
+  const maxPauseMs = (Number(s.max_pause_h) || 0) * HOUR;
+  const inStep = act.steps.includes(hour);
+  if (act.pausedAt && (inStep || nowMs >= last + HOUR || nowMs - act.pausedAt > maxPauseMs + 15 * 60000)) {
+    await pulse(load, 'resume', 'resume', nowMs);
+    act.pausedAt = null;
+  } else if (!act.pausedAt && !inStep && hour > act.steps[0] && hour < last && maxPauseMs > 0 && (mode !== 'on' || smp.on)) {
+    if (await pulse(load, 'pause', 'pause', nowMs)) act.pausedAt = nowMs;
+  }
+  // done: past the last step and (for real) no longer running
+  if (nowMs >= last + HOUR && !act.pausedAt && (mode !== 'on' || !smp.on)) rt.active.delete(load.id);
 }
 
 async function getConfig() {
@@ -888,13 +1063,33 @@ async function dailyReport(load, days = 14, nowMs = Date.now()) {
   });
 }
 
-async function importHistory(days = 30, { callTool } = {}) {
+// Pure: an appliance's runs from its kWh per hour (imported history has no on/off): hours in a row
+// using at least minKwh are one run; runs under minTotal kWh (stand-by, a door light) are left out.
+function runsFromHourly(rows, { minKwh = 0.05, minTotal = 0.2 } = {}) {
+  const out = [];
+  let cur = null;
+  for (const r of [...rows].sort((a, b) => (a.hour < b.hour ? -1 : 1))) {
+    const t = Date.parse(r.hour);
+    if ((Number(r.kwh) || 0) >= minKwh) {
+      if (cur && cur.endMs === t) { cur.endMs = t + HOUR; cur.kwh += Number(r.kwh); }
+      else { if (cur) out.push(cur); cur = { startMs: t, endMs: t + HOUR, kwh: Number(r.kwh) }; }
+    } else if (cur) { out.push(cur); cur = null; }
+  }
+  if (cur) out.push(cur);
+  return out.filter((x) => x.kwh >= minTotal).map((x) => ({ start_at: new Date(x.startMs).toISOString(), end_at: new Date(x.endMs).toISOString(), kwh: r3(x.kwh) }));
+}
+
+// History from the Miniserver's own statistics (its meter block, through its MCP server): kWh per hour
+// for the last `days` days (up to a year), for every consumer or one (loadId). For an appliance the runs
+// are derived from it as well, so its patterns are learned straight away.
+async function importHistory(days = 30, { callTool, loadId = null } = {}) {
   const mcp = callTool || ((ms, name, input) => require('./mcpClient').callTool(ms, name, input));
   const em = require('./energyMeters');
   const report = [];
   const to = new Date(); to.setUTCMinutes(0, 0, 0);
-  const from = new Date(to.getTime() - Math.max(1, Math.min(120, days)) * 86400000);
+  const from = new Date(to.getTime() - Math.max(1, Math.min(366, days)) * 86400000);
   for (const l of await listLoads()) {
+    if (loadId && l.id !== loadId) continue;
     const m = await resolveMeter(l);
     const group = em.totalStatGroup(m?.control);
     if (!group) { report.push({ load: l.name, ok: false, message: 'No meter statistics on this control.' }); continue; }
@@ -908,7 +1103,18 @@ async function importHistory(days = 30, { callTool } = {}) {
         await db.upsert('load_hourly', { load_id: l.id, hour: row.hour, kwh: row.total ?? 0, source: 'loxone' }, ['load_id', 'hour']);
         added++;
       }
-      report.push({ load: l.name, ok: true, hours: added });
+      let runs = 0;
+      if (l.kind === 'appliance') {
+        const hourly = await db.prepare('SELECT hour, kwh FROM load_hourly WHERE load_id = ? AND hour >= ? AND hour < ?').all(l.id, from.toISOString(), to.toISOString());
+        const have = await db.prepare("SELECT start_at, end_at FROM load_runs WHERE load_id = ? AND kind = 'run' AND start_at >= ?").all(l.id, new Date(from.getTime() - 86400000).toISOString());
+        for (const r of runsFromHourly(hourly)) {
+          // a run measured live (minute-exact) wins over the hourly estimate
+          if (have.some((h) => Date.parse(h.start_at) < Date.parse(r.end_at) && Date.parse(h.end_at || h.start_at) > Date.parse(r.start_at))) continue;
+          await db.prepare("INSERT INTO load_runs (load_id, start_at, end_at, kwh, kind) VALUES (?, ?, ?, ?, 'run')").run(l.id, r.start_at, r.end_at, r.kwh);
+          runs++;
+        }
+      }
+      report.push({ load: l.name, ok: true, hours: added, runs });
     } catch (err) { report.push({ load: l.name, ok: false, message: err.message }); }
   }
   return report;
@@ -930,7 +1136,7 @@ function stopEnergyManager() {
 function invalidate() { rt.planAt = 0; }
 
 module.exports = {
-  cleanStatusText, isOffText, seenStatuses,
+  HOME_CONNECT_STATUS, HOME_CONNECT_RUNNING, cleanStatusText, isOffText, bucket, seenStatuses, runsFromHourly, scheduledFromText, isReadyText, bestSteps, applianceStep,
   applyLive,
   KINDS, parseSettings, viName, toHours, effCost, planLoads, currentSignals, runStep, hourCost, quantile,
   runProgress, anomalies, unknownPatterns, weatherFor, sourcesOf, parseStatusMap, loadState, statusKey, statusSummary, timeline, loadDetail, learnedStatus,

@@ -98,8 +98,10 @@ function readSources(b) {
     power: uuid(b.src_power), power_unit: b.src_power_unit === 'kW' ? 'kW' : 'W',
     energy: uuid(b.src_energy), energy_unit: b.src_energy_unit === 'Wh' ? 'Wh' : 'kWh',
     temp: uuid(b.src_temp),
+    ready: uuid(b.src_ready),
+    start_in: uuid(b.src_start_in), start_in_unit: ['min', 's'].includes(b.src_start_in_unit) ? b.src_start_in_unit : 'h',
   };
-  return src.onoff || src.status || src.power || src.energy || src.temp ? src : null;
+  return src.onoff || src.status || src.power || src.energy || src.temp || src.start_in || src.ready ? src : null;
 }
 
 function readLoadForm(b) {
@@ -113,6 +115,10 @@ function readLoadForm(b) {
   if (b.s_kw_fixed) s.kw_fixed = true;
   if (b.s_max_block_auto_sent) s.max_block_auto = !!b.s_max_block_auto;
   if (b.s_use_patterns_sent) s.use_patterns = !!b.s_use_patterns;
+  if (kind === 'appliance') {
+    s.start_mode = ['off', 'log', 'on'].includes(b.s_start_mode) ? b.s_start_mode : 'log';
+    if (b.s_ready_within_h !== undefined && b.s_ready_within_h !== '') s.ready_within_h = Math.max(1, Math.min(36, num(b.s_ready_within_h, 8)));
+  }
   const vi = {};
   for (const sig of em.KINDS[kind].signals) { const v = String(b[`vi_${sig.key}`] || '').trim(); if (v) vi[sig.key] = v; }
   if (Object.keys(vi).length) s.vi = vi;
@@ -193,6 +199,13 @@ router.post('/requests/:id/delete.json', requirePermission('energy_manager', 'ed
   res.json({ ok: true });
 }));
 
+router.post('/loads/:id/import.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
+  try {
+    const report = await em.importHistory(Number(req.body?.days) || 30, { loadId: Number(req.params.id) });
+    em.invalidate();
+    res.json({ ok: true, report });
+  } catch (err) { res.json({ ok: false, message: err.message }); }
+}));
 router.post('/import.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   try { res.json({ ok: true, report: await em.importHistory(Number(req.body?.days) || 30) }); } catch (err) { res.json({ ok: false, message: err.message }); }
 }));

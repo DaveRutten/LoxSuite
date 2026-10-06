@@ -8,7 +8,7 @@
     <div><label><%= t('Priority (1 = first)') %></label><input type="text" name="priority" value="<%= l ? l.priority : 5 %>"></div>
     <div style="align-self:end;"><label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" name="enabled" value="1" <%= !l || l.enabled ? 'checked' : '' %>> <%= t('Active') %></label></div>
   </div>
-  <details class="em-signals" style="margin-top:0.6rem;" <%= src.onoff || src.status || src.power || src.energy || !l ? 'open' : '' %>>
+  <details class="em-signals" style="margin-top:0.6rem;" <%= src.onoff || src.status || src.power || src.energy || src.start_in || src.ready || !l ? 'open' : '' %>>
     <summary style="cursor:pointer;"><strong><%= t('Signals from Loxone') %></strong> <span class="hint"><%= t('— on/off, status, power and energy; LoxSuite learns from each of them') %></span></summary>
     <div class="form-grid" style="margin-top:0.5rem;">
       <div><label><%= t('Miniserver') %></label><select name="src_ms" data-ms-pick><% msList.forEach(m => { %><option value="<%= m.id %>" <%= String(msSel) === String(m.id) ? 'selected' : '' %>><%= m.name %></option><% }) %></select></div>
@@ -20,10 +20,13 @@
       <div><label><%= t('Status (text or number)') %></label><select name="src_status" data-state-pick="status" data-current="<%= src.status || '' %>"><option value=""><%= t('— none —') %></option><% if (src.status) { %><option value="<%= src.status %>" selected><%= src.status %></option><% } %></select><p class="hint" data-status-hint style="margin:0.2rem 0 0;"></p></div>
       <div><label><%= t('Power') %></label><div style="display:flex; gap:0.3rem;"><select name="src_power" data-state-pick="power" data-current="<%= src.power || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.power) { %><option value="<%= src.power %>" selected><%= src.power %></option><% } %></select><select name="src_power_unit" style="width:6em;"><option value="W" <%= src.power_unit !== 'kW' ? 'selected' : '' %>>W</option><option value="kW" <%= src.power_unit === 'kW' ? 'selected' : '' %>>kW</option></select></div></div>
       <div><label><%= t('Temperature (room or tank)') %></label><select name="src_temp" data-state-pick="temp" data-current="<%= src.temp || '' %>"><option value=""><%= t('— none —') %></option><% if (src.temp) { %><option value="<%= src.temp %>" selected><%= src.temp %></option><% } %></select></div>
+      <div><label><%= t('Ready to start (1/0)') %></label><select name="src_ready" data-state-pick="ready" data-current="<%= src.ready || '' %>"><option value=""><%= t('— none —') %></option><% if (src.ready) { %><option value="<%= src.ready %>" selected><%= src.ready %></option><% } %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('Optional: Home Connect "remote start allowed". A status text like "Startklaar" works too.') %></p></div>
+      <div><label><%= t('Start in (scheduled start)') %></label><div style="display:flex; gap:0.3rem;"><select name="src_start_in" data-state-pick="startIn" data-current="<%= src.start_in || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.start_in) { %><option value="<%= src.start_in %>" selected><%= src.start_in %></option><% } %></select><select name="src_start_in_unit" style="width:6em;"><% [['h', 'h'], ['min', 'min'], ['s', 's']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= (src.start_in_unit || 'h') === v ? 'selected' : '' %>><%= lbl %></option><% }) %></select></div><p class="hint" style="margin:0.2rem 0 0;"><%= t('Optional: time until a delayed start (Home Connect). A status text like "Ingepland – start over 3 uur" works too.') %></p></div>
       <div><label><%= t('Energy counter') %></label><div style="display:flex; gap:0.3rem;"><select name="src_energy" data-state-pick="energy" data-current="<%= src.energy || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.energy) { %><option value="<%= src.energy %>" selected><%= src.energy %></option><% } %></select><select name="src_energy_unit" style="width:6.5em;"><option value="kWh" <%= src.energy_unit !== 'Wh' ? 'selected' : '' %>>kWh</option><option value="Wh" <%= src.energy_unit === 'Wh' ? 'selected' : '' %>>Wh</option></select></div></div>
     </div>
     <div class="form-grid" style="margin-top:0.4rem;">
-      <div style="grid-column:span 2;" data-status-map><label><%= t('Status values') %></label><textarea name="src_status_map" rows="3" placeholder="<%= t('0=Off, 1=Washing, 2=Spinning, 3=Done (one per line or comma)') %>"><%= src.status_map || '' %></textarea></div>
+      <div style="grid-column:span 2;" data-status-map><label><%= t('Status values') %></label><textarea name="src_status_map" rows="3" placeholder="<%= t('0=Off, 1=Washing, 2=Spinning, 3=Done (one per line or comma)') %>"><%= src.status_map || '' %></textarea>
+        <div class="btn-row" style="margin:0.25rem 0 0;"><button type="button" class="btn-soft" data-status-preset="homeconnect"><%= t('Fill in: Home Connect') %></button></div></div>
       <div><label><%= t('Values that mean running') %></label><input type="text" name="src_status_on" value="<%= src.status_on || '' %>" placeholder="1, 2"><p class="hint" style="margin:0.2rem 0 0;"><%= t('Empty: everything except off, idle, done, paused or waiting.') %></p>
         <% const seen = (typeof seenStatuses !== 'undefined' && l && seenStatuses[l.id]) || []; if (seen.length) { %><div class="hint" style="margin:0.3rem 0 0;"><%= t('Seen — tap what means running:') %><div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.2rem;"><% seen.forEach(x => { %><button type="button" class="chip" data-status-chip="<%= x.status %>" title="<%= x.hours %> h"><%= x.status %></button><% }) %></div></div><% } %></div>
     </div>
@@ -49,6 +52,11 @@
   <div class="form-grid" data-kind="appliance" data-for="<%= fid %>" style="margin-top:0.6rem;">
     <div><label><%= t('Typical power (kW)') %></label><input type="text" name="s_kw" value="<%= s.kw ?? kinds.appliance.defaults.kw %>"></div>
     <div><label><%= t('Look for a better start up to (h later)') %></label><input type="text" name="s_flex_h" value="<%= s.flex_h ?? 8 %>"></div>
+    <div><label><%= t('Start via LoxSuite') %></label><select name="s_start_mode"><% [['off', 'Off'], ['log', 'Log only (default)'], ['on', 'On — start in the best hour']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= (s.start_mode || 'log') === v ? 'selected' : '' %>><%= t(lbl) %></option><% }) %></select></div>
+    <div><label><%= t('Pause in between: at most (h, 0 = never)') %></label><input type="text" name="s_max_pause_h" value="<%= s.max_pause_h ?? 0 %>"></div>
+    <div data-show-if="!s_max_pause_h=0|"><label><%= t('Pauses per run (at most)') %></label><input type="text" name="s_max_pauses" value="<%= s.max_pauses ?? 2 %>"></div>
+    <div><label><%= t('When ready to start: done within (h)') %></label><input type="text" name="s_ready_within_h" value="<%= s.ready_within_h ?? '' %>" placeholder="<%= s.flex_h ?? 8 %>"></div>
+    <p class="hint" style="grid-column:1/-1; margin:0;"><%= t('When the machine is loaded and set to remote start, LoxSuite picks the cheapest / sunniest hour and — with Start via LoxSuite on — sends one pulse to the virtual input') %> <code><%= l ? (l.signals && (l.signals.find(x => x.key === 'start') || {}).vi) || 'LoxSuite_<name>_Start' : 'LoxSuite_<name>_Start' %></code><%= t(', only while the machine still says it is ready. In Loxone Config: that virtual input → the Home Connect block\'s input "Start geselecteerd programma"; status = "Bedrijfstoestand", ready to start = "Starten op afstand actief".') %> <%= t('With pausing allowed the run may be split over cheaper hours: _Pauze and _Verder (wire them to "Pause" and "Verder") — mind wet laundry in a paused washer and creases in a paused dryer.') %></p>
   </div>
   <p class="hint" style="margin:0.5rem 0 0.2rem;"><input type="hidden" name="s_use_patterns_sent" value="1"><label style="display:inline-flex; gap:0.3rem; font-weight:normal;"><input type="checkbox" name="s_use_patterns" value="1" <%= s.use_patterns !== false ? 'checked' : '' %>> <%= t('Use learned patterns') %></label> <%= t('(tap water hot before its usual use; an appliance\'s usual run gets a best start)') %></p>
   <p class="hint" style="margin:0.2rem 0 0.2rem;"><%= t('The kW is learned from the meter after a few days (tick to keep your own value):') %> <label style="display:inline-flex; gap:0.3rem; font-weight:normal;"><input type="checkbox" name="s_kw_fixed" value="1" <%= s.kw_fixed ? 'checked' : '' %>> <%= t('keep my kW') %></label></p>
@@ -86,11 +94,13 @@
   // block), and per field the kind of state that fits (status: a Status block's text; power: actual …).
   var nameIn = form.querySelector('input[name="name"]');
   var FIT = {
-    status: function (x) { return (x.type === 'TextState' && /^text/i.test(x.state || '')) ? 3 : /status|state|mode|program/i.test(x.state || '') ? 1 : 0; },
+    status: function (x) { var n = (x.state || '') + ' ' + (x.control || ''); return (x.type === 'TextState' && /^text/i.test(x.state || '')) || /bedrijfstoestand|operation ?state|betriebszustand/i.test(n) ? 3 : /status|state|mode|program/i.test(x.state || '') ? 1 : 0; },
     power: function (x) { return /^(actual|power|p|value)$/i.test(x.state || '') ? 2 : 0; },
     energy: function (x) { return /^(total|energy|e)$/i.test(x.state || '') ? 2 : 0; },
     onoff: function (x) { return /^(active|on|value|state)$/i.test(x.state || '') ? 1 : 0; },
     temp: function (x) { return /temp/i.test(x.state || '') ? 2 : 0; },
+    ready: function (x) { return /op afstand|remote|ready|allowed|startklaar|gereed|fernstart/i.test((x.state || '') + ' ' + (x.control || '')) ? 2 : 0; },
+    startIn: function (x) { var n = (x.state || '') + ' ' + (x.control || ''); return /resterende|remaining|restzeit|voortgang|progress/i.test(n) ? 0 : /start ?in|starttijd|start time|delay|uitstel|verzögert/i.test(n) ? 2 : 0; },
   };
   function nameScore(x) {
     var words = String((nameIn && nameIn.value) || '').toLowerCase().split(/[\s\-_/]+/).filter(function (w) { return w.length >= 3; });
@@ -109,8 +119,8 @@
         .sort(function (a, b) { return b.s - a.s; }).map(function (o) { return o.x; }).slice(0, 400);
       // nothing chosen yet: the one state that clearly is this consumer's status is suggested
       var suggested = null;
-      if (!cur && !p.dataset.touched && role === 'status') {
-        var hits = list.filter(function (x) { return nameScore(x) && fit(x) === 3; });
+      if (!cur && !p.dataset.touched && (role === 'status' || role === 'ready')) {
+        var hits = list.filter(function (x) { return nameScore(x) && fit(x) >= (role === 'status' ? 3 : 2); });
         if (hits.length === 1) { suggested = hits[0]; cur = suggested.uuid; }
       }
       var none = p.options[0] ? p.options[0].textContent : '—';
@@ -137,7 +147,18 @@
     var hint = form.querySelector('[data-status-hint]'), map = form.querySelector('[data-status-map]');
     if (hint) hint.textContent = !x ? '' : (suggested ? TLs('Suggested from the name.') + ' ' : '') + (isText ? TLs('Text status: used as it is, no values needed.') : '');
     if (map) map.style.display = isText ? 'none' : '';
+    // a Home Connect operation state: fill in its values when none are there yet
+    if (x && !isText && /home ?connect|operation ?state|operationstate|betriebszustand|bedrijfstoestand/i.test((x.type || '') + ' ' + (x.state || '') + ' ' + (x.control || ''))) fillHomeConnect(false);
   }
+  // Home Connect's operation state: the values filled in with one tap (or by themselves, see statusHint)
+  var HC = <%- JSON.stringify(typeof homeConnect !== 'undefined' && homeConnect ? homeConnect : { map: '', on: '' }) %>, HC_MAP = HC.map, HC_ON = HC.on;
+  function fillHomeConnect(force) {
+    var ta = form.querySelector('[name="src_status_map"]'), on = form.querySelector('[name="src_status_on"]');
+    if (!ta || (!force && ta.value.trim())) return;
+    ta.value = HC_MAP; if (on && (force || !on.value.trim())) on.value = HC_ON;
+  }
+  var hcBtn = form.querySelector('[data-status-preset="homeconnect"]');
+  if (hcBtn) hcBtn.addEventListener('click', function () { fillHomeConnect(true); });
   function TLs(k) { return (window.LS_I18N && window.LS_I18N[k]) || k; }
   Array.prototype.forEach.call(picks, function (p) { p.addEventListener('change', function () { p.dataset.touched = '1'; if (p.getAttribute('data-state-pick') === 'status') statusHint(p, null); }); });
   if (nameIn) nameIn.addEventListener('change', function () {

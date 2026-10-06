@@ -9,9 +9,23 @@
   <p class="hint" id="el-weather" style="margin:0.7rem 0 0;"></p>
   <p class="hint" style="margin:0.6rem 0 0;">
     <%= t('Signals:') %>
-    <%= [load.meter_uuid ? t('Loxone meter') : null, src.onoff ? t('on/off') : null, src.status ? t('status') : null, src.power ? t('power') : null, src.energy ? t('energy counter') : null, src.temp ? t('temperature') : null].filter(Boolean).join(' · ') || t('none yet — add them under Consumers') %>
+    <%= [load.meter_uuid ? t('Loxone meter') : null, src.onoff ? t('on/off') : null, src.status ? t('status') : null, src.power ? t('power') : null, src.energy ? t('energy counter') : null, src.temp ? t('temperature') : null, src.startIn ? t('scheduled start') : null, src.ready ? t('ready to start') : null].filter(Boolean).join(' · ') || t('none yet — add them under Consumers') %>
   </p>
 </div>
+
+<% if (canEdit('energy_manager')) { %>
+<div class="card" data-card-key="history">
+  <h2 style="margin-top:0;"><%= t('History from Loxone') %></h2>
+  <p class="hint" style="margin:-0.4rem 0 0.6rem;"><%= t('Reads the kWh per hour from the Miniserver\'s own statistics (its meter block) and learns from it straight away — for an appliance its runs as well. Hours LoxSuite measured itself are kept.') %></p>
+  <% if (!load.meter_uuid) { %><p class="hint" style="margin:0;"><%= t('Choose a Loxone meter for this consumer first (Administration → Energy & charging → Energy manager).') %></p><% } else { %>
+  <div class="btn-row" style="margin:0; align-items:flex-end;">
+    <div><label><%= t('Period') %></label><select id="el-import-days"><option value="7"><%= t('last 7 days') %></option><option value="30" selected><%= t('last 30 days') %></option><option value="90"><%= t('last 3 months') %></option><option value="365"><%= t('last year') %></option></select></div>
+    <button type="button" class="btn-soft" id="el-import"><%= t('Read from Loxone') %></button>
+  </div>
+  <p class="hint" id="el-import-msg" style="margin:0.4rem 0 0;"></p>
+  <% } %>
+</div>
+<% } %>
 
 <div class="card">
   <h2 style="margin-top:0;"><%= t('Last 48 hours') %></h2>
@@ -54,6 +68,8 @@
   var colorOf = {};
   function color(key) {
     if (/^(off|uit|0)$/i.test(key)) return '#9aa5b1';
+    // not running (done, paused, waiting …): a lighter grey, the running statuses get the colours
+    if (/(^|[^a-zà-ÿ])(uitgeschakeld|klaar|gereed|beëindigd|beeindigd|einde|afgelopen|finished|done|ready|pauze|gepauzeerd|paused|uitgesteld|uitgestelde|delayed|wacht|wachten|waiting|stand-?by|idle|offline)($|[^a-zà-ÿ])/i.test(key)) return '#c3cad3';
     if (!colorOf[key]) colorOf[key] = PALETTE[Object.keys(colorOf).length % PALETTE.length];
     return colorOf[key];
   }
@@ -71,6 +87,8 @@
       state = '<span class="ls-dot" style="background:' + color(now.status != null ? txt : (now.on ? 'on' : 'off')) + ';"></span>' + esc(txt);
     }
     var since = now && now.since ? TL('in this state for {0}').replace('{0}', dur((Date.now() - now.since) / 60000)) : '';
+    if (now && now.readyToStart) since = TL('ready to start — LoxSuite picks the best hour') + (since ? ' · ' + since : '');
+    if (now && now.startAt && now.startAt > Date.now() - 15 * 60000) since = TL('starts at ~{0} (in {1})').replace('{0}', hh(now.startAt)).replace('{1}', dur(Math.max(0, now.startAt - Date.now()) / 60000)) + (since ? ' · ' + since : '');
     document.getElementById('el-tiles').innerHTML =
       tile(TL('State now'), state, since) +
       tile(TL('Power now'), now && now.kw != null ? nf(now.kw, 2) + ' <small>kW</small>' : '—', now && now.total != null ? TL('counter {0} kWh').replace('{0}', nf(now.total, 1)) : '') +
@@ -141,6 +159,19 @@
   }
   render();
   lsOnResize(render);
+  var imp = document.getElementById('el-import');
+  if (imp) imp.addEventListener('click', function () {
+    var msg = document.getElementById('el-import-msg');
+    imp.disabled = true; msg.textContent = TL('Reading…');
+    fetch('/energy-manager/loads/' + ID + '/import.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days: Number(document.getElementById('el-import-days').value) }) })
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        var x = r.ok && r.report[0];
+        msg.textContent = !r.ok ? r.message : !x ? '' : !x.ok ? x.message : TL('{0} hours read, {1} runs found — reload the page for what it learned.').replace('{0}', x.hours).replace('{1}', x.runs || 0);
+      })
+      .catch(function (e) { msg.textContent = e.message; })
+      .finally(function () { imp.disabled = false; });
+  });
   setInterval(function () { fetch('/energy-manager/loads/' + ID + '/detail.json').then(function (r) { return r.json(); }).then(function (d) { if (d.detail) { data = d; render(); } }).catch(function () {}); }, 60000);
 })();
 </script>

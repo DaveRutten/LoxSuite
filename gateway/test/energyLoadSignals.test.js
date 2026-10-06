@@ -48,6 +48,12 @@ test('text status (Loxone Status block): name and countdown left off, off-words 
   assert.equal(off.label, 'Uitgeschakeld'); assert.equal(off.on, false);
   const on = em.loadState({ raw: { status: 'Wasmachine wassen - nog 45 min' }, src, name: 'Wasmachine' });
   assert.equal(on.status, 'Wassen'); assert.equal(on.on, true);
+  // "Uitgeschakeld" is just off: booked with the on/off signal's off, also older rows in the summary
+  assert.equal(em.statusKey(off), 'off');
+  assert.equal(em.statusKey(on), 'Wassen');
+  const sum = em.statusSummary([{ status: 'off', minutes: 60, kwh: 0 }, { status: 'Uitgeschakeld', minutes: 30, kwh: 0 }, { status: 'Klaar', minutes: 10, kwh: 0 }], 1);
+  assert.deepEqual(sum.map((x) => x.status), ['off', 'Klaar']);
+  assert.equal(sum[0].hours, 1.5);
   // numeric status with a label "Done" is not running either
   assert.equal(em.loadState({ raw: { status: 3 }, src: SRC({ status: 'u', status_map: '3=Done' }) }).on, false);
 });
@@ -71,8 +77,8 @@ test('per status: hours, kWh and the typical kW only from measured kWh', () => {
   const by = Object.fromEntries(s.map((x) => [x.status, x]));
   assert.equal(by.Washing.kw, 1.8);
   assert.equal(by.Spinning.kw, 0.4);
-  assert.equal(by.Off.kw, null);
-  assert.equal(s[0].status, 'Off'); // longest first
+  assert.equal(by.off.kw, null); // "Off" is booked as off
+  assert.equal(s[0].status, 'off'); // longest first
 });
 
 test('timeline: changes become segments, equal neighbours merged', () => {
@@ -120,4 +126,69 @@ test('sampling: minutes per status, estimated kWh from on × kW, change events a
   const detail = await em.loadDetail((await em.listLoads()).find((l) => l.id === loadId), t0 + 9 * 60000);
   assert.ok(detail.timeline.length >= 3);
   assert.equal(detail.perStatus.find((x) => x.status === 'Washing').hours, 0.05);
+});
+
+test('scheduled start (Home Connect): from the status text or a "start in" signal, counted as not running', () => {
+  const now = Date.parse('2026-10-06T12:00:00Z');
+  assert.deepEqual(em.scheduledFromText('Droger ingepland', now), { scheduled: true, startMs: null });
+  assert.equal(em.scheduledFromText('Ingepland - start over 3 uur', now).startMs, now + 3 * 3600000);
+  assert.equal(em.scheduledFromText('Uitgestelde start, over 2 uur 30 min', now).startMs, now + 150 * 60000);
+  assert.equal(em.scheduledFromText('Start over 1:15', now).startMs, now + 75 * 60000);
+  assert.equal(em.scheduledFromText('Wasmachine wassen', now).scheduled, false);
+  assert.equal(em.isOffText('Ingepland'), true);
+  // a "start in" signal (hours) wins
+  const st = em.loadState({ raw: { status: 'Wasmachine ingepland', startIn: 4 }, src: SRC({ status: 'u', start_in: 'u2' }), name: 'Wasmachine', nowMs: now });
+  assert.equal(st.on, false); assert.equal(st.startAt, now + 4 * 3600000);
+  // without the signal: the text's time
+  const st2 = em.loadState({ raw: { status: 'Ingepland - start over 45 min' }, src: SRC({ status: 'u' }), nowMs: now });
+  assert.equal(st2.startAt, now + 45 * 60000);
+});
+
+test('history: runs from imported kWh per hour (stand-by left out)', () => {
+  const h = (i, kwh) => ({ hour: new Date(Date.parse('2026-10-01T08:00:00Z') + i * 3600000).toISOString(), kwh });
+  const runs = em.runsFromHourly([h(0, 0.01), h(1, 0.9), h(2, 1.1), h(3, 0.02), h(5, 0.06), h(8, 1.5)]);
+  assert.equal(runs.length, 2);
+  assert.equal(runs[0].start_at, '2026-10-01T09:00:00.000Z'); assert.equal(runs[0].end_at, '2026-10-01T11:00:00.000Z'); assert.equal(runs[0].kwh, 2);
+  assert.equal(runs[1].kwh, 1.5);
+});
+
+test('Home Connect operation state: running only while the program runs, Gereed = ready to start, Inactief = off', () => {
+  const now = Date.parse('2026-10-06T12:00:00Z');
+  const src = SRC({ status: 'u', status_map: em.HOME_CONNECT_STATUS, status_on: em.HOME_CONNECT_RUNNING });
+  const at = (v, extra = {}) => em.loadState({ raw: { status: v, ...extra }, src: extra.src || src, nowMs: now });
+  assert.equal(at(3).on, true); assert.equal(at(3).label, 'Programma loopt');
+  for (const v of [0, 1, 2, 4, 5, 6, 7, 8]) assert.equal(at(v).on, false, String(v));
+  assert.equal(em.statusKey(at(0)), 'off');
+  assert.equal(at(1).readyToStart, true);
+  assert.equal(at(3).readyToStart, false);
+  assert.equal(at(6).readyToStart, false);
+  // delayed start with a "start in" signal: scheduled, not ready (it starts by itself)
+  const d = em.loadState({ raw: { status: 2, startIn: 3 }, src: SRC({ status: 'u', status_map: em.HOME_CONNECT_STATUS, status_on: '3', start_in: 'u2' }), nowMs: now });
+  assert.equal(d.startAt, now + 3 * 3600000); assert.equal(d.readyToStart, false);
+  // without a numbered list nothing is "running" by mistake: voltooid/fout/actie vereist are not running
+  for (const t of ['Programma voltooid', 'Fout', 'Actie vereist', 'Programma afgebroken', 'Inactief']) assert.equal(em.isOffText(t), true, t);
+  // a ready signal of its own wins
+  assert.equal(em.loadState({ raw: { status: 0, ready: 1 }, src: SRC({ status: 'u', ready: 'r' }), nowMs: now }).readyToStart, true);
+});
+
+test('appliance in steps: cheapest hours with pauses of at most maxGapH, one block when pausing is off', () => {
+  const t0 = Date.parse('2026-10-06T10:00:00Z');
+  const prices = [0.30, 0.10, 0.40, 0.40, 0.12, 0.50, 0.11, 0.60];
+  const H = prices.map((p, i) => ({ ms: t0 + i * 3600000, price: p }));
+  const costOf = (i) => prices[i];
+  // no pausing: the cheapest 2 hours in a row
+  const one = em.bestSteps(H, { dur: 2, readyBy: t0 + 8 * 3600000, costOf });
+  assert.deepEqual(one.idx, [0, 1]); assert.equal(one.pauses, 0);
+  // pauses up to 2 h: 10:00-ish cheap hour 1, then 4 (gap 2 h), then 6 (gap 1 h)
+  const steps = em.bestSteps(H, { dur: 3, readyBy: t0 + 8 * 3600000, maxGapH: 2, maxPauses: 2, costOf });
+  assert.deepEqual(steps.idx, [1, 4, 6]); assert.equal(steps.pauses, 2);
+  // at most one pause
+  const onePause = em.bestSteps(H, { dur: 3, readyBy: t0 + 8 * 3600000, maxGapH: 2, maxPauses: 1, costOf });
+  assert.equal(onePause.pauses <= 1, true);
+  // gap of 3 h never allowed with maxGapH 2
+  for (const r of [steps, onePause]) for (let k = 1; k < r.idx.length; k++) assert.ok(r.idx[k] - r.idx[k - 1] - 1 <= 2);
+  // must be done by readyBy
+  const early = em.bestSteps(H, { dur: 2, readyBy: t0 + 3 * 3600000, maxGapH: 2, maxPauses: 2, costOf });
+  assert.ok(early.idx.every((i) => i < 3));
+  assert.equal(em.bestSteps(H, { dur: 9, readyBy: t0 + 8 * 3600000, costOf }), null);
 });

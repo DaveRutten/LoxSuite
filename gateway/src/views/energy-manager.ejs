@@ -52,6 +52,7 @@
     var dot = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; background:' + (lv.on ? 'var(--success, #4caf50)' : '#9aa5b1') + ';"></span>';
     var txt = lv.status != null ? (lv.label || lv.status) : (lv.on ? 'on' : 'off');
     var mins = lv.since ? Math.round((Date.now() - lv.since) / 60000) : null;
+    if (lv.startAt && lv.startAt > Date.now() - 15 * 60000) return dot + '<strong>' + esc(txt) + '</strong><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(TLx('starts at ~{0}').replace('{0}', hh(lv.startAt).slice(0, 5))) + '</div>';
     return dot + '<strong>' + esc(txt) + '</strong>' + (mins != null ? '<div class="hint" style="margin:0; font-size:0.75rem;">' + esc((window.LS_I18N && window.LS_I18N['in this state for {0}'] || 'in this state for {0}').replace('{0}', mins >= 60 ? Math.floor(mins / 60) + ' h ' + String(mins % 60).padStart(2, '0') : mins + ' min')) + '</div>' : '');
   }
   // the weather side: kWh against the temperature, and how fast the room / tank cools down

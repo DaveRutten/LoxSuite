@@ -72,7 +72,7 @@ async function energyManagerData(req) {
   try { meters = (await require('../energyMeters').candidateMeters()).filter((m) => m.type === 'Meter'); } catch { meters = []; }
   return {
     emLoads: loads.map((l) => ({ ...l, signals: (em.KINDS[l.kind]?.signals || []).map((x) => ({ ...x, vi: em.viName(l, x) })) })),
-    emKinds: em.KINDS, emMeters: meters, emCfg: await em.getConfig(),
+    emKinds: em.KINDS, emMeters: meters, emCfg: await em.getConfig(), homeConnect: { map: em.HOME_CONNECT_STATUS, on: em.HOME_CONNECT_RUNNING },
     seenStatuses: Object.fromEntries(await Promise.all(loads.map(async (l) => [l.id, await em.seenStatuses(l.id).catch(() => [])]))),
   };
 }

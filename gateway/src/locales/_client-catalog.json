@@ -964,6 +964,13 @@
   ]
  },
  {
+  "key": "{0} hours read, {1} runs found — reload the page for what it learned.",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
+  ]
+ },
+ {
   "key": "{0} in this backup doesn't look like a Mosquitto dynamic-security file.",
   "module": "core",
   "where": [
@@ -2853,6 +2860,13 @@
  },
  {
   "key": "best start for the {0}",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
+  ]
+ },
+ {
+  "key": "best start for the waiting run (ready by {0})",
   "module": "energy_manager",
   "where": [
    "src/energyManager.js"
@@ -5893,7 +5907,14 @@
   ]
  },
  {
-  "key": "Home Connect pause",
+  "key": "Home Connect pause (only when pausing is allowed)",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
+  ]
+ },
+ {
+  "key": "Home Connect resume (\"Verder\")",
   "module": "energy_manager",
   "where": [
    "src/energyManager.js"
@@ -6933,6 +6954,13 @@
   "module": "core",
   "where": [
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "Log only (default)",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form"
   ]
  },
  {
@@ -8484,6 +8512,13 @@
   ]
  },
  {
+  "key": "No Miniserver for this consumer.",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
+  ]
+ },
+ {
   "key": "No Miniserver is connected to this conversation — you can only chat, not read or control anything.",
   "module": "ai",
   "where": [
@@ -9213,10 +9248,10 @@
   "module": "monitor",
   "where": [
    "monitor",
+   "partials/energy-load-form",
    "planner",
    "planner (script)",
-   "public/mappings-loxone-to-mqtt-tabulator.js",
-   "public/mappings-mqtt-to-loxone-tabulator.js"
+   "public/mappings-loxone-to-mqtt-tabulator.js"
   ]
  },
  {
@@ -9302,6 +9337,13 @@
   "module": "mqtt",
   "where": [
    "public/mappings-loxone-to-mqtt-tabulator.js"
+  ]
+ },
+ {
+  "key": "On — start in the best hour",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form"
   ]
  },
  {
@@ -9598,6 +9640,13 @@
   "module": "core",
   "where": [
    "partials/foot (script)"
+  ]
+ },
+ {
+  "key": "paused: cheaper to go on at {0}",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
   ]
  },
  {
@@ -10162,9 +10211,17 @@
  },
  {
   "key": "Reading…",
-  "module": "core",
+  "module": "energy",
   "where": [
+   "energy-load (script)",
    "partials/vehicle-fields (script)"
+  ]
+ },
+ {
+  "key": "ready",
+  "module": "energy_manager",
+  "where": [
+   "partials/energy-load-form (script)"
   ]
  },
  {
@@ -10212,6 +10269,20 @@
   "module": "charging",
   "where": [
    "planner (script)"
+  ]
+ },
+ {
+  "key": "ready to start",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
+  ]
+ },
+ {
+  "key": "ready to start — LoxSuite picks the best hour",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
   ]
  },
  {
@@ -10573,6 +10644,13 @@
   ]
  },
  {
+  "key": "run in progress",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
+  ]
+ },
+ {
   "key": "running",
   "module": "energy_manager",
   "where": [
@@ -10748,6 +10826,20 @@
   "where": [
    "src/backup.js",
    "src/notifications.js"
+  ]
+ },
+ {
+  "key": "scheduled on the appliance",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
+  ]
+ },
+ {
+  "key": "scheduled on the appliance (start ~{0})",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
   ]
  },
  {
@@ -11451,6 +11543,20 @@
   "module": "charging",
   "where": [
    "agenda (script)"
+  ]
+ },
+ {
+  "key": "starts at ~{0}",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
+  "key": "starts at ~{0} (in {1})",
+  "module": "energy",
+  "where": [
+   "energy-load (script)"
   ]
  },
  {
@@ -13325,6 +13431,13 @@
   "module": "monitor",
   "where": [
    "src/dashboardSuggestions.js"
+  ]
+ },
+ {
+  "key": "Verder",
+  "module": "energy_manager",
+  "where": [
+   "src/energyManager.js"
   ]
  },
  {

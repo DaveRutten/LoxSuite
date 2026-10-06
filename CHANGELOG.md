@@ -2,6 +2,44 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.44.0-alpha.1] - 2026-10-06
+
+### Added
+- **History from Loxone per consumer** (reported: the dryer had nothing to learn from yet): on a consumer's
+  page *History from Loxone* reads the kWh per hour from the Miniserver's own statistics (its meter block) for
+  the last 7 days, 30 days, 3 months or a year, and learns from it straight away — for an appliance its runs
+  are derived from the hours as well (hours in a row above stand-by), so its usual times and kWh per run are
+  known at once. Hours and runs LoxSuite measured itself are kept. The overview's import goes up to a year too.
+- **Scheduled start (Home Connect)**: a washer or dryer that is *scheduled* ("Ingepland", "Uitgestelde
+  start") waits — not running — and when LoxSuite knows when it starts, that run is planned in: its kWh go in
+  that hour, and no usual run or best start is planned besides it. The start comes from a new optional
+  signal *Start in* (h / min / s — Home Connect's time until a delayed start) or from the status text itself
+  ("start over 3 uur", "start om 14:30"). The consumer's page and the overview show "starts at ~14:30".
+
+- **Start a washer or dryer in the best hour (Home Connect)**: when the machine is loaded and set to remote
+  start (Home Connect *Starten op afstand actief*, a new optional signal *Ready to start*, or a status
+  *Gereed* / "Startklaar"), the energy manager plans the cheapest / sunniest start within *done within* hours
+  (default: the appliance's *look for a better start*). Per appliance **Start via LoxSuite**: *off*, *log only*
+  (default — it writes down when it would have started) or *on* — then, in the planned hour and only while the
+  machine still says it is ready, one pulse on the virtual input `LoxSuite_<name>_Start` (wire it to the
+  Home Connect block's *Start geselecteerd programma*), at most once per 30 minutes, in the system log.
+- **A run in steps (optional)**: per appliance *Pause in between: at most (h)* (default 0 = never) and
+  *pauses per run*. With pausing allowed the run may be split over cheaper hours with gaps of at most that
+  long: a pulse on `LoxSuite_<name>_Pauze` at the start of a gap and on `LoxSuite_<name>_Verder` at the next
+  step (wire them to the Home Connect block's *Pause* and *Verder*). It only pauses while the machine runs,
+  always resumes once a pause has lasted its maximum (+15 min), and keeps a started run's hours — a re-plan
+  doesn't move a running wash. Mind wet laundry in a paused washer and creases in a paused dryer.
+- **Home Connect's operation state** (*Bedrijfstoestand*, 0–8): *Fill in: Home Connect* fills the values in
+  (and does so by itself for a state that looks like it), with 3 *Programma loopt* as running; *Inactief* is
+  off, *Gereed* is ready to start, *Uitgestelde start* is scheduled; finished, error, aborted, action required
+  and paused are not running. The pickers find *Bedrijfstoestand* and *Starten op afstand actief* by name.
+
+### Changed
+- **"Uitgeschakeld" is off**: words that just mean off ("Uitgeschakeld", "Off", "Stand-by") are booked as
+  *off*, the same as the on/off signal's off — also the hours already booked apart. Done, paused, waiting or
+  scheduled stay their own status in a light grey; the running statuses (Drogen, Kreukbescherming …) get the
+  colours.
+
 ## [0.43.2-alpha.1] - 2026-10-06
 
 ### Changed

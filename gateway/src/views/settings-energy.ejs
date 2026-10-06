@@ -352,13 +352,13 @@
   <% emLoads.forEach(l => { %>
     <details>
       <summary><strong><%= l.name %></strong> <span class="hint">· <%= t(emKinds[l.kind].label) %> <%= t('· priority') %> <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
-      <%- include('partials/energy-load-form', { l, kinds: emKinds, meters: emMeters, miniservers, seenStatuses }) %>
+      <%- include('partials/energy-load-form', { l, kinds: emKinds, meters: emMeters, miniservers, seenStatuses, homeConnect }) %>
       <form method="post" action="/energy-manager/loads/<%= l.id %>/delete" style="margin-top:0.6rem;" onsubmit="return confirm(<%= JSON.stringify(t('Delete {name} and its history?', { name: l.name })) %>);"><button type="submit" class="danger"><%- icon('trash') %> <%= t('Delete') %></button></form>
     </details>
   <% }) %>
   <details <%= emLoads.length ? '' : 'open' %>>
     <summary><strong><%= t('+ Add a consumer') %></strong></summary>
-    <%- include('partials/energy-load-form', { l: null, kinds: emKinds, meters: emMeters, miniservers }) %>
+    <%- include('partials/energy-load-form', { l: null, kinds: emKinds, meters: emMeters, miniservers, homeConnect }) %>
   </details>
   </div>
   <h3 class="subhead"><%= t('The car among the consumers') %></h3>
