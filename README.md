@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.47.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.48.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -710,11 +710,17 @@ charging page itself is the overview.
   moment, or a fixed feed-in tariff), grid energy at the all-in price; the cheapest intervals win. For a plug-in
   hybrid intervals above the fuel break-even price (fuel price x l/100 km vs kWh/km) are skipped. Every planned
   interval shows its solar and grid part (e.g. *11.0 kWh (2.9 ☀️ + 8.1 ⚡)*), also in the chart.
-- **The chart**: price per interval with the planned ones, the expected solar surplus and import from the grid,
-  and the **expected battery level** (%) — up while charging, down during the drives in the agenda (or the
-  usual drive of that day), with the level at the start, when it has to be ready and after each drive. A tick
-  every hour, the days below it, a *now* line; **tap a bar** for that interval: its price (per quarter), what is
+- **The chart**: four panels over one time axis, each with its own scale — **price** (the planned intervals in
+  green, cheaper = lighter), **charging** (kW, the solar part yellow), the **expected battery level** (%; up while
+  charging, down during the drives in the agenda or the usual drive of that day, with the level at the start,
+  when it has to be ready and around each drive) and **solar surplus with the import from the grid** (kW). Soft
+  fills, smooth lines with a light wash, a tick every hour, the days below, *now*, *ready by* and *expected home*
+  over all panels. Point at an hour for a summary, **tap** it for the details: its price (per quarter), what is
   planned (kWh, kW, solar part), solar and house, import from the grid, what it costs and the battery after it.
+- **Consumption**: what the car's own electric range says (its energy for the km it shows — that follows the
+  weather), before what LoxSuite learned over time; your own kWh/km in the vehicle settings goes before both.
+  While the car is out on a drive from the agenda, what is left of that drive counts (its km minus what the
+  odometer counted since it left) instead of the usual km of the day.
 - **Full and ready**: plugged in before a trip, only the trip + reserve has to be in before leaving; the trip's
   own kWh come out of the battery, so after it is back the car is charged **full again before it is needed
   next** (its next departure in the agenda or the learned one) — in the cheapest hours it is home, never while

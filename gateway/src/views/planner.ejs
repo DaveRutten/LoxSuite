@@ -44,11 +44,24 @@
   <% } %>
   <div id="pl-plan" style="margin-top:1rem;"></div>
   <div style="margin-top:1rem;">
-    <div class="hint" style="margin:0 0 0.2rem; font-size:0.8rem;"><%= t('Price per interval (all-in) —') %> <span style="color:var(--accent); font-weight:700;">■</span> <%= t('planned') %> &nbsp;<span style="color:#d4a017; font-weight:700;">━</span> <%= t('expected solar surplus (kW)') %> &nbsp;<span style="color:#e5534b; font-weight:700;">┆</span> <%= t('ready by') %> &nbsp;<span style="color:#d4a017; font-weight:700;">■</span> <%= t('solar part') %> &nbsp;<span style="color:#3b82f6; font-weight:700;">┆</span> <%= t('expected home') %> &nbsp;<span style="color:var(--accent); font-weight:700;">⬚</span> <%= t('if it came home now') %> &nbsp;<span style="color:#e0794f; font-weight:700;">┅</span> <%= t('expected import from the grid (kW)') %> &nbsp;<span style="display:inline-block; width:0.9em; height:0.8em; vertical-align:-0.05em; background:repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 5px); opacity:0.45;"></span> <%= t('no price (yet)') %> &nbsp;<span style="color:#8b5cf6; font-weight:700;">━</span> <%= t('battery (expected, %)') %> &nbsp;<span style="font-weight:700;">│</span> <%= t('now') %> · <%= t('Tap a bar for the details.') %></div>
+    <div class="hint" style="margin:0 0 0.3rem; font-size:0.8rem;"><span style="font-weight:700;">│</span> <%= t('now') %> &nbsp;<span style="color:#e5534b; font-weight:700;">│</span> <%= t('ready by') %> &nbsp;<span style="font-weight:700; opacity:0.6;">│</span> <%= t('expected home') %> &nbsp;<span style="color:var(--accent); font-weight:700;">⬚</span> <%= t('if it came home now') %> &nbsp;<span style="display:inline-block; width:0.9em; height:0.8em; vertical-align:-0.05em; background:repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 5px); opacity:0.45;"></span> <%= t('no price (yet)') %> · <%= t('Point at or tap an hour for the details.') %></div>
     <div id="pl-chart"></div>
     <div id="pl-detail"></div>
   </div>
 </div>
+
+<style>
+  /* chart colors (validated as pairs per panel, light and dark): price, solar, import, battery, ready by */
+  #pl-chart { position:relative; --pl-price:#9aa5b1; --pl-solar:#d4a017; --pl-import:#4a7bd0; --pl-battery:#7b6fd6; --pl-ready:#e5534b; }
+  @media (prefers-color-scheme: dark) { #pl-chart { --pl-price:#7d8794; --pl-solar:#c08a10; --pl-import:#5b8be0; --pl-battery:#8577e0; --pl-ready:#e5675f; } }
+  :root[data-theme="light"] #pl-chart { --pl-price:#9aa5b1; --pl-solar:#d4a017; --pl-import:#4a7bd0; --pl-battery:#7b6fd6; --pl-ready:#e5534b; }
+  :root[data-theme="dark"] #pl-chart { --pl-price:#7d8794; --pl-solar:#c08a10; --pl-import:#5b8be0; --pl-battery:#8577e0; --pl-ready:#e5675f; }
+  .pl-tip { position:absolute; z-index:5; pointer-events:none; min-width:150px; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:10px; background:var(--surface, #fff); box-shadow:0 6px 18px rgba(0,0,0,0.12); font-size:0.78rem; line-height:1.35; }
+  .pl-tip > div { display:flex; justify-content:space-between; gap:0.8rem; }
+  .pl-tip > div strong { order:2; font-variant-numeric:tabular-nums; }
+  .pl-tip > div span { opacity:0.7; }
+  .pl-tip .pl-tip-h { font-weight:600; margin-bottom:0.15rem; }
+</style>
 
 <p class="hint" data-hint-keep><%= t('Charging, the output to Loxone (advise or live) and reminders are set under') %> <a href="/settings/energy#charging"><%= t('Administration → Energy & charging') %></a>.</p>
 
@@ -229,50 +242,98 @@
       '</div>';
     return '<div class="card" style="margin:0.6rem 0 0; padding:0.7rem 0.9rem;"><div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;"><strong>' + esc(day + ' ' + tm(s.start) + '–' + tm(s.end)) + '</strong><a href="#" class="hint" id="pl-detail-close" style="margin:0;">' + esc(T('Close')) + '</a></div>' + tiles + '</div>';
   }
+  // Pure: a smooth path through [[x, y], …] that never overshoots (monotone cubic, Fritsch–Carlson): the
+  // curve stays between neighbouring values, so the battery never shows above 100% or below empty.
+  function smoothPath(pts) {
+    var n = pts.length;
+    var f = function (v) { return v.toFixed(1); };
+    if (!n) return '';
+    if (n < 3) return 'M' + pts.map(function (q) { return f(q[0]) + ',' + f(q[1]); }).join('L');
+    var dx = [], m = [], t = [];
+    for (var i = 0; i < n - 1; i++) { dx[i] = pts[i + 1][0] - pts[i][0]; m[i] = dx[i] ? (pts[i + 1][1] - pts[i][1]) / dx[i] : 0; }
+    t[0] = m[0]; t[n - 1] = m[n - 2];
+    for (var j = 1; j < n - 1; j++) t[j] = m[j - 1] * m[j] <= 0 ? 0 : (m[j - 1] + m[j]) / 2;
+    for (var k = 0; k < n - 1; k++) {
+      if (m[k] === 0) { t[k] = 0; t[k + 1] = 0; continue; }
+      var a = t[k] / m[k], b = t[k + 1] / m[k], h = a * a + b * b;
+      if (h > 9) { var sc = 3 / Math.sqrt(h); t[k] = sc * a * m[k]; t[k + 1] = sc * b * m[k]; }
+    }
+    var d = 'M' + f(pts[0][0]) + ',' + f(pts[0][1]);
+    for (var q = 0; q < n - 1; q++) {
+      var h3 = dx[q] / 3;
+      d += 'C' + f(pts[q][0] + h3) + ',' + f(pts[q][1] + t[q] * h3) + ' ' + f(pts[q + 1][0] - h3) + ',' + f(pts[q + 1][1] - t[q + 1] * h3) + ' ' + f(pts[q + 1][0]) + ',' + f(pts[q + 1][1]);
+    }
+    return d;
+  }
+  // A column with a 4px rounded top, square at the baseline.
+  function barPath(x, y, w, h) {
+    var r = Math.max(0, Math.min(4, w / 2, h)), f = function (v) { return v.toFixed(1); };
+    return 'M' + f(x) + ',' + f(y + h) + 'V' + f(y + r) + 'Q' + f(x) + ',' + f(y) + ' ' + f(x + r) + ',' + f(y) + 'H' + f(x + w - r) + 'Q' + f(x + w) + ',' + f(y) + ' ' + f(x + w) + ',' + f(y + r) + 'V' + f(y + h) + 'Z';
+  }
+  // Planned kWh (and its solar part) inside [a, b).
+  function plannedIn(p, a, b) {
+    var kwh = 0, pv = 0, kw = 0;
+    p.slots.forEach(function (q) {
+      var qa = Date.parse(q.start), qb = Date.parse(q.end), ov = Math.min(b, qb) - Math.max(a, qa);
+      if (ov <= 0 || qb <= qa) return;
+      kwh += (q.kwh || 0) * ov / (qb - qa); pv += (q.pvKwh || 0) * ov / (qb - qa); kw = Math.max(kw, q.kw || 0);
+    });
+    return { kwh: kwh, pv: pv, kw: kw };
+  }
+
+  // The chart: four panels over one time axis, each with its own scale (no second axis on one plot) —
+  // price (planned hours in green), charging (kW, the solar part yellow), the expected battery level and
+  // the solar surplus with the import from the grid. Soft fills, smooth lines, hairline grid. Point at
+  // an hour for a summary, tap it for the details below.
   function renderChart(p) {
     chartPlan = p;
     var el = document.getElementById('pl-chart');
     if (!p || !p.slotsAll || !p.slotsAll.length) { el.innerHTML = '<p class="hint" style="margin:0;">No prices yet.</p>'; return; }
-    var slots = withQuarters(p.slotsAll.slice(0, 160), p.chartPrices);
-    var W = lsChartW(el, 900), H = 190, left = 40, n = slots.length, bw = (W - left - 8) / n;
-    var maxP = Math.max(0.1, Math.max.apply(null, slots.map(function (s) { return s.price || 0; })));
-    // expected import from the grid per interval (kW): the house beyond the expected solar, plus the
-    // grid part of the planned charging in it
-    var gridKw = slots.map(function (s) {
+    var hourly = p.slotsAll.slice(0, 160);
+    var slots = withQuarters(hourly, p.chartPrices);
+    var W = lsChartW(el, 900), left = 44, right = 8, n = slots.length;
+    var t0 = Date.parse(slots[0].start), t1 = Date.parse(slots[n - 1].end);
+    var X = function (ms) { return left + (ms - t0) / (t1 - t0) * (W - left - right); };
+    var f1 = function (v) { return v.toFixed(1); };
+    var mid = function (s) { return (Date.parse(s.start) + Date.parse(s.end)) / 2; };
+    var PW = W - left - right;
+    // panels close together, each its label in its own top-left corner above the data, a hairline between
+    var P = {}, cy = 24;
+    [['price', 68], ['charge', 36], ['battery', 54], ['power', 44]].forEach(function (d) { P[d[0]] = { top: cy, label: cy + 11, y: cy + 15, h: d[1] }; cy += 15 + d[1] + 7; });
+    var bottom = cy - 7, H = bottom + 40;
+    // expected import from the grid (kW) per hour: the house beyond the expected solar + the grid part of the charging
+    var gridOf = function (s) {
       var a = Date.parse(s.start), b = Date.parse(s.end);
       var house = s.houseKwh != null && s.pvKwh != null ? Math.max(0, s.houseKwh - s.pvKwh) : null;
-      var car = p.slots.reduce(function (t, q) {
-        var qa = Date.parse(q.start), qb = Date.parse(q.end), ov = Math.min(b, qb) - Math.max(a, qa);
-        if (ov <= 0 || !(q.kwh > 0)) return t;
-        return t + q.kw * Math.max(0, 1 - (q.pvKwh || 0) / q.kwh) * Math.min(1, ov / (b - a));
-      }, 0);
+      var pl = plannedIn(p, a, b), car = (pl.kwh - Math.min(pl.kwh, pl.pv)) / ((b - a) / 3600000);
       return house === null ? (car || null) : house + car;
+    };
+    var gridKw = slots.map(gridOf);
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block; overflow:visible;" class="pl-svg">' +
+      '<defs><pattern id="pl-noprice" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="currentColor" stroke-width="2" opacity="0.14"/></pattern>' +
+      ['battery', 'solar', 'import'].map(function (k) { return '<linearGradient id="pl-g-' + k + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--pl-' + k + '); stop-opacity:' + (k === 'import' ? 0.12 : k === 'battery' ? 0.22 : 0.26) + ';"/><stop offset="1" style="stop-color:var(--pl-' + k + '); stop-opacity:0.02;"/></linearGradient>'; }).join('') + '</defs>';
+    var label = function (pn, parts) { return '<text x="' + left + '" y="' + pn.label + '" font-size="10.5" fill="currentColor" opacity="0.78">' + parts + '</text>'; };
+    var key = function (style, txt) { return '<tspan dx="12" style="' + style + '" font-size="11">■</tspan><tspan dx="4">' + esc(txt) + '</tspan>'; };
+    var lineKey = function (style, txt) { return '<tspan dx="12" style="' + style + '" font-weight="700">━</tspan><tspan dx="4">' + esc(txt) + '</tspan>'; };
+    var track = function (pn) { return pn.top > 30 ? '<line x1="' + left + '" y1="' + (pn.top - 3.5) + '" x2="' + (W - right) + '" y2="' + (pn.top - 3.5) + '" stroke="currentColor" opacity="0.1"/>' : ''; };
+    var hair = function (y) { return '<line x1="' + left + '" y1="' + f1(y) + '" x2="' + (W - right) + '" y2="' + f1(y) + '" stroke="currentColor" opacity="0.06"/>'; };
+    var tick = function (y, txt) { return '<text x="' + (left - 5) + '" y="' + f1(y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + txt + '</text>'; };
+    // a column in the middle of its interval: about two thirds of it (at most 48px), at least 2px of air
+    var colOf = function (a, b) { var x = X(a), w = X(b) - x, cw = Math.max(0.6, Math.min(48, w - Math.min(2, w * 0.25), Math.max(w * 0.66, Math.min(22, w - 2)))); return { x: x + (w - cw) / 2, w: cw }; };
+
+    // ---- price: planned intervals in green, the rest gray, lighter where cheaper
+    var pp = P.price;
+    var maxP = Math.max(0.1, Math.max.apply(null, slots.map(function (s) { return s.price || 0; })));
+    svg += label(pp, '<tspan font-weight="600">' + esc(T('Price (all-in)')) + '</tspan>' + key('fill:var(--accent)', T('planned hours'))) + track(pp) + hair(pp.y + pp.h * 0.08) + hair(pp.y + pp.h * 0.54) +
+      tick(pp.y + pp.h * 0.08, '€' + nf(maxP, 2)) + tick(pp.y + pp.h * 0.54, '€' + nf(maxP / 2, 2));
+    slots.forEach(function (s) {
+      if (s.price == null) return;
+      var a = Date.parse(s.start), b = Date.parse(s.end), c = colOf(a, b);
+      var h = Math.max(1.5, s.price / maxP * pp.h * 0.92);
+      var planned = plannedIn(p, a, b).kwh > 0.01;
+      svg += '<path d="' + barPath(c.x, pp.y + pp.h - h, c.w, h) + '" style="fill:' + (planned ? 'var(--accent)' : 'var(--pl-price)') + ';" opacity="' + (planned ? 0.8 : (0.22 + 0.36 * s.price / maxP).toFixed(2)) + '"/>';
     });
-    var maxPv = Math.max(1, Math.max.apply(null, slots.map(function (s) { return s.pvKw || 0; }).concat(gridKw.map(function (v) { return v || 0; }))));
-    var planned = {};
-    p.slots.forEach(function (x) { planned[x.start] = true; });
-    var t0 = Date.parse(slots[0].start), t1 = Date.parse(slots[n - 1].end);
-    var X = function (ms) { return left + (ms - t0) / (t1 - t0) * (W - left - 8); };
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 50) + '" width="100%" style="display:block;">' +
-      '<defs><pattern id="pl-noprice" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="currentColor" stroke-width="2" opacity="0.18"/></pattern></defs>';
-    [0.25, 0.5, 0.75, 1].forEach(function (f) { var v = maxP * f; var y = 10 + H - f * H; svg += '<line x1="' + left + '" y1="' + y + '" x2="' + (W - 5) + '" y2="' + y + '" stroke="currentColor" opacity="0.08"/><text x="' + (left - 4) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">€' + v.toFixed(2) + '</text>'; });
-    slots.forEach(function (s, i) {
-      var x = X(Date.parse(s.start));
-      var w = Math.max(1, X(Date.parse(s.end)) - x - 1);
-      if (s.price == null) return; // marked below as one hatched block
-      var h = s.price / maxP * H;
-      var isPlan = !!planned[s.start] || p.slots.some(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); });
-      svg += '<rect x="' + x + '" y="' + (10 + H - h) + '" width="' + w + '" height="' + h + '" rx="1.5" fill="' + (isPlan ? 'var(--accent)' : '#c9d0d8') + '" opacity="' + (isPlan ? 0.95 : 0.75) + '"><title>' + tm(s.start) + ' € ' + s.price.toFixed(3) + (gridKw[i] != null ? ' · ' + esc(T('import ~{0} kW', nf(gridKw[i], 1))) : '') + '</title></rect>';
-      // solar part of a planned interval: the lower part of the bar in yellow
-      var ps = isPlan ? p.slots.filter(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); }) : [];
-      var pk = ps.reduce(function (a, q) { return a + (q.pvKwh || 0); }, 0), tk = ps.reduce(function (a, q) { return a + q.kwh; }, 0);
-      if (pk > 0.05 && tk > 0) { var sh = h * Math.min(1, pk / tk); svg += '<rect x="' + x + '" y="' + (10 + H - sh) + '" width="' + w + '" height="' + sh + '" fill="#d4a017" opacity="0.9"><title>☀️ ' + nf(pk, 1) + ' / ' + nf(tk, 1) + ' kWh</title></rect>'; }
-      // what it would do if the car came home now: outlined
-      if (p.ifNow && !isPlan && p.ifNow.slots.some(function (q) { return Date.parse(q.start) < Date.parse(s.end) && Date.parse(q.end) > Date.parse(s.start); })) svg += '<rect x="' + (x + 0.75) + '" y="' + (10 + H - h + 0.75) + '" width="' + Math.max(0, w - 1.5) + '" height="' + Math.max(0, h - 1.5) + '" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3 2"/>';
-    });
-    // Intervals without a price: hatched over the full height with what is going on, so an empty
-    // stretch never looks like "nothing planned because it is expensive". Day-ahead prices for a day
-    // come out around 13:00 the day before.
+    // no price: hatched over the whole height of the panels, with what is going on
     var runs = [], run = null;
     slots.forEach(function (s) {
       var a = Date.parse(s.start), b = Date.parse(s.end);
@@ -282,42 +343,46 @@
     runs.forEach(function (r) {
       var x0 = X(r.a), x1 = X(r.b), tail = r.b >= t1;
       var pub = new Date(r.a - 86400000); pub.setHours(13, 0, 0, 0);
-      var label = !tail ? T('no price known')
-        : Date.now() < pub.getTime() + 30 * 60000 ? T('prices not known yet — out around 13:00 on {0}', pub.toLocaleDateString([], { weekday: 'long' }))
-        : T('no prices yet — LoxSuite keeps trying');
-      svg += '<rect x="' + x0 + '" y="10" width="' + Math.max(1, x1 - x0) + '" height="' + H + '" fill="url(#pl-noprice)"><title>' + esc(label) + '</title></rect>' +
-        '<line x1="' + x0 + '" y1="10" x2="' + x0 + '" y2="' + (10 + H) + '" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" opacity="0.4"/>';
-      if (x1 - x0 > 70) svg += '<text x="' + ((x0 + x1) / 2) + '" y="' + (10 + H * 0.3) + '" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">' + esc(label) + '</text>';
-      else if (x1 - x0 >= 12) { var cx = (x0 + x1) / 2 + 3.5, cy = 10 + H - 6; svg += '<text x="' + cx + '" y="' + cy + '" transform="rotate(-90 ' + cx + ' ' + cy + ')" font-size="10" fill="currentColor" opacity="0.75">' + esc(label) + '</text>'; }
+      var lbl = !tail ? T('no price known') : Date.now() < pub.getTime() + 30 * 60000 ? T('prices not known yet — out around 13:00 on {0}', pub.toLocaleDateString([], { weekday: 'long' })) : T('no prices yet — LoxSuite keeps trying');
+      svg += '<rect x="' + f1(x0) + '" y="' + pp.y + '" width="' + f1(Math.max(1, x1 - x0)) + '" height="' + pp.h + '" rx="4" fill="url(#pl-noprice)"/>';
+      if (x1 - x0 > 90) svg += '<text x="' + f1((x0 + x1) / 2) + '" y="' + (pp.y + pp.h / 2 + 3) + '" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.7">' + esc(lbl) + '</text>';
     });
-    var pts = slots.map(function (s) { return X((Date.parse(s.start) + Date.parse(s.end)) / 2).toFixed(1) + ',' + (10 + H - (s.pvKw || 0) / maxPv * H * 0.9).toFixed(1); });
-    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#d4a017" stroke-width="2" opacity="0.9"/>';
-    var gpts = [];
-    slots.forEach(function (s, i) { if (gridKw[i] != null) gpts.push(X((Date.parse(s.start) + Date.parse(s.end)) / 2).toFixed(1) + ',' + (10 + H - gridKw[i] / maxPv * H * 0.9).toFixed(1)); });
-    if (gpts.length > 1) svg += '<polyline points="' + gpts.join(' ') + '" fill="none" stroke="#e0794f" stroke-width="1.8" stroke-dasharray="5 3" opacity="0.95"/>';
-    // kW scale on the right for both lines
-    [0.5, 1].forEach(function (f) { var y = 10 + H - f * H * 0.9; svg += '<text x="' + (W - 2) + '" y="' + (y - 2) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.5">' + nf(maxPv * f, 1) + ' kW</text>'; });
-    if (p.arrival) {
-      var ax = X(Date.parse(p.arrival.at)), nx0 = left;
-      if (ax > left && ax < W) svg += '<rect x="' + nx0 + '" y="10" width="' + Math.max(0, ax - nx0) + '" height="' + H + '" fill="#3b82f6" opacity="0.06"/><line x1="' + ax + '" y1="4" x2="' + ax + '" y2="' + (10 + H) + '" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (ax + 3) + '" y="9" font-size="10" fill="#3b82f6">' + esc(T('home ~{0}', tm(p.arrival.at))) + '</text>';
-    }
-    if (p.split) {
-      var bx = X(Date.parse(p.split.backAt));
-      if (bx > left && bx < W) svg += '<line x1="' + bx + '" y1="4" x2="' + bx + '" y2="' + (10 + H) + '" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (bx + 3) + '" y="9" font-size="10" fill="#3b82f6">' + esc(T('back ~{0}', tm(p.split.backAt))) + '</text>';
-    }
-    if (p.readyAt) { var rx = X(Date.parse(p.readyAt)); if (rx > left && rx < W) svg += '<line x1="' + rx + '" y1="4" x2="' + rx + '" y2="' + (10 + H) + '" stroke="#e5534b" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (rx > W - 90 ? rx - 3 : rx + 3) + '" y="9" font-size="10" text-anchor="' + (rx > W - 90 ? 'end' : 'start') + '" fill="#e5534b">' + esc(T('ready {0}', tm(p.readyAt))) + '</text>'; }
-    // the expected battery level: up while charging, down while out (agenda / the usual drive)
-    var bat = p.battery;
+
+    // ---- charging (kW): the grid part green, the solar part yellow below it; what it would do if it came home now, outlined
+    var cp = P.charge;
+    var ch = slots.map(function (s) { var a = Date.parse(s.start), b = Date.parse(s.end), pl = plannedIn(p, a, b), hrs = (b - a) / 3600000; return { kw: pl.kwh / hrs, pv: Math.min(pl.kwh, pl.pv) / hrs }; });
+    var maxKwC = Math.max(3.7, Math.max.apply(null, ch.map(function (c) { return c.kw; })));
+    svg += label(cp, '<tspan font-weight="600">' + esc(T('Charging (kW)')) + '</tspan>' + key('fill:var(--accent)', T('from the grid')) + key('fill:var(--pl-solar)', T('solar'))) + track(cp) + hair(cp.y + cp.h * 0.08) + tick(cp.y + cp.h * 0.08, nf(maxKwC, 1));
+    slots.forEach(function (s, i) {
+      var a = Date.parse(s.start), b = Date.parse(s.end), col = colOf(a, b), c = ch[i];
+      if (c.kw > 0.05) {
+        var hT = c.kw / maxKwC * cp.h * 0.92, hS = c.pv / maxKwC * cp.h * 0.92, base = cp.y + cp.h;
+        if (hS > 0.5) svg += '<path d="' + barPath(col.x, base - hS, col.w, hS) + '" style="fill:var(--pl-solar);" opacity="0.8"/>';
+        if (hT - hS > 0.5) svg += '<path d="' + barPath(col.x, base - hT, col.w, hT - hS - (hS > 0.5 ? 2 : 0)) + '" style="fill:var(--accent);" opacity="0.8"/>';
+      } else if (p.ifNow && p.ifNow.slots.some(function (q) { return Date.parse(q.start) < b && Date.parse(q.end) > a; })) {
+        svg += '<rect x="' + f1(col.x + 0.5) + '" y="' + f1(cp.y + cp.h * 0.35) + '" width="' + f1(Math.max(0.5, col.w - 1)) + '" height="' + f1(cp.h * 0.65 - 0.5) + '" rx="3" fill="none" style="stroke:var(--accent);" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.7"/>';
+      }
+    });
+
+    // ---- battery (%): smooth, with a light wash below; the level at the start, when ready, around drives, at the end
+    var bpn = P.battery, bat = p.battery;
+    var BY = function (pct) { return bpn.y + bpn.h - Math.max(0, Math.min(100, pct)) / 100 * bpn.h; };
+    svg += label(bpn, '<tspan font-weight="600">' + esc(T('Battery (expected)')) + '</tspan>' + (bat && bat.estimated ? '<tspan dx="8" opacity="0.8">' + esc(T('estimated level')) + '</tspan>' : '')) + track(bpn) + hair(BY(100)) + hair(BY(50)) + tick(BY(100), '100%') + tick(BY(50), '50%');
     if (bat && bat.points && bat.points.length > 1) {
-      var BY = function (pct) { return (10 + H - Math.max(0, Math.min(100, pct)) / 100 * H).toFixed(1); };
-      var clipT = function (ms) { return Math.max(t0, Math.min(t1, ms)); };
+      if (bat.reservePct > 0) svg += '<line x1="' + left + '" y1="' + f1(BY(bat.reservePct)) + '" x2="' + (W - right) + '" y2="' + f1(BY(bat.reservePct)) + '" style="stroke:var(--pl-battery);" stroke-width="1" stroke-dasharray="1 3" opacity="0.7"/>';
       var bp = [];
-      bat.points.forEach(function (pt) { if (pt.at >= t0 - 1 && pt.at <= t1 + 1) bp.push(X(clipT(pt.at)).toFixed(1) + ',' + BY(pt.pct)); });
+      bat.points.forEach(function (pt) {
+        if (pt.at < t0 - 1 || pt.at > t1 + 1) return;
+        var px = X(Math.max(t0, Math.min(t1, pt.at))), py = BY(pt.pct);
+        if (bp.length && px - bp[bp.length - 1][0] < 0.8) bp[bp.length - 1] = [bp[bp.length - 1][0], py]; else bp.push([px, py]);
+      });
       var endLvl = batteryAt(bat, t1);
-      if (endLvl != null && bat.points[bat.points.length - 1].at > t1) bp.push(X(t1).toFixed(1) + ',' + BY(endLvl));
-      if (bat.reservePct > 0) svg += '<line x1="' + left + '" y1="' + BY(bat.reservePct) + '" x2="' + (W - 5) + '" y2="' + BY(bat.reservePct) + '" stroke="#8b5cf6" stroke-width="1" stroke-dasharray="2 4" opacity="0.55"/><text x="' + (left + 3) + '" y="' + (Number(BY(bat.reservePct)) - 3) + '" font-size="9" fill="#8b5cf6" opacity="0.8">' + esc(T('reserve {0}%', nf(bat.reservePct, 0))) + '</text>';
-      if (bp.length > 1) svg += '<polyline points="' + bp.join(' ') + '" fill="none" stroke="#8b5cf6" stroke-width="2.4" stroke-linejoin="round"' + (bat.estimated ? ' stroke-dasharray="6 3"' : '') + '/>';
-      // the level at the start, when it has to be ready, back from each drive, and at the end
+      if (endLvl != null && bat.points[bat.points.length - 1].at > t1) bp.push([X(t1), BY(endLvl)]);
+      if (bp.length > 1) {
+        var line = smoothPath(bp);
+        svg += '<path d="' + line + 'L' + f1(bp[bp.length - 1][0]) + ',' + (bpn.y + bpn.h) + 'L' + f1(bp[0][0]) + ',' + (bpn.y + bpn.h) + 'Z" fill="url(#pl-g-battery)"/>' +
+          '<path d="' + line + '" fill="none" style="stroke:var(--pl-battery);" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"' + (bat.estimated ? ' stroke-dasharray="5 4"' : '') + '/>';
+      }
       var marks = [{ at: Math.max(t0, bat.points[0].at) }];
       if (p.readyAt) marks.push({ at: Date.parse(p.readyAt) });
       (bat.drives || []).forEach(function (d) { marks.push({ at: d.leave }); marks.push({ at: d.back }); });
@@ -325,45 +390,118 @@
       var lastX = -99, lastLv = null;
       marks.filter(function (m) { return m.at >= t0 && m.at <= t1; }).sort(function (a, b) { return a.at - b.at; }).forEach(function (m) {
         var lv = batteryAt(bat, m.at), mx = X(m.at);
-        // not again when nothing changed since the last label, nor on top of it
-        if (lv == null || mx - lastX < 34 || (lastLv !== null && Math.abs(lv - lastLv) < 1)) return;
+        if (lv == null || mx - lastX < 38 || (lastLv !== null && Math.abs(lv - lastLv) < 1)) return;
         lastX = mx; lastLv = lv;
-        var ly = Number(BY(lv)), ty = ly < 24 ? ly + 13 : ly - 6;
-        svg += '<circle cx="' + mx.toFixed(1) + '" cy="' + ly + '" r="2.8" fill="#8b5cf6"/><text x="' + Math.min(W - 6, Math.max(left + 2, mx)).toFixed(1) + '" y="' + ty + '" text-anchor="' + (mx > W - 30 ? 'end' : mx < left + 20 ? 'start' : 'middle') + '" font-size="10" font-weight="700" fill="#8b5cf6" paint-order="stroke" stroke="var(--surface, #fff)" stroke-width="3">' + (bat.estimated ? '≈' : '') + nf(lv, 0) + '%</text>';
+        var ly = BY(lv), ty = lv > 70 ? ly + 15 : ly - 7;
+        svg += '<circle cx="' + f1(mx) + '" cy="' + f1(ly) + '" r="3.5" style="fill:var(--pl-battery); stroke:var(--surface, #fff);" stroke-width="2"/>' +
+          '<text x="' + f1(Math.min(W - right - 2, Math.max(left + 2, mx))) + '" y="' + f1(ty) + '" text-anchor="' + (mx > W - 34 ? 'end' : mx < left + 18 ? 'start' : 'middle') + '" font-size="10.5" font-weight="600" fill="currentColor">' + (bat.estimated ? '≈' : '') + nf(lv, 0) + '%</text>';
       });
+    } else {
+      svg += '<text x="' + (left + PW / 2) + '" y="' + (bpn.y + bpn.h / 2 + 3) + '" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.6">' + esc(T('no battery size or level known for this car')) + '</text>';
     }
-    // time axis: a tick every hour, a label every 1–3 hours (what fits), the days below with a line at midnight
-    var pxH = (W - left - 8) / Math.max(1, (t1 - t0) / 3600000);
-    var every = pxH >= 26 ? 1 : pxH >= 13 ? 2 : 3;
+
+    // ---- solar surplus and import from the grid (kW): per hour, smooth
+    var wp = P.power;
+    var hrs = hourly.filter(function (s) { return Date.parse(s.end) > t0 && Date.parse(s.start) < t1; });
+    var hGrid = hrs.map(gridOf);
+    var maxKw = Math.max(1, Math.max.apply(null, hrs.map(function (s) { return s.pvKw || 0; }).concat(hGrid.map(function (v) { return v || 0; }))));
+    var KY = function (kw) { return wp.y + wp.h - Math.max(0, kw) / maxKw * wp.h * 0.9; };
+    svg += label(wp, (W < 480 ? '<tspan font-weight="600">kW</tspan>' : '<tspan font-weight="600">' + esc(T('Solar and grid (kW)')) + '</tspan>') + key('fill:var(--pl-solar)', T('solar surplus')) + lineKey('fill:var(--pl-import)', T('import from the grid'))) + track(wp) + hair(KY(maxKw)) + tick(KY(maxKw), nf(maxKw, 1));
+    var sp = hrs.map(function (s) { return [X(mid(s)), KY(s.pvKw || 0)]; });
+    if (sp.length > 1) {
+      var sl = smoothPath(sp);
+      svg += '<path d="' + sl + 'L' + f1(sp[sp.length - 1][0]) + ',' + (wp.y + wp.h) + 'L' + f1(sp[0][0]) + ',' + (wp.y + wp.h) + 'Z" fill="url(#pl-g-solar)"/><path d="' + sl + '" fill="none" style="stroke:var(--pl-solar);" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    }
+    var gp = [];
+    hrs.forEach(function (s, i) { if (hGrid[i] != null) gp.push([X(mid(s)), KY(hGrid[i])]); });
+    if (gp.length > 1) {
+      var gl = smoothPath(gp);
+      svg += '<path d="' + gl + 'L' + f1(gp[gp.length - 1][0]) + ',' + (wp.y + wp.h) + 'L' + f1(gp[0][0]) + ',' + (wp.y + wp.h) + 'Z" fill="url(#pl-g-import)"/><path d="' + gl + '" fill="none" style="stroke:var(--pl-import);" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    }
+
+    // ---- moments over all panels: expected home (shaded before it), back, ready by, now — labels on top
+    // lines over the panels' data only — never through a panel's label
+    var top = P.price.y, flags = [], bands = [P.price, P.charge, P.battery, P.power];
+    var vline = function (x, style, w) { return bands.map(function (pn) { return '<line x1="' + f1(x) + '" y1="' + pn.y + '" x2="' + f1(x) + '" y2="' + (pn.y + pn.h) + '" style="' + style + '" stroke-width="' + (w || 1.3) + '"/>'; }).join(''); };
+    var vband = function (x, w, attrs) { return bands.map(function (pn) { return '<rect x="' + f1(x) + '" y="' + pn.y + '" width="' + f1(w) + '" height="' + pn.h + '" ' + attrs + '/>'; }).join(''); };
+    if (p.arrival) {
+      var ax = X(Date.parse(p.arrival.at));
+      if (ax > left && ax < W - right) { svg += vband(left, ax - left, 'fill="currentColor" opacity="0.025"') + vline(ax, 'stroke:currentColor; opacity:0.3;', 1); flags.push({ x: ax, txt: T('home ~{0}', tm(p.arrival.at)), dot: 'currentColor' }); }
+    }
+    if (p.split) {
+      var bx = X(Date.parse(p.split.backAt));
+      if (bx > left && bx < W - right) { svg += vline(bx, 'stroke:currentColor; opacity:0.3;', 1); flags.push({ x: bx, txt: T('back ~{0}', tm(p.split.backAt)), dot: 'currentColor' }); }
+    }
+    if (p.readyAt) {
+      var rx = X(Date.parse(p.readyAt));
+      if (rx > left && rx < W - right) { svg += vline(rx, 'stroke:var(--pl-ready); opacity:0.55;', 1.2); flags.push({ x: rx, txt: T('ready {0}', tm(p.readyAt)), dot: 'var(--pl-ready)' }); }
+    }
+    var nowMs = Date.now();
+    if (nowMs >= t0 && nowMs <= t1) { var nx = X(nowMs); svg += vline(nx, 'stroke:currentColor; opacity:0.4;', 1.2); flags.push({ x: nx, txt: T('now'), dot: 'currentColor' }); }
+    var rowEnd = [-999, -999];
+    flags.sort(function (a, b) { return a.x - b.x; }).forEach(function (fl) {
+      var wTxt = fl.txt.length * 5.6 + 12, anchorEnd = fl.x + wTxt > W - right;
+      var x0 = anchorEnd ? fl.x - wTxt : fl.x;
+      var row = x0 > rowEnd[0] + 6 ? 0 : 1;
+      rowEnd[row] = x0 + wTxt;
+      var ty = 9 + row * 11;
+      svg += '<circle cx="' + f1(fl.x) + '" cy="' + (ty - 3.5) + '" r="2.5" style="fill:' + fl.dot + ';"/><text x="' + f1(anchorEnd ? fl.x - 5 : fl.x + 5) + '" y="' + ty + '" text-anchor="' + (anchorEnd ? 'end' : 'start') + '" font-size="10" fill="currentColor" opacity="0.85">' + esc(fl.txt) + '</text>';
+    });
+
+    // ---- time axis: a tick every hour, a label every 1–3 hours (what fits), the days below, midnight over all panels
+    var pxH = PW / Math.max(1, (t1 - t0) / 3600000), every = pxH >= 26 ? 1 : pxH >= 13 ? 2 : 3;
     for (var hms = Math.ceil(t0 / 3600000) * 3600000; hms <= t1; hms += 3600000) {
-      var hd = new Date(hms), hx = X(hms), hr = hd.getHours();
-      svg += '<line x1="' + hx + '" y1="' + (10 + H) + '" x2="' + hx + '" y2="' + (10 + H + (hr % every === 0 ? 5 : 3)) + '" stroke="currentColor" opacity="0.35"/>';
-      if (hr === 0) svg += '<line x1="' + hx + '" y1="10" x2="' + hx + '" y2="' + (10 + H + 30) + '" stroke="currentColor" opacity="0.28"/>';
-      if (hr % every === 0 && hx > left + 6 && hx < W - 8) svg += '<text x="' + hx + '" y="' + (H + 25) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.65">' + String(hr).padStart(2, '0') + '</text>';
+      var hx = X(hms), hr = new Date(hms).getHours();
+      svg += '<line x1="' + f1(hx) + '" y1="' + bottom + '" x2="' + f1(hx) + '" y2="' + (bottom + (hr % every === 0 ? 5 : 3)) + '" stroke="currentColor" opacity="0.3"/>';
+      if (hr === 0) svg += vline(hx, 'stroke:currentColor; opacity:0.1;', 1) + '<line x1="' + f1(hx) + '" y1="' + bottom + '" x2="' + f1(hx) + '" y2="' + (bottom + 30) + '" stroke="currentColor" opacity="0.1"/>';
+      if (hr % every === 0 && hx > left + 6 && hx < W - right - 6) svg += '<text x="' + f1(hx) + '" y="' + (bottom + 16) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + String(hr).padStart(2, '0') + '</text>';
     }
     var dd = new Date(t0); dd.setHours(0, 0, 0, 0);
     for (var ds = dd.getTime(); ds < t1;) {
       var dn = new Date(ds); dn.setDate(dn.getDate() + 1);
       var xa = X(Math.max(ds, t0)), xb = X(Math.min(dn.getTime(), t1));
-      if (xb - xa > 34) svg += '<text x="' + ((xa + xb) / 2).toFixed(1) + '" y="' + (H + 42) + '" text-anchor="middle" font-size="10.5" font-weight="600" fill="currentColor" opacity="0.75">' + esc(new Date(ds).toLocaleDateString([], xb - xa > 110 ? { weekday: 'long', day: 'numeric', month: 'short' } : { weekday: 'short', day: 'numeric' })) + '</text>';
+      if (xb - xa > 34) svg += '<text x="' + f1((xa + xb) / 2) + '" y="' + (bottom + 32) + '" text-anchor="middle" font-size="10.5" font-weight="600" fill="currentColor" opacity="0.72">' + esc(new Date(ds).toLocaleDateString([], xb - xa > 110 ? { weekday: 'long', day: 'numeric', month: 'short' } : { weekday: 'short', day: 'numeric' })) + '</text>';
       ds = dn.getTime();
     }
-    // now
-    var nowX = X(Date.now());
-    if (Date.now() >= t0 && Date.now() <= t1) svg += '<line x1="' + nowX + '" y1="10" x2="' + nowX + '" y2="' + (10 + H) + '" stroke="currentColor" stroke-width="1.5" opacity="0.7"/><text x="' + (nowX + 3) + '" y="' + (10 + H - 4) + '" font-size="10" font-weight="700" fill="currentColor" opacity="0.75" paint-order="stroke" stroke="var(--surface, #fff)" stroke-width="3">' + esc(T('now')) + '</text>';
-    // tap (or click) an interval: outlined, and its details below the chart
-    slots.forEach(function (s, i) {
-      var sx = X(Date.parse(s.start)), sw = Math.max(1, X(Date.parse(s.end)) - sx), sa = Date.parse(s.start);
-      if (plSel === sa) svg += '<rect x="' + (sx + 0.5) + '" y="10" width="' + Math.max(1, sw - 1) + '" height="' + H + '" rx="2" fill="none" stroke="var(--accent)" stroke-width="2"/>';
-      svg += '<rect data-pl-i="' + i + '" x="' + sx + '" y="10" width="' + sw + '" height="' + H + '" fill="transparent" style="cursor:pointer;"><title>' + tm(s.start) + (s.price != null ? ' € ' + s.price.toFixed(3) : '') + (gridKw[i] != null ? ' · ' + esc(T('import ~{0} kW', nf(gridKw[i], 1))) : '') + '</title></rect>';
-    });
-    svg += '</svg>';
-    el.innerHTML = svg;
-    Array.prototype.forEach.call(el.querySelectorAll('[data-pl-i]'), function (r) {
-      r.addEventListener('click', function () { var s = slots[Number(r.getAttribute('data-pl-i'))]; var ms = Date.parse(s.start); plSel = plSel === ms ? null : ms; renderChart(chartPlan); });
-    });
-    var det = document.getElementById('pl-detail');
+
+    // ---- the chosen interval: a soft wash over all panels; a crosshair that follows the pointer
     var si = plSel === null ? -1 : slots.findIndex(function (s) { return Date.parse(s.start) === plSel; });
+    if (si >= 0) { var sx = X(Date.parse(slots[si].start)), sw = X(Date.parse(slots[si].end)) - sx; svg += vband(sx, Math.max(2, sw), 'rx="3" style="fill:var(--accent);" opacity="0.13" pointer-events="none"'); }
+    svg += '<g id="pl-xh" opacity="0" pointer-events="none">' + vline(0, 'stroke:currentColor;', 1) + '</g>' +
+      '<rect id="pl-hit" x="' + left + '" y="0" width="' + PW + '" height="' + bottom + '" fill="transparent" style="cursor:pointer;"/></svg>' +
+      '<div id="pl-tip" class="pl-tip" hidden></div>';
+    el.innerHTML = svg;
+
+    var hit = document.getElementById('pl-hit'), xh = document.getElementById('pl-xh'), tip = document.getElementById('pl-tip'), svgEl = el.querySelector('svg');
+    var indexAt = function (ev) {
+      var r = svgEl.getBoundingClientRect(), x = (ev.clientX - r.left) * W / r.width;
+      for (var i = 0; i < n; i++) if (x < X(Date.parse(slots[i].end))) return i;
+      return n - 1;
+    };
+    hit.addEventListener('pointermove', function (ev) {
+      var i = indexAt(ev), s = slots[i], a = Date.parse(s.start), b = Date.parse(s.end), cx = X((a + b) / 2);
+      xh.setAttribute('transform', 'translate(' + f1(cx) + ',0)'); xh.setAttribute('opacity', '0.45');
+      var pl = plannedIn(p, a, b), lv = batteryAt(p.battery, b), rows = [];
+      rows.push([dtm(s.start) + '–' + tm(s.end), '']);
+      rows.push([T('Price'), s.price != null ? eur(s.price, 3) : T('no price (yet)')]);
+      if (pl.kwh > 0.05) rows.push([T('Planned'), nf(pl.kwh, 1) + ' kWh']);
+      if (lv != null) rows.push([T('Battery level'), nf(lv, 0) + '%']);
+      rows.push([T('solar surplus'), nf(s.pvKw || 0, 1) + ' kW']);
+      if (gridKw[i] != null) rows.push([T('import from the grid'), nf(gridKw[i], 1) + ' kW']);
+      tip.textContent = '';
+      rows.forEach(function (rw, k) {
+        var div = document.createElement('div');
+        if (!k) { div.className = 'pl-tip-h'; div.textContent = rw[0]; } else { var v = document.createElement('strong'); v.textContent = rw[1]; var l = document.createElement('span'); l.textContent = rw[0]; div.appendChild(v); div.appendChild(l); }
+        tip.appendChild(div);
+      });
+      var r = svgEl.getBoundingClientRect(), px = ev.clientX - r.left;
+      tip.hidden = false;
+      tip.style.left = (px + 14 + tip.offsetWidth > r.width ? px - tip.offsetWidth - 14 : px + 14) + 'px';
+      tip.style.top = Math.max(0, ev.clientY - r.top - 20) + 'px';
+    });
+    hit.addEventListener('pointerleave', function () { xh.setAttribute('opacity', '0'); tip.hidden = true; });
+    hit.addEventListener('click', function (ev) { var ms = Date.parse(slots[indexAt(ev)].start); plSel = plSel === ms ? null : ms; renderChart(chartPlan); });
+    var det = document.getElementById('pl-detail');
     if (si < 0) { plSel = null; det.innerHTML = ''; return; }
     det.innerHTML = slotDetail(p, slots[si], gridKw[si]);
     var cl = document.getElementById('pl-detail-close');

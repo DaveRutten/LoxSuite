@@ -206,7 +206,7 @@ const server = http.createServer((req, res) => {
   // A car's own data as JSON (vehicle source "HTTP / JSON URL"), for the vehicle pages.
   if (req.url === '/car.json') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ battery: { soc: 64, range_km: 41 }, total_range_km: 612, plugged: false, charging: false, limit: 100, odometer: 23456.8, position: { lat: 52.0907, lon: 5.1214 }, place: 'Utrecht Centraal' }));
+    res.end(JSON.stringify({ battery: { soc: 64, range_km: 76 }, total_range_km: 612, plugged: false, charging: false, limit: 100, odometer: 23456.8, position: { lat: 52.0907, lon: 5.1214 }, place: 'Utrecht Centraal' }));
     return;
   }
   // A calendar (ICS) with appointments around today, for the agenda.

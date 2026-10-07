@@ -276,6 +276,40 @@ function effectiveKwhPerKm(vehicle, fallback = 0.2) {
   return fallback;
 }
 
+// Pure: the consumption the car itself reckons with now — the energy in its battery for the electric
+// range it shows (that follows the weather and the driving: in the cold the range drops). Null without a
+// usable reading (no range, an estimated one, a nearly empty battery) or an implausible result.
+function kwhPerKmFromRange(vehicle, reading) {
+  const bat = Number(vehicle?.battery_kwh);
+  const soc = Number(reading?.soc);
+  const range = Number(reading?.range_km);
+  if (!(bat > 0) || !(soc >= 15) || !(range >= 10) || reading?.range_estimated) return null;
+  const k = bat * soc / 100 / range;
+  return k >= 0.08 && k <= 0.6 ? Math.round(k * 1000) / 1000 : null;
+}
+
+// The consumption to plan with now: your own value; else what the car's range says (its latest reading,
+// at most 3 days old) — reported: 100% = 120 km in this weather, so 2 × 17 km is about 28%, while the
+// value learned over the summer said 21%; else what LoxSuite learned; else the default.
+function currentKwhPerKm(vehicle, fallback = 0.2, { reading, readingAt, nowMs = Date.now() } = {}) {
+  const own = Number(vehicle?.kwh_per_km);
+  if (own > 0) return own;
+  let r = reading;
+  let at = readingAt;
+  if (r === undefined && vehicle) {
+    try {
+      const st = require('./vehicles').getVehicleStatus(vehicle);
+      r = st.reading;
+      at = st.sourceUpdatedAt || st.fetchedAt || null;
+    } catch { r = null; }
+  }
+  const t = at ? Date.parse(at) : NaN;
+  const fresh = !Number.isFinite(t) || nowMs - t <= 3 * 86400000;
+  const fromRange = fresh ? kwhPerKmFromRange(vehicle, r) : null;
+  if (fromRange) return fromRange;
+  return effectiveKwhPerKm(vehicle, fallback);
+}
+
 // --------------------------------------------------------------------------- DB
 
 async function loadReadings(vehicleId, days = 400) {
@@ -430,4 +464,4 @@ function stopDriving() {
   timer = null;
 }
 
-module.exports = { analyze, emptyLevel, weekPattern, kmToday, drivePattern, chargingCost, costPerKm, effectiveKwhPerKm, loadReadings, loadChargeHours, report, learnAll, startDriving, stopDriving };
+module.exports = { analyze, emptyLevel, weekPattern, kmToday, drivePattern, chargingCost, costPerKm, effectiveKwhPerKm, kwhPerKmFromRange, currentKwhPerKm, loadReadings, loadChargeHours, report, learnAll, startDriving, stopDriving };

@@ -42,3 +42,20 @@ test('charging or a drive partly before the start counts only from the start; no
   assert.deepEqual(batteryCurve({ startMs: t0, startKwh: 10, batteryKwh: null, untilMs: t0 + H }), []);
   assert.deepEqual(batteryCurve({ startMs: t0, startKwh: NaN, batteryKwh: 50, untilMs: t0 + H }), []);
 });
+
+test('consumption from the car\'s own range: 100% = 120 km in the cold, so 2 × 17 km is about 28%', () => {
+  const driving = require('../src/driving');
+  const car = { battery_kwh: 25.7, kwh_per_km_learned: 0.16 };
+  const k = driving.kwhPerKmFromRange(car, { soc: 100, range_km: 120 });
+  assert.equal(k, 0.214);
+  assert.equal(Math.round(34 * k / 25.7 * 100), 28);
+  // the car's range goes before what was learned over the summer, your own value before both
+  assert.equal(driving.currentKwhPerKm(car, 0.2, { reading: { soc: 100, range_km: 120 }, readingAt: new Date().toISOString() }), 0.214);
+  assert.equal(driving.currentKwhPerKm({ ...car, kwh_per_km: 0.19 }, 0.2, { reading: { soc: 100, range_km: 120 } }), 0.19);
+  // not from an estimated range, a nearly empty battery, an old reading, or nonsense
+  assert.equal(driving.kwhPerKmFromRange(car, { soc: 100, range_km: 120, range_estimated: true }), null);
+  assert.equal(driving.kwhPerKmFromRange(car, { soc: 8, range_km: 10 }), null);
+  assert.equal(driving.currentKwhPerKm(car, 0.2, { reading: { soc: 100, range_km: 120 }, readingAt: new Date(Date.now() - 5 * 86400000).toISOString() }), 0.16);
+  assert.equal(driving.kwhPerKmFromRange(car, { soc: 100, range_km: 900 }), null);
+  assert.equal(driving.currentKwhPerKm({ battery_kwh: 25.7 }, 0.2, { reading: null }), 0.2);
+});

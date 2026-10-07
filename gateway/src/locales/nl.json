@@ -4258,5 +4258,17 @@
   "Tap a bar for the details.": "Tik op een staaf voor de details.",
   "this hour: solar {0} kWh, house {1} kWh": "dit uur: zon {0} kWh, huis {1} kWh",
   "nothing planned": "niets gepland",
-  "Battery level": "Accuniveau"
+  "Battery level": "Accuniveau",
+  "· about {0} km left of {1}": "· nog ongeveer {0} km van {1}",
+  "Battery (expected)": "Accu (verwacht)",
+  "Charging (kW)": "Laden (kW)",
+  "estimated from {0}: about {1} km": "geschat uit {0}: ongeveer {1} km",
+  "from the grid": "van het net",
+  "import from the grid": "afname van het net",
+  "no battery size or level known for this car": "geen accugrootte of -niveau bekend voor deze auto",
+  "Point at or tap an hour for the details.": "Wijs een uur aan of tik erop voor de details.",
+  "Price (all-in)": "Prijs (all-in)",
+  "estimated level": "geschat niveau",
+  "planned hours": "geplande uren",
+  "Solar and grid (kW)": "Zon en net (kW)"
 }

@@ -309,6 +309,13 @@
   ]
  },
  {
+  "key": "· about {0} km left of {1}",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
   "key": "· about {0} km more today (learned: {1} km on a {2})",
   "module": "charging",
   "where": [
@@ -1606,13 +1613,6 @@
   ]
  },
  {
-  "key": "☀️ {0} / {1} kWh",
-  "module": "charging",
-  "where": [
-   "planner (script)"
-  ]
- },
- {
   "key": "✓ Monitored",
   "module": "core",
   "where": [
@@ -2878,6 +2878,13 @@
   ]
  },
  {
+  "key": "Battery (expected)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "battery {0}% → {1}%",
   "module": "charging",
   "where": [
@@ -3372,6 +3379,13 @@
    "planner (script)",
    "src/ocppBridge.js",
    "src/vehicles.js"
+  ]
+ },
+ {
+  "key": "Charging (kW)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -5200,10 +5214,24 @@
   ]
  },
  {
+  "key": "estimated from {0}: about {1} km",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
   "key": "estimated from the usual {0} km on a {1} (learned from the odometer)",
   "module": "charging",
   "where": [
    "src/planner.js"
+  ]
+ },
+ {
+  "key": "estimated level",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -5756,6 +5784,13 @@
   "module": "charging",
   "where": [
    "agenda (script)"
+  ]
+ },
+ {
+  "key": "from the grid",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -6356,17 +6391,17 @@
   ]
  },
  {
-  "key": "import ~{0} kW",
-  "module": "charging",
-  "where": [
-   "planner (script)"
-  ]
- },
- {
   "key": "Import failed: {0} __ERROR__",
   "module": "core",
   "where": [
    "src/routes/setup.js"
+  ]
+ },
+ {
+  "key": "import from the grid",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -8519,6 +8554,13 @@
   ]
  },
  {
+  "key": "no battery size or level known for this car",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "No calendars found.",
   "module": "core",
   "where": [
@@ -10202,6 +10244,13 @@
   ]
  },
  {
+  "key": "planned hours",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Planned interval until {0} ({1}).",
   "module": "charging",
   "where": [
@@ -10391,6 +10440,13 @@
   "module": "energy_manager",
   "where": [
    "energy-manager (script)",
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "Price (all-in)",
+  "module": "charging",
+  "where": [
    "planner (script)"
   ]
  },
@@ -10865,13 +10921,6 @@
   "module": "core",
   "where": [
    "admin-security (script)"
-  ]
- },
- {
-  "key": "reserve {0}%",
-  "module": "charging",
-  "where": [
-   "planner (script)"
   ]
  },
  {
@@ -11698,7 +11747,8 @@
   "key": "solar",
   "module": "energy_manager",
   "where": [
-   "energy-manager (script)"
+   "energy-manager (script)",
+   "planner (script)"
   ]
  },
  {
@@ -11735,6 +11785,13 @@
   ]
  },
  {
+  "key": "Solar and grid (kW)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Solar forecast",
   "module": "core",
   "where": [
@@ -11764,8 +11821,9 @@
  },
  {
   "key": "solar surplus",
-  "module": "energy_manager",
+  "module": "charging",
   "where": [
+   "planner (script)",
    "src/energyManager.js"
   ]
  },

@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.48.0-alpha.1] - 2026-10-07
+
+### Changed
+- **Smart charging chart in the style of the energy manager** (asked for: smoother lines, softer colors, a light
+  gradient; "the energy manager chart is a hundred times better"): four panels over one time axis instead of
+  everything on top of each other with three scales — price (planned intervals green, the rest gray and lighter
+  where cheaper), charging (kW, solar part yellow), expected battery level, and solar surplus with the import from
+  the grid. Soft rounded columns with air between them on a light track per panel, smooth lines (monotone, so the
+  battery never seems to go above 100% or below empty) with a light wash below, hairline grid, labels in text color,
+  colors checked for telling apart (also with color blindness) in light and dark. Pointing at an hour shows a
+  crosshair and a summary (price, planned, battery, solar, import); tapping still opens the details.
+
+### Fixed
+- **Expected battery when the car comes home was too high** (reported: 80% shown, while it left at 100% = 120 km in
+  this weather and drives 2 × 17 km, so about 72%): the consumption came from what LoxSuite learned over the summer.
+  Now the car's own electric range for the energy in its battery is used first (it follows the weather; your own
+  kWh/km in the vehicle settings still goes before it) — for the km still to drive, trips in the agenda and the
+  fuel break-even of a plug-in hybrid. And while the car is out on a drive from the agenda, what is left of that
+  drive counts (its km without the margin, minus what the odometer counted since it left) instead of the usual km
+  of the day.
+
 ## [0.47.0-alpha.1] - 2026-10-07
 
 ### Added

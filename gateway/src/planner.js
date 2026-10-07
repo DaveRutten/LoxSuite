@@ -318,6 +318,16 @@ function freshReading(vehicle) {
   return r;
 }
 
+// km the car drove since fromMs up to a reading with odometer `odoNow`: that minus the last odometer
+// before it left. 0 when either is unknown.
+async function kmSince(vehicleId, fromMs, odoNow) {
+  const now = Number(odoNow);
+  if (odoNow === null || odoNow === undefined || !Number.isFinite(now)) return 0;
+  const row = await require('./db').prepare('SELECT odometer_km FROM vehicle_readings WHERE vehicle_id = ? AND ts <= ? AND odometer_km IS NOT NULL ORDER BY ts DESC LIMIT 1').get(vehicleId, new Date(fromMs).toISOString());
+  const before = Number(row?.odometer_km);
+  return row && Number.isFinite(before) ? Math.max(0, now - before) : 0;
+}
+
 // Live Wallbox values (connected, power, session energy) via the configured wallbox meter.
 async function wallboxLive() {
   const learning = require('./learning');
@@ -352,9 +362,19 @@ async function computeTarget(nowMs, wb) {
   let drive = null;
   try { drive = await require('./driving').drivePattern(vehicle, { nowMs }); } catch { drive = null; }
   const away = !wb?.connected && reading?.home !== true;
-  const kpkNow = require('./driving').effectiveKwhPerKm(vehicle, cfg.default_kwh_per_km);
+  const kpkNow = require('./driving').currentKwhPerKm(vehicle, cfg.default_kwh_per_km);
   const todayPat = drive && vehicle ? drive.days[require('./localTime').localParts(nowMs, tz).weekday] : null;
   const usualToday = away && todayPat?.usual && todayPat.kmMedian ? todayPat : null;
+  // Out on a drive from the agenda that is going on now: what is left of it counts instead of the usual
+  // km of the day (reported: 2 × 17 km in the agenda, the plan reckoned with less).
+  let tourNow = null;
+  if (away && vehicle) {
+    try {
+      const list = await require('./agenda').tours(new Date(nowMs - 12 * 3600000).toISOString(), new Date(nowMs + 3600000).toISOString());
+      tourNow = list.find((t) => !t.allDay && t.km > 0 && Date.parse(t.leaveAt) <= nowMs && Date.parse(t.backAt) > nowMs && (!t.vehicle_id || t.vehicle_id === vehicle.id)) || null;
+    } catch { tourNow = null; }
+  }
+  const tourKm = tourNow ? Math.max(0, tourNow.km - (tourNow.marginKm || 0)) : 0;
   if (reading && vehicle?.battery_kwh) {
     const limitPct = reading.limit_soc ?? vehicle.charge_limit_pct ?? 100;
     needKwh = Math.max(0, vehicle.battery_kwh * (limitPct - reading.soc) / 100);
@@ -368,12 +388,23 @@ async function computeTarget(nowMs, wb) {
       const since = Math.max(0, sessKwh - rt.socBase.kwh);
       if (since > 0.05) { needKwh = Math.max(0, needKwh - since); needSource += `, minus ${since.toFixed(1)} kWh charged since`; }
     }
-    if (usualToday) {
+    if (tourNow) {
+      // what is left of it after the car's reading: its km minus what the odometer counted since it left
+      const done = await kmSince(vehicle.id, Date.parse(tourNow.leaveAt), reading.odometer_km).catch(() => 0);
+      const leftKm = Math.max(0, Math.round(tourKm - done));
+      const room = usable !== null ? Math.max(0, usable - needKwh) : Infinity;
+      const extra = Math.min(room, leftKm * kpkNow);
+      if (leftKm >= 1 && extra > 0.1) { needKwh += extra; needSource += ` · about ${leftKm} km left of ${tourNow.title}`; }
+    } else if (usualToday) {
       const moreKm = Math.max(0, Math.round(usualToday.kmMedian - (drive.kmToday || 0)));
       const room = usable !== null ? Math.max(0, usable - needKwh) : Infinity;
       const extra = Math.min(room, moreKm * kpkNow);
       if (moreKm >= 2 && extra > 0.1) { needKwh += extra; needSource += ` · about ${moreKm} km more today (learned: ${usualToday.kmMedian} km on a ${WEEKDAY_NAMES[usualToday.weekday]})`; }
     }
+  } else if (tourNow && tourKm > 0) {
+    // Out on a drive from the agenda, no state of charge from the car: that drive.
+    needKwh = Math.min(usable ?? Infinity, tourKm * kpkNow);
+    needSource = `estimated from ${tourNow.title}: about ${Math.round(tourKm)} km`;
   } else if (usualToday) {
     // Out, and no state of charge from the car: what it usually drives on this weekday (odometer).
     needKwh = Math.min(usable ?? Infinity, usualToday.kmMedian * kpkNow);
@@ -405,7 +436,7 @@ async function computeTarget(nowMs, wb) {
     if (rt.readyOverrideOwn && usable) {
       const agenda = require('./agenda');
       const acfg = await agenda.getConfig().catch(() => agenda.DEFAULTS);
-      const kpk = require('./driving').effectiveKwhPerKm(vehicle, cfg.default_kwh_per_km);
+      const kpk = require('./driving').currentKwhPerKm(vehicle, cfg.default_kwh_per_km);
       const tn = agenda.tripNeedKwh({ own: agenda.parseOwnValue(rt.readyOverrideOwn), marginKm: Number(acfg.margin_km) || 0, kwhPerKm: kpk, usableKwh: usable });
       if (tn.kwh) {
         const energyNow = reading && vehicle?.battery_kwh ? vehicle.battery_kwh * reading.soc / 100 : (usable - needKwh);
@@ -903,7 +934,7 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   let fuel = null;
   if (vehicle?.type === 'phev') {
     const fuelPrice = await require('./fuelPrice').currentFuelPrice();
-    fuel = fuelBreakEven({ fuelEurL: fuelPrice?.eur_l ?? cfg.fuel_eur_l, lPer100km: vehicle.fuel_l_per_100km || 6.5, kwhPerKm: require('./driving').effectiveKwhPerKm(vehicle, cfg.default_kwh_per_km) });
+    fuel = fuelBreakEven({ fuelEurL: fuelPrice?.eur_l ?? cfg.fuel_eur_l, lPer100km: vehicle.fuel_l_per_100km || 6.5, kwhPerKm: require('./driving').currentKwhPerKm(vehicle, cfg.default_kwh_per_km) });
     if (fuel !== null) priceCap = priceCap === null ? fuel : Math.min(priceCap, fuel);
   }
   const planArgs = {

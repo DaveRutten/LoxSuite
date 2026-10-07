@@ -206,15 +206,14 @@ async function main() {
     // Long pages are captured whole (fullPage) so the charts below the fold are in the picture.
     await page.goto(`${BASE}/planner`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(2500);
-    // the details of a planned hour below the chart
-    const planned = await page.evaluate(() => {
-      const bar = [...document.querySelectorAll('#pl-chart rect')].find((r) => r.getAttribute('fill') === 'var(--accent)');
-      if (!bar) return -1;
-      const x = Number(bar.getAttribute('x'));
-      const hit = [...document.querySelectorAll('[data-pl-i]')].find((r) => Math.abs(Number(r.getAttribute('x')) - x) < 1);
-      return hit ? Number(hit.getAttribute('data-pl-i')) : -1;
+    // the details of a planned hour below the chart (a click on the chart above a green column)
+    const col = await page.evaluate(() => {
+      const b = [...document.querySelectorAll('#pl-chart path')].find((x) => /var\(--accent\)/.test(x.getAttribute('style') || ''));
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
     });
-    if (planned >= 0) { await page.locator(`[data-pl-i="${planned}"]`).dispatchEvent('click'); await page.waitForTimeout(500); }
+    if (col) { await page.mouse.click(col.x, col.y); await page.mouse.move(0, 0); await page.waitForTimeout(500); }
     await shoot(page, 'smart-charging', theme, { fullPage: true });
 
     await page.goto(`${BASE}/energy`, { waitUntil: 'networkidle' });
