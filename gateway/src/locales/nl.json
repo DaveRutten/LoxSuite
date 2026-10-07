@@ -4204,5 +4204,16 @@
   "Škoda gives no car data right now ({0}) — the car may be in deep sleep or without connection; LoxSuite keeps the last known values and tries again.": "Škoda geeft nu geen autogegevens ({0}) — de auto is misschien in diepe slaap of zonder verbinding; LoxSuite houdt de laatst bekende waarden en probeert het opnieuw.",
   "empty answer": "leeg antwoord",
   "{0} (next try in {1} min)": "{0} (volgende poging over {1} min)",
-  "Škoda budget used ({0} requests per hour) — try again after {1}.": "Škoda-budget op ({0} verzoeken per uur) — probeer het opnieuw na {1}."
+  "Škoda budget used ({0} requests per hour) — try again after {1}.": "Škoda-budget op ({0} verzoeken per uur) — probeer het opnieuw na {1}.",
+  "{0}% solar": "{0}% zon",
+  "battery {0}% → {1}%": "accu {0}% → {1}%",
+  "costs {0} · average {1}/kWh": "kost {0} · gemiddeld {1}/kWh",
+  "nothing charged (yet)": "(nog) niets geladen",
+  "plugged in {0}, unplugged {1}": "ingestoken {0}, uitgetrokken {1}",
+  "plugged in since {0}": "ingestoken sinds {0}",
+  "This session": "Deze sessie",
+  "up to {0} kW": "tot {0} kW",
+  "charging at {0}": "laadt {0}",
+  "charged at {0}": "geladen {0}",
+  "now": "nu"
 }

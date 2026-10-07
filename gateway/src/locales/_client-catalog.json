@@ -1430,6 +1430,13 @@
   ]
  },
  {
+  "key": "{0}% solar",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "{0}% too high",
   "module": "charging",
   "where": [
@@ -2795,6 +2802,13 @@
   ]
  },
  {
+  "key": "battery {0}% → {1}%",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "battery full (not unplugged since)",
   "module": "charging",
   "where": [
@@ -3206,6 +3220,13 @@
   ]
  },
  {
+  "key": "Charge log →",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Charge log with automatic checks",
   "module": "core",
   "where": [
@@ -3217,6 +3238,13 @@
   "module": "vehicles",
   "where": [
    "driving (script)"
+  ]
+ },
+ {
+  "key": "charged at {0}",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -3254,6 +3282,13 @@
    "planner (script)",
    "src/ocppBridge.js",
    "src/vehicles.js"
+  ]
+ },
+ {
+  "key": "charging at {0}",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -3857,6 +3892,13 @@
   "module": "ocpp",
   "where": [
    "src/ocppStats.js"
+  ]
+ },
+ {
+  "key": "costs {0} · average {1}/kWh",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -6570,6 +6612,13 @@
   ]
  },
  {
+  "key": "Last session",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Last session (kWh)",
   "module": "ocpp",
   "where": [
@@ -9077,6 +9126,13 @@
   ]
  },
  {
+  "key": "nothing charged (yet)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "Nothing in this period. Click an appointment for details.",
   "module": "charging",
   "where": [
@@ -9194,6 +9250,13 @@
   "module": "monitor",
   "where": [
    "public/threshold-annotation-builder.js"
+  ]
+ },
+ {
+  "key": "now",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -9948,6 +10011,20 @@
   "where": [
    "src/vehicles.js",
    "vehicle-edit (script)"
+  ]
+ },
+ {
+  "key": "plugged in {0}, unplugged {1}",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "plugged in since {0}",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -12504,6 +12581,13 @@
   ]
  },
  {
+  "key": "This session",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "This week",
   "module": "ocpp",
   "where": [
@@ -13249,6 +13333,13 @@
   "module": "core",
   "where": [
    "partials/panel-grid (script)"
+  ]
+ },
+ {
+  "key": "up to {0} kW",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {

@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.44.5-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.45.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -86,7 +86,7 @@ It provides:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/smart-charging-dark.png">
-  <img src="docs/screenshots/smart-charging-light.png" alt="Smart charging in two cards: Now (mode, session buttons and the live figures) and Plan (what fits in the battery, ready by, expected home, the plan with its solar and grid part, and the price chart with planned hours)">
+  <img src="docs/screenshots/smart-charging-light.png" alt="Smart charging in two cards: Now (mode, session buttons, the live figures and the last session) and Plan (what fits in the battery, ready by, expected home, the plan with its solar and grid part, and the price chart with planned hours)">
 </picture>
 
 </td>
@@ -717,6 +717,10 @@ charging page itself is the overview.
   after plugging in or coming home, within a few hours, so an unexpected trip is always possible. And an hour
   that is only slightly dearer but earlier wins (*earlier is worth*, default € 0.03/kWh per day), so the
   battery is full sooner for a few cents. Or choose *only what the next departure usually needs + buffer*.
+- **Last session**: a tile on Smart charging with the newest session — the one going on, or the last one:
+  when it was plugged in and out, when it actually charged (and up to how many kW), the kWh, what it cost (each
+  hour at its price, the solar part at its value) and the battery before and after, with a link to that session
+  in the charge log. In the morning: what happened at night.
 - **Control** every 30 s: the charging power is written to a Loxone virtual input (kW, 0 = stop; optional 1/0
   "charging allowed" input) on change and at least every 5 minutes, never above the grid connection limit.
   A *Send test value* button checks the wiring. Published as `loxsuite/planner/{setpoint_kw,mode,need_kwh,…}`.

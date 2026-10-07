@@ -144,6 +144,28 @@ async function main() {
     await db.prepare('INSERT INTO charging_sessions (connect_at, disconnect_at, kwh, vehicle_id, id_tag, source) VALUES (?, ?, ?, ?, ?, ?)')
       .run(s.connect_at, s.disconnect_at, s.kwh, s.vehicle_id, s.id_tag, s.source);
   }
+  // The charge log of the newest session (the "Last session" tile on Smart charging): plugged in, the
+  // night's charging at 7.4 kW, the battery going up, unplugged in the morning (or still plugged in).
+  const lastS = sessions[sessions.length - 1];
+  if (lastS) {
+    const plug = Date.parse(lastS.connect_at);
+    const end = lastS.disconnect_at ? Date.parse(lastS.disconnect_at) : now - 60000;
+    const key = `s${plug}`;
+    const socStart = Math.max(5, Math.round(100 - (lastS.kwh / cap) * 100));
+    const log = (t, event, d) => db.prepare('INSERT INTO charge_log (ts, session_key, event, data) VALUES (?, ?, ?, ?)')
+      .run(iso(t), key, event, JSON.stringify({ connected: 1, enabled: 1, active: d.kw > 0 ? 1 : 0, limit: d.kw, mode: 1, sentKw: d.kw, sentEnable: 1, sentSource: 'live', advisedKw: d.kw, output: 'live', car: 'Family car', plugged: true, ...d }));
+    await log(plug, 'Car plugged in', { kw: 0, sessionKwh: 0, soc: socStart, charging: false });
+    let done = 0;
+    for (const hs of [...wallboxByHour.keys()].filter((t) => t >= plug && t < end).sort((a, b) => a - b)) {
+      const k = wallboxByHour.get(hs);
+      await log(hs + 60000, 'Live: sent 7.4 kW', { kw: 7.4, sessionKwh: r2(done), soc: Math.round(socStart + (done / cap) * 100), charging: true });
+      done += k;
+      await log(hs + Math.round((k / 7.4) * H), null, { kw: k < 7.3 ? 0 : 7.4, sessionKwh: r2(done), soc: Math.min(100, Math.round(socStart + (done / cap) * 100)), charging: k >= 7.3 });
+    }
+    if (lastS.disconnect_at) await db.prepare('INSERT INTO charge_log (ts, session_key, event, data) VALUES (?, ?, ?, ?)')
+      .run(iso(end), key, 'Car unplugged', JSON.stringify({ connected: 0, kw: 0, sessionKwh: r2(done), soc: Math.min(100, Math.round(socStart + (done / cap) * 100)), car: 'Family car' }));
+    else await log(end, null, { kw: 0, sessionKwh: r2(done), soc: Math.min(100, Math.round(socStart + (done / cap) * 100)), charging: false });
+  }
 
   // ---- four weeks of hourly energy (grid / solar / Wallbox / house) and the solar forecast of then ----
   const pvKwp = 8.4;

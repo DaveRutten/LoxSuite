@@ -4809,6 +4809,8 @@ details > summary + p.hint { margin-top: 0.5rem; }
 .ls-tile-sub { font-size: 0.75rem; color: var(--text-muted); line-height: 1.35; margin-top: 0.1rem; }
 .ls-tile-sub a { color: inherit; }
 .ls-tiles + .hint, .ls-tiles + p { margin-top: 0.6rem; }
+/* a tile with more to say (the last charging session) takes two columns where there is room */
+@media (min-width: 900px) { .ls-tile.ls-tile-wide { grid-column: span 2; } }
 .ls-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 0.35rem; vertical-align: 0.05em; background: #9aa5b1; }
 .ls-dot.on { background: var(--success, #4caf50); }
 

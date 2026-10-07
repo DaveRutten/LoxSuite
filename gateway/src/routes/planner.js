@@ -32,12 +32,15 @@ router.get('/', asyncHandler(async (req, res) => {
   });
 }));
 
+let lastSessionCache = null;
 router.get('/status.json', asyncHandler(async (req, res) => {
   const rt = planner.getRuntime();
   if (!rt.status) await planner.tick().catch(() => {});
   const r = planner.getRuntime();
   const plan = r.plan ? { ...r.plan } : null;
-  res.json({ status: r.status, plan, override: r.override, readyOverride: r.readyOverride, readyOverrideOwn: r.readyOverrideOwn, readyOverrideAway: r.readyOverrideAway, cfg: await planner.getConfig() });
+  // the newest charging session (the one going on, or the last one): kept a minute, the page asks every 30 s
+  if (!lastSessionCache || Date.now() - lastSessionCache.at > 60000) lastSessionCache = { at: Date.now(), value: await require('../chargeLog').lastSession().catch(() => null) };
+  res.json({ status: r.status, plan, override: r.override, readyOverride: r.readyOverride, readyOverrideOwn: r.readyOverrideOwn, readyOverrideAway: r.readyOverrideAway, cfg: await planner.getConfig(), lastSession: lastSessionCache.value });
 }));
 
 // JSON actions from the page (CSRF-exempt like the other JSON endpoints).

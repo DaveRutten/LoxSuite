@@ -269,9 +269,77 @@ async function sessionDetail(key) {
   return { ...info, checks, rows, summary: summaryText(info, checks, rows) };
 }
 
+// Pure: what happened in one session, for the "Last session" tile on Smart charging — when it was
+// plugged in and out, when it actually charged (spans above 1 kW, short pauses joined), how much the
+// Wallbox counted, and the battery before and after. rows: [{ t, event, d }] oldest first.
+function summarizeSession(rows, nowMs = Date.now()) {
+  if (!rows || !rows.length) return null;
+  const last = rows[rows.length - 1];
+  const unplug = rows.find((r) => /unplugged/i.test(r.event || '')) || null;
+  // still plugged in: no "unplugged" and the log is still being written (a heartbeat every minute)
+  const connected = !unplug && last.d.connected === 1 && nowMs - last.t < 5 * 60000;
+  const spans = [];
+  let cur = null;
+  for (const r of rows) {
+    const kw = r.d.kw || 0;
+    if (!cur) { if (kw >= ON_KW) cur = { from: r.t, to: null, peakKw: kw }; continue; }
+    if (kw < OFF_KW) { cur.to = r.t; spans.push(cur); cur = null; } else cur.peakKw = Math.max(cur.peakKw, kw);
+  }
+  const chargingNow = !!cur && connected;
+  if (cur) { cur.to = connected ? null : last.t; spans.push(cur); }
+  // a pause of a few minutes (the car balancing, a planned interval boundary) is the same charge
+  const joined = [];
+  for (const sp of spans) {
+    const prev = joined[joined.length - 1];
+    if (prev && prev.to !== null && sp.from - prev.to < 5 * 60000) { prev.to = sp.to; prev.peakKw = Math.max(prev.peakKw, sp.peakKw); } else joined.push({ ...sp });
+  }
+  const socs = rows.filter((r) => Number.isFinite(r.d.soc));
+  return {
+    pluggedAt: (rows.find((r) => r.d.connected === 1) || rows[0]).t,
+    unpluggedAt: unplug ? unplug.t : connected ? null : last.t,
+    connected, chargingNow, spans: joined,
+    kwh: r2(Math.max(0, ...rows.map((r) => r.d.sessionKwh || 0))),
+    peakKw: joined.length ? r2(Math.max(...joined.map((x) => x.peakKw))) : null,
+    socFrom: socs.length ? socs[0].d.soc : null, socTo: socs.length ? socs[socs.length - 1].d.soc : null,
+    car: (rows.find((r) => r.d.car) || {}).d?.car || null,
+  };
+}
+
+// The newest session (also the one going on now), with what its kWh cost: the grid part at the price
+// of each hour it charged and the solar part at its value (as in Smart charging), from the Wallbox and
+// grid meters per hour. Falls back to the Wallbox's own session list when the log has nothing.
+async function lastSession(nowMs = Date.now()) {
+  const head = await db.prepare("SELECT session_key, MIN(ts) AS t0 FROM charge_log WHERE session_key <> 'idle' GROUP BY session_key ORDER BY MIN(ts) DESC LIMIT 1").get().catch(() => null);
+  let sum = null;
+  if (head) {
+    sum = summarizeSession(parseRows(await db.prepare('SELECT ts, event, data FROM charge_log WHERE session_key = ? ORDER BY ts').all(head.session_key)), nowMs);
+    if (sum) sum.key = head.session_key;
+  }
+  const cs = await db.prepare('SELECT connect_at, disconnect_at, kwh FROM charging_sessions ORDER BY connect_at DESC LIMIT 1').get().catch(() => null);
+  if (cs && (!sum || Date.parse(cs.connect_at) > sum.pluggedAt + 10 * 60000)) {
+    sum = { key: null, pluggedAt: Date.parse(cs.connect_at), unpluggedAt: cs.disconnect_at ? Date.parse(cs.disconnect_at) : null, connected: !cs.disconnect_at, chargingNow: false, spans: [], kwh: r2(cs.kwh), peakKw: null, socFrom: null, socTo: null, car: null };
+  }
+  if (!sum) return null;
+  if (sum.kwh > 0.05) {
+    try {
+      const fin = require('./ocppFinance');
+      const cfg = await require('./planner').getConfig();
+      const from = sum.spans.length ? sum.spans[0].from : sum.pluggedAt;
+      const to = sum.spans.length ? (sum.spans[sum.spans.length - 1].to || nowMs) : (sum.unpluggedAt || nowMs);
+      const { hours, prices } = await fin.loadHoursAndPrices(Math.floor(from / 1000), Math.ceil(to / 1000));
+      const [c] = fin.costSessions({
+        rows: [{ start: Math.floor(from / 1000), end: Math.ceil(to / 1000), energy: sum.kwh }], tariffs: [], hours, prices,
+        settings: { cost_mode: 'hourly', solar_value: cfg.feed_in === 'fixed' ? 'fixed' : 'saldering', solar_eur_kwh: cfg.feed_in_eur_kwh },
+      });
+      if (c && c.cost !== null) { sum.cost = c.cost; sum.eurPerKwh = Math.round((c.cost / sum.kwh) * 1000) / 1000; sum.solarShare = c.solarShare; sum.costSource = c.costSource; }
+    } catch { /* no prices or meters */ }
+  }
+  return sum;
+}
+
 // Samples outside a session (tests with no car connected), newest first.
 async function idleEvents(limit = 50) {
   return parseRows(await db.prepare("SELECT ts, event, data FROM charge_log WHERE session_key = 'idle' AND event IS NOT NULL ORDER BY ts DESC").all()).slice(0, limit);
 }
 
-module.exports = { recordSent, sample, snapshot, startChargeLog, stopChargeLog, analyzeSession, summaryText, sessions, sessionDetail, idleEvents, prune };
+module.exports = { recordSent, sample, snapshot, startChargeLog, stopChargeLog, analyzeSession, summaryText, summarizeSession, lastSession, sessions, sessionDetail, idleEvents, prune };

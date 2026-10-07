@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.45.0-alpha.1] - 2026-10-07
+
+### Added
+- **Last session** on Smart charging (asked for: in the morning an overview of what happened at night): a tile
+  in the *Now* card with the newest charging session — the one going on (*This session*) or the last one:
+  plugged in and unplugged, when it actually charged (short pauses joined) and up to how many kW, the kWh the
+  Wallbox counted, what it cost and the average €/kWh (each hour at its price, the solar part at its value, from
+  the Wallbox and grid meters), the battery before and after, and a link to that session in the charge log.
+  From the charge log; without it, from the Wallbox's own session list (times and kWh only).
+
 ## [0.44.5-alpha.1] - 2026-10-06
 
 ### Fixed

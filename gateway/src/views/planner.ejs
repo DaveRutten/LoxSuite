@@ -89,6 +89,21 @@
   // "car reports 64% · about 52 km more today … · trip needs 22.7 kWh": each "· …" part in its own text
   // node, so each is translated on its own (the whole line has no translation of its own)
   function parts(text) { var p = String(text || '').split(' · '); return esc(p[0]) + p.slice(1).map(function (x) { return ' <span>' + esc('· ' + x) + '</span>'; }).join(''); }
+  // The newest session — the one going on, or the last one: in the morning, what happened at night.
+  function lastSessionTile(ls) {
+    if (!ls) return '';
+    var lines = [];
+    lines.push(ls.connected ? T('plugged in since {0}', dtm(ls.pluggedAt)) : T('plugged in {0}, unplugged {1}', dtm(ls.pluggedAt), dtm(ls.unpluggedAt)));
+    var spans = (ls.spans || []).map(function (x) { return tm(x.from) + '–' + (x.to ? tm(x.to) : T('now')); });
+    if (spans.length) lines.push(T(ls.chargingNow && spans.length === 1 ? 'charging at {0}' : 'charged at {0}', spans.join(', ')) + (ls.peakKw ? ' · ' + T('up to {0} kW', nf(ls.peakKw, 1)) : ''));
+    else if (!(ls.kwh > 0.05)) lines.push(T('nothing charged (yet)'));
+    if (ls.cost != null) lines.push(T('costs {0} · average {1}/kWh', eur(ls.cost), eur(ls.eurPerKwh, 3)) + (ls.solarShare > 0 ? ' · ' + T('{0}% solar', ls.solarShare) : ''));
+    if (ls.socFrom != null && ls.socTo != null) lines.push(T('battery {0}% → {1}%', Math.round(ls.socFrom), Math.round(ls.socTo)));
+    var link = ls.key ? '<div><a href="/planner/log?session=' + encodeURIComponent(ls.key) + '">' + esc(T('Charge log →')) + '</a></div>' : '';
+    return '<div class="ls-tile ls-tile-wide"><div class="ls-tile-label">' + esc(T(ls.connected ? 'This session' : 'Last session')) + (ls.car ? ' · ' + esc(ls.car) : '') + '</div>' +
+      '<div class="ls-tile-value"' + (ls.chargingNow ? ' style="color:var(--accent);"' : '') + '>' + nf(ls.kwh, 1) + ' <small>kWh</small></div>' +
+      '<div class="ls-tile-sub">' + lines.map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + link + '</div></div>';
+  }
   var MODE_LABEL = { off: 'Off', now: 'Now', pv: 'Solar', minpv: 'Min + Solar', plan: 'Smart plan' };
   var readyFilled = false;
 
@@ -104,6 +119,7 @@
     t += tile('Charging', nf(wb.kw, 2) + ' <small>kW</small>', 'setpoint ' + nf(s.setpointKw, 2) + ' kW' + (d.override ? ' · ' + esc(MODE_LABEL[d.override]) + ' for this session' : ''));
     t += tile('Solar surplus', nf(s.surplusKw, 2) + ' <small>kW</small>', 'export + what the car uses', '#d4a017');
     if (p && p.fuelBreakEven) t += tile('Fuel break-even', eur(p.fuelBreakEven, 3) + '<small>/kWh</small>', 'above this, fuel is cheaper');
+    t += lastSessionTile(d.lastSession);
     document.getElementById('pl-tiles').innerHTML = t;
     document.getElementById('pl-reason').innerHTML = esc(s.reason || '') + (s.outputResult && s.outputResult.error ? ' <span style="color:var(--danger);">Output: ' + esc(s.outputResult.error) + '</span>' : '') + (s.done ? ' <strong>Car is full.</strong>' : '');
 
