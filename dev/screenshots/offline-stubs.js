@@ -26,6 +26,16 @@ function energyZero(url) {
   return json({ Prices, intervalType: 4 });
 }
 
+// EnergyZero's public API: `date` (dd-mm-yyyy, local) answers the day before, that day and the day after.
+function energyZeroPublic(url) {
+  const [d, m, y] = String(url.searchParams.get('date') || '').split('-').map(Number);
+  const day = Date.UTC(y, m - 1, d) - 2 * HOUR; // ~ Dutch local midnight
+  const Q = HOUR / 4;
+  const base = [];
+  for (let t = day - 24 * HOUR; t < day + 48 * HOUR; t += Q) base.push({ start: new Date(t).toISOString(), end: new Date(t + Q).toISOString(), price: { value: String(marketAt(t)) } });
+  return json({ interval: 'RESPONSE_INTERVAL_QUARTER', range: { start: base[0].start, end: base[base.length - 1].end }, base });
+}
+
 // Global tilted irradiance (W/m²) per hour: a bell around 13:00 UTC+2, a little cloud on day 2.
 function openMeteo() {
   const start = Math.floor(Date.now() / 86400000) * 86400000 - 86400000;
@@ -55,6 +65,7 @@ globalThis.fetch = async (input, init) => {
   try { url = new URL(typeof input === 'string' ? input : input.url); } catch { return realFetch(input, init); }
   const host = url.host;
   if (host === 'api.energyzero.nl') return energyZero(url);
+  if (host === 'public.api.energyzero.nl') return energyZeroPublic(url);
   if (host === 'api.open-meteo.com') return openMeteo();
   if (host === 'opendata.cbs.nl') return cbs();
   if (host === 'nominatim.openstreetmap.org') return json([{ lat: '52.156', lon: '5.387' }]);

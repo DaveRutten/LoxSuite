@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.45.1-alpha.1] - 2026-10-07
+
+### Fixed
+- **Tomorrow's prices didn't come** (reported: Wednesday well after 13:00 still no prices for Thursday, while
+  the Loxone Spot Price Optimizer had them): LoxSuite asked EnergyZero's old API
+  (`api.energyzero.nl/v1/energyprices`), which no longer gets the next day's prices — at 17:00 it still ended
+  at midnight. It now uses EnergyZero's public API (`public.api.energyzero.nl/public/v1/prices`), which had
+  Thursday's prices. One call per local day brings that day and, once published, the next; a day that isn't
+  out yet (404) is simply not there yet. The old API is only used when the public one gives nothing at all.
+- **Waiting for tomorrow's prices**: after 13:00 LoxSuite checks every 15 minutes until tomorrow's prices are
+  in, instead of once an hour.
+
+### Changed
+- **EnergyZero per quarter**: the public API gives quarter-hour prices, so *Prices in the charts → per quarter
+  of an hour* now works with EnergyZero too (no ENTSO-E key needed); the plan keeps what your contract bills.
+- **ENTSO-E filled from EnergyZero**: what ENTSO-E lacks (tomorrow not in yet, a token or service problem) is
+  filled from EnergyZero. Settings shows it (*missing prices from EnergyZero*) and keeps showing the ENTSO-E
+  problem.
+
 ## [0.45.0-alpha.1] - 2026-10-07
 
 ### Added

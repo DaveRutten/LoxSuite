@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.45.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.45.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -724,12 +724,13 @@ charging page itself is the overview.
 - **Control** every 30 s: the charging power is written to a Loxone virtual input (kW, 0 = stop; optional 1/0
   "charging allowed" input) on change and at least every 5 minutes, never above the grid connection limit.
   A *Send test value* button checks the wiring. Published as `loxsuite/planner/{setpoint_kw,mode,need_kwh,…}`.
-- **Prices**: EnergyZero (free) or ENTSO-E (API key) day-ahead prices, turned into all-in prices by a tariff
-  formula, or calibrated automatically against a Loxone *Spot Price Optimizer* (samples every 15 min, linear fit
-  over two weeks). Your contract bills **per hour** (the average of the four quarters, most suppliers) or **per
-  quarter** (ENTSO-E delivers quarters). A **fixed contract** can have a normal and a low (dal) tariff with low
-  hours (default weekdays 23:00–07:00) and the whole weekend. Without internet prices: an estimate per hour of
-  day from the Spot Price Optimizer.
+- **Prices**: EnergyZero (free, public API, per quarter) or ENTSO-E (API key; what it lacks is filled from
+  EnergyZero) day-ahead prices, turned into all-in prices by a tariff formula, or calibrated automatically
+  against a Loxone *Spot Price Optimizer* (samples every 15 min, linear fit over two weeks). Your contract bills
+  **per hour** (the average of the four quarters, most suppliers) or **per quarter** (both sources deliver
+  quarters). After 13:00 LoxSuite checks every 15 minutes until tomorrow's prices are in. A **fixed contract**
+  can have a normal and a low (dal) tariff with low hours (default weekdays 23:00–07:00) and the whole weekend.
+  Without internet prices: an estimate per hour of day from the Spot Price Optimizer.
 - **Fuel**: manual price, or the CBS national average pump price (incl. VAT and excise) of what you tank —
   Euro95 (E10), diesel or LPG — with an optional surcharge per litre (Super 98, a dearer station).
 

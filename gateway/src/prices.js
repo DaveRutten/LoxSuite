@@ -1,8 +1,9 @@
 // Electricity prices for the charging planner. Day-ahead market prices come from EnergyZero (free,
-// no key) or ENTSO-E (free API key); the all-in price you actually pay is derived either from a
-// tariff formula (market + supplier markup, VAT, energy tax) or — when a Loxone Spot Price Optimizer
-// exists — by calibrating against the all-in price Loxone shows: LoxSuite samples Loxone's current
-// price every 15 minutes and fits all-in = a x market + b over the last two weeks.
+// no key, per quarter through its public API) or ENTSO-E (free API key; what it lacks — tomorrow's
+// prices late, an outage — is filled from EnergyZero). The all-in price you actually pay is derived
+// either from a tariff formula (market + supplier markup, VAT, energy tax) or — when a Loxone Spot
+// Price Optimizer exists — by calibrating against the all-in price Loxone shows: LoxSuite samples
+// Loxone's current price every 15 minutes and fits all-in = a x market + b over the last two weeks.
 //
 // Without an internet price source, 'loxone' predicts from the Spot Price Optimizer's own recent
 // prices per hour of day (an estimate, shown as such).
@@ -25,10 +26,10 @@ const DEFAULTS = {
   fixed_low_until: '07:00',
   fixed_low_weekend: true,
   // What your dynamic contract bills: 'hour' (average of the four quarters, most suppliers) or
-  // 'quarter' (each 15 minutes its own price; ENTSO-E gives quarters, EnergyZero only hours).
+  // 'quarter' (each 15 minutes its own price; EnergyZero and ENTSO-E both give quarters).
   price_interval: 'hour',
-  // What the charts show: 'hour', or 'quarter' when the source has quarters (ENTSO-E) — also when
-  // the contract bills per hour, so you see the price move within the hour.
+  // What the charts show: 'hour', or 'quarter' when the source has quarters (EnergyZero, ENTSO-E) —
+  // also when the contract bills per hour, so you see the price move within the hour.
   chart_interval: 'hour',
   calibrate_loxone: true,
   loxone_miniserver_id: null,
@@ -66,7 +67,23 @@ function fitLinear(pairs, minPairs = 24) {
   return { a: round4(a), b: round4(b), n, rmse: round4(rmse) };
 }
 
-// EnergyZero answer -> intervals. Each price holds until the next one (hourly or 15-minute).
+// EnergyZero's public API answer -> intervals: the "base" list (market price excl. VAT; the same
+// numbers the old API gave with inclBtw=false), each with its own start and end (15 or 60 minutes).
+function parseEnergyZeroPublic(body) {
+  return (Array.isArray(body?.base) ? body.base : [])
+    .map((p) => ({ start: Date.parse(p?.start), end: Date.parse(p?.end), price: Number(p?.price && typeof p.price === 'object' ? p.price.value : p?.price) }))
+    .filter((p) => Number.isFinite(p.start) && Number.isFinite(p.end) && p.end > p.start && Number.isFinite(p.price))
+    .sort((a, b) => a.start - b.start)
+    .map((p) => ({ start: new Date(p.start).toISOString(), end: new Date(p.end).toISOString(), market: round4(p.price) }));
+}
+
+// Pure: the local day `ms` falls in as dd-mm-yyyy (what EnergyZero's public API takes).
+function ezDate(ms, localParts) {
+  const p = localParts(ms);
+  return `${String(p.d).padStart(2, '0')}-${String(p.m).padStart(2, '0')}-${p.y}`;
+}
+
+// The old EnergyZero API's answer -> intervals. Each price holds until the next one (hourly or 15-minute).
 function parseEnergyZero(body) {
   const list = (body?.Prices || body?.prices || []).map((p) => ({ start: Date.parse(p.readingDate || p.from), price: Number(p.price) }))
     .filter((p) => Number.isFinite(p.start) && Number.isFinite(p.price))
@@ -219,11 +236,57 @@ async function fetchText(url, timeoutMs = 15000) {
   }
 }
 
-async function fetchMarket(cfg, fromMs, toMs, fetchImpl = fetchText) {
-  if (cfg.source === 'energyzero') {
-    const url = `https://api.energyzero.nl/v1/energyprices?fromDate=${new Date(fromMs).toISOString()}&tillDate=${new Date(toMs - 1).toISOString()}&interval=4&usageType=1&inclBtw=false`;
-    return parseEnergyZero(JSON.parse(await fetchImpl(url)));
+const EZ_PUBLIC = 'https://public.api.energyzero.nl/public/v1/prices';
+
+// EnergyZero market prices from fromMs to toMs, per quarter. The public API takes a local day and
+// answers the day before, that day and the day after as far as they are known (404 when that day
+// isn't out yet), so one call usually brings today and — once published — tomorrow; a day still
+// missing is asked for on its own. The old api.energyzero.nl/v1/energyprices stopped getting the
+// next day's prices (reported: Wednesday 17:00 still nothing for Thursday, the public API had them):
+// it is only used when the public API gives nothing at all.
+async function fetchEnergyZero(fromMs, toMs, fetchImpl = fetchText) {
+  const { localParts, localMidnight } = require('./localTime');
+  const byStart = new Map();
+  const add = (list) => {
+    for (const i of list) {
+      const s = Date.parse(i.start);
+      if (s >= fromMs && s < toMs && !byStart.has(s)) byStart.set(s, i);
+    }
+  };
+  const coveredUntil = (a, b) => {
+    // true when [a, b) is covered without holes by what came in
+    let t = a;
+    for (const [s, i] of [...byStart.entries()].sort((x, y) => x[0] - y[0])) {
+      if (s > t) break;
+      t = Math.max(t, Date.parse(i.end));
+      if (t >= b) return true;
+    }
+    return t >= b;
+  };
+  let err = null;
+  for (let day = localMidnight(fromMs), n = 0; day < toMs && n < 7; day = localMidnight(day, undefined, 1), n++) {
+    const dayEnd = localMidnight(day, undefined, 1);
+    if (coveredUntil(Math.max(day, fromMs), Math.min(dayEnd, toMs))) continue;
+    try {
+      add(parseEnergyZeroPublic(JSON.parse(await fetchImpl(`${EZ_PUBLIC}?energyType=ENERGY_TYPE_ELECTRICITY&interval=INTERVAL_QUARTER&date=${ezDate(day, localParts)}`))));
+    } catch (e) {
+      if (!/HTTP 404/.test(e.message)) err = e;
+      break; // a later day won't be out either
+    }
   }
+  if (!byStart.size) {
+    try {
+      const url = `https://api.energyzero.nl/v1/energyprices?fromDate=${new Date(fromMs).toISOString()}&tillDate=${new Date(toMs - 1).toISOString()}&interval=4&usageType=1&inclBtw=false`;
+      add(parseEnergyZero(JSON.parse(await fetchImpl(url))));
+    } catch (e) {
+      throw err || e;
+    }
+  }
+  return [...byStart.entries()].sort((a, b) => a[0] - b[0]).map(([, i]) => i);
+}
+
+async function fetchMarket(cfg, fromMs, toMs, fetchImpl = fetchText) {
+  if (cfg.source === 'energyzero') return fetchEnergyZero(fromMs, toMs, fetchImpl);
   if (cfg.source === 'entsoe') {
     const token = entsoeToken(cfg);
     if (!token) throw new Error('ENTSO-E needs an API token.');
@@ -295,6 +358,8 @@ async function refreshPrices(nowMs = Date.now(), { fetchImpl } = {}) {
   const calib = cfg.calibrate_loxone ? await calibration() : null;
   let intervals = [];
   let basis = null;
+  let filled = null;
+  let warning = null;
   if (cfg.source === 'fixed') {
     // quarters, so a low tariff that starts at e.g. 22:45 is exact
     for (let t = from; t < to; t += 900000) intervals.push({ start: new Date(t).toISOString(), end: new Date(t + 900000).toISOString(), market: null, allin: round4(fixedPrice(t, cfg)) });
@@ -318,7 +383,10 @@ async function refreshPrices(nowMs = Date.now(), { fetchImpl } = {}) {
     }
     basis = all.length; // number of Spot Price Optimizer values the estimate is made from
   } else {
-    let market = await fetchMarket(cfg, from, to, fetchImpl);
+    const got = await fetchMarketFilled(cfg, from, to, fetchImpl);
+    let market = got.market;
+    filled = got.filled;
+    warning = got.warning;
     // the quarters as they came in, for the charts (planning stays on what the contract bills)
     const quarterly = market.some((i) => Date.parse(i.end) - Date.parse(i.start) < 3600000);
     await settings.set('price_quarters', quarterly ? market.map((i) => ({ start: i.start, end: i.end, price: allinPrice(i.market, cfg, calib) })) : []);
@@ -332,12 +400,40 @@ async function refreshPrices(nowMs = Date.now(), { fetchImpl } = {}) {
   for (const i of intervals) {
     await db.upsert('energy_prices', { start_at: i.start, end_at: i.end, market_eur_kwh: i.market, allin_eur_kwh: i.allin, source: cfg.source, fetched_at: now }, ['start_at']);
   }
-  await settings.set('prices_status', { ok: true, at: now, count: intervals.length, until: intervals.length ? intervals[intervals.length - 1].end : null, calib, basis });
-  return { count: intervals.length, calib };
+  await settings.set('prices_status', { ok: true, at: now, count: intervals.length, until: intervals.length ? intervals[intervals.length - 1].end : null, calib, basis, filled, warning });
+  return { count: intervals.length, calib, filled };
+}
+
+// ENTSO-E with what it lacks (tomorrow's prices not in yet, a token or service problem) filled from
+// EnergyZero, which needs no key. The ENTSO-E problem stays visible as a warning.
+async function fetchMarketFilled(cfg, fromMs, toMs, fetchImpl = fetchText) {
+  if (cfg.source !== 'entsoe') return { market: await fetchMarket(cfg, fromMs, toMs, fetchImpl), filled: null, warning: null };
+  let market = [];
+  let err = null;
+  try { market = await fetchMarket(cfg, fromMs, toMs, fetchImpl); } catch (e) { err = e; }
+  const end = market.reduce((m, i) => Math.max(m, Date.parse(i.end)), fromMs);
+  let filled = null;
+  if (end < toMs) {
+    const extra = (await fetchEnergyZero(end, toMs, fetchImpl).catch(() => [])).filter((i) => Date.parse(i.start) >= end);
+    if (extra.length) { market = market.concat(extra); filled = 'energyzero'; }
+  }
+  if (!market.length && err) throw err;
+  return { market, filled, warning: err ? `ENTSO-E: ${err.message}` : null };
+}
+
+// True when tomorrow's day-ahead prices should be out (after 13:00) but aren't stored yet — then
+// LoxSuite asks every 15 minutes instead of once an hour.
+async function pricesBehind(nowMs = Date.now()) {
+  const cfg = await getConfig();
+  if (!['energyzero', 'entsoe'].includes(cfg.source)) return false;
+  const { localParts, localMidnight } = require('./localTime');
+  if (localParts(nowMs).hour < 13) return false;
+  const row = await db.prepare('SELECT MAX(end_at) AS until FROM energy_prices').get();
+  return !(row?.until && Date.parse(row.until) >= localMidnight(nowMs, undefined, 2));
 }
 
 // Quarter-hour all-in prices for the charts between two times, or null when the charts show hours
-// (setting) or the source has no quarters (EnergyZero, the Loxone estimate).
+// (setting) or the source has no quarters (the Loxone estimate, a fixed price).
 async function chartQuarters(fromIso, toIso) {
   const cfg = await getConfig();
   if (cfg.chart_interval !== 'quarter' || !['energyzero', 'entsoe'].includes(cfg.source)) return null;
@@ -368,7 +464,10 @@ function startPrices() {
     await settings.set('prices_status', { ok: false, at: new Date().toISOString(), error: err.message }).catch(() => {});
   });
   const t1 = setInterval(refresh, 60 * 60 * 1000);
-  const t2 = setInterval(() => sampleCalibration().catch(() => {}), 15 * 60 * 1000);
+  const t2 = setInterval(() => {
+    sampleCalibration().catch(() => {});
+    pricesBehind().then((behind) => (behind ? refresh() : null)).catch(() => {});
+  }, 15 * 60 * 1000);
   setTimeout(refresh, 30000).unref?.();
   setTimeout(() => sampleCalibration().catch(() => {}), 45000).unref?.();
   [t1, t2].forEach((t) => t.unref?.());
@@ -381,7 +480,7 @@ function stopPrices() {
 }
 
 module.exports = {
-  DEFAULTS, allinPrice, fitLinear, parseEnergyZero, parseEntsoe, entsoeTime, hourOfDayProfile, fillProfile, loxoneHistory, toIntervals, toHourly, fixedPrice,
-  getConfig, saveConfig, fetchMarket, refreshPrices, getPrices, chartQuarters, currentPrice, calibration, sampleCalibration,
+  DEFAULTS, allinPrice, fitLinear, parseEnergyZero, parseEnergyZeroPublic, ezDate, parseEntsoe, entsoeTime, hourOfDayProfile, fillProfile, loxoneHistory, toIntervals, toHourly, fixedPrice,
+  getConfig, saveConfig, fetchMarket, fetchEnergyZero, fetchMarketFilled, pricesBehind, refreshPrices, getPrices, chartQuarters, currentPrice, calibration, sampleCalibration,
   loxoneCurrentPrice, findSpotOptimizer, startPrices, stopPrices,
 };

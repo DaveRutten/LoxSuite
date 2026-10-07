@@ -20,7 +20,7 @@
   <p class="hint" style="margin:0 0 0.6rem;"><%= t('Used by Smart charging, the energy manager, Driving & costs and OCPP costs.') %></p>
   <div class="ls-fold-list">
   <details <%= saved === 'prices' ? 'open' : '' %>>
-    <summary><strong><%= t('Electricity price') %></strong> <span class="hint"><%= priceStatus ? (priceStatus.ok ? '· ' + t('{0} intervals, until {1}', [priceStatus.count, formatDateTime(priceStatus.until)]) + (priceStatus.basis ? ' · ' + t('estimate from {0} Spot Price Optimizer values', [priceStatus.basis]) : '') : '· ' + t(priceStatus.error)) : '' %></span></summary>
+    <summary><strong><%= t('Electricity price') %></strong> <span class="hint"><%= priceStatus ? (priceStatus.ok ? '· ' + t('{0} intervals, until {1}', [priceStatus.count, formatDateTime(priceStatus.until)]) + (priceStatus.basis ? ' · ' + t('estimate from {0} Spot Price Optimizer values', [priceStatus.basis]) : '') + (priceStatus.filled ? ' · ' + t('missing prices from EnergyZero') : '') + (priceStatus.warning ? ' · ' + priceStatus.warning : '') : '· ' + t(priceStatus.error)) : '' %></span></summary>
     <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
       <input type="hidden" name="section" value="prices">
       <div class="form-grid">
@@ -35,8 +35,7 @@
           <option value="quarter" <%= priceCfg.price_interval === 'quarter' ? 'selected' : '' %>><%= t('quarter of an hour') %></option></select></div>
         <div data-show-if="source=energyzero|entsoe"><label><%= t('Prices in the charts') %></label><select name="chart_interval">
           <option value="hour" <%= priceCfg.chart_interval !== 'quarter' ? 'selected' : '' %>><%= t('per hour') %></option>
-          <option value="quarter" <%= priceCfg.chart_interval === 'quarter' ? 'selected' : '' %>><%= t('per quarter of an hour (ENTSO-E only)') %></option></select></div>
-        <div data-show-if="source=energyzero"><p class="hint" style="margin:1.4rem 0 0;"><%= t('EnergyZero only gives prices per hour. For quarters choose ENTSO-E (free API key from transparency.entsoe.eu).') %></p></div>
+          <option value="quarter" <%= priceCfg.chart_interval === 'quarter' ? 'selected' : '' %>><%= t('per quarter of an hour') %></option></select></div>
       </div>
       <div class="form-grid" style="margin-top:0.8rem;" data-show-if="source=fixed">
         <div><label><%= t('Price (€/kWh, all-in)') %></label><input type="text" name="fixed_eur_kwh" value="<%= priceCfg.fixed_eur_kwh %>"></div>
@@ -52,7 +51,7 @@
         <div><label><%= t('Calibrate to Loxone') %><%= spo ? ` (${spo.name})` : '' %></label><%- toggleSwitch('calibrate_loxone', !!priceCfg.calibrate_loxone) %></div>
       </div>
       <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=fixed"><%= t('A fixed contract: one price, or a normal and a low (dal) tariff — in the Netherlands usually low on weekdays from 23:00 to 07:00 and all weekend. The plan then charges in the low hours where it can.') %></p>
-      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=energyzero|entsoe"><%= t('Since October 2025 the day-ahead market has a price per quarter of an hour; most dynamic contracts still bill the average per hour. ENTSO-E delivers the quarters, EnergyZero only hours.') %></p>
+      <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=energyzero|entsoe"><%= t('Since October 2025 the day-ahead market has a price per quarter of an hour; most dynamic contracts still bill the average per hour. EnergyZero and ENTSO-E both deliver the quarters; with ENTSO-E, prices it lacks are filled from EnergyZero.') %></p>
       <p class="hint" style="margin:0.5rem 0 0;" data-show-if="source=energyzero|entsoe|loxone">
         <%= t('All-in price = (market + markup) × VAT + energy tax. With') %> <em><%= t('Calibrate') %></em> <%= t('LoxSuite instead learns the formula from the price your Spot Price Optimizer shows (sampled every 15 minutes, fitted over two weeks)') %><%= priceStatus && priceStatus.calib ? ` — now: all-in = ${priceStatus.calib.a} × market + ${priceStatus.calib.b} (${priceStatus.calib.n} samples)` : spo ? ' — needs a day of samples first' : ' — no Spot Price Optimizer found' %>.
       </p>
