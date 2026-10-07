@@ -44,18 +44,15 @@
   <% } %>
   <div id="pl-plan" style="margin-top:1rem;"></div>
   <div style="margin-top:1rem;">
-    <div class="hint" style="margin:0 0 0.3rem; font-size:0.8rem;"><span style="font-weight:700;">│</span> <%= t('now') %> &nbsp;<span style="color:#e5534b; font-weight:700;">│</span> <%= t('ready by') %> &nbsp;<span style="font-weight:700; opacity:0.6;">│</span> <%= t('expected home') %> &nbsp;<span style="color:var(--accent); font-weight:700;">⬚</span> <%= t('if it came home now') %> &nbsp;<span style="display:inline-block; width:0.9em; height:0.8em; vertical-align:-0.05em; background:repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 5px); opacity:0.45;"></span> <%= t('no price (yet)') %> · <%= t('Point at or tap an hour for the details.') %></div>
+    <div class="hint" style="margin:0 0 0.3rem; font-size:0.8rem;"><span style="font-weight:700;">│</span> <%= t('now') %> &nbsp;<span style="color:var(--en-battery); font-weight:700;">│</span> <%= t('ready by') %> &nbsp;<span style="font-weight:700; opacity:0.6;">│</span> <%= t('expected home') %> &nbsp;<span style="color:var(--en-car); font-weight:700;">⬚</span> <%= t('if it came home now') %> &nbsp;<span style="display:inline-block; width:0.9em; height:0.8em; vertical-align:-0.05em; background:repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 5px); opacity:0.45;"></span> <%= t('no price (yet)') %> · <%= t('Point at or tap an hour for the details.') %></div>
     <div id="pl-chart"></div>
     <div id="pl-detail"></div>
   </div>
 </div>
 
 <style>
-  /* chart colors (validated as pairs per panel, light and dark): price, solar, import, battery, ready by */
-  #pl-chart { position:relative; --pl-price:#9aa5b1; --pl-solar:#d4a017; --pl-import:#4a7bd0; --pl-battery:#7b6fd6; --pl-ready:#e5534b; }
-  @media (prefers-color-scheme: dark) { #pl-chart { --pl-price:#7d8794; --pl-solar:#c08a10; --pl-import:#5b8be0; --pl-battery:#8577e0; --pl-ready:#e5675f; } }
-  :root[data-theme="light"] #pl-chart { --pl-price:#9aa5b1; --pl-solar:#d4a017; --pl-import:#4a7bd0; --pl-battery:#7b6fd6; --pl-ready:#e5534b; }
-  :root[data-theme="dark"] #pl-chart { --pl-price:#7d8794; --pl-solar:#c08a10; --pl-import:#5b8be0; --pl-battery:#8577e0; --pl-ready:#e5675f; }
+  /* the colors of the whole energy part (style.css --en-*): price, solar, import, the battery, ready by */
+  #pl-chart { position:relative; --pl-price:var(--en-price); --pl-solar:var(--en-solar); --pl-import:var(--en-import); --pl-battery:var(--en-battery); --pl-ready:var(--en-battery); --pl-car:var(--en-car); }
   .pl-tip { position:absolute; z-index:5; pointer-events:none; min-width:150px; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:10px; background:var(--surface, #fff); box-shadow:0 6px 18px rgba(0,0,0,0.12); font-size:0.78rem; line-height:1.35; }
   .pl-tip > div { display:flex; justify-content:space-between; gap:0.8rem; }
   .pl-tip > div strong { order:2; font-variant-numeric:tabular-nums; }
@@ -131,7 +128,7 @@
     var t = '';
     t += tile('Car', s.connected ? 'connected' : 'not connected', s.connected ? (p && p.target && p.target.vehicle ? esc(p.target.vehicle.name) + ' · ' : '') + nf(wb.sessionKwh, 1) + ' kWh this session' : '', s.connected ? 'var(--accent)' : '');
     t += tile('Charging', nf(wb.kw, 2) + ' <small>kW</small>', 'setpoint ' + nf(s.setpointKw, 2) + ' kW' + (d.override ? ' · ' + esc(MODE_LABEL[d.override]) + ' for this session' : ''));
-    t += tile('Solar surplus', nf(s.surplusKw, 2) + ' <small>kW</small>', 'export + what the car uses', '#d4a017');
+    t += tile('Solar surplus', nf(s.surplusKw, 2) + ' <small>kW</small>', 'export + what the car uses');
     if (p && p.fuelBreakEven) t += tile('Fuel break-even', eur(p.fuelBreakEven, 3) + '<small>/kWh</small>', 'above this, fuel is cheaper');
     t += lastSessionTile(d.lastSession);
     document.getElementById('pl-tiles').innerHTML = t;
@@ -144,7 +141,7 @@
           ? tile('Needs before leaving', nf(p.split.mustKwh, 1) + ' <small>kWh</small>', esc(T('trip {0} kWh + reserve {1} kWh; after it is back ({2}) {3} kWh more to be full again', nf(p.split.tripKwh, 1), nf(p.split.reserveKwh, 1), dtm(p.split.backAt), nf(p.split.restKwh, 1))))
           : tile(T(/^car reports/.test(tg.needSource || '') ? 'Room in the battery' : 'To charge (estimate)'), nf(p.needKwh, 1) + ' <small>kWh</small>', parts(tg.needSource))) +
         tile('Ready by', dtm(p.readyAt), esc(tg.readySource || 'no departure known — within 24 h')) +
-        (p.arrival ? tile('Expected home', dtm(p.arrival.at), esc(p.arrival.label), '#3b82f6') : '');
+        (p.arrival ? tile('Expected home', dtm(p.arrival.at), esc(p.arrival.label)) : '');
     }
     document.getElementById('pl-target').innerHTML = th;
     // the one-time "ready by" (the fields themselves are not redrawn, so typing is never lost)
@@ -324,14 +321,14 @@
     // ---- price: planned intervals in green, the rest gray, lighter where cheaper
     var pp = P.price;
     var maxP = Math.max(0.1, Math.max.apply(null, slots.map(function (s) { return s.price || 0; })));
-    svg += label(pp, '<tspan font-weight="600">' + esc(T('Price (all-in)')) + '</tspan>' + key('fill:var(--accent)', T('planned hours'))) + track(pp) + hair(pp.y + pp.h * 0.08) + hair(pp.y + pp.h * 0.54) +
+    svg += label(pp, '<tspan font-weight="600">' + esc(T('Price (all-in)')) + '</tspan>' + key('fill:var(--pl-car)', T('planned hours'))) + track(pp) + hair(pp.y + pp.h * 0.08) + hair(pp.y + pp.h * 0.54) +
       tick(pp.y + pp.h * 0.08, '€' + nf(maxP, 2)) + tick(pp.y + pp.h * 0.54, '€' + nf(maxP / 2, 2));
     slots.forEach(function (s) {
       if (s.price == null) return;
       var a = Date.parse(s.start), b = Date.parse(s.end), c = colOf(a, b);
       var h = Math.max(1.5, s.price / maxP * pp.h * 0.92);
       var planned = plannedIn(p, a, b).kwh > 0.01;
-      svg += '<path d="' + barPath(c.x, pp.y + pp.h - h, c.w, h) + '" style="fill:' + (planned ? 'var(--accent)' : 'var(--pl-price)') + ';" opacity="' + (planned ? 0.8 : (0.22 + 0.36 * s.price / maxP).toFixed(2)) + '"/>';
+      svg += '<path d="' + barPath(c.x, pp.y + pp.h - h, c.w, h) + '" style="fill:' + (planned ? 'var(--pl-car)' : 'var(--pl-price)') + ';" opacity="' + (planned ? 0.75 : (0.22 + 0.36 * s.price / maxP).toFixed(2)) + '"/>';
     });
     // no price: hatched over the whole height of the panels, with what is going on
     var runs = [], run = null;
@@ -352,15 +349,15 @@
     var cp = P.charge;
     var ch = slots.map(function (s) { var a = Date.parse(s.start), b = Date.parse(s.end), pl = plannedIn(p, a, b), hrs = (b - a) / 3600000; return { kw: pl.kwh / hrs, pv: Math.min(pl.kwh, pl.pv) / hrs }; });
     var maxKwC = Math.max(3.7, Math.max.apply(null, ch.map(function (c) { return c.kw; })));
-    svg += label(cp, '<tspan font-weight="600">' + esc(T('Charging (kW)')) + '</tspan>' + key('fill:var(--accent)', T('from the grid')) + key('fill:var(--pl-solar)', T('solar'))) + track(cp) + hair(cp.y + cp.h * 0.08) + tick(cp.y + cp.h * 0.08, nf(maxKwC, 1));
+    svg += label(cp, '<tspan font-weight="600">' + esc(T('Charging (kW)')) + '</tspan>' + key('fill:var(--pl-car)', T('from the grid')) + key('fill:var(--pl-solar)', T('solar'))) + track(cp) + hair(cp.y + cp.h * 0.08) + tick(cp.y + cp.h * 0.08, nf(maxKwC, 1));
     slots.forEach(function (s, i) {
       var a = Date.parse(s.start), b = Date.parse(s.end), col = colOf(a, b), c = ch[i];
       if (c.kw > 0.05) {
         var hT = c.kw / maxKwC * cp.h * 0.92, hS = c.pv / maxKwC * cp.h * 0.92, base = cp.y + cp.h;
         if (hS > 0.5) svg += '<path d="' + barPath(col.x, base - hS, col.w, hS) + '" style="fill:var(--pl-solar);" opacity="0.8"/>';
-        if (hT - hS > 0.5) svg += '<path d="' + barPath(col.x, base - hT, col.w, hT - hS - (hS > 0.5 ? 2 : 0)) + '" style="fill:var(--accent);" opacity="0.8"/>';
+        if (hT - hS > 0.5) svg += '<path d="' + barPath(col.x, base - hT, col.w, hT - hS - (hS > 0.5 ? 2 : 0)) + '" style="fill:var(--pl-car);" opacity="0.75"/>';
       } else if (p.ifNow && p.ifNow.slots.some(function (q) { return Date.parse(q.start) < b && Date.parse(q.end) > a; })) {
-        svg += '<rect x="' + f1(col.x + 0.5) + '" y="' + f1(cp.y + cp.h * 0.35) + '" width="' + f1(Math.max(0.5, col.w - 1)) + '" height="' + f1(cp.h * 0.65 - 0.5) + '" rx="3" fill="none" style="stroke:var(--accent);" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.7"/>';
+        svg += '<rect x="' + f1(col.x + 0.5) + '" y="' + f1(cp.y + cp.h * 0.35) + '" width="' + f1(Math.max(0.5, col.w - 1)) + '" height="' + f1(cp.h * 0.65 - 0.5) + '" rx="3" fill="none" style="stroke:var(--pl-car);" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.7"/>';
       }
     });
 
@@ -466,7 +463,7 @@
 
     // ---- the chosen interval: a soft wash over all panels; a crosshair that follows the pointer
     var si = plSel === null ? -1 : slots.findIndex(function (s) { return Date.parse(s.start) === plSel; });
-    if (si >= 0) { var sx = X(Date.parse(slots[si].start)), sw = X(Date.parse(slots[si].end)) - sx; svg += vband(sx, Math.max(2, sw), 'rx="3" style="fill:var(--accent);" opacity="0.13" pointer-events="none"'); }
+    if (si >= 0) { var sx = X(Date.parse(slots[si].start)), sw = X(Date.parse(slots[si].end)) - sx; svg += vband(sx, Math.max(2, sw), 'rx="3" style="fill:var(--pl-car);" opacity="0.1" pointer-events="none"'); }
     svg += '<g id="pl-xh" opacity="0" pointer-events="none">' + vline(0, 'stroke:currentColor;', 1) + '</g>' +
       '<rect id="pl-hit" x="' + left + '" y="0" width="' + PW + '" height="' + bottom + '" fill="transparent" style="cursor:pointer;"/></svg>' +
       '<div id="pl-tip" class="pl-tip" hidden></div>';

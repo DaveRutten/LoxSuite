@@ -4270,5 +4270,15 @@
   "Price (all-in)": "Prijs (all-in)",
   "estimated level": "geschat niveau",
   "planned hours": "geplande uren",
-  "Solar and grid (kW)": "Zon en net (kW)"
+  "Solar and grid (kW)": "Zon en net (kW)",
+  "{0} – {1} kWh": "{0} – {1} kWh",
+  "in the weekend": "in het weekend",
+  "low – high": "laag – hoog",
+  "on a workday": "op een werkdag",
+  "Moved from {0} — what you chose for the series still counts.": "Verplaatst van {0} — wat je voor de reeks koos, blijft gelden.",
+  "Wallbox limit": "Limiet Wallbox",
+  "an event": "een gebeurtenis",
+  "via the first address, then home": "via het eerste adres naar huis",
+  "Via:": "Via:",
+  "(again)": "(weer)"
 }

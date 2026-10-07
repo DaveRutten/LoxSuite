@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.49.0-alpha.1] - 2026-10-07
+
+### Changed
+- **One chart style in the whole energy part** (asked for: Meters still had hard lines; "the same style
+  everywhere"): a shared `public/ls-chart.js` (smooth lines that never overshoot, a light wash below, soft columns
+  with a rounded end, hairline grid, a crosshair with a summary when you point at a chart) and one palette for all
+  energy charts (`--en-*` in style.css, light and dark, checked to be told apart — also with colour blindness):
+  solar yellow, import from the grid red, export green, the car / Wallbox blue, the house gray, the battery and
+  *ready by* violet, the price gray.
+  - **Meters**: solar as a smooth line with a wash, the house as a calm line, import / Wallbox / export as soft
+    columns (export below zero, rounded at the bottom); point at an hour for all values of that hour; the tiles show
+    their value in text color with a color key.
+  - **Smart charging**: planned hours and charging in the car's blue (as in the energy manager), import red.
+  - **Energy manager**: the same colors in the plan; the expected kWh per hour of a consumer as a smooth line.
+  - **Consumer page**: the last 48 hours as soft blocks on a light track, kWh per hour as soft columns.
+  - **Learned**: the solar forecast as a smooth line in a light band (low – high) and the yield per day as soft
+    columns; the house profile (workday solid, weekend dashed) smooth; point at both for the values.
+  - **Driving & costs**: km per month as soft stacked columns, the consumption per month as a smooth line with dots.
+  - **Charge log**: still steps (set values jump), in the shared colors with a light wash under the power.
+
+### Added
+- **Back home via where the drive started** (asked for: drop off at appointment 1, drive on to appointment 2, and
+  from there back via appointment 1 — to pick up — before going home): after an appointment that isn't where the
+  drive started there is a third choice, *via the first address, then home*. The route gets that stop again
+  (home → 1 → 2 → 1 → home) with the distances and times of each leg, and the car is back home after it.
+
+### Fixed
+- **A series moved to another day** (asked for: a Tuesday series with some weeks on another day): that occurrence
+  already showed on its new day with the series' choices; now a choice made for that one day (drop off / pick up,
+  driving on, own value, climate) stays with it when it is moved, and the agenda says where it was moved from. The
+  occurrence's original start (RECURRENCE-ID) is kept as `calendar_events.recurrence_at` (migration 038).
+- Learned: the solar history chart broke when there was no forecast for tomorrow (no width).
+
 ## [0.48.0-alpha.1] - 2026-10-07
 
 ### Changed

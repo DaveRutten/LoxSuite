@@ -90,8 +90,9 @@ function icsUrl(url) {
   return String(url || '').trim().replace(/^webcals?:\/\//i, 'https://');
 }
 
-// node-ical calendar data -> occurrences [{uid, start, end, allDay, title, location, description}]
-// within [fromMs, toMs): recurrences expanded, EXDATEs skipped, modified occurrences applied.
+// node-ical calendar data -> occurrences [{uid, start, end, allDay, title, location, description,
+// recurrenceAt}] within [fromMs, toMs): recurrences expanded, EXDATEs skipped, modified occurrences
+// applied (also one moved to another day: recurrenceAt keeps its original start).
 function expandEvents(data, fromMs, toMs) {
   const out = [];
   const dayKey = (d) => d.toISOString().slice(0, 10);
@@ -100,7 +101,7 @@ function expandEvents(data, fromMs, toMs) {
     if (!e || e.type !== 'VEVENT' || !e.start) continue;
     const allDay = e.datetype === 'date' || e.start.dateOnly === true;
     const durMs = e.end ? e.end - e.start : (allDay ? 86400000 : 3600000);
-    const push = (start, ev = e) => {
+    const push = (start, ev = e, occ = null) => {
       const s = allDay ? asAllDay(start) : start;
       const end = ev.end && ev !== e ? (allDay ? asAllDay(ev.end) : ev.end) : new Date(s.getTime() + durMs);
       if (end.getTime() <= fromMs || s.getTime() >= toMs) return;
@@ -108,6 +109,7 @@ function expandEvents(data, fromMs, toMs) {
         uid: String(e.uid || ''), start: s.toISOString(), end: end.toISOString(), allDay,
         title: require('./caldav').decodeEntities(ev.summary?.val ?? ev.summary ?? ''), location: require('./caldav').decodeEntities(ev.location?.val ?? ev.location ?? ''),
         description: String(ev.description?.val ?? ev.description ?? '').slice(0, 2000),
+        recurrenceAt: occ ? (allDay ? asAllDay(occ) : occ).toISOString() : null,
       });
     };
     if (e.rrule) {
@@ -117,8 +119,8 @@ function expandEvents(data, fromMs, toMs) {
         const k = dayKey(o);
         if (ex.has(k)) continue;
         const rec = e.recurrences && (e.recurrences[k] || e.recurrences[o.toISOString()]);
-        if (rec) { if (rec.status !== 'CANCELLED') push(rec.start || o, rec); continue; }
-        push(o);
+        if (rec) { if (rec.status !== 'CANCELLED') push(rec.start || o, rec, o); continue; }
+        push(o, e, o);
       }
     } else if (e.status !== 'CANCELLED') {
       push(e.start);
@@ -204,7 +206,7 @@ async function syncCalendar(cal, { nowMs = Date.now(), fetchText = fetchIcs } = 
       await db.upsert('calendar_events', {
         calendar_id: cal.id, uid: o.uid.slice(0, 255), start_at: o.start, end_at: o.end, all_day: o.allDay ? 1 : 0,
         title: o.title.slice(0, 300), location: o.location.slice(0, 300) || null, car_tag: car ? 1 : 0, car_hint: hint ? JSON.stringify(hint) : null,
-        trip_tag: tripTag,
+        trip_tag: tripTag, recurrence_at: o.recurrenceAt,
       }, ['calendar_id', 'uid', 'start_at']);
       seen.add(`${o.uid}|${o.start}`);
     }
@@ -324,6 +326,13 @@ function cleanFlag(v) {
   if (v === null || v === undefined || v === '') return null;
   return Number(v) ? 1 : 0;
 }
+// Pure: after an appointment: '' -> null, 0 = home, 1 = on to the next appointment, 2 = back home via the
+// address the drive started at (e.g. to pick up there).
+function cleanChain(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return n === 2 ? 2 : n ? 1 : 0;
+}
 
 // Only the fields that are given change; the others (car needed, own value, climate, how you drive,
 // driving on) are kept. With scope 'series', car needed / how you drive / driving on go to the whole
@@ -334,7 +343,7 @@ async function setOverride(b) {
   const { calendar_id, uid } = b;
   const start_at = b.start_at;
   const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
-  const clean = (k, v) => (k === 'trip_mode' ? cleanMode(v) : cleanFlag(v));
+  const clean = (k, v) => (k === 'trip_mode' ? cleanMode(v) : k === 'chain_end' ? cleanChain(v) : cleanFlag(v));
   if (b.scope === 'series' && SERIES_FIELDS.some(has)) {
     const ser = await db.prepare('SELECT * FROM event_overrides WHERE calendar_id = ? AND uid = ? AND start_at = ?').get(Number(calendar_id), String(uid), '*') || {};
     const row = {
@@ -400,7 +409,10 @@ async function build(fromIso, toIso, { withGeo = false, fetchLegs = false } = {}
   for (const e of events) {
     const cal = cals.get(e.calendar_id) || {};
     if (cal.name) cal.name = require('./caldav').decodeEntities(cal.name);
-    const o0 = ov.get(`${e.calendar_id}|${e.uid}|${e.start_at}`);
+    // the day's own choice: stored under the occurrence's original start, so it stays when the
+    // appointment is moved to another day (before: under where it was then)
+    const occ = e.recurrence_at || e.start_at;
+    const o0 = ov.get(`${e.calendar_id}|${e.uid}|${occ}`) || ov.get(`${e.calendar_id}|${e.uid}|${e.start_at}`);
     const so = ov.get(`${e.calendar_id}|${e.uid}|*`);
     // the day's own choice, else the series' choice; own value and climate per day
     const o = o0 && o0.needs_car !== null ? o0 : so && so.needs_car !== null ? { ...(o0 || {}), needs_car: so.needs_car, series: true } : o0;
@@ -414,13 +426,14 @@ async function build(fromIso, toIso, { withGeo = false, fetchLegs = false } = {}
       kind: 'event', id: e.id, calendar_id: e.calendar_id, calendar: cal.name, color: cal.color, uid: e.uid,
       start: e.start_at, end: e.end_at, allDay: !!e.all_day, title: e.title, location: e.location,
       carTag: !!e.car_tag, needsCar, carSource: o && o.needs_car !== null && o.needs_car !== undefined ? (o.series ? 'series' : 'you') : e.car_tag ? 'tag' : null,
-      recurring: recurring.has(`${e.calendar_id}|${e.uid}`),
+      recurring: recurring.has(`${e.calendar_id}|${e.uid}`) || !!e.recurrence_at, occ,
+      movedFrom: e.recurrence_at && e.recurrence_at !== e.start_at ? e.recurrence_at : null,
       own: o?.own_value || null, hint: e.car_hint ? JSON.parse(e.car_hint) : null, vehicle_id: o?.vehicle_id || cal.vehicle_id || null,
       askCar: !needsCar && !!e.location && !(o && Number(o.needs_car) === 0 && o.needs_car !== null),
       climateC: o?.climate_c ?? null,
       tripMode: e.all_day ? 'stay' : (TRIP_MODES.includes(mode?.v) ? mode.v : (e.trip_tag || 'stay')),
       tripModeSource: mode ? mode.src : e.trip_tag ? 'tag' : null, tripTag: e.trip_tag || null,
-      chainStart: !!Number(cs?.v || 0), chainEnd: !!Number(ce?.v || 0), chainSource: cs?.src === 'series' || ce?.src === 'series' ? 'series' : cs || ce ? 'you' : null,
+      chainStart: !!Number(cs?.v || 0), chainEnd: Number(ce?.v || 0), chainSource: cs?.src === 'series' || ce?.src === 'series' ? 'series' : cs || ce ? 'you' : null,
     };
     if (needsCar) await enrichNeed(item, cfg, withGeo);
     out.push(item);
@@ -495,11 +508,13 @@ function stopsOf(item, dwellMin = 5) {
   const e = Date.parse(item.end);
   const dw = Math.max(0, Number(dwellMin) || 0) * 60000;
   const mode = item.allDay ? 'stay' : (item.tripMode || 'stay');
-  const at = (role, arrive, depart, chain) => ({ item, role, arrive, depart, chain: !!chain && !item.allDay });
-  if (mode === 'both') return [at('drop', s, s + dw, item.chainStart), at('pick', e, e + dw, item.chainEnd)];
+  // after the end: on to the next appointment (1), or back home via where the drive started (2)
+  const end = Number(item.chainEnd) || 0;
+  const at = (role, arrive, depart, chain, via = false) => ({ item, role, arrive, depart, chain: !!chain && !item.allDay, via: !!via && !item.allDay });
+  if (mode === 'both') return [at('drop', s, s + dw, item.chainStart), at('pick', e, e + dw, end === 1, end === 2)];
   if (mode === 'drop') return [at('drop', s, s + dw, item.chainStart)];
-  if (mode === 'pick') return [at('pick', e, e + dw, item.chainEnd)];
-  return [at('stay', s, e, item.chainEnd)];
+  if (mode === 'pick') return [at('pick', e, e + dw, end === 1, end === 2)];
+  return [at('stay', s, e, end === 1, end === 2)];
 }
 
 // Pure: the stops of one car -> routes, in time order. A stop that drives on is followed by the next
@@ -564,7 +579,7 @@ function homeLeg(st) {
 function routeNeed(route, legs, { marginKm = 20 } = {}) {
   const itemsIn = [];
   for (const st of route) if (!itemsIn.includes(st.item)) itemsIn.push(st.item);
-  const share = (it) => route.filter((st) => st.item === it).length / (it._stops || 1);
+  const share = (it) => route.filter((st) => st.item === it && st.role !== 'via').length / (it._stops || 1);
   const kpk = itemsIn.find((i) => i.kwhPerKm)?.kwhPerKm || 0.2;
   const usable = itemsIn.find((i) => i.usableKwh)?.usableKwh ?? null;
   const known = legs.every(Boolean);
@@ -665,6 +680,11 @@ async function routesOf(list, cfg, { fetchLegs = false } = {}) {
       if (st.role === 'drop') st.item.nextAfterStart = info; else st.item.nextAfterEnd = info;
     }
     for (const route of chainStops(stops, { maxGapH })) {
+      // back home via the address the drive started at (to pick up there): one more stop
+      const lastSt = route[route.length - 1];
+      if (lastSt.via && route.length > 1) route.push({ item: route[0].item, role: 'via', arrive: lastSt.depart, depart: lastSt.depart + dwell * 60000, chain: false, via: false });
+      // offered after an appointment that isn't where the drive started
+      route.forEach((st, idx) => { if (idx > 0 && (st.role === 'stay' || st.role === 'pick') && st.item !== route[0].item) st.item.viaAfterEnd = { title: route[0].item.title, location: route[0].item.location || null }; });
       const legs = [homeLeg(route[0])];
       for (let i = 1; i < route.length; i++) {
         const a = route[i - 1].item;
@@ -675,6 +695,10 @@ async function routesOf(list, cfg, { fetchLegs = false } = {}) {
           if (fetchLegs && (!cached || cached.error)) cached = await fetchLeg(a, b).catch(() => null);
         }
         legs.push(legOf(route[i - 1], route[i], cached));
+        if (route[i].role === 'via') {
+          route[i].arrive = route[i - 1].depart + (legs[i]?.min || 0) * 60000;
+          route[i].depart = route[i].arrive + dwell * 60000;
+        }
       }
       legs.push(homeLeg(route[route.length - 1]));
       out.push({ route, r: routeOf(route, legs, { marginKm, readyMarginMin }) });
@@ -690,6 +714,7 @@ async function routesOf(list, cfg, { fetchLegs = false } = {}) {
         it.leaveAt = r.leaveAt;
         it.readyAt = r.readyAt;
       }
+      if (it.tours.some((x) => x.id === r.id)) return; // back via where it started: the same drive once
       it.tours.push({
         id: r.id, role: st.role, first: idx === 0, title: r.title, leaveAt: r.leaveAt, backAt: r.backAt, readyAt: r.readyAt,
         kwh: r.kwh, km: r.km, approx: r.approx, marginKm: r.marginKm, stops: r.stops.map((x) => ({ title: x.title, role: x.role, arrive: x.arrive, location: x.location })), legs: r.legs,
@@ -757,6 +782,6 @@ function stopAgenda() {
 }
 
 module.exports = {
-  DEFAULTS, TRIP_MODES, hasCarTag, parseCarHint, parseTripTag, parseOwnValue, tripNeedKwh, stopsOf, chainStops, legOf, routeNeed, routeOf, crowKm, cleanMode, cleanFlag, tours, fetchLeg, icsUrl, expandEvents, tripOccurrences,
+  DEFAULTS, TRIP_MODES, hasCarTag, parseCarHint, parseTripTag, parseOwnValue, tripNeedKwh, stopsOf, chainStops, legOf, routeNeed, routeOf, crowKm, cleanMode, cleanFlag, cleanChain, tours, fetchLeg, icsUrl, expandEvents, tripOccurrences,
   addressCandidates, icsName, fetchIcs, getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
 };

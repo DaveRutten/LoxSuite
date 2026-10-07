@@ -116,8 +116,10 @@
       var W = lsChartW(el, 900), H = 36, t1 = Date.now(), t0 = t1 - 48 * 3600000;
       var X = function (ms) { return (ms - t0) / (t1 - t0) * W; };
       var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 18) + '" width="100%" style="display:block;">';
-      segs.forEach(function (sg) { var x = X(sg.from), w = Math.max(1, X(sg.to) - x); svg += '<rect x="' + x + '" y="4" width="' + w + '" height="' + (H - 8) + '" fill="' + color(sg.key) + '" opacity="0.9"><title>' + esc(sg.key + ' · ' + hh(sg.from) + '–' + hh(sg.to) + ' (' + dur((sg.to - sg.from) / 60000) + ')') + '</title></rect>'; });
-      for (var t = Math.ceil(t0 / 3600000) * 3600000; t < t1; t += 3600000) { var dt = new Date(t); if (dt.getHours() % 6 === 0) svg += '<line x1="' + X(t) + '" y1="0" x2="' + X(t) + '" y2="' + H + '" stroke="currentColor" opacity="0.15"/><text x="' + (X(t) + 2) + '" y="' + (H + 13) + '" font-size="10" fill="currentColor" opacity="0.6">' + (dt.getHours() === 0 ? dt.toLocaleDateString([], { weekday: 'short' }) : String(dt.getHours()).padStart(2, '0') + ':00') + '</text>'; }
+      // a light track, the states as soft rounded blocks with a hairline of air between them
+      svg += '<rect x="0" y="6" width="' + W + '" height="' + (H - 12) + '" rx="6" fill="currentColor" opacity="0.04"/>';
+      segs.forEach(function (sg) { var x = X(sg.from), w = Math.max(1, X(sg.to) - x - 1); svg += '<rect x="' + (x + 0.5) + '" y="6" width="' + w + '" height="' + (H - 12) + '" rx="' + Math.min(4, w / 2) + '" fill="' + color(sg.key) + '" opacity="0.7"><title>' + esc(sg.key + ' · ' + hh(sg.from) + '–' + hh(sg.to) + ' (' + dur((sg.to - sg.from) / 60000) + ')') + '</title></rect>'; });
+      for (var t = Math.ceil(t0 / 3600000) * 3600000; t < t1; t += 3600000) { var dt = new Date(t); if (dt.getHours() % 6 === 0) svg += '<line x1="' + X(t) + '" y1="2" x2="' + X(t) + '" y2="' + H + '" stroke="currentColor" opacity="0.1"/><text x="' + (X(t) + 2) + '" y="' + (H + 13) + '" font-size="10" fill="currentColor" opacity="0.6">' + (dt.getHours() === 0 ? dt.toLocaleDateString([], { weekday: 'short' }) : String(dt.getHours()).padStart(2, '0') + ':00') + '</text>'; }
       var keys = []; segs.forEach(function (sg) { if (keys.indexOf(sg.key) < 0) keys.push(sg.key); });
       el.innerHTML = svg + '</svg><div class="hint" style="margin:0.3rem 0 0;">' + keys.map(function (k) { return '<span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:' + color(k) + '; margin:0 4px 0 10px;"></span>' + esc(k); }).join('') + '</div>';
     }
@@ -130,8 +132,10 @@
       var W2 = lsChartW(hel, 900), H2 = 120, e1 = Math.floor(Date.now() / 3600000) * 3600000 + 3600000, e0 = e1 - 7 * 24 * 3600000;
       var X2 = function (ms) { return (ms - e0) / (e1 - e0) * W2; }, bw = W2 / (7 * 24);
       var max = Math.max.apply(null, rows.map(function (r) { return r.kwh; }).concat([0.1]));
-      var s2 = '<svg viewBox="0 0 ' + W2 + ' ' + (H2 + 16) + '" width="100%" style="display:block;">';
-      rows.forEach(function (r) { var ms = Date.parse(r.hour), h = r.kwh / max * H2; s2 += '<rect x="' + X2(ms) + '" y="' + (H2 - h) + '" width="' + Math.max(1, bw - 0.5) + '" height="' + h + '" fill="var(--accent, #5CA83F)" opacity="0.85"><title>' + esc(new Date(ms).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ': ' + nf(r.kwh, 2) + ' kWh') + '</title></rect>'; });
+      // per hour as soft columns (a consumer switches on and off: no smoothing over that)
+      var C = window.LsChart;
+      var s2 = '<svg viewBox="0 0 ' + W2 + ' ' + (H2 + 16) + '" width="100%" style="display:block;">' + C.hline(0, W2, H2 / 2) + C.hline(0, W2, H2, 0.18);
+      rows.forEach(function (r) { var ms = Date.parse(r.hour), h = r.kwh / max * H2 * 0.95; s2 += C.col(X2(ms) + 0.25, H2 - h, Math.max(0.8, bw - 0.5), h, { color: 'var(--accent, #5CA83F)', opacity: 0.45, r: Math.min(2, bw / 2), title: esc(new Date(ms).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ': ' + nf(r.kwh, 2) + ' kWh') }); });
       for (var t2 = Math.ceil(e0 / 86400000) * 86400000; t2 < e1; t2 += 86400000) s2 += '<text x="' + (X2(t2) + 2) + '" y="' + (H2 + 12) + '" font-size="10" fill="currentColor" opacity="0.6">' + new Date(t2).toLocaleDateString([], { weekday: 'short', day: 'numeric' }) + '</text>';
       hel.innerHTML = s2 + '</svg><div class="hint" style="margin:0.3rem 0 0;">' + esc(TL('Highest hour: {0} kWh').replace('{0}', nf(max, 2))) + '</div>';
     }

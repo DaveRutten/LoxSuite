@@ -62,8 +62,8 @@
     var s = '<svg width="' + TW + '" height="18" viewBox="0 0 ' + TW + ' 18" style="display:block;"><line x1="0" y1="9" x2="' + TW + '" y2="9" stroke="currentColor" opacity="0.12"/>';
     [6, 12, 18].forEach(function (h) { var x = h / 24 * TW; s += '<line x1="' + x + '" y1="2" x2="' + x + '" y2="16" stroke="currentColor" opacity="0.15"/>'; });
     var m = {}; morning.forEach(function (v) { m[v] = true; });
-    all.forEach(function (v) { s += '<circle cx="' + (v / 1440 * TW) + '" cy="9" r="4" fill="' + (m[v] ? 'var(--accent)' : '#b0b8c2') + '" opacity="0.85"/>'; });
-    if (medMin != null) { var x = medMin / 1440 * TW; s += '<line x1="' + x + '" y1="0" x2="' + x + '" y2="18" stroke="#e5534b" stroke-width="2"/>'; }
+    all.forEach(function (v) { s += '<circle cx="' + (v / 1440 * TW) + '" cy="9" r="4" style="fill:' + (m[v] ? 'var(--en-car)' : 'var(--en-price)') + '; stroke:var(--surface, #fff);" stroke-width="1.5" opacity="0.85"/>'; });
+    if (medMin != null) { var x = medMin / 1440 * TW; s += '<line x1="' + x + '" y1="1" x2="' + x + '" y2="17" style="stroke:var(--en-battery);" stroke-width="2" stroke-linecap="round"/>'; }
     return s + '</svg>';
   }
   function axis(labels, max, w) { var s = '<svg width="' + w + '" height="14" viewBox="0 0 ' + w + ' 14" style="display:block;">'; labels.forEach(function (l) { s += '<text x="' + Math.min(w - 14, l / max * w) + '" y="11" font-size="10" fill="currentColor" opacity="0.6">' + l + '</text>'; }); return s + '</svg>'; }
@@ -84,8 +84,8 @@
   function strip(vals, med) {
     var s = '<svg width="' + SW + '" height="18" viewBox="0 0 ' + SW + ' 18" style="display:block;"><line x1="0" y1="9" x2="' + SW + '" y2="9" stroke="currentColor" opacity="0.12"/>';
     [5, 10, 15, 20].forEach(function (k) { var x = k / MAXK * SW; s += '<line x1="' + x + '" y1="3" x2="' + x + '" y2="15" stroke="currentColor" opacity="0.12"/>'; });
-    vals.forEach(function (v) { s += '<circle cx="' + (Math.min(v, MAXK) / MAXK * SW) + '" cy="9" r="4" fill="#4a7bd0" opacity="0.75"/>'; });
-    if (med != null) { var x = Math.min(med, MAXK) / MAXK * SW; s += '<line x1="' + x + '" y1="0" x2="' + x + '" y2="18" stroke="#e5534b" stroke-width="2"/>'; }
+    vals.forEach(function (v) { s += '<circle cx="' + (Math.min(v, MAXK) / MAXK * SW) + '" cy="9" r="4" style="fill:var(--en-car); stroke:var(--surface, #fff);" stroke-width="1.5" opacity="0.75"/>'; });
+    if (med != null) { var x = Math.min(med, MAXK) / MAXK * SW; s += '<line x1="' + x + '" y1="1" x2="' + x + '" y2="17" style="stroke:var(--en-battery);" stroke-width="2" stroke-linecap="round"/>'; }
     return s + '</svg>';
   }
   function renderTrips(d) {
@@ -122,31 +122,34 @@
     var el = document.getElementById('ln-solar');
     if (!s.config.kwp) { el.innerHTML = '<p class="hint" style="margin:0;">Set your solar array (kWp, tilt, direction) and home location under <a href="/settings/energy#prices">Administration &rarr; Energy &amp; charging</a>.</p>'; return; }
     var hours = s.tomorrow.hours;
-    var html = '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700; color:#d4a017;">' + nf(s.tomorrow.total_kwh, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh</span></div>' +
+    var html = '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700;"><span style="display:inline-block; width:0.6em; height:4px; border-radius:2px; vertical-align:0.3em; margin-right:0.3em; background:var(--en-solar);"></span>' + nf(s.tomorrow.total_kwh, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh</span></div>' +
       '<div class="hint" style="margin:0;">range ' + nf(s.tomorrow.low_kwh, 0) + ' – ' + nf(s.tomorrow.high_kwh, 0) + ' kWh' + (s.status && s.status.ok ? ' · updated ' + new Date(s.status.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : s.status && s.status.error ? ' · <span style="color:var(--danger);">' + esc(s.status.error) + '</span>' : '') + '</div></div>';
     if (hours.length) {
       var W = lsChartW(el, 520), H = 120, max = Math.max(1, Math.max.apply(null, hours.map(function (h) { return h.corrected_kwh || 0; })) * 1.15);
       var band = s.tomorrow.band;
       var X = function (i) { return 30 + i / Math.max(1, hours.length - 1) * (W - 40); };
       var Y = function (v) { return 8 + H - v / max * H; };
-      var up = hours.map(function (h, i) { return X(i) + ',' + Y((h.corrected_kwh || 0) * band.high); });
-      var lo = hours.map(function (h, i) { return X(i) + ',' + Y((h.corrected_kwh || 0) * band.low); }).reverse();
-      var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 28) + '" width="100%" style="display:block;"><polygon points="' + up.concat(lo).join(' ') + '" fill="#d4a017" opacity="0.15"/>' +
-        '<polyline points="' + hours.map(function (h, i) { return X(i) + ',' + Y(h.corrected_kwh || 0); }).join(' ') + '" fill="none" stroke="#d4a017" stroke-width="2.4"/>';
+      // the expected yield as a smooth line, the range (low – high) as a light band around it
+      var C = window.LsChart;
+      var up = hours.map(function (h, i) { return [X(i), Y((h.corrected_kwh || 0) * band.high)]; });
+      var lo = hours.map(function (h, i) { return [X(i), Y((h.corrected_kwh || 0) * band.low)]; });
+      var mid = hours.map(function (h, i) { return [X(i), Y(h.corrected_kwh || 0)]; });
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 28) + '" width="100%" style="display:block;">' + C.hline(30, W - 10, Y(max / 1.15)) + C.hline(30, W - 10, 8 + H, 0.18) +
+        '<path d="' + C.between(up, lo) + '" style="fill:var(--en-solar);" opacity="0.1"/>' + C.wash(mid, 8 + H, 'var(--en-solar)', 0.14) + C.line(mid, 'var(--en-solar)');
       hours.forEach(function (h, i) { if (i % 3 === 0) svg += '<text x="' + X(i) + '" y="' + (H + 24) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + new Date(h.hour).toLocaleTimeString([], { hour: '2-digit' }) + '</text>'; });
-      html += svg + '</svg>';
+      html += '<div class="ln-solar-chart">' + svg + '</svg></div>';
     }
     var f = s.status && s.status.factors;
     html += '<p class="hint" style="margin:0.2rem 0 0;">Weather forecast (irradiance on your panels, Open-Meteo) &times; your ' + nf(s.config.kwp, 1) + ' kWp, corrected per hour with what the PV meter really produced' + (f ? ' (overall factor ' + nf(f.overall, 2) + ', ' + f.samples + ' hours compared)' : '') + '.</p>';
     var hist = s.history;
     if (hist.length) {
-      var W2 = W, H2 = 80, mx = Math.max(1, Math.max.apply(null, hist.map(function (x) { return Math.max(x.actual, x.forecast); })));
+      var W2 = lsChartW(el, 520), H2 = 80, mx = Math.max(1, Math.max.apply(null, hist.map(function (x) { return Math.max(x.actual, x.forecast); })));
       var bw = (W2 - 10) / hist.length;
-      var svg2 = '<svg viewBox="0 0 ' + W2 + ' ' + (H2 + 18) + '" width="100%" style="display:block;">';
+      var svg2 = '<svg viewBox="0 0 ' + W2 + ' ' + (H2 + 18) + '" width="100%" style="display:block;">' + window.LsChart.hline(5, W2 - 5, 4 + H2, 0.18);
       hist.forEach(function (x, i) {
-        var hgt = x.actual / mx * H2;
-        svg2 += '<rect x="' + (5 + i * bw + 1) + '" y="' + (4 + H2 - hgt) + '" width="' + (bw - 2) + '" height="' + hgt + '" fill="#d4a017" opacity="0.75" rx="2"><title>' + new Date(x.day).toLocaleDateString() + ': ' + nf(x.actual, 1) + ' kWh (forecast ' + nf(x.forecast, 1) + ')</title></rect>' +
-          '<line x1="' + (5 + i * bw + 2) + '" x2="' + (5 + (i + 1) * bw - 2) + '" y1="' + (4 + H2 - x.forecast / mx * H2) + '" y2="' + (4 + H2 - x.forecast / mx * H2) + '" stroke="currentColor" stroke-width="2" opacity="0.7"/>';
+        var hgt = x.actual / mx * H2, cw = Math.min(26, bw * 0.7), x0 = 5 + i * bw + (bw - cw) / 2;
+        svg2 += window.LsChart.col(x0, 4 + H2 - hgt, cw, hgt, { color: 'var(--en-solar)', opacity: 0.45, r: 3, title: esc(new Date(x.day).toLocaleDateString() + ': ' + nf(x.actual, 1) + ' kWh (forecast ' + nf(x.forecast, 1) + ')') }) +
+          '<line x1="' + (x0 - 2) + '" x2="' + (x0 + cw + 2) + '" y1="' + (4 + H2 - x.forecast / mx * H2) + '" y2="' + (4 + H2 - x.forecast / mx * H2) + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.65"/>';
       });
       svg2 += '</svg>';
       var band2 = s.tomorrow.band;
@@ -155,6 +158,15 @@
       html += '<p class="hint" style="margin:0.5rem 0 0;">The comparison with the PV meter starts as soon as forecasts and measured hours overlap (a day or two).</p>';
     }
     el.innerHTML = html;
+    var sc = el.querySelector('.ln-solar-chart');
+    if (sc && hours.length) {
+      var TLs = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
+      window.LsChart.hover(sc, {
+        W: W, top: 8, bottom: 8 + H, n: hours.length, x: X,
+        title: function (i) { return new Date(hours[i].hour).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); },
+        rows: function (i) { var v = hours[i].corrected_kwh || 0; return [[TLs('expected'), nf(v, 2) + ' kWh', 'var(--en-solar)'], [TLs('low – high'), nf(v * band.low, 2) + ' – ' + nf(v * band.high, 2) + ' kWh']]; },
+      });
+    }
   }
 
   function signedMin(v) { return (v > 0 ? '+' : '') + String(v) + '\u00a0min'; }
@@ -190,21 +202,29 @@
     var max = Math.max(0.5, Math.max.apply(null, all) * 1.1);
     var X = function (i) { return 30 + i / 23 * (W - 40); };
     var Y = function (v) { return 8 + H - v / max * H; };
-    var line = function (arr, color, dash) { var pts = []; arr.forEach(function (v, i) { if (v != null) pts.push(X(i) + ',' + Y(v)); }); return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="2.2"' + (dash ? ' stroke-dasharray="5 3"' : '') + '/>'; };
+    // workday and weekend: the same color (it is the same house), the weekend dashed
+    var C = window.LsChart;
+    var pts = function (arr) { var out = []; arr.forEach(function (v, i) { if (v != null) out.push([X(i), Y(v)]); }); return out; };
     var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 26) + '" width="100%" style="display:block;">';
-    [max / 2, max].forEach(function (v) { svg += '<line x1="30" x2="' + (W - 10) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="currentColor" opacity="0.08"/><text x="26" y="' + (Y(v) + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + v.toFixed(1) + '</text>'; });
-    svg += line(h.workday, '#4a7bd0') + line(h.weekend, '#9b59b6', true);
+    [max / 2, max].forEach(function (v) { svg += C.hline(30, W - 10, Y(v)) + '<text x="26" y="' + (Y(v) + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + v.toFixed(1) + '</text>'; });
+    svg += C.wash(pts(h.workday), 8 + H, 'var(--en-house)', 0.16) + C.line(pts(h.workday), 'var(--en-house)') + C.line(pts(h.weekend), 'var(--en-house)', { dash: '5 4', opacity: 0.75 });
     [0, 6, 12, 18, 23].forEach(function (i) { svg += '<text x="' + X(i) + '" y="' + (H + 22) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + String(i).padStart(2, '0') + '</text>'; });
     svg += '</svg>';
     var chg = h.change && h.change.changed ? '<p class="hint" style="margin:0 0 0.4rem; color:#b8860b;">' + esc(((window.LS_I18N && window.LS_I18N['Use changed: last week {0} kWh/day against {1} before — LoxSuite now learns mostly from the last week.']) || 'Use changed: last week {0} kWh/day against {1} before — LoxSuite now learns mostly from the last week.').replace('{0}', nf(h.change.recent, 1)).replace('{1}', nf(h.change.before, 1))) + '</p>' : '';
     var hw = d.houseWeather, TLw = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
     if (hw && hw.usable) chg += '<p class="hint" style="margin:0 0 0.4rem;">' + esc(TLw('Weather: +{0} kWh per degree colder (fits {1}%)').replace('{0}', nf(hw.b, 2)).replace('{1}', Math.round(hw.r2 * 100))) + ' — ' + esc(TLw('the plan expects more on cold days.')) + '</p>';
-    var html = chg + '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700; color:#4a7bd0;">' + nf(h.perDay, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh/day</span></div><div class="hint" style="margin:0;">base load ±' + nf(h.baseLoadKw, 2) + ' kW · without the Wallbox · ' + h.days + ' full days</div></div>' + svg +
-      '<div class="hint" style="margin:0.1rem 0 0;"><span style="color:#4a7bd0; font-weight:700;">━</span> workday &nbsp; <span style="color:#9b59b6; font-weight:700;">┅</span> weekend &nbsp;(kWh per hour, median of the last 4 weeks)</div>' +
+    var html = chg + '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700;">' + nf(h.perDay, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh/day</span></div><div class="hint" style="margin:0;">base load ±' + nf(h.baseLoadKw, 2) + ' kW · without the Wallbox · ' + h.days + ' full days</div></div><div class="ln-house-chart">' + svg + '</div>' +
+      '<div class="hint" style="margin:0.1rem 0 0;"><span style="color:var(--en-house); font-weight:700;">━</span> workday &nbsp; <span style="color:var(--en-house); font-weight:700; opacity:0.75;">┅</span> weekend &nbsp;(kWh per hour, median of the last 4 weeks)</div>' +
       '<p class="hint" style="margin:0.5rem 0 0;">Calculated per hour as grid import &minus; export + solar &minus; Wallbox from the meters.</p>';
     var s = d.surplus;
     if (d.solar.config.kwp) html += '<div style="margin-top:0.9rem; padding:0.7rem 0.9rem; border-radius:10px; border:1px solid var(--border);"><strong>Expected solar surplus tomorrow:</strong> ±' + nf(s.kwh, 1) + ' kWh' + (s.from ? ' between ' + new Date(s.from).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' and ' + new Date(s.to).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '') + '<div class="hint" style="margin:0.2rem 0 0;">= solar ' + nf(d.solar.tomorrow.total_kwh, 1) + ' &minus; house during the day ±' + nf(s.houseDay, 1) + ' kWh. The smart plan uses this first, the rest in the cheapest hours.</div></div>';
     el.innerHTML = html;
+    var hc = el.querySelector('.ln-house-chart');
+    if (hc) window.LsChart.hover(hc, {
+      W: W, top: 8, bottom: 8 + H, n: 24, x: X,
+      title: function (i) { return String(i).padStart(2, '0') + ':00'; },
+      rows: function (i) { return [[TLw('on a workday'), h.workday[i] == null ? '—' : nf(h.workday[i], 2) + ' kWh', 'var(--en-house)'], [TLw('in the weekend'), h.weekend[i] == null ? '—' : nf(h.weekend[i], 2) + ' kWh']]; },
+    });
   }
 
   var lastData = null;

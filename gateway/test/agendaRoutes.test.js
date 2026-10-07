@@ -210,3 +210,66 @@ test('sync: #brengen / #halen in the calendar text is stored, and marks the car 
   const row = await db.prepare('SELECT car_tag, trip_tag FROM calendar_events WHERE uid = ?').get('opvang@test');
   assert.deepEqual({ ...row }, { car_tag: 1, trip_tag: 'both' });
 });
+
+test('a series moved for one week (Tuesday → Thursday): that week on Thursday only, its original day kept', () => {
+  const ical = require('node-ical');
+  const tz = 'BEGIN:VTIMEZONE\r\nTZID:Europe/Amsterdam\r\nBEGIN:STANDARD\r\nDTSTART:19701025T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0100\r\nRRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU\r\nEND:STANDARD\r\nBEGIN:DAYLIGHT\r\nDTSTART:19700329T020000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0200\r\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU\r\nEND:DAYLIGHT\r\nEND:VTIMEZONE';
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//t//EN', tz,
+    'BEGIN:VEVENT', 'UID:hond-tue@test', 'DTSTART;TZID=Europe/Amsterdam:20261006T080000', 'DTEND;TZID=Europe/Amsterdam:20261006T170000', 'RRULE:FREQ=WEEKLY;BYDAY=TU', 'SUMMARY:Hond #brengen #halen', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:hond-tue@test', 'RECURRENCE-ID;TZID=Europe/Amsterdam:20261013T080000', 'DTSTART;TZID=Europe/Amsterdam:20261015T083000', 'DTEND;TZID=Europe/Amsterdam:20261015T173000', 'SUMMARY:Hond #brengen #halen', 'END:VEVENT',
+    'END:VCALENDAR', ''].join('\r\n');
+  const occ = agenda.expandEvents(ical.sync.parseICS(ics), Date.parse('2026-10-05T00:00:00Z'), Date.parse('2026-10-25T00:00:00Z'));
+  assert.deepEqual(occ.map((o) => [o.start, o.recurrenceAt]), [
+    ['2026-10-06T06:00:00.000Z', '2026-10-06T06:00:00.000Z'],
+    ['2026-10-15T06:30:00.000Z', '2026-10-13T06:00:00.000Z'],
+    ['2026-10-20T06:00:00.000Z', '2026-10-20T06:00:00.000Z'],
+  ]);
+});
+
+test('moved to another day: the series\' choices count there, and a choice for that one day moves with it', async () => {
+  const orig = at(8, 0, 3);
+  await db.upsert('calendar_events', { calendar_id: calId, uid: 'sport@test', start_at: orig, end_at: at(9, 0, 3), all_day: 0, title: 'Sport', location: 'Oppas 1, Utrecht', car_tag: 1, car_hint: null, trip_tag: null, recurrence_at: orig }, ['calendar_id', 'uid', 'start_at']);
+  await db.upsert('calendar_events', { calendar_id: calId, uid: 'sport@test', start_at: at(8, 0, 10), end_at: at(9, 0, 10), all_day: 0, title: 'Sport', location: 'Oppas 1, Utrecht', car_tag: 1, car_hint: null, trip_tag: null, recurrence_at: at(8, 0, 10) }, ['calendar_id', 'uid', 'start_at']);
+  await agenda.setOverride({ calendar_id: calId, uid: 'sport@test', start_at: orig, trip_mode: 'drop', scope: 'series' });
+  await agenda.setOverride({ calendar_id: calId, uid: 'sport@test', start_at: orig, own_value: '30 km' });
+  // the calendar moves this one occurrence two days later (next sync)
+  await db.prepare('UPDATE calendar_events SET start_at = ?, end_at = ? WHERE uid = ? AND start_at = ?').run(at(10, 0, 5), at(11, 0, 5), 'sport@test', orig);
+  const moved = (await agenda.items(...range())).find((i) => i.uid === 'sport@test' && i.start === at(10, 0, 5));
+  assert.ok(moved, 'on the new day');
+  assert.equal(moved.movedFrom, orig);
+  assert.equal(moved.recurring, true);
+  assert.equal(moved.tripMode, 'drop', 'the series\' choice');
+  assert.equal(moved.own, '30 km', 'the day\'s own value moved along');
+  assert.equal(moved.occ, orig);
+});
+
+test('after the second appointment: back home via the first address (to pick up there)', async () => {
+  const ev = async (uid, start, end, title, location, extra = {}) => db.upsert('calendar_events', {
+    calendar_id: calId, uid, start_at: start, end_at: end, all_day: 0, title, location, car_tag: 1, car_hint: null, trip_tag: null, ...extra,
+  }, ['calendar_id', 'uid', 'start_at']);
+  await ev('school@test', at(8, 0, 2), at(15, 0, 2), 'School #brengen', 'Oppas 1, Utrecht', { trip_tag: 'drop' });
+  await ev('kapper2@test', at(9, 0, 2), at(9, 30, 2), 'Kapper', 'Kapper 2, Zeist');
+  let items = await agenda.items(at(0, 0, 2), at(23, 0, 2));
+  let b = items.find((i) => i.uid === 'kapper2@test');
+  assert.equal(b.viaAfterEnd, undefined, 'not driving on from the school yet: nothing to go back via');
+  await agenda.setOverride({ calendar_id: calId, uid: 'school@test', start_at: at(8, 0, 2), chain_start: '1' });
+  items = await agenda.items(at(0, 0, 2), at(23, 0, 2));
+  b = items.find((i) => i.uid === 'kapper2@test');
+  assert.equal(b.viaAfterEnd.title, 'School #brengen', 'offered: back via the school');
+  await agenda.setOverride({ calendar_id: calId, uid: 'kapper2@test', start_at: at(9, 0, 2), chain_end: '2' });
+  items = await agenda.items(at(0, 0, 2), at(23, 0, 2));
+  const a = items.find((i) => i.uid === 'school@test');
+  b = items.find((i) => i.uid === 'kapper2@test');
+  assert.equal(b.chainEnd, 2);
+  assert.equal(a.tours.length, 1, 'the same drive once, though it passes the school twice');
+  const r = a.tours[0];
+  assert.deepEqual(r.stops.map((s) => s.role), ['drop', 'stay', 'via']);
+  assert.equal(r.legs.length, 4, 'home → school → hairdresser → school → home');
+  assert.equal(r.legs[3].km, 12, 'from the school home');
+  const back = Date.parse(at(9, 30, 2)) + r.legs[2].min * 60000 + 5 * 60000 + 15 * 60000;
+  assert.equal(r.backAt, new Date(back).toISOString(), 'back after the stop at the school');
+  assert.equal(agenda.cleanChain('2'), 2);
+  assert.equal(agenda.cleanChain('1'), 1);
+  assert.equal(agenda.cleanChain('0'), 0);
+  assert.equal(agenda.cleanChain(''), null);
+});

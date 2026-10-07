@@ -149,13 +149,13 @@
           var qs = qOf(h);
           if (qs.length > 1) {
             var qw = bw / qs.length;
-            qs.forEach(function (q, qi) { s += '<rect x="' + (x + 0.5 + qi * qw) + '" y="' + (y + 3) + '" width="' + Math.max(0.5, qw - 0.6) + '" height="' + (rowH - 6) + '" rx="1" fill="#9aa5b1" opacity="' + (0.25 + 0.75 * (q.price || 0) / maxP) + '"><title>' + esc(hh(Date.parse(q.start)) + ' € ' + nf(q.price, 3)) + '</title></rect>'; });
+            qs.forEach(function (q, qi) { s += '<rect x="' + (x + 0.5 + qi * qw) + '" y="' + (y + 3) + '" width="' + Math.max(0.5, qw - 0.6) + '" height="' + (rowH - 6) + '" rx="1" style="fill:var(--en-price);" opacity="' + (0.25 + 0.75 * (q.price || 0) / maxP) + '"><title>' + esc(hh(Date.parse(q.start)) + ' € ' + nf(q.price, 3)) + '</title></rect>'; });
             return;
           }
-          fill = '#9aa5b1'; op = 0.25 + 0.75 * (h.price || 0) / maxP; tip += '€ ' + nf(h.price, 3);
+          fill = 'var(--en-price)'; op = 0.25 + 0.75 * (h.price || 0) / maxP; tip += '€ ' + nf(h.price, 3);
         }
-        else if (r.kind === 'solar') { if (h.surplusKwh > 0.05) { fill = '#d4a017'; op = 0.2 + 0.8 * h.surplusKwh / maxS; } tip += nf(h.surplusKwh, 1) + ' kWh'; }
-        else if (r.kind === 'car') { var k = d.carKwh[h.ms] || 0; if (k > 0.05) fill = '#4a7bd0'; tip += nf(k, 1) + ' kWh'; }
+        else if (r.kind === 'solar') { if (h.surplusKwh > 0.05) { fill = 'var(--en-solar)'; op = 0.2 + 0.8 * h.surplusKwh / maxS; } tip += nf(h.surplusKwh, 1) + ' kWh'; }
+        else if (r.kind === 'car') { var k = d.carKwh[h.ms] || 0; if (k > 0.05) fill = 'var(--en-car)'; tip += nf(k, 1) + ' kWh'; }
         else {
           var p = r.load.plan.find(function (x) { return Date.parse(x.hour) === h.ms; });
           var v = p ? p.values[r.sig.key] : null;
@@ -163,7 +163,7 @@
           else if (Number(v)) fill = '#4caf50';
           tip += (v == null ? '—' : v + ' ' + r.sig.unit) + (p && p.reason ? ' — ' + p.reason : '');
         }
-        s += '<rect x="' + (x + 0.5) + '" y="' + (y + 3) + '" width="' + Math.max(1, bw - 1) + '" height="' + (rowH - 6) + '" rx="2" fill="' + (fill || 'currentColor') + '" opacity="' + (fill ? op : 0.06) + '"><title>' + esc(tip) + '</title></rect>';
+        s += '<rect x="' + (x + 0.5) + '" y="' + (y + 3) + '" width="' + Math.max(1, bw - 1) + '" height="' + (rowH - 6) + '" rx="2" style="fill:' + (fill || 'currentColor') + ';" opacity="' + (fill ? op : 0.06) + '"><title>' + esc(tip) + '</title></rect>';
       });
     });
     hrs.forEach(function (h, i) { if (new Date(h.ms).getHours() % 3 === 0) s += '<text x="' + (left + i * bw) + '" y="' + (H - 6) + '" font-size="10" fill="currentColor" opacity="0.6">' + hh(h.ms).slice(0, 5) + '</text>'; });
@@ -222,13 +222,14 @@
       var ex = (l && l.expected) || [];
       if (!ex.length) return;
       var W = lsChartW(el, 600), H = 46, bw = W / ex.length, max = Math.max.apply(null, ex.map(function (x) { return x.kwh || 0; }).concat([0.01]));
-      var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 14) + '" width="100%" style="display:block;">';
+      var C = window.LsChart, cx = function (i) { return i * bw + bw / 2; };
+      var pts = ex.map(function (x, i) { return [cx(i), 3 + H - 3 - (x.kwh || 0) / max * (H - 6)]; });
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 14) + '" width="100%" style="display:block;">' + C.hline(0, W, H, 0.18) + C.wash(pts, H, 'var(--accent, #5CA83F)', 0.24) + C.line(pts, 'var(--accent, #5CA83F)');
       ex.forEach(function (x, i) {
-        var bh = Math.round((x.kwh || 0) / max * H);
-        svg += '<rect x="' + (i * bw + 1) + '" y="' + (H - bh) + '" width="' + Math.max(1, bw - 2) + '" height="' + bh + '" rx="1.5" fill="var(--accent, #5CA83F)" opacity="0.75"><title>' + hh(x.ms) + ': ' + nf(x.kwh, 2) + ' kWh</title></rect>';
-        if (i % 3 === 0) svg += '<text x="' + (i * bw + bw / 2) + '" y="' + (H + 11) + '" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.6">' + String(new Date(x.ms).getHours()).padStart(2, '0') + '</text>';
+        if (i % 3 === 0) svg += '<text x="' + cx(i) + '" y="' + (H + 11) + '" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.6">' + String(new Date(x.ms).getHours()).padStart(2, '0') + '</text>';
       });
       el.innerHTML = svg + '</svg>';
+      C.hover(el, { W: W, top: 2, bottom: H, n: ex.length, x: cx, title: function (i) { return hh(ex[i].ms); }, rows: function (i) { return [[TLx('expected'), nf(ex[i].kwh, 2) + ' kWh', 'var(--accent, #5CA83F)']]; } });
     });
   }
   function render(d) {
@@ -261,7 +262,7 @@
         var solar7 = kwh7 > 0 ? Math.round(wk.reduce(function (a, x) { return a + (x.solarShare == null ? 0 : x.solarShare * x.kwh); }, 0) / kwh7) : null;
         tiles += tile('Learned', lr.kwhPerDay != null ? nf(lr.kwhPerDay, 1) + ' <small>' + esc(TLx('kWh per day')) + '</small>' : '—', lr.kwPeak != null ? TLx('about {0} kW while running').replace('{0}', nf(lr.kwPeak, 1)) : TLx('no measurements yet'));
         tiles += tile('Last 7 days', nf(kwh7, 1) + ' <small>kWh</small>', eur(cost7) + (kwh7 > 0 ? ' · ' + eur(cost7 / kwh7, 3) + '/kWh' : ''));
-        tiles += tile('From own solar', solar7 == null ? '—' : solar7 + '%', TLx('of the last 7 days'), solar7 > 0 ? '#d4a017' : null);
+        tiles += tile('From own solar', solar7 == null ? '—' : solar7 + '%', TLx('of the last 7 days'), null);
         tiles += tile('Could save', eur(pot), TLx('in 14 days, by running in the advised hours'), pot > 0.01 ? 'var(--success)' : null);
       }
       h += '<div class="ls-tiles">' + tiles + '</div>';

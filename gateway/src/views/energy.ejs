@@ -90,15 +90,18 @@
 <script>
 (function () {
   var LABELS = { grid: 'Grid', pv: 'Solar', wallbox: 'Wallbox', battery: 'Battery', house: 'House' };
-  var COLORS = { pv: '#d4a017', house: '#4a7bd0', wallbox: 'var(--accent, #5CA83F)', grid: '#8a94a3', battery: '#9b59b6' };
-  // grid import (bought) and export (fed in): the same two colours in the tile and the chart
-  var IMPORT_COLOR = '#e0794f', EXPORT_COLOR = '#2a9d8f';
+  // the colors of the whole energy part (style.css --en-*); grid import (bought) and export (fed in) the
+  // same in the tile and the chart
+  var COLORS = { pv: 'var(--en-solar)', house: 'var(--en-house)', wallbox: 'var(--en-car)', grid: 'var(--en-price)', battery: 'var(--en-battery)' };
+  var IMPORT_COLOR = 'var(--en-import)', EXPORT_COLOR = 'var(--en-export)';
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  // the value in text color; the series color as a short key next to the label
   function tile(label, value, sub, color, health) {
     var dot = health === 'failing' ? '<span style="color:var(--danger);" title="no data">●</span> ' : health === 'ok' ? '<span style="color:var(--success);">●</span> ' : '';
-    return '<div class="ls-tile"><div class="ls-tile-label">' + dot + esc(label) + '</div>' +
-      '<div class="ls-tile-value" style="color:' + color + ';">' + value + '</div>' + (sub ? '<div class="ls-tile-sub">' + sub + '</div>' : '') + '</div>';
+    var key = color ? '<span style="display:inline-block; width:0.9em; height:3px; border-radius:2px; vertical-align:0.25em; margin-right:0.35em; background:' + color + ';"></span>' : '';
+    return '<div class="ls-tile"><div class="ls-tile-label">' + dot + key + esc(label) + '</div>' +
+      '<div class="ls-tile-value">' + value + '</div>' + (sub ? '<div class="ls-tile-sub">' + sub + '</div>' : '') + '</div>';
   }
   function renderLive(d) {
     var el = document.getElementById('en-live');
@@ -116,7 +119,7 @@
       if (k === 'grid') {
         // import (from the grid) and export (to the grid) apart: today, this month
         sub = r.power_kw == null ? '' : '<strong>' + esc(TL(r.power_kw >= 0 ? 'importing now' : 'exporting now')) + '</strong>';
-        var line = function (label, g) { return g ? '<div>' + esc(TL(label)) + ' <span style="color:' + IMPORT_COLOR + ';">▲ ' + nf(g.import_kwh, 1) + '</span> · <span style="color:' + EXPORT_COLOR + ';">▼ ' + nf(g.export_kwh, 1) + '</span> kWh</div>' : ''; };
+        var line = function (label, g) { return g ? '<div>' + esc(TL(label)) + ' <span style="color:' + IMPORT_COLOR + ';">▲</span> ' + nf(g.import_kwh, 1) + ' · <span style="color:' + EXPORT_COLOR + ';">▼</span> ' + nf(g.export_kwh, 1) + ' kWh</div>' : ''; };
         sub += line('today', td) + line('this month', (d.month || {}).grid);
       } else if (td) sub += (sub ? ' · ' : '') + 'today ' + nf(td.import_kwh, 1) + (td.export_kwh ? ' / ' + nf(td.export_kwh, 1) : '') + ' kWh';
       if (!r.found) sub = 'control not found on the Miniserver';
@@ -138,46 +141,64 @@
   function renderChart(s) {
     chartData = s;
     var TL = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
-    var W = lsChartW(document.getElementById('en-chart'), 860), H = 170, left = 34, n = s.hours.length || 24, bw = (W - left - 10) / n;
+    var el = document.getElementById('en-chart');
+    var W = lsChartW(el, 860), H = 170, left = 34, n = s.hours.length || 24, bw = (W - left - 10) / n;
     var all = [];
     Object.keys(s.series).forEach(function (k) { s.series[k].forEach(function (v) { if (v != null) all.push(v); }); });
     var imp = (s.series.grid || []).map(function (v) { return v || 0; });
     var ex = (s.exported.grid || []).map(function (v) { return v || 0; });
+    var wb = (s.series.wallbox || []).map(function (v) { return v || 0; });
     var max = Math.max(1, Math.max.apply(null, all.concat([0])));
     var maxEx = Math.max.apply(null, ex.concat([0]));
     var zero = 14 + H * (max / (max + maxEx || 1));
     var scale = (zero - 14) / max;
     var hh = function (i) { return new Date(s.hours[i]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
+    var cx = function (i) { return left + i * bw + bw / 2; };
+    var C = window.LsChart;
     var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 40) + '" width="100%" style="display:block;">';
     var step = max > 6 ? 2 : max > 3 ? 1 : 0.5;
-    for (var g = 0; g <= max; g += step) {
+    for (var g = step; g <= max; g += step) {
       var gy = zero - g * scale;
-      svg += '<line x1="' + left + '" y1="' + gy + '" x2="' + (W - 5) + '" y2="' + gy + '" stroke="currentColor" opacity="0.08"/><text x="' + (left - 4) + '" y="' + (gy + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + g + '</text>';
+      svg += C.hline(left, W - 5, gy) + '<text x="' + (left - 4) + '" y="' + (gy + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + g + '</text>';
     }
     for (var ge = step; ge <= maxEx; ge += step) {
       var gye = zero + ge * scale;
-      svg += '<line x1="' + left + '" y1="' + gye + '" x2="' + (W - 5) + '" y2="' + gye + '" stroke="currentColor" opacity="0.06"/><text x="' + (left - 4) + '" y="' + (gye + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.45">−' + ge + '</text>';
+      svg += C.hline(left, W - 5, gye, 0.05) + '<text x="' + (left - 4) + '" y="' + (gye + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.45">−' + ge + '</text>';
     }
-    imp.forEach(function (v, i) { if (!v) return; svg += '<rect x="' + (left + i * bw + bw * 0.12) + '" y="' + (zero - v * scale) + '" width="' + (bw * 0.76) + '" height="' + (v * scale) + '" fill="' + IMPORT_COLOR + '" opacity="0.45" rx="2"><title>' + esc(hh(i) + ' ' + TL('Import from the grid') + ' ' + nf(v, 2) + ' kWh') + '</title></rect>'; });
-    (s.series.wallbox || []).forEach(function (v, i) { if (!v) return; svg += '<rect x="' + (left + i * bw + bw * 0.3) + '" y="' + (zero - v * scale) + '" width="' + (bw * 0.4) + '" height="' + (v * scale) + '" fill="' + COLORS.wallbox + '" opacity="0.9" rx="2"><title>' + esc(hh(i) + ' Wallbox ' + nf(v, 2) + ' kWh') + '</title></rect>'; });
-    ex.forEach(function (v, i) { if (!v) return; svg += '<rect x="' + (left + i * bw + bw * 0.12) + '" y="' + zero + '" width="' + (bw * 0.76) + '" height="' + (v * scale) + '" fill="' + EXPORT_COLOR + '" opacity="0.55" rx="2"><title>' + esc(hh(i) + ' ' + TL('Export to the grid') + ' ' + nf(v, 2) + ' kWh') + '</title></rect>'; });
-    ['pv', 'house'].forEach(function (k) {
-      var arr = s.series[k];
-      if (!arr) return;
-      var pts = [];
-      arr.forEach(function (v, i) { if (v != null) pts.push((left + i * bw + bw / 2).toFixed(1) + ',' + (zero - v * scale).toFixed(1)); });
-      if (pts.length > 1) svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + COLORS[k] + '" stroke-width="2.2"/>';
-    });
-    svg += '<line x1="' + left + '" y1="' + zero + '" x2="' + (W - 5) + '" y2="' + zero + '" stroke="currentColor" opacity="0.3"/>';
-    s.hours.forEach(function (h, i) { if (i % 3 === 0) svg += '<text x="' + (left + i * bw + bw / 2) + '" y="' + (H + 36) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + new Date(h).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</text>'; });
+    // columns: what came from the grid (soft), the Wallbox's part in front of it, below zero what went to the grid
+    var cw = Math.min(28, bw * 0.72), cw2 = Math.min(12, bw * 0.34);
+    imp.forEach(function (v, i) { if (v > 0.005) svg += C.col(cx(i) - cw / 2, zero - v * scale, cw, v * scale, { color: IMPORT_COLOR, opacity: 0.32, r: 3 }); });
+    wb.forEach(function (v, i) { if (v > 0.005) svg += C.col(cx(i) - cw2 / 2, zero - v * scale, cw2, v * scale, { color: COLORS.wallbox, opacity: 0.85, r: 3 }); });
+    ex.forEach(function (v, i) { if (v > 0.005) svg += C.col(cx(i) - cw / 2, zero, cw, v * scale, { color: EXPORT_COLOR, opacity: 0.4, r: 3, down: true }); });
+    // solar with a light wash, the house as a calm line
+    var pts = function (arr) { var out = []; (arr || []).forEach(function (v, i) { if (v != null) out.push([cx(i), zero - v * scale]); }); return out; };
+    var pv = pts(s.series.pv), house = pts(s.series.house);
+    if (pv.length > 1) svg += C.wash(pv, zero, COLORS.pv, 0.26) + C.line(pv, COLORS.pv);
+    if (house.length > 1) svg += C.line(house, COLORS.house, { opacity: 0.9 });
+    svg += C.hline(left, W - 5, zero, 0.25);
+    s.hours.forEach(function (h, i) { if (i % 3 === 0) svg += '<text x="' + cx(i) + '" y="' + (H + 36) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + new Date(h).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</text>'; });
     svg += '</svg>';
-    document.getElementById('en-chart').innerHTML = all.length ? svg : '<p class="hint" style="margin:0;">No hourly data for this day yet.</p>';
+    el.innerHTML = all.length ? svg : '<p class="hint" style="margin:0;">No hourly data for this day yet.</p>';
+    if (all.length) C.hover(el, {
+      W: W, top: 8, bottom: H + 22, n: n, x: cx,
+      title: function (i) { return hh(i) + '–' + new Date(Date.parse(s.hours[i]) + 3600000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); },
+      rows: function (i) {
+        var kwh = function (v) { return v == null ? '—' : nf(v, 2) + ' kWh'; };
+        return [
+          s.series.pv ? [TL(LABELS.pv), kwh(s.series.pv[i]), COLORS.pv] : null,
+          s.series.house ? [TL(LABELS.house), kwh(s.series.house[i]), COLORS.house] : null,
+          s.series.wallbox ? [TL(LABELS.wallbox), kwh(s.series.wallbox[i]), COLORS.wallbox] : null,
+          [TL('Import from the grid'), kwh(imp[i]), IMPORT_COLOR],
+          [TL('Export to the grid'), kwh(ex[i]), EXPORT_COLOR],
+        ];
+      },
+    });
     var sum = function (a) { return (a || []).reduce(function (x, y) { return x + (y || 0); }, 0); };
-    var item = function (color, mark, label, v) { return '<span style="white-space:nowrap;"><span style="color:' + color + '; font-weight:700;">' + mark + '</span> <span>' + esc(label) + '</span> ' + nf(v, 1) + ' kWh</span>'; };
+    var item = function (color, kind, label, v) { return '<span style="white-space:nowrap;"><span style="display:inline-block; width:' + (kind === 'line' ? '0.9em;height:3px;border-radius:2px;vertical-align:0.25em' : '0.7em;height:0.7em;border-radius:2px;vertical-align:-0.05em') + '; background:' + color + ';"></span> <span>' + esc(label) + '</span> ' + nf(v, 1) + ' kWh</span>'; };
     document.getElementById('en-legend').innerHTML = [
-      item(COLORS.pv, '━', LABELS.pv, sum(s.series.pv)), item(COLORS.house, '━', LABELS.house, sum(s.series.house)),
-      item(COLORS.wallbox, '■', LABELS.wallbox, sum(s.series.wallbox)),
-      item(IMPORT_COLOR, '■', TL('Import from the grid'), sum(imp)), item(EXPORT_COLOR, '■', TL('Export to the grid'), sum(ex)),
+      item(COLORS.pv, 'line', LABELS.pv, sum(s.series.pv)), item(COLORS.house, 'line', LABELS.house, sum(s.series.house)),
+      item(COLORS.wallbox, 'box', LABELS.wallbox, sum(s.series.wallbox)),
+      item(IMPORT_COLOR, 'box', TL('Import from the grid'), sum(imp)), item(EXPORT_COLOR, 'box', TL('Export to the grid'), sum(ex)),
     ].join(' &nbsp; ') + ' &nbsp;<span style="opacity:0.7;">(' + esc(TL('kWh per hour')) + ')</span>';
   }
   function loadDay() {

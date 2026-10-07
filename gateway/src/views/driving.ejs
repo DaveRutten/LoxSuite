@@ -52,36 +52,46 @@
   }
   var CONF = { high: 'var(--success)', medium: '#d4a017', low: 'var(--danger, #c0392b)', none: 'var(--text-muted)' };
 
+  // km per month: on electricity (the car's color) and on fuel stacked, soft columns with a 2px gap
   function kmChart(months, phev) {
     if (!months.length) return '<p class="hint" style="margin:0;">No driving recorded yet.</p>';
-    var W = lsChartW(document.getElementById('dr-km'), 520), H = 170, max = Math.max.apply(null, months.map(function (m) { return m.km || 0; }).concat([10]));
-    var bw = (W - 40) / months.length, bwid = Math.min(bw - 8, 70), off = (bw - bwid) / 2;
-    var s = '<svg viewBox="0 0 ' + W + ' ' + (H + 24) + '" width="100%" style="display:block;">';
+    var C = window.LsChart;
+    var W = lsChartW(document.getElementById('dr-km'), 520), H = 170, max = Math.max.apply(null, months.map(function (m) { return (m.elecKm || 0) + (m.fuelKm || 0) + (m.unknownKm || 0); }).concat([10]));
+    var bw = (W - 40) / months.length, bwid = Math.min(bw * 0.62, 44), off = (bw - bwid) / 2;
+    var s = '<svg viewBox="0 0 ' + W + ' ' + (H + 24) + '" width="100%" style="display:block;">' + C.hline(30, W - 4, 4, 0.06) + C.hline(30, W - 4, 4 + H / 2, 0.06) + C.hline(30, W - 4, H + 4, 0.2);
     months.forEach(function (m, i) {
       var x = 30 + i * bw + off, e = (m.elecKm || 0) / max * H, f = (m.fuelKm || 0) / max * H, u = (m.unknownKm || 0) / max * H;
-      var y = H + 4;
-      s += '<rect x="' + x + '" y="' + (y - e) + '" width="' + bwid + '" height="' + e + '" fill="#4caf50" rx="2"><title>' + esc(monthLabel(m.month)) + ': ' + nf(m.elecKm, 0) + ' km electric</title></rect>';
-      y -= e;
-      if (f) { s += '<rect x="' + x + '" y="' + (y - f) + '" width="' + bwid + '" height="' + f + '" fill="#e67e22" rx="2"><title>' + nf(m.fuelKm, 0) + ' km on fuel</title></rect>'; y -= f; }
-      if (u) { s += '<rect x="' + x + '" y="' + (y - u) + '" width="' + bwid + '" height="' + u + '" fill="currentColor" opacity="0.2" rx="2"><title>' + nf(m.unknownKm, 0) + ' km (no battery data)</title></rect>'; }
+      var y = H + 4, parts = [];
+      if (e > 0.5) parts.push([e, 'var(--en-car)', 0.75, esc(monthLabel(m.month)) + ': ' + nf(m.elecKm, 0) + ' km electric']);
+      if (f > 0.5) parts.push([f, 'var(--en-import)', 0.6, nf(m.fuelKm, 0) + ' km on fuel']);
+      if (u > 0.5) parts.push([u, 'currentColor', 0.15, nf(m.unknownKm, 0) + ' km (no battery data)']);
+      parts.forEach(function (pt, k) {
+        var top = k === parts.length - 1, gap = k ? 2 : 0;
+        s += C.col(x, y - pt[0] + gap, bwid, Math.max(0.5, pt[0] - gap), { color: pt[1], opacity: pt[2], r: top ? 4 : 0, title: pt[3] });
+        y -= pt[0];
+      });
       s += '<text x="' + (x + bwid / 2) + '" y="' + (H + 20) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + esc(monthLabel(m.month)) + '</text>';
     });
     s += '<text x="26" y="12" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + Math.round(max) + '</text></svg>';
-    s += '<div class="hint" style="margin:0.3rem 0 0;"><span style="color:#4caf50;">&#9632;</span> <span>on electricity</span>' + (phev ? ' &nbsp;<span style="color:#e67e22;">&#9632;</span> on fuel' : '') + '</div>';
+    s += '<div class="hint" style="margin:0.3rem 0 0;"><span style="display:inline-block; width:0.7em; height:0.7em; border-radius:2px; background:var(--en-car);"></span> <span>on electricity</span>' + (phev ? ' &nbsp;<span style="display:inline-block; width:0.7em; height:0.7em; border-radius:2px; background:var(--en-import);"></span> on fuel' : '') + '</div>';
     return s;
   }
+  // kWh per 100 km per month: a smooth line with a light wash, the value on each point, the average as a hairline
   function consChart(months, avg) {
     var pts = months.filter(function (m) { return m.kwhPer100 != null; });
     if (!pts.length) return '<p class="hint" style="margin:0;">Not enough electric driving per month yet (at least 20 km with battery data).</p>';
+    var C = window.LsChart;
     var W = lsChartW(document.getElementById('dr-cons'), 520), H = 150, max = Math.max.apply(null, pts.map(function (m) { return m.kwhPer100; }).concat([avg || 0, 10])) * 1.15;
-    var bw = (W - 40) / pts.length, bwid = Math.min(bw - 8, 70), off = (bw - bwid) / 2;
-    var s = '<svg viewBox="0 0 ' + W + ' ' + (H + 24) + '" width="100%" style="display:block;">';
-    if (avg) { var ay = H + 4 - avg / max * H; s += '<line x1="30" x2="' + W + '" y1="' + ay + '" y2="' + ay + '" stroke="#4a7bd0" stroke-dasharray="4 3" opacity="0.7"/><text x="' + (W - 2) + '" y="' + (ay - 3) + '" text-anchor="end" font-size="9" fill="#4a7bd0">avg ' + nf(avg, 1) + '</text>'; }
+    var bw = (W - 40) / pts.length;
+    var X = function (i) { return 30 + i * bw + bw / 2; }, Y = function (v) { return H + 4 - v / max * H; };
+    var s = '<svg viewBox="0 0 ' + W + ' ' + (H + 24) + '" width="100%" style="display:block;">' + C.hline(30, W - 4, H + 4, 0.2);
+    if (avg) { var ay = Y(avg); s += '<line x1="30" x2="' + (W - 4) + '" y1="' + ay + '" y2="' + ay + '" stroke="currentColor" stroke-dasharray="2 4" opacity="0.45"/><text x="' + (W - 4) + '" y="' + (ay - 4) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.7">avg ' + nf(avg, 1) + '</text>'; }
+    var line = pts.map(function (m, i) { return [X(i), Y(m.kwhPer100)]; });
+    if (line.length > 1) s += C.wash(line, H + 4, 'var(--en-car)', 0.2) + C.line(line, 'var(--en-car)');
     pts.forEach(function (m, i) {
-      var x = 30 + i * bw + off, h = m.kwhPer100 / max * H;
-      s += '<rect x="' + x + '" y="' + (H + 4 - h) + '" width="' + bwid + '" height="' + h + '" fill="#4a7bd0" opacity="0.8" rx="2"><title>' + esc(monthLabel(m.month)) + ': ' + nf(m.kwhPer100, 1) + ' kWh/100 km</title></rect>' +
-        '<text x="' + (x + bwid / 2) + '" y="' + (H + 1 - h) + '" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.7">' + nf(m.kwhPer100, 1) + '</text>' +
-        '<text x="' + (x + bwid / 2) + '" y="' + (H + 20) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + esc(monthLabel(m.month)) + '</text>';
+      s += '<circle cx="' + X(i) + '" cy="' + Y(m.kwhPer100) + '" r="4" style="fill:var(--en-car); stroke:var(--surface, #fff);" stroke-width="2"><title>' + esc(monthLabel(m.month)) + ': ' + nf(m.kwhPer100, 1) + ' kWh/100 km</title></circle>' +
+        '<text x="' + X(i) + '" y="' + (Y(m.kwhPer100) - 9) + '" text-anchor="middle" font-size="9.5" font-weight="600" fill="currentColor" opacity="0.8">' + nf(m.kwhPer100, 1) + '</text>' +
+        '<text x="' + X(i) + '" y="' + (H + 20) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + esc(monthLabel(m.month)) + '</text>';
     });
     return s + '</svg>';
   }
@@ -103,7 +113,7 @@
         '<span style="color:' + CONF[c.confidence] + ';">' + c.confidence + '</span> · ' + nf(c.km, 0) + ' km · ' + used),
       tile('Driven this month', nf(cur ? cur.km : 0, 0) + ' <small>km</small>', cur ? TR('{0} trips, on average {1} km', cur.trips).replace('{1}', nf(cur.avgTripKm, 0)) : ''),
     ];
-    if (phev) tiles.push(tile('On electricity', tot.e + tot.f > 0 ? Math.round(tot.e / (tot.e + tot.f) * 100) + '%' : '—', nf(tot.e, 0) + ' km electric · ' + nf(tot.f, 0) + ' km fuel', '#4caf50'));
+    if (phev) tiles.push(tile('On electricity', tot.e + tot.f > 0 ? Math.round(tot.e / (tot.e + tot.f) * 100) + '%' : '—', nf(tot.e, 0) + ' km electric · ' + nf(tot.f, 0) + ' km fuel'));
     tiles.push(tile('Cost per km', eur(d.prices.elecPerKm, 3), 'electric · fuel ' + eur(d.prices.fuelPerKm, 3) + ' (' + eur(d.prices.fuelEurL) + '/l)'));
     tiles.push(tile('Saved by driving electric', eur(d.savedTotal, 0), 'vs. the same km on fuel', d.savedTotal > 0 ? 'var(--success)' : null));
     document.getElementById('dr-tiles').innerHTML = tiles.join('');

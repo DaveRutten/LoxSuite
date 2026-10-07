@@ -605,6 +605,13 @@
   ]
  },
  {
+  "key": "(again)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "(attribute)",
   "module": "core",
   "where": [
@@ -815,6 +822,13 @@
   "module": "charging",
   "where": [
    "agenda (script)"
+  ]
+ },
+ {
+  "key": "{0} – {1} kWh",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -1323,13 +1337,6 @@
   ]
  },
  {
-  "key": "{0} Wallbox {1} kWh",
-  "module": "energy",
-  "where": [
-   "energy (script)"
-  ]
- },
- {
   "key": "{0}–{1} {2} kWh{3}",
   "module": "charging",
   "where": [
@@ -1347,8 +1354,7 @@
   "key": "{0}: {1} kWh",
   "module": "energy",
   "where": [
-   "energy-load (script)",
-   "energy-manager (script)"
+   "energy-load (script)"
   ]
  },
  {
@@ -2376,6 +2382,13 @@
   "module": "ai",
   "where": [
    "admin-ai (script)"
+  ]
+ },
+ {
+  "key": "an event",
+  "module": "charging",
+  "where": [
+   "planner-log (script)"
   ]
  },
  {
@@ -5315,7 +5328,8 @@
   "key": "expected",
   "module": "energy_manager",
   "where": [
-   "energy-manager (script)"
+   "energy-manager (script)",
+   "learned (script)"
   ]
  },
  {
@@ -6482,6 +6496,13 @@
   ]
  },
  {
+  "key": "in the weekend",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "in this state for {0}",
   "module": "energy",
   "where": [
@@ -7344,6 +7365,13 @@
   ]
  },
  {
+  "key": "low – high",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "Loxone",
   "module": "ocpp",
   "where": [
@@ -8170,6 +8198,13 @@
   "module": "core",
   "where": [
    "src/modules.js"
+  ]
+ },
+ {
+  "key": "Moved from {0} — what you chose for the series still counts.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -9697,6 +9732,13 @@
   "where": [
    "partials/energy-load-form",
    "public/mappings-loxone-to-mqtt-tabulator.js"
+  ]
+ },
+ {
+  "key": "on a workday",
+  "module": "charging",
+  "where": [
+   "learned (script)"
   ]
  },
  {
@@ -14004,6 +14046,13 @@
   ]
  },
  {
+  "key": "via the first address, then home",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Viewer",
   "module": "monitor",
   "where": [
@@ -14074,6 +14123,13 @@
   "module": "ocpp",
   "where": [
    "src/ocppBridge.js"
+  ]
+ },
+ {
+  "key": "Wallbox limit",
+  "module": "charging",
+  "where": [
+   "planner-log (script)"
   ]
  },
  {

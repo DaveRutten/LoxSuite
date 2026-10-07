@@ -278,9 +278,10 @@
   // One drive from home: when, the stops with the distance to each, and what it needs.
   function routeBlock(t) {
     var label = t.stops.length > 1 ? 'Route' : t.stops[0].role === 'drop' ? 'Drop off' : t.stops[0].role === 'pick' ? 'Pick up' : 'There and back';
+    // a stop back at where the drive started is marked as such
     var km = function (l) { return l ? (l.approx ? '≈ ' : '') + nf(l.km, 0) + ' km' : '? km'; };
     var path = '<span>home</span>';
-    t.stops.forEach(function (st, i) { path += ' → ' + esc(st.title) + ' <span style="opacity:0.7;">(' + km(t.legs[i]) + ')</span>'; });
+    t.stops.forEach(function (st, i) { path += ' → ' + esc(st.title) + (st.role === 'via' ? ' <span>(again)</span>' : '') + ' <span style="opacity:0.7;">(' + km(t.legs[i]) + ')</span>'; });
     path += ' → <span>home</span> <span style="opacity:0.7;">(' + km(t.legs[t.legs.length - 1]) + ')</span>';
     var tight = (t.legs || []).some(function (l) { return l && l.tight; });
     return '<div style="margin-top:0.5rem; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:10px;">' +
@@ -305,7 +306,8 @@
     var html = '<div style="border:1px solid var(--border); border-radius:12px; padding:0.9rem 1rem;">' +
       '<div class="hint" style="margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;">' + esc(it.calendar || (it.kind === 'trip' ? 'LoxSuite trip' : '')) + '</div>' +
       '<div style="font-size:1.1rem; font-weight:700; margin:0.15rem 0;">' + carMark(it) + esc(it.title) + '</div>' +
-      '<div class="hint" style="margin:0;">' + when + (it.location ? ' · 📍 ' + esc(it.location) : '') + '</div>';
+      '<div class="hint" style="margin:0;">' + when + (it.location ? ' · 📍 ' + esc(it.location) : '') + '</div>' +
+      (it.movedFrom ? '<div class="hint" style="margin:0.2rem 0 0;">Moved from ' + new Date(it.movedFrom).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' — what you chose for the series still counts.</div>' : '');
     if (it.kind === 'event' && canEdit) {
       html += '<div class="ag-box" style="margin-top:0.8rem; background:var(--accent-soft, #EAF7E4);"><div class="ag-field"><span class="ag-lbl">Car needed</span>' +
         '<select id="ag-need"><option value="">auto' + (it.carTag ? ' (yes, marker)' : ' (no)') + '</option><option value="1"' + ((it.carSource === 'you' || it.carSource === 'series') && it.needsCar ? ' selected' : '') + '>yes</option><option value="0"' + ((it.carSource === 'you' || it.carSource === 'series') && !it.needsCar ? ' selected' : '') + '>no</option></select></div></div>' +
@@ -316,11 +318,14 @@
     if (it.kind === 'event' && canEdit && it.needsCar && !it.allDay) {
       var mOpt = function (v, l) { return '<option value="' + v + '"' + ((it.tripModeSource === 'you' || it.tripModeSource === 'series' ? it.tripMode : '') === v ? ' selected' : '') + '>' + l + '</option>'; };
       // the next appointment with the car in full under the dropdown (a long title doesn't fit in it)
-      var chainSel = function (id, label, on, next) {
+      // after an appointment also: back home via where the drive started (e.g. to pick up there)
+      var chainSel = function (id, label, on, next, via) {
+        var v = Number(on) || 0;
         return '<div class="ag-field"><span class="ag-lbl">' + label + '</span><select id="' + id + '">' +
-          '<option value="0"' + (on ? '' : ' selected') + '>back home</option>' +
-          '<option value="1"' + (on ? ' selected' : '') + (next ? '' : ' disabled') + '>drive on to the next appointment</option></select>' +
-          '<div class="hint">' + (next ? '<span>Next appointment:</span> ' + esc(next.title) + ' · ' + tm(next.at) : 'No appointment with the car after it.') + '</div></div>';
+          '<option value="0"' + (v === 0 ? ' selected' : '') + '>back home</option>' +
+          '<option value="1"' + (v === 1 ? ' selected' : '') + (next ? '' : ' disabled') + '>drive on to the next appointment</option>' +
+          (via ? '<option value="2"' + (v === 2 ? ' selected' : '') + '>via the first address, then home</option>' : '') + '</select>' +
+          '<div class="hint">' + (v === 2 && via ? '<span>Via:</span> ' + esc(via.title) + (via.location ? ' · ' + esc(via.location) : '') : next ? '<span>Next appointment:</span> ' + esc(next.title) + ' · ' + tm(next.at) : 'No appointment with the car after it.') + '</div></div>';
       };
       var m = it.tripMode || 'stay';
       html += '<div class="ag-box" style="background:var(--surface-alt, #f4f6f8);">' +
@@ -328,7 +333,7 @@
         mOpt('', (it.tripTag ? 'calendar — ' : 'default — ') + modeName(it.tripTag || 'stay')) + mOpt('stay', 'the car stays there') + mOpt('both', 'drop off and pick up') + mOpt('drop', 'only drop off') + mOpt('pick', 'only pick up') + '</select>' +
         '<div class="hint">' + (it.tripModeSource === 'tag' ? 'From the calendar text (#brengen / #halen).' : it.tripModeSource === 'series' || it.chainSource === 'series' ? 'Set for the whole series.' : 'In the calendar text: #brengen, #halen or both.') + '</div></div>' +
         (m === 'both' || m === 'drop' ? chainSel('ag-chain-start', 'After dropping off', it.chainStart, it.nextAfterStart) : '') +
-        (m === 'stay' ? chainSel('ag-chain-end', 'Afterwards', it.chainEnd, it.nextAfterEnd) : m === 'both' || m === 'pick' ? chainSel('ag-chain-end', 'After picking up', it.chainEnd, it.nextAfterEnd) : '') +
+        (m === 'stay' ? chainSel('ag-chain-end', 'Afterwards', it.chainEnd, it.nextAfterEnd, it.viaAfterEnd) : m === 'both' || m === 'pick' ? chainSel('ag-chain-end', 'After picking up', it.chainEnd, it.nextAfterEnd, it.viaAfterEnd) : '') +
         (it.recurring ? '<div id="ag-trip-scope" hidden style="margin:0.4rem 0 0; padding:0.5rem 0.7rem; border:1px dashed var(--border); border-radius:10px;"><span class="hint" style="margin:0 0.5rem 0 0;">Repeating appointment — for:</span><button type="button" class="btn-soft" data-scope="day">only this day</button> <button type="button" class="btn-soft" data-scope="series">the whole series</button></div>' : '') +
         '</div>';
     }
@@ -380,7 +385,7 @@
     el.innerHTML = html;
     var setTemp = function (v) {
       if (it.kind === 'trip') return post('/agenda/trips/' + it.id + '/climate.json', { climate_c: v });
-      return post('/agenda/override.json', { calendar_id: it.calendar_id, uid: it.uid, start_at: it.start, climate_c: v });
+      return post('/agenda/override.json', { calendar_id: it.calendar_id, uid: it.uid, start_at: it.occ || it.start, climate_c: v });
     };
     var skip = function (off) {
       return post('/agenda/climate-skip.json', { kind: it.kind, id: it.id, calendar_id: it.calendar_id, uid: it.uid, start: it.start, leave_at: it.leaveAt, title: it.title, target_c: it.climateC, off: off ? 1 : 0 });
@@ -396,7 +401,7 @@
     var climAll = document.getElementById('ag-clim-all');
     if (climAll) climAll.onclick = function (e) { e.preventDefault(); (it.climateOff ? skip(false) : Promise.resolve()).then(function () { return setTemp(''); }).then(load); };
     var save = function (patch) {
-      post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.start, needs_car: document.getElementById('ag-need') ? document.getElementById('ag-need').value : '', own_value: document.getElementById('ag-own') ? document.getElementById('ag-own').value : it.own }, patch || {})).then(load);
+      post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.occ || it.start, needs_car: document.getElementById('ag-need') ? document.getElementById('ag-need').value : '', own_value: document.getElementById('ag-own') ? document.getElementById('ag-own').value : it.own }, patch || {})).then(load);
     };
     var need = document.getElementById('ag-need');
     var scope = document.getElementById('ag-scope');
@@ -411,7 +416,7 @@
     // how you drive / driving on: for a repeating appointment, this day or the whole series
     var tripScope = document.getElementById('ag-trip-scope');
     var setTrip = function (patch) {
-      var go = function (series) { post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.start }, patch, series ? { scope: 'series' } : {})).then(load); };
+      var go = function (series) { post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.occ || it.start }, patch, series ? { scope: 'series' } : {})).then(load); };
       if (!tripScope) { go(false); return; }
       tripScope.hidden = false;
       tripScope.querySelectorAll('button').forEach(function (b) { b.onclick = function () { go(b.dataset.scope === 'series'); }; });

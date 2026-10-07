@@ -4941,3 +4941,31 @@ tr.ls-extra { display: none; }
   .segmented button { flex: 1; padding: 0.55rem 0.4rem; font-size: 0.82rem; }
   .ls-tile-value { font-size: 1.15rem; }
 }
+
+/* ---- Charts in the energy part (public/ls-chart.js): one palette, checked to be told apart (also with
+   colour blindness) per mode. Solar, import from the grid, export to it, the car / Wallbox, the house,
+   the battery (and "ready by"), the price. */
+:root {
+  --en-solar: #eda100; --en-import: #d64545; --en-export: #1baf7a; --en-car: #2a78d6;
+  --en-house: #6f7887; --en-battery: #7b6fd6; --en-price: #9aa5b1;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --en-solar: #c98500; --en-import: #e0507a; --en-export: #199e70; --en-car: #3987e5;
+    --en-house: #a3abb8; --en-battery: #9085e9; --en-price: #7d8794;
+  }
+}
+:root[data-theme="dark"] {
+  --en-solar: #c98500; --en-import: #e0507a; --en-export: #199e70; --en-car: #3987e5;
+  --en-house: #a3abb8; --en-battery: #9085e9; --en-price: #7d8794;
+}
+:root[data-theme="light"] {
+  --en-solar: #eda100; --en-import: #d64545; --en-export: #1baf7a; --en-car: #2a78d6;
+  --en-house: #6f7887; --en-battery: #7b6fd6; --en-price: #9aa5b1;
+}
+.ls-tip { position: absolute; z-index: 5; pointer-events: none; min-width: 150px; padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface, #fff); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12); font-size: 0.78rem; line-height: 1.4; }
+.ls-tip > div { display: flex; justify-content: space-between; gap: 0.8rem; }
+.ls-tip > div > span { opacity: 0.75; }
+.ls-tip > div > strong { font-variant-numeric: tabular-nums; }
+.ls-tip .ls-tip-h { display: block; font-weight: 600; margin-bottom: 0.15rem; }
+.ls-tip .ls-tip-key { display: inline-block; width: 0.7em; height: 3px; border-radius: 2px; margin-right: 0.35em; vertical-align: 0.2em; }

@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.48.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.49.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -717,6 +717,9 @@ charging page itself is the overview.
   fills, smooth lines with a light wash, a tick every hour, the days below, *now*, *ready by* and *expected home*
   over all panels. Point at an hour for a summary, **tap** it for the details: its price (per quarter), what is
   planned (kWh, kW, solar part), solar and house, import from the grid, what it costs and the battery after it.
+- **One chart style** in the whole energy part (Smart charging, Meters, energy manager, consumers, Learned, Driving
+  & costs, charge log): smooth lines, a light wash, soft columns, hairline grid, point at a chart for the values,
+  and one palette for light and dark (solar yellow, import red, export green, car blue, house gray, battery violet).
 - **Consumption**: what the car's own electric range says (its energy for the km it shows — that follows the
   weather), before what LoxSuite learned over time; your own kWh/km in the vehicle settings goes before both.
   While the car is out on a drive from the agenda, what is left of that drive counts (its km minus what the
@@ -789,9 +792,11 @@ before you have to leave. Learned departures, planned charging and past sessions
 `#halen` in the title or description, or chosen in LoxSuite per day or for the whole series) means there and back
 at the start, home in between (so it can charge), and there and back again at the end; also *only drop off* or
 *only pick up*. After a stop you can **drive on** to the next appointment with the car instead of going home:
-the stops become one route (home → 1 → 2 → 3 → home) with the road distances between them (OSRM, cached; an
+the stops become one route (home → 1 → 2 → 3 → home) — or back home via where it started (home → 1 → 2 → 1 →
+home, e.g. to pick up) — with the road distances between them (OSRM, cached; an
 estimate until looked up), the margin once, and leave/back times for the whole route. The planner, the plug-in
-reminders, the expected arrival and climate at departure all work per drive from home.
+reminders, the expected arrival and climate at departure all work per drive from home. A repeating appointment
+moved to another day keeps the series' choices, and a choice made for that one day moves with it.
 
 **Climate at departure** (cars on the Škoda API): switch it on per appointment or trip with a temperature
 (16–26 °C); a set time before you leave (default 20 min) LoxSuite starts the car's air conditioning, once per
