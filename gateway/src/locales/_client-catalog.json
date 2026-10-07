@@ -302,6 +302,13 @@
   ]
  },
  {
+  "key": "· ☀️ {0} kWh",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "· about {0} km more today (learned: {1} km on a {2})",
   "module": "charging",
   "where": [
@@ -1107,6 +1114,13 @@
   "module": "charging",
   "where": [
    "src/planner.js"
+  ]
+ },
+ {
+  "key": "{0} kWh from the grid",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -2491,6 +2505,13 @@
   ]
  },
  {
+  "key": "at {0}",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "At 0 kW the Wallbox does not charge",
   "module": "charging",
   "where": [
@@ -2882,6 +2903,13 @@
   "module": "charging",
   "where": [
    "src/planner.js"
+  ]
+ },
+ {
+  "key": "Battery level",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -3614,7 +3642,8 @@
   "module": "charging",
   "where": [
    "agenda (script)",
-   "energy-manager (script)"
+   "energy-manager (script)",
+   "planner (script)"
   ]
  },
  {
@@ -3954,6 +3983,13 @@
   "module": "ocpp",
   "where": [
    "src/ocppStats.js"
+  ]
+ },
+ {
+  "key": "Costs",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -6338,6 +6374,13 @@
   "module": "energy",
   "where": [
    "energy (script)"
+  ]
+ },
+ {
+  "key": "Import from the grid (expected)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -8850,6 +8893,13 @@
   ]
  },
  {
+  "key": "no price (yet)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "no price comparison possible",
   "module": "charging",
   "where": [
@@ -9294,6 +9344,13 @@
  },
  {
   "key": "nothing more to charge",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "nothing planned",
   "module": "charging",
   "where": [
    "planner (script)"
@@ -10131,6 +10188,13 @@
   ]
  },
  {
+  "key": "Planned",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
   "key": "planned charging",
   "module": "charging",
   "where": [
@@ -10326,7 +10390,8 @@
   "key": "Price",
   "module": "energy_manager",
   "where": [
-   "energy-manager (script)"
+   "energy-manager (script)",
+   "planner (script)"
   ]
  },
  {
@@ -10800,6 +10865,13 @@
   "module": "core",
   "where": [
    "admin-security (script)"
+  ]
+ },
+ {
+  "key": "reserve {0}%",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {
@@ -11708,7 +11780,8 @@
   "key": "Solar surplus (forecast)",
   "module": "energy_manager",
   "where": [
-   "energy-manager (script)"
+   "energy-manager (script)",
+   "planner (script)"
   ]
  },
  {
@@ -12696,6 +12769,13 @@
   "module": "energy",
   "where": [
    "src/energyMeters.js"
+  ]
+ },
+ {
+  "key": "this hour: solar {0} kWh, house {1} kWh",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {

@@ -390,6 +390,10 @@ async function computeTarget(nowMs, wb) {
     needKwh = Math.max(0, est - (wb?.sessionKwh || 0));
     needSource = exp ? `estimated from ${exp.source} (${exp.n}x, ${exp.kwh} kWh) minus ${(wb?.sessionKwh || 0).toFixed(1)} kWh charged` : 'estimate (no history yet)';
   }
+  // The battery level the plan starts from (now, or when it is back): what is missing up to its limit
+  // — from the car's own reading when there is one, else the estimate above. For the chart's line.
+  const limitPctNow = reading?.limit_soc ?? vehicle?.charge_limit_pct ?? 100;
+  const levelKwh = vehicle?.battery_kwh && Number.isFinite(needKwh) ? round3(Math.max(0, vehicle.battery_kwh * limitPctNow / 100 - needKwh)) : null;
   // Deadline: a manual "ready by" for this session, the agenda, the learned weekday pattern.
   let readyAtMs = null;
   let readySource = '';
@@ -536,7 +540,10 @@ async function computeTarget(nowMs, wb) {
     needKwh = 0; zeroed = true;
   }
   if (zeroed) { split = null; bufferKwh = 0; } // full / minimum top-up: nothing to split or to buffer
-  return { needKwh: round3(needKwh || 0), needSource, readyAtMs, readySource, vehicle, usable, reading, drive, away, split, bufferKwh, bufferKm: Number(cfg.buffer_km) || 0 };
+  return {
+    needKwh: round3(needKwh || 0), needSource, readyAtMs, readySource, vehicle, usable, reading, drive, away, split, bufferKwh, bufferKm: Number(cfg.buffer_km) || 0,
+    batteryKwh: vehicle?.battery_kwh || null, limitPct: limitPctNow, levelKwh, levelEstimated: !(reading && vehicle?.battery_kwh), reservePct: vehicle?.reserve_pct ?? null,
+  };
 }
 
 // When the car that is out is expected home: an appointment with the car that is going on now (its
@@ -626,6 +633,71 @@ function mergeTrips(first, next = [], { gapMin = 45 } = {}) {
     out.merged = (out.merged || 0) + 1;
   }
   return out;
+}
+
+// Pure: the expected battery level from startMs: up during the planned charging (each slot's kWh spread
+// over it), down during the drives (leave → back, their kWh), never above its limit or below empty (a
+// plug-in hybrid then drives on fuel). -> [{ at (ms), pct }] at every change.
+function batteryCurve({ startMs, startKwh, batteryKwh, fullKwh = null, charges = [], drives = [], untilMs }) {
+  if (!(batteryKwh > 0) || !Number.isFinite(startKwh) || !(untilMs > startMs)) return [];
+  const full = Math.min(batteryKwh, fullKwh > 0 ? fullKwh : batteryKwh);
+  const parts = [];
+  const add = (from, to, kwh, sign) => {
+    const a = Math.max(from, startMs);
+    const b = Math.min(to, untilMs);
+    if (b > a && to > from && kwh > 0) parts.push({ a, b, rate: sign * kwh / (to - from) });
+  };
+  for (const c of charges) add(c.start, c.end, c.kwh, 1);
+  for (const d of drives) add(d.leave, d.back, d.kwh, -1);
+  const cuts = [...new Set([startMs, untilMs, ...parts.flatMap((x) => [x.a, x.b])])].sort((x, y) => x - y);
+  const pct = (k) => Math.round(k / batteryKwh * 1000) / 10;
+  let kwh = Math.min(full, Math.max(0, startKwh));
+  const out = [{ at: cuts[0], pct: pct(kwh) }];
+  for (let i = 1; i < cuts.length; i++) {
+    const a = cuts[i - 1];
+    const b = cuts[i];
+    const rate = parts.filter((x) => x.a <= a && x.b >= b).reduce((t, x) => t + x.rate, 0);
+    let next = kwh + rate * (b - a);
+    if (rate > 0 && next > full) {
+      const at = a + (full - kwh) / rate;
+      if (at > a && at < b) out.push({ at: Math.round(at), pct: pct(full) });
+      next = full;
+    } else if (rate < 0 && next < 0) {
+      const at = a - kwh / rate;
+      if (at > a && at < b) out.push({ at: Math.round(at), pct: 0 });
+      next = 0;
+    }
+    kwh = next;
+    out.push({ at: b, pct: pct(kwh) });
+  }
+  return out;
+}
+
+// The chart's battery line: from the start of the plan, with its charging and the car's drives from
+// home in the agenda (their expected use, without the margin) — or the usual drive of that weekday the
+// plan reckons with.
+async function batteryLine(target, plan, slots, startMs) {
+  if (!(target.batteryKwh > 0) || !Number.isFinite(target.levelKwh)) return null;
+  const untilMs = slots.length ? Date.parse(slots[slots.length - 1].end) : startMs + 24 * 3600000;
+  const charges = (plan.slots || []).map((q) => ({ start: Date.parse(q.start), end: Date.parse(q.end), kwh: q.kwh || 0 }));
+  const drives = [];
+  try {
+    for (const t of await require('./agenda').tours(new Date(startMs).toISOString(), new Date(untilMs).toISOString())) {
+      if (t.allDay || (t.vehicle_id && target.vehicle && t.vehicle_id !== target.vehicle.id)) continue;
+      const use = t.km > 0 && t.marginKm > 0 && t.km > t.marginKm && t.kwh ? t.kwh * (t.km - t.marginKm) / t.km : t.kwh;
+      drives.push({ leave: Date.parse(t.leaveAt), back: Date.parse(t.backAt), kwh: round3(use || 0), title: t.title });
+    }
+  } catch { /* no agenda */ }
+  const sp = target.split;
+  if (sp && /^usual /.test(sp.title || '') && sp.away?.[0] && !drives.some((d) => d.leave < sp.backAtMs && d.back > sp.away[0][0])) {
+    drives.push({ leave: sp.away[0][0], back: sp.backAtMs, kwh: sp.tripKwh || 0, title: sp.title });
+  }
+  const fullKwh = target.batteryKwh * (Number(target.limitPct) || 100) / 100;
+  return {
+    points: batteryCurve({ startMs, startKwh: target.levelKwh, batteryKwh: target.batteryKwh, fullKwh, charges, drives, untilMs }),
+    limitPct: Number(target.limitPct) || 100, reservePct: target.reservePct, estimated: !!target.levelEstimated,
+    drives: drives.map((d) => ({ leave: d.leave, back: d.back, kwh: d.kwh, title: d.title })),
+  };
 }
 
 // Pure: the plan for what must be in before the appointment + the rest. The rest is picked from the
@@ -854,7 +926,10 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   plan.fuelBreakEven = fuel;
   plan.priceCap = priceCap;
   plan.slotsAll = slots;
+  plan.battery = await batteryLine(target, plan, slots, arrival ? arrival.at : nowMs).catch(() => null);
   plan.chartPrices = slots.length ? await require('./prices').chartQuarters(slots[0].start, slots[slots.length - 1].end).catch(() => null) : null;
+  // the quarters for the details of an hour, also when the chart shows hours
+  plan.quarterPrices = !plan.chartPrices && slots.length ? await require('./prices').quartersBetween(slots[0].start, slots[slots.length - 1].end).catch(() => null) : null;
   plan.priceGapFrom = priceGapFrom === null ? null : new Date(priceGapFrom).toISOString();
   plan.madeAt = new Date(nowMs).toISOString();
   rt.plan = plan;
@@ -1058,6 +1133,6 @@ function stopPlanner() {
 }
 
 module.exports = {
-  MODES, DEFAULTS, makePlan, withRest, planSplit, sameTrip, mergeTrips, planWithBuffer, joinPlans, freeOf, fuelBreakEven, activeSlot, controlStep,
+  MODES, DEFAULTS, makePlan, withRest, planSplit, sameTrip, mergeTrips, batteryCurve, planWithBuffer, joinPlans, freeOf, fuelBreakEven, activeSlot, controlStep,
   houseWeather, getConfig, saveConfig, recalc, tick, outputMiniserver, sessionFull, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, stopPlanner, buildSlots, computeTarget, wallboxLive,
 };

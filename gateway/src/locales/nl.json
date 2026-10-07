@@ -4246,5 +4246,17 @@
   "default —": "standaard —",
   "drive on to the next appointment": "door naar volgende afspraak",
   "Next appointment:": "Volgende afspraak:",
-  "No appointment with the car after it.": "Geen afspraak met de auto erna."
+  "No appointment with the car after it.": "Geen afspraak met de auto erna.",
+  "· ☀️ {0} kWh": "· ☀️ {0} kWh",
+  "{0} kWh from the grid": "{0} kWh van het net",
+  "at {0}": "om {0}",
+  "battery (expected, %)": "accu (verwacht, %)",
+  "Costs": "Kosten",
+  "Import from the grid (expected)": "Afname van het net (verwacht)",
+  "Planned": "Gepland",
+  "reserve {0}%": "reserve {0}%",
+  "Tap a bar for the details.": "Tik op een staaf voor de details.",
+  "this hour: solar {0} kWh, house {1} kWh": "dit uur: zon {0} kWh, huis {1} kWh",
+  "nothing planned": "niets gepland",
+  "Battery level": "Accuniveau"
 }

@@ -44,8 +44,9 @@
   <% } %>
   <div id="pl-plan" style="margin-top:1rem;"></div>
   <div style="margin-top:1rem;">
-    <div class="hint" style="margin:0 0 0.2rem; font-size:0.8rem;"><%= t('Price per interval (all-in) —') %> <span style="color:var(--accent); font-weight:700;">■</span> <%= t('planned') %> &nbsp;<span style="color:#d4a017; font-weight:700;">━</span> <%= t('expected solar surplus (kW)') %> &nbsp;<span style="color:#e5534b; font-weight:700;">┆</span> <%= t('ready by') %> &nbsp;<span style="color:#d4a017; font-weight:700;">■</span> <%= t('solar part') %> &nbsp;<span style="color:#3b82f6; font-weight:700;">┆</span> <%= t('expected home') %> &nbsp;<span style="color:var(--accent); font-weight:700;">⬚</span> <%= t('if it came home now') %> &nbsp;<span style="color:#e0794f; font-weight:700;">┅</span> <%= t('expected import from the grid (kW)') %> &nbsp;<span style="display:inline-block; width:0.9em; height:0.8em; vertical-align:-0.05em; background:repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 5px); opacity:0.45;"></span> <%= t('no price (yet)') %></div>
+    <div class="hint" style="margin:0 0 0.2rem; font-size:0.8rem;"><%= t('Price per interval (all-in) —') %> <span style="color:var(--accent); font-weight:700;">■</span> <%= t('planned') %> &nbsp;<span style="color:#d4a017; font-weight:700;">━</span> <%= t('expected solar surplus (kW)') %> &nbsp;<span style="color:#e5534b; font-weight:700;">┆</span> <%= t('ready by') %> &nbsp;<span style="color:#d4a017; font-weight:700;">■</span> <%= t('solar part') %> &nbsp;<span style="color:#3b82f6; font-weight:700;">┆</span> <%= t('expected home') %> &nbsp;<span style="color:var(--accent); font-weight:700;">⬚</span> <%= t('if it came home now') %> &nbsp;<span style="color:#e0794f; font-weight:700;">┅</span> <%= t('expected import from the grid (kW)') %> &nbsp;<span style="display:inline-block; width:0.9em; height:0.8em; vertical-align:-0.05em; background:repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 5px); opacity:0.45;"></span> <%= t('no price (yet)') %> &nbsp;<span style="color:#8b5cf6; font-weight:700;">━</span> <%= t('battery (expected, %)') %> &nbsp;<span style="font-weight:700;">│</span> <%= t('now') %> · <%= t('Tap a bar for the details.') %></div>
     <div id="pl-chart"></div>
+    <div id="pl-detail"></div>
   </div>
 </div>
 
@@ -193,13 +194,47 @@
     return out;
   }
   var chartPlan = null;
+  var plSel = null; // start (ms) of the interval tapped for its details
   lsOnResize(function () { if (chartPlan) renderChart(chartPlan); });
+  // Pure: the expected battery level (%) at an instant from the line's points, or null.
+  function batteryAt(bat, ms) {
+    var pts = bat && bat.points;
+    if (!pts || !pts.length || ms < pts[0].at) return null;
+    for (var i = 1; i < pts.length; i++) {
+      if (ms <= pts[i].at) { var a = pts[i - 1], b = pts[i]; return b.at === a.at ? b.pct : a.pct + (b.pct - a.pct) * (ms - a.at) / (b.at - a.at); }
+    }
+    return pts[pts.length - 1].pct;
+  }
+  // Everything about one interval of the chart: price (per quarter), what is planned, solar, house,
+  // import from the grid, what it costs and the battery after it.
+  function slotDetail(p, s, gridKw) {
+    var a = Date.parse(s.start), b = Date.parse(s.end);
+    var kwh = 0, pv = 0, kw = 0;
+    p.slots.forEach(function (q) {
+      var qa = Date.parse(q.start), qb = Date.parse(q.end), ov = Math.min(b, qb) - Math.max(a, qa);
+      if (ov <= 0 || qb <= qa) return;
+      kwh += (q.kwh || 0) * ov / (qb - qa); pv += (q.pvKwh || 0) * ov / (qb - qa); kw = Math.max(kw, q.kw || 0);
+    });
+    var grid = Math.max(0, kwh - pv);
+    var qs = (p.quarterPrices || []).filter(function (q) { return Date.parse(q.start) >= a && Date.parse(q.end) <= b; });
+    var level = batteryAt(p.battery, b);
+    var day = new Date(a).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+    var tiles = '<div class="ls-tiles" style="margin-top:0.5rem; grid-template-columns:repeat(auto-fill, minmax(min(132px, 100%), 1fr));">' +
+      tile(T('Price'), s.price != null ? eur(s.price, 3) + '<small style="font-size:0.6em; opacity:0.7;"> /kWh</small>' : '—', s.price == null ? esc(T('no price (yet)')) : qs.length > 1 ? qs.map(function (q) { return esc(tm(q.start)) + ' ' + eur(q.price, 3); }).join('<br>') : '') +
+      tile(T('Planned'), kwh > 0.05 ? nf(kwh, 1) + ' kWh' : esc(T('nothing planned')), kwh > 0.05 ? esc(T('{0} kW', nf(kw, 1))) + (pv > 0.05 ? ' · ☀️ ' + nf(pv, 1) + ' kWh' : '') : '') +
+      tile(T('Solar surplus (forecast)'), nf(s.pvKw || 0, 1) + ' kW', esc(T('this hour: solar {0} kWh, house {1} kWh', nf(s.pvKwh || 0, 1), nf(s.houseKwh || 0, 1)))) +
+      tile(T('Import from the grid (expected)'), gridKw != null ? nf(gridKw, 1) + ' kW' : '—') +
+      tile(T('Costs'), kwh > 0.05 && s.price != null ? eur(grid * s.price) : '—', kwh > 0.05 ? esc(T('{0} kWh from the grid', nf(grid, 1))) : '') +
+      tile(T('Battery level'), level != null ? (p.battery.estimated ? '≈ ' : '') + nf(level, 0) + '%' : '—', level != null ? esc(T('at {0}', tm(s.end))) : '') +
+      '</div>';
+    return '<div class="card" style="margin:0.6rem 0 0; padding:0.7rem 0.9rem;"><div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;"><strong>' + esc(day + ' ' + tm(s.start) + '–' + tm(s.end)) + '</strong><a href="#" class="hint" id="pl-detail-close" style="margin:0;">' + esc(T('Close')) + '</a></div>' + tiles + '</div>';
+  }
   function renderChart(p) {
     chartPlan = p;
     var el = document.getElementById('pl-chart');
     if (!p || !p.slotsAll || !p.slotsAll.length) { el.innerHTML = '<p class="hint" style="margin:0;">No prices yet.</p>'; return; }
     var slots = withQuarters(p.slotsAll.slice(0, 160), p.chartPrices);
-    var W = lsChartW(el, 900), H = 160, left = 40, n = slots.length, bw = (W - left - 8) / n;
+    var W = lsChartW(el, 900), H = 190, left = 40, n = slots.length, bw = (W - left - 8) / n;
     var maxP = Math.max(0.1, Math.max.apply(null, slots.map(function (s) { return s.price || 0; })));
     // expected import from the grid per interval (kW): the house beyond the expected solar, plus the
     // grid part of the planned charging in it
@@ -218,7 +253,7 @@
     p.slots.forEach(function (x) { planned[x.start] = true; });
     var t0 = Date.parse(slots[0].start), t1 = Date.parse(slots[n - 1].end);
     var X = function (ms) { return left + (ms - t0) / (t1 - t0) * (W - left - 8); };
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 34) + '" width="100%" style="display:block;">' +
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 50) + '" width="100%" style="display:block;">' +
       '<defs><pattern id="pl-noprice" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="currentColor" stroke-width="2" opacity="0.18"/></pattern></defs>';
     [0.25, 0.5, 0.75, 1].forEach(function (f) { var v = maxP * f; var y = 10 + H - f * H; svg += '<line x1="' + left + '" y1="' + y + '" x2="' + (W - 5) + '" y2="' + y + '" stroke="currentColor" opacity="0.08"/><text x="' + (left - 4) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">€' + v.toFixed(2) + '</text>'; });
     slots.forEach(function (s, i) {
@@ -271,10 +306,68 @@
       if (bx > left && bx < W) svg += '<line x1="' + bx + '" y1="4" x2="' + bx + '" y2="' + (10 + H) + '" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (bx + 3) + '" y="9" font-size="10" fill="#3b82f6">' + esc(T('back ~{0}', tm(p.split.backAt))) + '</text>';
     }
     if (p.readyAt) { var rx = X(Date.parse(p.readyAt)); if (rx > left && rx < W) svg += '<line x1="' + rx + '" y1="4" x2="' + rx + '" y2="' + (10 + H) + '" stroke="#e5534b" stroke-width="2" stroke-dasharray="4 3"/><text x="' + (rx > W - 90 ? rx - 3 : rx + 3) + '" y="9" font-size="10" text-anchor="' + (rx > W - 90 ? 'end' : 'start') + '" fill="#e5534b">' + esc(T('ready {0}', tm(p.readyAt))) + '</text>'; }
-    var lastLabel = -1;
-    slots.forEach(function (s) { var ms = Date.parse(s.start); var d = new Date(ms); if (d.getMinutes() === 0 && d.getHours() % 3 === 0 && ms !== lastLabel) { lastLabel = ms; svg += '<text x="' + X(ms) + '" y="' + (H + 26) + '" font-size="10" fill="currentColor" opacity="0.6">' + (d.getHours() === 0 ? d.toLocaleDateString([], { weekday: 'short' }) : String(d.getHours()).padStart(2, '0')) + '</text>'; } });
+    // the expected battery level: up while charging, down while out (agenda / the usual drive)
+    var bat = p.battery;
+    if (bat && bat.points && bat.points.length > 1) {
+      var BY = function (pct) { return (10 + H - Math.max(0, Math.min(100, pct)) / 100 * H).toFixed(1); };
+      var clipT = function (ms) { return Math.max(t0, Math.min(t1, ms)); };
+      var bp = [];
+      bat.points.forEach(function (pt) { if (pt.at >= t0 - 1 && pt.at <= t1 + 1) bp.push(X(clipT(pt.at)).toFixed(1) + ',' + BY(pt.pct)); });
+      var endLvl = batteryAt(bat, t1);
+      if (endLvl != null && bat.points[bat.points.length - 1].at > t1) bp.push(X(t1).toFixed(1) + ',' + BY(endLvl));
+      if (bat.reservePct > 0) svg += '<line x1="' + left + '" y1="' + BY(bat.reservePct) + '" x2="' + (W - 5) + '" y2="' + BY(bat.reservePct) + '" stroke="#8b5cf6" stroke-width="1" stroke-dasharray="2 4" opacity="0.55"/><text x="' + (left + 3) + '" y="' + (Number(BY(bat.reservePct)) - 3) + '" font-size="9" fill="#8b5cf6" opacity="0.8">' + esc(T('reserve {0}%', nf(bat.reservePct, 0))) + '</text>';
+      if (bp.length > 1) svg += '<polyline points="' + bp.join(' ') + '" fill="none" stroke="#8b5cf6" stroke-width="2.4" stroke-linejoin="round"' + (bat.estimated ? ' stroke-dasharray="6 3"' : '') + '/>';
+      // the level at the start, when it has to be ready, back from each drive, and at the end
+      var marks = [{ at: Math.max(t0, bat.points[0].at) }];
+      if (p.readyAt) marks.push({ at: Date.parse(p.readyAt) });
+      (bat.drives || []).forEach(function (d) { marks.push({ at: d.leave }); marks.push({ at: d.back }); });
+      marks.push({ at: t1 });
+      var lastX = -99, lastLv = null;
+      marks.filter(function (m) { return m.at >= t0 && m.at <= t1; }).sort(function (a, b) { return a.at - b.at; }).forEach(function (m) {
+        var lv = batteryAt(bat, m.at), mx = X(m.at);
+        // not again when nothing changed since the last label, nor on top of it
+        if (lv == null || mx - lastX < 34 || (lastLv !== null && Math.abs(lv - lastLv) < 1)) return;
+        lastX = mx; lastLv = lv;
+        var ly = Number(BY(lv)), ty = ly < 24 ? ly + 13 : ly - 6;
+        svg += '<circle cx="' + mx.toFixed(1) + '" cy="' + ly + '" r="2.8" fill="#8b5cf6"/><text x="' + Math.min(W - 6, Math.max(left + 2, mx)).toFixed(1) + '" y="' + ty + '" text-anchor="' + (mx > W - 30 ? 'end' : mx < left + 20 ? 'start' : 'middle') + '" font-size="10" font-weight="700" fill="#8b5cf6" paint-order="stroke" stroke="var(--surface, #fff)" stroke-width="3">' + (bat.estimated ? '≈' : '') + nf(lv, 0) + '%</text>';
+      });
+    }
+    // time axis: a tick every hour, a label every 1–3 hours (what fits), the days below with a line at midnight
+    var pxH = (W - left - 8) / Math.max(1, (t1 - t0) / 3600000);
+    var every = pxH >= 26 ? 1 : pxH >= 13 ? 2 : 3;
+    for (var hms = Math.ceil(t0 / 3600000) * 3600000; hms <= t1; hms += 3600000) {
+      var hd = new Date(hms), hx = X(hms), hr = hd.getHours();
+      svg += '<line x1="' + hx + '" y1="' + (10 + H) + '" x2="' + hx + '" y2="' + (10 + H + (hr % every === 0 ? 5 : 3)) + '" stroke="currentColor" opacity="0.35"/>';
+      if (hr === 0) svg += '<line x1="' + hx + '" y1="10" x2="' + hx + '" y2="' + (10 + H + 30) + '" stroke="currentColor" opacity="0.28"/>';
+      if (hr % every === 0 && hx > left + 6 && hx < W - 8) svg += '<text x="' + hx + '" y="' + (H + 25) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.65">' + String(hr).padStart(2, '0') + '</text>';
+    }
+    var dd = new Date(t0); dd.setHours(0, 0, 0, 0);
+    for (var ds = dd.getTime(); ds < t1;) {
+      var dn = new Date(ds); dn.setDate(dn.getDate() + 1);
+      var xa = X(Math.max(ds, t0)), xb = X(Math.min(dn.getTime(), t1));
+      if (xb - xa > 34) svg += '<text x="' + ((xa + xb) / 2).toFixed(1) + '" y="' + (H + 42) + '" text-anchor="middle" font-size="10.5" font-weight="600" fill="currentColor" opacity="0.75">' + esc(new Date(ds).toLocaleDateString([], xb - xa > 110 ? { weekday: 'long', day: 'numeric', month: 'short' } : { weekday: 'short', day: 'numeric' })) + '</text>';
+      ds = dn.getTime();
+    }
+    // now
+    var nowX = X(Date.now());
+    if (Date.now() >= t0 && Date.now() <= t1) svg += '<line x1="' + nowX + '" y1="10" x2="' + nowX + '" y2="' + (10 + H) + '" stroke="currentColor" stroke-width="1.5" opacity="0.7"/><text x="' + (nowX + 3) + '" y="' + (10 + H - 4) + '" font-size="10" font-weight="700" fill="currentColor" opacity="0.75" paint-order="stroke" stroke="var(--surface, #fff)" stroke-width="3">' + esc(T('now')) + '</text>';
+    // tap (or click) an interval: outlined, and its details below the chart
+    slots.forEach(function (s, i) {
+      var sx = X(Date.parse(s.start)), sw = Math.max(1, X(Date.parse(s.end)) - sx), sa = Date.parse(s.start);
+      if (plSel === sa) svg += '<rect x="' + (sx + 0.5) + '" y="10" width="' + Math.max(1, sw - 1) + '" height="' + H + '" rx="2" fill="none" stroke="var(--accent)" stroke-width="2"/>';
+      svg += '<rect data-pl-i="' + i + '" x="' + sx + '" y="10" width="' + sw + '" height="' + H + '" fill="transparent" style="cursor:pointer;"><title>' + tm(s.start) + (s.price != null ? ' € ' + s.price.toFixed(3) : '') + (gridKw[i] != null ? ' · ' + esc(T('import ~{0} kW', nf(gridKw[i], 1))) : '') + '</title></rect>';
+    });
     svg += '</svg>';
     el.innerHTML = svg;
+    Array.prototype.forEach.call(el.querySelectorAll('[data-pl-i]'), function (r) {
+      r.addEventListener('click', function () { var s = slots[Number(r.getAttribute('data-pl-i'))]; var ms = Date.parse(s.start); plSel = plSel === ms ? null : ms; renderChart(chartPlan); });
+    });
+    var det = document.getElementById('pl-detail');
+    var si = plSel === null ? -1 : slots.findIndex(function (s) { return Date.parse(s.start) === plSel; });
+    if (si < 0) { plSel = null; det.innerHTML = ''; return; }
+    det.innerHTML = slotDetail(p, slots[si], gridKw[si]);
+    var cl = document.getElementById('pl-detail-close');
+    if (cl) cl.addEventListener('click', function (e) { e.preventDefault(); plSel = null; renderChart(chartPlan); });
   }
 
   function load() { fetch('/planner/status.json').then(function (r) { return r.json(); }).then(render).catch(function () {}); }

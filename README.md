@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.46.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.47.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -86,7 +86,7 @@ It provides:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/smart-charging-dark.png">
-  <img src="docs/screenshots/smart-charging-light.png" alt="Smart charging in two cards: Now (mode, session buttons, the live figures and the last session) and Plan (what fits in the battery, ready by, expected home, the plan with its solar and grid part, and the price chart with planned hours)">
+  <img src="docs/screenshots/smart-charging-light.png" alt="Smart charging in two cards: Now (mode, session buttons, the live figures and the last session) and Plan (what fits in the battery, ready by, expected home, the plan with its solar and grid part, and the chart: prices with the planned hours, the expected battery level, hours and days, now, and the details of a tapped hour)">
 </picture>
 
 </td>
@@ -710,6 +710,11 @@ charging page itself is the overview.
   moment, or a fixed feed-in tariff), grid energy at the all-in price; the cheapest intervals win. For a plug-in
   hybrid intervals above the fuel break-even price (fuel price x l/100 km vs kWh/km) are skipped. Every planned
   interval shows its solar and grid part (e.g. *11.0 kWh (2.9 ☀️ + 8.1 ⚡)*), also in the chart.
+- **The chart**: price per interval with the planned ones, the expected solar surplus and import from the grid,
+  and the **expected battery level** (%) — up while charging, down during the drives in the agenda (or the
+  usual drive of that day), with the level at the start, when it has to be ready and after each drive. A tick
+  every hour, the days below it, a *now* line; **tap a bar** for that interval: its price (per quarter), what is
+  planned (kWh, kW, solar part), solar and house, import from the grid, what it costs and the battery after it.
 - **Full and ready**: plugged in before a trip, only the trip + reserve has to be in before leaving; the trip's
   own kWh come out of the battery, so after it is back the car is charged **full again before it is needed
   next** (its next departure in the agenda or the learned one) — in the cheapest hours it is home, never while

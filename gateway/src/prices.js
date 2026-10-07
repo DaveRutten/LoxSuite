@@ -442,6 +442,16 @@ async function chartQuarters(fromIso, toIso) {
   return list.length ? list : null;
 }
 
+// The quarter-hour all-in prices between two times whatever the charts show (for the details of an
+// hour), or null when the source has none.
+async function quartersBetween(fromIso, toIso) {
+  const cfg = await getConfig();
+  if (!['energyzero', 'entsoe'].includes(cfg.source)) return null;
+  const a = Date.parse(fromIso), b = Date.parse(toIso);
+  const list = ((await settings.get('price_quarters', [])) || []).filter((q) => Date.parse(q.end) > a && Date.parse(q.start) < b);
+  return list.length ? list : null;
+}
+
 async function getPrices(fromIso, toIso) {
   return db.prepare('SELECT start_at, end_at, market_eur_kwh, allin_eur_kwh, source FROM energy_prices WHERE end_at > ? AND start_at < ? ORDER BY start_at').all(fromIso, toIso);
 }
@@ -481,6 +491,6 @@ function stopPrices() {
 
 module.exports = {
   DEFAULTS, allinPrice, fitLinear, parseEnergyZero, parseEnergyZeroPublic, ezDate, parseEntsoe, entsoeTime, hourOfDayProfile, fillProfile, loxoneHistory, toIntervals, toHourly, fixedPrice,
-  getConfig, saveConfig, fetchMarket, fetchEnergyZero, fetchMarketFilled, pricesBehind, refreshPrices, getPrices, chartQuarters, currentPrice, calibration, sampleCalibration,
+  getConfig, saveConfig, fetchMarket, fetchEnergyZero, fetchMarketFilled, pricesBehind, refreshPrices, getPrices, chartQuarters, quartersBetween, currentPrice, calibration, sampleCalibration,
   loxoneCurrentPrice, findSpotOptimizer, startPrices, stopPrices,
 };

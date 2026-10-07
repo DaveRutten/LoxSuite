@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.47.0-alpha.1] - 2026-10-07
+
+### Added
+- **More detail in the Smart charging chart** (asked for):
+  - **expected battery level** (%, purple): from the start of the plan (now, or when the car is expected
+    home), up while charging, down during the car's drives in the agenda (their expected use, without the
+    margin) or the usual drive of that weekday the plan reckons with, capped at the charge limit and never below
+    empty; the level at the start, when it has to be ready and around each drive is written next to it; dashed
+    when the starting level is an estimate (no reading from the car), the reserve as a dotted line;
+  - **finer time axis**: a tick every hour and a label every 1–3 hours (what fits), the days below the hours with
+    a line at midnight, a *now* line; the chart is a bit taller;
+  - **tap (or click) a bar** for that interval below the chart: price (and the four quarter prices of an hour,
+    also when the chart shows hours), what is planned (kWh, kW, solar part), the solar surplus with the expected
+    solar and house use of that hour, the expected import from the grid, what the grid part costs, and the
+    battery level after it.
+
 ## [0.46.0-alpha.1] - 2026-10-07
 
 ### Added
