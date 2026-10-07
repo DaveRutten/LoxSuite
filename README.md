@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.49.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.50.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -707,7 +707,10 @@ charging page itself is the overview.
   appointment that is going on, else the learned end of the day's last trip from the odometer, or the usual
   plug-in time); the page shows *Expected home* and, next to it, what it would do if the car (or another car)
   came home right now. The km the car usually still drives that day are added to what it needs. Solar surplus is valued at what exporting it earns (net metering = the price of that
-  moment, or a fixed feed-in tariff), grid energy at the all-in price; the cheapest intervals win. For a plug-in
+  moment until the end of 2026, from 1 January 2027 automatically the bare market price; or the market price or a
+  fixed feed-in tariff) minus *prefer own solar* (default € 0.05/kWh, also for the energy manager), grid energy at
+  the all-in price; the cheapest intervals win — so a sunny hour runs at the minimum power before grid power is
+  added in an equally cheap one. Tap an hour to see what its solar counts as. For a plug-in
   hybrid intervals above the fuel break-even price (fuel price x l/100 km vs kWh/km) are skipped. Every planned
   interval shows its solar and grid part (e.g. *11.0 kWh (2.9 ☀️ + 8.1 ⚡)*), also in the chart.
 - **The chart**: four panels over one time axis, each with its own scale — **price** (the planned intervals in

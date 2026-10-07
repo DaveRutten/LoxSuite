@@ -107,7 +107,7 @@ async function check(nowMs = Date.now()) {
     }
     // Cheapest electricity between now and the deadline for that amount.
     const slots = await planner.buildSlots(nowMs, ready);
-    const plan = planner.makePlan({ nowMs, readyAtMs: ready, needKwh: deficit, slots, mode: 'plan', minKw: pcfg.min_kw, maxKw: pcfg.max_kw, solarTrust: 'low' });
+    const plan = planner.makePlan({ nowMs, readyAtMs: ready, needKwh: deficit, slots, mode: 'plan', minKw: pcfg.min_kw, maxKw: pcfg.max_kw, solarTrust: 'low', feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, solarBonus: pcfg.solar_bonus_eur });
     const fuel = await require('./fuelPrice').currentFuelPrice();
     const breakEven = planner.fuelBreakEven({ fuelEurL: fuel.eur_l, lPer100km: v.fuel_l_per_100km || 6.5, kwhPerKm: require('./driving').currentKwhPerKm(v, pcfg.default_kwh_per_km) });
     const weekdayKey = require('./localTime').WEEKDAYS[localParts(ready, tz).weekday];

@@ -239,16 +239,16 @@ function kmToday(trips, { tz, nowMs = Date.now() } = {}) {
 }
 
 // € per kWh that went into the car per month, from hourly meter data: the grid part of each hour at
-// that hour's all-in price, the solar part at its feed-in value ('saldering' = the price of that hour,
-// 'fixed' = feedInEur). hours: [{ hour, wallboxKwh, gridImportKwh, price }] (price may be null).
-function chargingCost(hours, { feedIn = 'saldering', feedInEur = 0.05, monthOf = (t) => new Date(t).toISOString().slice(0, 7) } = {}) {
+// that hour's all-in price, the solar part at what exporting it would have yielded (solarValue.js:
+// 'saldering' = the price of that hour until 2027, then the market price; 'market'; 'fixed' = feedInEur). hours: [{ hour, wallboxKwh, gridImportKwh, price }] (price may be null).
+function chargingCost(hours, { feedIn = 'saldering', feedInEur = 0.05, priceCfg = {}, monthOf = (t) => new Date(t).toISOString().slice(0, 7) } = {}) {
   const months = new Map();
   for (const h of hours || []) {
     const wb = Number(h.wallboxKwh) || 0;
     if (wb <= 0.01 || h.price === null || h.price === undefined) continue;
     const grid = Math.min(wb, Math.max(0, Number(h.gridImportKwh) || 0));
     const solar = wb - grid;
-    const solarValue = feedIn === 'fixed' ? feedInEur : h.price;
+    const solarValue = require('./solarValue').exportWorth({ atMs: Date.parse(h.hour), price: h.price, market: h.market ?? null, feedIn, feedInEur, priceCfg });
     const k = monthOf(Date.parse(h.hour));
     const m = months.get(k) || { month: k, kwh: 0, solarKwh: 0, eur: 0 };
     m.kwh += wb; m.solarKwh += solar; m.eur += grid * h.price + solar * solarValue;
@@ -369,7 +369,7 @@ async function report(vehicle) {
   // A consumption set by hand wins over the learned one for electric km and costs.
   const kpk = Number(vehicle.kwh_per_km) > 0 ? Number(vehicle.kwh_per_km) : a.kwhPerKmUsed;
   const carCount = (await db.prepare('SELECT COUNT(*) AS n FROM vehicles WHERE enabled = 1').get())?.n || 1;
-  const cost = chargingCost(await loadChargeHours(vehicle, { carCount: Number(carCount) }), { feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, monthOf });
+  const cost = chargingCost(await loadChargeHours(vehicle, { carCount: Number(carCount) }), { feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, priceCfg: await require('./prices').getConfig().catch(() => ({})), monthOf });
   let fuelEurL = pcfg.fuel_eur_l;
   if (pcfg.fuel_auto) {
     const fp = await require('./fuelPrice').currentFuelPrice().catch(() => null);

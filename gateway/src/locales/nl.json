@@ -2035,7 +2035,6 @@
   "Needed {0} (±{1} kWh). {2}{3}": "Nodig {0} (±{1} kWh). {2}{3}",
   "Needle": "Naald",
   "Needs": "Nodig",
-  "Net metering (price of that moment)": "Salderen (prijs van dat moment)",
   "network error": "netwerkfout",
   "Neutral (no color)": "Neutraal (geen kleur)",
   "Neutral trend line color": "Kleur neutrale trendlijn",
@@ -2470,7 +2469,6 @@
   "Power now": "Vermogen nu",
   "Power while heating (kW)": "Vermogen tijdens opwarmen (kW)",
   "Pre-heat/cool correction (°C)": "Correctie voorverwarmen/-koelen (°C)",
-  "Prefer own solar (€/kWh bonus)": "Voorkeur voor eigen zon (€/kWh bonus)",
   "Preparing": "Voorbereiden",
   "Prev": "Vorige",
   "Preview (as sent to Telegram, with example data):": "Voorbeeld (zoals naar Telegram verzonden, met voorbeeldgegevens):",
@@ -4280,5 +4278,12 @@
   "an event": "een gebeurtenis",
   "via the first address, then home": "via het eerste adres naar huis",
   "Via:": "Via:",
-  "(again)": "(weer)"
+  "(again)": "(weer)",
+  "A kWh of your own solar in the car costs what exporting it would have yielded: with net metering the price of that moment, from 1 January 2027 (the end of net metering) the bare market price without energy tax and VAT. \"Prefer own solar\" makes it count that much cheaper — for your supplier's feed-in costs, or because you would rather use it yourself: then the plan charges at the minimum power in sunny hours before it adds grid power in an equally cheap hour. Also used by the energy manager.": "Een kWh eigen zon in de auto kost wat terugleveren had opgeleverd: met salderen de prijs van dat moment, vanaf 1 januari 2027 (het einde van de salderingsregeling) de kale marktprijs zonder energiebelasting en btw. \"Voorkeur voor eigen zon\" laat hem zoveel goedkoper tellen — voor de terugleverkosten van je leverancier, of omdat je hem liever zelf gebruikt: dan laadt het plan in zonnige uren eerst op het minimale vermogen voordat het er in een even goedkoop uur netstroom bij zet. Geldt ook voor de energiemanager.",
+  "Market price of that moment (no net metering)": "Marktprijs van dat moment (geen salderen)",
+  "Net metering until the end of 2026, then the market price": "Salderen tot eind 2026, daarna de marktprijs",
+  "own solar counts as {0} per kWh (feed-in tariff)": "eigen zon telt als {0} per kWh (terugleververgoeding)",
+  "own solar counts as {0} per kWh (market price)": "eigen zon telt als {0} per kWh (marktprijs)",
+  "own solar counts as {0} per kWh (net metering)": "eigen zon telt als {0} per kWh (salderen)",
+  "Prefer own solar (€/kWh)": "Voorkeur voor eigen zon (€/kWh)"
 }

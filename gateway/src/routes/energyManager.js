@@ -205,7 +205,8 @@ router.post('/unknown.json', requirePermission('energy_manager', 'edit'), asyncH
 }));
 
 router.post('/settings', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
-  await em.saveConfig({ car_priority: Math.max(1, Math.min(9, num(req.body.car_priority, 3))), solar_bonus_eur: Math.max(0, num(req.body.solar_bonus_eur, 0.05)) });
+  // ("prefer own solar" is set with Smart charging now, for both)
+  await em.saveConfig({ car_priority: Math.max(1, Math.min(9, num(req.body.car_priority, 3))) });
   res.redirect('/settings/energy?saved=settings#energy-manager');
 }));
 

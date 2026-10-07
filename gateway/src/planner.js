@@ -14,6 +14,7 @@
 // or when something changes; and — in "Live" output mode — writes the setpoint to Loxone virtual
 // inputs. In "Advise" mode it only shows what it would do.
 const settings = require('./wallboxSettings');
+const solarValue = require('./solarValue');
 
 const MODES = ['off', 'now', 'pv', 'minpv', 'plan'];
 const DEFAULTS = {
@@ -38,8 +39,11 @@ const DEFAULTS = {
   solar_trust: 'low',             // 'low' (p10 of the forecast band) | 'expected' | 'bonus' (ignore solar when planning)
   max_price_eur_kwh: null,
   insufficient: 'charge',         // too few cheap intervals: 'charge' anyway | 'stop' at the price cap
-  feed_in: 'saldering',           // value of exported solar: 'saldering' (= price of that moment) | 'fixed'
+  feed_in: 'saldering',           // value of exported solar (solarValue.js): 'saldering' (= price of that moment, until
+                                  // net metering ends on 1 January 2027, then the market price) | 'market' | 'fixed'
   feed_in_eur_kwh: 0.05,
+  // solar_bonus_eur: "prefer own solar" (€/kWh): own solar counts this much cheaper than exporting it
+  // yields. Not in the defaults: getConfig() takes the energy manager's old setting when it is not set yet.
   target_policy: 'full',          // after a trip: 'full' again before the next departure | 'needed' (what that departure
                                   // usually needs + reserve + buffer)
   buffer_km: 40,                  // always this much range soon after plugging in (an unexpected trip), within buffer_h
@@ -58,11 +62,12 @@ const round3 = (x) => Math.round(x * 1000) / 1000;
 
 // ------------------------------------------------------------------ plan (pure)
 
-// slots: [{ start, end (ISO), price (all-in €/kWh), pvKw (expected solar surplus, kW) }]
+// slots: [{ start, end (ISO), price (all-in €/kWh), market (bare €/kWh, optional), pvKw (expected solar surplus, kW) }]
+// solarBonus: "prefer own solar" (€/kWh) — own solar counts this much cheaper than exporting it yields.
 function makePlan({
   nowMs, readyAtMs = null, needKwh, slots, mode = 'plan', minKw = 4.16, maxKw = 11,
   solarTrust = 'low', priceCap = null, insufficient = 'charge', feedIn = 'saldering', feedInEur = 0.05, horizonH = 24,
-  earlyValue = 0,
+  earlyValue = 0, solarBonus = 0, priceCfg = {},
 }) {
   const end = readyAtMs || nowMs + horizonH * 3600000;
   const trust = solarTrust === 'bonus' ? 0 : solarTrust === 'expected' ? 1 : 0.7;
@@ -76,7 +81,11 @@ function makePlan({
     const h = (s.e - s.s) / 3600000;
     const pv = Math.max(0, (s.pvKw || 0) * trust);
     const price = Number.isFinite(s.price) ? s.price : null;
-    const pvValue = feedIn === 'fixed' ? feedInEur : (price ?? feedInEur);
+    // What a kWh of own solar costs here: what exporting it would yield (net metering: the price of
+    // that moment; from 2027 the market price) minus the preference for own solar. With a preference,
+    // the minimum power in a sunny interval comes before a grid top-up in an equally cheap one, and a
+    // solar hour can fall below the price cap.
+    const pvValue = solarValue.ownSolarCost(solarValue.exportWorth({ atMs: s.s, price, market: s.market ?? null, feedIn, feedInEur, priceCfg }), solarBonus);
     if (pv >= minKw) {
       const kwA = Math.min(maxKw, pv);
       chunks.push({ slot: s, kw: kwA, h, cost: pvValue, source: 'pv', pvKw: kwA });
@@ -264,7 +273,13 @@ function controlStep({ nowMs, mode, cfg, plan, live, state = {}, done = false, o
 const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-async function getConfig() { return settings.get('planner', DEFAULTS); }
+async function getConfig() {
+  const cfg = await settings.get('planner', DEFAULTS);
+  if (cfg.solar_bonus_eur !== undefined && cfg.solar_bonus_eur !== null) return cfg;
+  // "prefer own solar" used to be an energy manager setting; it now counts for Smart charging too
+  const em = await settings.get('energy_manager', {}).catch(() => ({}));
+  return { ...cfg, solar_bonus_eur: Number.isFinite(Number(em?.solar_bonus_eur)) ? Number(em.solar_bonus_eur) : 0.05 };
+}
 async function saveConfig(v) {
   const cur = await getConfig();
   const next = { ...cur, ...v };
@@ -886,15 +901,15 @@ async function buildSlots(nowMs, untilMs) {
   const weatherFactor = (ms) => require('./temperature').dayFactor(rt.houseWeather.model, rt.houseWeather.means.get(dayOf(ms)) ?? null, { min: 0.6, max: 1.8 });
   const slots = [];
   const covered = rows.length ? Date.parse(rows[rows.length - 1].end_at) : nowMs;
-  const pushSlot = (s, e, price) => {
+  const pushSlot = (s, e, price, market = null) => {
     const hour = new Date(Math.floor(s / 3600000) * 3600000).toISOString();
     const pvKwh = pv.get(hour) || 0;
     // houseRaw: the learned profile with the weather (what the error correction is learned on)
     const houseRaw = round3((learning.expectedHouseKwh(house, s, { tz, dayType: types.get(dayOf(s))?.type || null }) ?? 0.4) * weatherFactor(s));
     const houseKwh = round3(houseRaw * (corr.houseFactor || 1));
-    slots.push({ start: new Date(s).toISOString(), end: new Date(e).toISOString(), price, pvKw: round3(Math.max(0, pvKwh - houseKwh)), pvKwh, houseKwh, houseRaw });
+    slots.push({ start: new Date(s).toISOString(), end: new Date(e).toISOString(), price, market, pvKw: round3(Math.max(0, pvKwh - houseKwh)), pvKwh, houseKwh, houseRaw });
   };
-  for (const r of rows) pushSlot(Date.parse(r.start_at), Date.parse(r.end_at), r.allin_eur_kwh);
+  for (const r of rows) pushSlot(Date.parse(r.start_at), Date.parse(r.end_at), r.allin_eur_kwh, r.market_eur_kwh ?? null);
   // Hours without a price (beyond the known prices — tomorrow's come out around 13:00 — or a gap,
   // e.g. today's missing): slots without a price, so the chart and the plan still start now.
   const spans = rows.map((r) => [Date.parse(r.start_at), Date.parse(r.end_at)]);
@@ -930,6 +945,7 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   flog.fillActuals(nowMs).catch(() => {});
   if (!rt.prunedAt || nowMs - rt.prunedAt > 86400000) { rt.prunedAt = nowMs; flog.prune(nowMs).catch(() => {}); }
   const vehicle = target.vehicle;
+  const priceCfg = await require('./prices').getConfig().catch(() => ({}));
   let priceCap = cfg.max_price_eur_kwh ? Number(cfg.max_price_eur_kwh) : null;
   let fuel = null;
   if (vehicle?.type === 'phev') {
@@ -942,7 +958,14 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
     minKw: cfg.min_kw, maxKw: cfg.max_kw, solarTrust: cfg.solar_trust, priceCap,
     insufficient: vehicle?.type === 'phev' ? 'stop' : cfg.insufficient, feedIn: cfg.feed_in, feedInEur: cfg.feed_in_eur_kwh,
     earlyValue: Math.max(0, Number(cfg.early_value_eur) || 0),
+    solarBonus: Math.max(0, Number(cfg.solar_bonus_eur) || 0), priceCfg,
   };
+  // what own solar counts as per interval, for the details of a tapped hour
+  for (const s of slots) {
+    const worth = solarValue.exportWorth({ atMs: Date.parse(s.start), price: s.price, market: s.market ?? null, feedIn: cfg.feed_in, feedInEur: cfg.feed_in_eur_kwh, priceCfg });
+    s.solarValue = solarValue.ownSolarCost(worth, planArgs.solarBonus);
+    s.solarRule = solarValue.ruleAt(cfg.feed_in, Date.parse(s.start));
+  }
   // The car is out: plan from the moment it is expected home; what it would do if it came home (or
   // another car were plugged in) right now is kept next to it. Plugging in always re-plans from now.
   const arrival = await expectedArrival(nowMs, target, until).catch(() => null);

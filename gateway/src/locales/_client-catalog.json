@@ -5704,7 +5704,7 @@
    "monitor-detail (script)",
    "partials/foot (script)",
    "partials/panel-grid (script)",
-   "public/tables.js"
+   "planner (script)"
   ]
  },
  {
@@ -9950,6 +9950,27 @@
   "module": "core",
   "where": [
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "own solar counts as {0} per kWh (feed-in tariff)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "own solar counts as {0} per kWh (market price)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "own solar counts as {0} per kWh (net metering)",
+  "module": "charging",
+  "where": [
+   "planner (script)"
   ]
  },
  {

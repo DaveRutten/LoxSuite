@@ -304,9 +304,11 @@
           <option value="relaxed" <%= cfg.depart_certainty === 'relaxed' ? 'selected' : '' %>><%= t('Relaxed: half of the times (cheapest)') %></option></select></div>
         <div><label><%= t('No grid top-up below (kWh)') %></label><input type="text" name="min_topup_kwh" value="<%= cfg.min_topup_kwh ?? 1 %>"></div>
         <div><label><%= t('Too few cheap intervals (full electric)') %></label><select name="insufficient"><option value="charge" <%= cfg.insufficient !== 'stop' ? 'selected' : '' %>><%= t('Charge anyway') %></option><option value="stop" <%= cfg.insufficient === 'stop' ? 'selected' : '' %>><%= t('Stop at the max. price') %></option></select></div>
-        <div><label><%= t('Value of exported solar') %></label><select name="feed_in"><option value="saldering" <%= cfg.feed_in !== 'fixed' ? 'selected' : '' %>><%= t('Net metering (price of that moment)') %></option><option value="fixed" <%= cfg.feed_in === 'fixed' ? 'selected' : '' %>><%= t('Fixed feed-in tariff') %></option></select></div>
-        <div><label><%= t('Feed-in tariff (€/kWh)') %></label><input type="text" name="feed_in_eur_kwh" value="<%= cfg.feed_in_eur_kwh %>"></div>
+        <div><label><%= t('Value of exported solar') %></label><select name="feed_in"><option value="saldering" <%= cfg.feed_in !== 'fixed' && cfg.feed_in !== 'market' ? 'selected' : '' %>><%= t('Net metering until the end of 2026, then the market price') %></option><option value="market" <%= cfg.feed_in === 'market' ? 'selected' : '' %>><%= t('Market price of that moment (no net metering)') %></option><option value="fixed" <%= cfg.feed_in === 'fixed' ? 'selected' : '' %>><%= t('Fixed feed-in tariff') %></option></select></div>
+        <div data-show-if="feed_in=fixed"><label><%= t('Feed-in tariff (€/kWh)') %></label><input type="text" name="feed_in_eur_kwh" value="<%= cfg.feed_in_eur_kwh %>"></div>
+        <div><label><%= t('Prefer own solar (€/kWh)') %></label><input type="text" name="solar_bonus_eur" value="<%= cfg.solar_bonus_eur ?? 0.05 %>"></div>
       </div>
+      <p class="hint" style="margin:0.5rem 0 0;"><%= t('A kWh of your own solar in the car costs what exporting it would have yielded: with net metering the price of that moment, from 1 January 2027 (the end of net metering) the bare market price without energy tax and VAT. "Prefer own solar" makes it count that much cheaper — for your supplier\'s feed-in costs, or because you would rather use it yourself: then the plan charges at the minimum power in sunny hours before it adds grid power in an equally cheap hour. Also used by the energy manager.') %></p>
       <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
     </form>
   </details>
@@ -366,7 +368,6 @@
   <form method="post" action="/energy-manager/settings">
     <div class="form-grid">
       <div><label><%= t('Priority of the car') %></label><input type="text" name="car_priority" value="<%= emCfg.car_priority %>"></div>
-      <div><label><%= t('Prefer own solar (€/kWh bonus)') %></label><input type="text" name="solar_bonus_eur" value="<%= emCfg.solar_bonus_eur %>"></div>
     </div>
     <div class="btn-row" style="margin-top:0.8rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
   </form>

@@ -284,8 +284,9 @@ function toHours(slots) {
   const map = new Map();
   for (const s of slots || []) {
     const ms = Math.floor(Date.parse(s.start) / HOUR) * HOUR;
-    const h = map.get(ms) || { ms, hour: new Date(ms).toISOString(), prices: [], surplusKwh: Math.max(0, Number(s.pvKw) || 0) };
+    const h = map.get(ms) || { ms, hour: new Date(ms).toISOString(), prices: [], markets: [], surplusKwh: Math.max(0, Number(s.pvKw) || 0) };
     if (s.price !== null && s.price !== undefined) h.prices.push(Number(s.price));
+    if (s.market !== null && s.market !== undefined && Number.isFinite(Number(s.market))) h.markets.push(Number(s.market));
     map.set(ms, h);
   }
   const hours = [...map.values()].sort((a, b) => a.ms - b.ms);
@@ -293,6 +294,7 @@ function toHours(slots) {
   return hours.map((h) => ({
     ms: h.ms, hour: h.hour, surplusKwh: r3(h.surplusKwh),
     price: h.prices.length ? r3(h.prices.reduce((a, b) => a + b, 0) / h.prices.length) : med, estimated: !h.prices.length,
+    market: h.markets.length ? r3(h.markets.reduce((a, b) => a + b, 0) / h.markets.length) : null,
   }));
 }
 
@@ -363,14 +365,17 @@ function bestSteps(H, { dur, notBefore = 0, readyBy = Infinity, maxGapH = 0, max
 
 function effCost(h, kwh, surplus, opts) {
   const fromSolar = Math.min(kwh, Math.max(0, surplus));
-  const solarValue = opts.feedIn === 'fixed' ? opts.feedInEur : (h.price ?? 0) - (opts.solarBonus || 0);
-  return fromSolar * Math.max(0, solarValue) + (kwh - fromSolar) * (h.price ?? 0);
+  // own solar: what exporting it would yield (solarValue.js — net metering until 2027, then the market
+  // price) minus the preference for own solar
+  const sv = require('./solarValue');
+  const solarValue = sv.ownSolarCost(sv.exportWorth({ atMs: h.ms, price: h.price ?? 0, market: h.market ?? null, feedIn: opts.feedIn, feedInEur: opts.feedInEur, priceCfg: opts.priceCfg || {} }), opts.solarBonus || 0);
+  return fromSolar * solarValue + (kwh - fromSolar) * (h.price ?? 0);
 }
 
 // loads: [{ id, kind, name, priority, settings (object), requests: [{ id, readyBy (ms), kwh, durationH }] }]
 // carKwh: { [hourMs]: kWh the car plan takes }; localOf(ms) -> { day: 'YYYY-MM-DD', hour: 0..23 }
-function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf, feedIn = 'saldering', feedInEur = 0.05, solarBonus = 0.05, awayDays = new Set() }) {
-  const opts = { feedIn, feedInEur, solarBonus };
+function planLoads({ hours, loads, carKwh = {}, carPriority = 3, nowMs, localOf, feedIn = 'saldering', feedInEur = 0.05, solarBonus = 0.05, priceCfg = {}, awayDays = new Set() }) {
+  const opts = { feedIn, feedInEur, solarBonus, priceCfg };
   const left = new Map(hours.map((h) => [h.ms, h.surplusKwh]));
   const nowHour = Math.floor(nowMs / HOUR) * HOUR;
   const H = hours.filter((h) => h.ms >= nowHour);
@@ -680,9 +685,11 @@ async function hourContext(hourIso) {
   const by = Object.fromEntries(rows.map((r) => [r.role, r]));
   const p = await priceAt(Date.parse(hourIso));
   const pcfg = await require('./planner').getConfig();
+  const sv = require('./solarValue');
   return {
     price: p, gridImport: by.grid ? by.grid.import_kwh : null, gridExport: by.grid ? by.grid.export_kwh || 0 : 0, houseKwh: by.house ? by.house.import_kwh : null,
-    solarValue: pcfg.feed_in === 'fixed' ? pcfg.feed_in_eur_kwh : p,
+    // what that solar would have yielded exported (no preference: this is what it really cost)
+    solarValue: p === null ? null : sv.exportWorth({ atMs: Date.parse(hourIso), price: p, feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, priceCfg: await require('./prices').getConfig().catch(() => ({})) }),
   };
 }
 
@@ -998,7 +1005,7 @@ async function recalc(nowMs = Date.now()) {
   }
   rt.follows = await followsFor(loads);
   rt.unknown = await unknownPatterns(nowMs, localOf).catch(() => []);
-  const plan = planLoads({ hours, loads, carKwh, carPriority: cfg.car_priority, nowMs, localOf, feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, solarBonus: cfg.solar_bonus_eur, awayDays: awayAhead });
+  const plan = planLoads({ hours, loads, carKwh, carPriority: cfg.car_priority, nowMs, localOf, feedIn: pcfg.feed_in, feedInEur: pcfg.feed_in_eur_kwh, solarBonus: pcfg.solar_bonus_eur, priceCfg: await require('./prices').getConfig().catch(() => ({})), awayDays: awayAhead });
   rt.plan = { ...plan, hours, carKwh, at: new Date(nowMs).toISOString(), today, live: corrected.live, pvF, dayTypes: Object.fromEntries(types) };
   rt.loads = loads;
   rt.localOf = localOf;
@@ -1117,8 +1124,9 @@ async function applianceStep(load, values, nowMs) {
   if (nowMs >= last + HOUR && !act.pausedAt && (mode !== 'on' || !smp.on)) rt.active.delete(load.id);
 }
 
+// (solar_bonus_eur — "prefer own solar" — is now a Smart charging setting for both: planner.getConfig())
 async function getConfig() {
-  return { car_priority: 3, solar_bonus_eur: 0.05, ...(await require('./wallboxSettings').get('energy_manager', {})) };
+  return { car_priority: 3, ...(await require('./wallboxSettings').get('energy_manager', {})) };
 }
 async function saveConfig(c) { await require('./wallboxSettings').set('energy_manager', { ...(await getConfig()), ...c }); rt.planAt = 0; }
 

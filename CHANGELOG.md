@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.50.0-alpha.1] - 2026-10-07
+
+### Changed
+- **Own solar in Smart charging** (asked: "tomorrow you charge at 9.6 kW at 14:00 with only 2.6 kW of solar — why
+  not the minimum power there, and at 16:00 with 4.4 kW expected surplus another hour at the minimum?"): with net
+  metering a kWh of solar counted as exactly the price of that hour, so the plan saw no reason to use it — the
+  cheapest quarters got full power from the grid, and the sunny 16:00 counted as its price, above the plug-in
+  hybrid's fuel break-even, so it was skipped. Now:
+  - **Prefer own solar** (€/kWh, default 0.05) counts for Smart charging too — it was an energy manager setting
+    only; it moved to *Settings → Energy → Smart charging*, next to *Value of exported solar* (an existing value is
+    taken over). Own solar counts that much cheaper than what exporting it yields — for your supplier's feed-in
+    costs, or because you would rather use it yourself. A sunny hour then runs at the minimum power before grid
+    power is added in an equally cheap hour, and a sunny hour can fall below the price cap.
+  - **Net metering ends on 1 January 2027**: *Net metering until the end of 2026, then the market price* — from
+    that moment solar automatically counts as the bare market price of that hour (without energy tax and VAT;
+    derived from the all-in price when the source has no market price). New option *Market price of that moment
+    (no net metering)*; the feed-in tariff field shows only with *Fixed feed-in tariff*.
+  - One valuation (`src/solarValue.js`) for Smart charging, the energy manager, the "plug in" reminder and the
+    charging costs on *Driving & costs*.
+  - Tap an hour in the Smart charging chart: the solar tile says what a kWh of own solar counts as there.
+
 ## [0.49.0-alpha.1] - 2026-10-07
 
 ### Changed
