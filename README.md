@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.45.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.46.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -108,7 +108,7 @@ It provides:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/agenda-dark.png">
-  <img src="docs/screenshots/agenda-light.png" alt="The agenda week view with a car appointment opened: distance, consumption, kWh needed, leave and ready-by time, climate at departure">
+  <img src="docs/screenshots/agenda-light.png" alt="The agenda week view with a drop-off and pick-up appointment opened: how you drive, driving on to the next appointment after dropping off, the route past both with distances and kWh, and picking up at the end">
 </picture>
 
 </td>
@@ -773,6 +773,14 @@ Hints like `🚗 120 km`, `🚗 30 kWh` or `🚗 full` are understood. For car a
 looks up the driving distance and time from home (OpenStreetMap Nominatim + OSRM; only those addresses are sent,
 results cached), adds the margin (default 20 km) and turns it into kWh; the planner makes sure the car is ready
 before you have to leave. Learned departures, planned charging and past sessions are shown in the views.
+
+**How you drive** to an appointment: by default the car stays there. **Drop off and pick up** (`#brengen` and
+`#halen` in the title or description, or chosen in LoxSuite per day or for the whole series) means there and back
+at the start, home in between (so it can charge), and there and back again at the end; also *only drop off* or
+*only pick up*. After a stop you can **drive on** to the next appointment with the car instead of going home:
+the stops become one route (home → 1 → 2 → 3 → home) with the road distances between them (OSRM, cached; an
+estimate until looked up), the margin once, and leave/back times for the whole route. The planner, the plug-in
+reminders, the expected arrival and climate at departure all work per drive from home.
 
 **Climate at departure** (cars on the Škoda API): switch it on per appointment or trip with a temperature
 (16–26 °C); a set time before you leave (default 20 min) LoxSuite starts the car's air conditioning, once per

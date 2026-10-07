@@ -183,6 +183,9 @@
     <p class="hint" style="margin:0.5rem 0 0;">
       <%= t('An appointment needs the car when its title or description contains one of the markers, e.g.') %> <code>🚗 Birthday</code> or <code>Visit #auto</code><%= t('. Add a hint like') %> <code>🚗 120 km</code>, <code>🚗 30 kWh</code> or <code>🚗 full</code> <%= t('to skip the distance lookup. For car appointments with an address, the driving distance from home is looked up (only those addresses are sent, results are kept), doubled for the way back plus the margin, and turned into kWh with the car\'s consumption.') %>
     </p>
+    <p class="hint" style="margin:0.5rem 0 0;">
+      <%= t('Drop off and pick up: with') %> <code>#brengen</code>, <code>#halen</code> <%= t('or both in the title or description, the car drives there and back at the start and/or the end of the appointment and is home in between (it can charge then). In the agenda you can also choose it per appointment or for the whole series, and drive on from one appointment to the next instead of going home: LoxSuite then plans one route (home → 1 → 2 → home) with the distances between them, the margin once.') %>
+    </p>
     <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button></div>
   </form>
 </div>

@@ -179,6 +179,8 @@ function demoCalendar() {
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//LoxSuite demo//EN', 'X-WR-CALNAME:Family',
     ev('e1', 0, 9, 30, 10, 30, 'Team meeting', null),
     ev('e2', 1, 14, 0, 16, 0, '🚗 Customer visit', 'Amersfoort'),
+    ev('e10', 1, 8, 15, 17, 30, 'Day care #brengen #halen', 'Kindcentrum, Zeist'),
+    ev('e11', 1, 9, 0, 9, 45, '🚗 Garage', 'Garage, Zeist'),
     ev('e3', 2, 19, 0, 21, 0, 'Sports', 'Sports park'),
     ev('e4', 3, 12, 0, 13, 0, 'Lunch', null),
     ev('e8', 3, 8, 0, 17, 0, 'Thuiswerken', null),

@@ -60,7 +60,15 @@
 <p class="hint" data-hint-keep><%= t('Calendars, car markers and climate at departure are set under') %> <a href="/settings/energy#calendars"><%= t('Administration → Energy & charging') %></a>.</p>
 <% } %>
 
-<style>.ag-need td { padding:0.3rem 0.2rem; } .ag-need td:last-child { white-space:nowrap; text-align:right; }</style>
+<style>
+  .ag-need td { padding:0.3rem 0.2rem; vertical-align:top; } .ag-need td:first-child { padding-right:0.6rem; } .ag-need td:last-child { text-align:right; overflow-wrap:anywhere; }
+  /* the choices in the detail panel: the text above, the dropdown below it, all as wide as the panel */
+  .ag-box { margin:0.6rem 0 0.3rem; padding:0.6rem 0.7rem; border-radius:10px; }
+  .ag-field + .ag-field { margin-top:0.55rem; }
+  .ag-lbl { display:block; font-weight:600; font-size:0.85rem; margin:0 0 0.25rem; }
+  .ag-field select, .ag-field input[type="text"] { display:block; width:100%; max-width:100%; box-sizing:border-box; margin:0; }
+  .ag-field .hint { margin:0.25rem 0 0; font-size:0.75rem; overflow-wrap:anywhere; }
+</style>
 <script src="/agenda-layout.js?v=<%= assetVersion %>"></script>
 <script>
 (function () {
@@ -180,7 +188,10 @@
         var col2 = itemColor(i);
         var sel = selected && key(i) === selected;
         var h = Math.max(20, y(b) - y(a) - 2);
-        var style = i.needsCar ? 'background:' + col2 + '; color:' + textOn(col2) + ';' : 'background:color-mix(in srgb, ' + col2 + ' 18%, var(--surface, #fff)); color:var(--text); border-left:3px solid ' + col2 + ';';
+        // drop off / pick up: the car is only gone at the start and/or the end (a thick edge there)
+        var dp = i.needsCar && i.tripMode && i.tripMode !== 'stay';
+        var style = i.needsCar && !dp ? 'background:' + col2 + '; color:' + textOn(col2) + ';' : 'background:color-mix(in srgb, ' + col2 + ' 18%, var(--surface, #fff)); color:var(--text); border-left:3px solid ' + col2 + ';' +
+          (dp && i.tripMode !== 'pick' ? ' border-top:5px solid ' + col2 + ';' : '') + (dp && i.tripMode !== 'drop' ? ' border-bottom:5px solid ' + col2 + ';' : '');
         // overlapping: each later one shifted right and on top (like a paper calendar), so every
         // title keeps a readable width instead of thin side-by-side strips
         var shift = L.lanes > 1 ? Math.min(35, 60 / (L.lanes - 1)) : 0;
@@ -262,13 +273,31 @@
   function key(i) { return i.kind + '|' + (i.calendar_id || i.id) + '|' + (i.uid || '') + '|' + i.start; }
   function bindClicks(el) { el.querySelectorAll('[data-key]').forEach(function (x) { x.onclick = function () { selected = x.dataset.key; render(); }; }); }
 
+  function roleName(r) { return r === 'drop' ? 'drop off' : r === 'pick' ? 'pick up' : ''; }
+  function modeName(m) { return m === 'both' ? 'drop off and pick up' : m === 'drop' ? 'only drop off' : m === 'pick' ? 'only pick up' : 'the car stays there'; }
+  // One drive from home: when, the stops with the distance to each, and what it needs.
+  function routeBlock(t) {
+    var label = t.stops.length > 1 ? 'Route' : t.stops[0].role === 'drop' ? 'Drop off' : t.stops[0].role === 'pick' ? 'Pick up' : 'There and back';
+    var km = function (l) { return l ? (l.approx ? '≈ ' : '') + nf(l.km, 0) + ' km' : '? km'; };
+    var path = '<span>home</span>';
+    t.stops.forEach(function (st, i) { path += ' → ' + esc(st.title) + ' <span style="opacity:0.7;">(' + km(t.legs[i]) + ')</span>'; });
+    path += ' → <span>home</span> <span style="opacity:0.7;">(' + km(t.legs[t.legs.length - 1]) + ')</span>';
+    var tight = (t.legs || []).some(function (l) { return l && l.tight; });
+    return '<div style="margin-top:0.5rem; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:10px;">' +
+      '<div style="display:flex; justify-content:space-between; gap:0.5rem;"><strong>' + label + '</strong><span class="hint" style="margin:0;">' + tm(t.leaveAt) + '–' + tm(t.backAt) + '</span></div>' +
+      '<div class="hint" style="margin:0.15rem 0 0;">' + path + '</div>' +
+      '<div style="margin-top:0.15rem;">' + (t.km != null ? '<span>' + nf(t.km, 0) + ' km incl. ' + nf(t.marginKm, 0) + ' km margin</span> · ' : '') + '<strong>' + (t.kwh != null ? (t.approx ? '≈ ' : '') + nf(t.kwh, 1) + ' kWh' : '—') + '</strong></div>' +
+      (tight ? '<div class="hint" style="margin:0.15rem 0 0; color:#b8860b;">Tight: the drive between two appointments takes longer than the time in between.</div>' : '') + '</div>';
+  }
+
   function renderDetail() {
     var el = document.getElementById('ag-detail');
     var it = selected && (data.items || []).find(function (i) { return key(i) === selected; });
     if (!it) {
-      var up = (data.items || []).filter(function (i) { return i.needsCar && new Date(i.start) > new Date(); }).slice(0, 4);
+      // the drives from home coming up: one per appointment, two for drop off and pick up, one for a route
+      var up = (data.tours || []).filter(function (t) { return new Date(t.backAt) > new Date(); }).slice(0, 5);
       el.innerHTML = '<div style="border:1px solid var(--border); border-radius:12px; padding:0.9rem 1rem;"><strong>Coming up with the car</strong>' +
-        (up.length ? up.map(function (i) { return '<div data-key="' + esc(key(i)) + '" style="margin-top:0.5rem; cursor:pointer;">' + carMark(i) + '<strong>' + esc(i.title) + '</strong><div class="hint" style="margin:0;">' + new Date(i.start).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + (i.needKwh != null ? ' · ' + nf(i.needKwh, 1) + ' kWh' : '') + '</div></div>'; }).join('') : '<p class="hint" style="margin:0.4rem 0 0;">Nothing in this period. Click an appointment for details.</p>') + '</div>';
+        (up.length ? up.map(function (t) { return '<div data-key="' + esc(t.stops[0].key) + '" style="margin-top:0.5rem; cursor:pointer;">' + (/[\u{1F697}\u{1F699}\u{1F698}]/u.test(t.title) ? '' : '🚗 ') + '<strong>' + esc(t.title) + '</strong>' + (t.stops.length === 1 && t.stops[0].role !== 'stay' ? ' <span class="hint" style="margin:0;">' + esc(roleName(t.stops[0].role)) + '</span>' : '') + '<div class="hint" style="margin:0;"><span>' + new Date(t.leaveAt).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + '–' + tm(t.backAt) + '</span>' + (t.kwh != null ? ' · ' + (t.approx ? '≈ ' : '') + nf(t.kwh, 1) + ' kWh' : '') + '</div></div>'; }).join('') : '<p class="hint" style="margin:0.4rem 0 0;">Nothing in this period. Click an appointment for details.</p>') + '</div>';
       bindClicks(el);
       return;
     }
@@ -278,25 +307,49 @@
       '<div style="font-size:1.1rem; font-weight:700; margin:0.15rem 0;">' + carMark(it) + esc(it.title) + '</div>' +
       '<div class="hint" style="margin:0;">' + when + (it.location ? ' · 📍 ' + esc(it.location) : '') + '</div>';
     if (it.kind === 'event' && canEdit) {
-      html += '<div style="display:flex; align-items:center; justify-content:space-between; margin:0.8rem 0 0.3rem; padding:0.5rem 0.7rem; border-radius:10px; background:var(--accent-soft, #EAF7E4);"><strong>Car needed</strong>' +
-        '<select id="ag-need"><option value="">auto' + (it.carTag ? ' (yes, marker)' : ' (no)') + '</option><option value="1"' + ((it.carSource === 'you' || it.carSource === 'series') && it.needsCar ? ' selected' : '') + '>yes</option><option value="0"' + ((it.carSource === 'you' || it.carSource === 'series') && !it.needsCar ? ' selected' : '') + '>no</option></select></div>' +
+      html += '<div class="ag-box" style="margin-top:0.8rem; background:var(--accent-soft, #EAF7E4);"><div class="ag-field"><span class="ag-lbl">Car needed</span>' +
+        '<select id="ag-need"><option value="">auto' + (it.carTag ? ' (yes, marker)' : ' (no)') + '</option><option value="1"' + ((it.carSource === 'you' || it.carSource === 'series') && it.needsCar ? ' selected' : '') + '>yes</option><option value="0"' + ((it.carSource === 'you' || it.carSource === 'series') && !it.needsCar ? ' selected' : '') + '>no</option></select></div></div>' +
         (it.recurring ? '<div id="ag-scope" hidden style="margin:0 0 0.4rem; padding:0.5rem 0.7rem; border:1px dashed var(--border); border-radius:10px;"><span class="hint" style="margin:0 0.5rem 0 0;">Repeating appointment — for:</span><button type="button" class="btn-soft" data-scope="day">only this day</button> <button type="button" class="btn-soft" data-scope="series">the whole series</button></div>' : '') +
         (it.carSource === 'series' ? '<p class="hint" style="margin:0 0 0.3rem;">Set for the whole series.</p>' : '') +
         '<div class="hint" style="margin:0 0 0.4rem; font-size:0.75rem;">Stored in LoxSuite only; your calendar isn\'t changed.</div>';
     }
+    if (it.kind === 'event' && canEdit && it.needsCar && !it.allDay) {
+      var mOpt = function (v, l) { return '<option value="' + v + '"' + ((it.tripModeSource === 'you' || it.tripModeSource === 'series' ? it.tripMode : '') === v ? ' selected' : '') + '>' + l + '</option>'; };
+      // the next appointment with the car in full under the dropdown (a long title doesn't fit in it)
+      var chainSel = function (id, label, on, next) {
+        return '<div class="ag-field"><span class="ag-lbl">' + label + '</span><select id="' + id + '">' +
+          '<option value="0"' + (on ? '' : ' selected') + '>back home</option>' +
+          '<option value="1"' + (on ? ' selected' : '') + (next ? '' : ' disabled') + '>drive on to the next appointment</option></select>' +
+          '<div class="hint">' + (next ? '<span>Next appointment:</span> ' + esc(next.title) + ' · ' + tm(next.at) : 'No appointment with the car after it.') + '</div></div>';
+      };
+      var m = it.tripMode || 'stay';
+      html += '<div class="ag-box" style="background:var(--surface-alt, #f4f6f8);">' +
+        '<div class="ag-field"><span class="ag-lbl">How you drive</span><select id="ag-mode">' +
+        mOpt('', (it.tripTag ? 'calendar — ' : 'default — ') + modeName(it.tripTag || 'stay')) + mOpt('stay', 'the car stays there') + mOpt('both', 'drop off and pick up') + mOpt('drop', 'only drop off') + mOpt('pick', 'only pick up') + '</select>' +
+        '<div class="hint">' + (it.tripModeSource === 'tag' ? 'From the calendar text (#brengen / #halen).' : it.tripModeSource === 'series' || it.chainSource === 'series' ? 'Set for the whole series.' : 'In the calendar text: #brengen, #halen or both.') + '</div></div>' +
+        (m === 'both' || m === 'drop' ? chainSel('ag-chain-start', 'After dropping off', it.chainStart, it.nextAfterStart) : '') +
+        (m === 'stay' ? chainSel('ag-chain-end', 'Afterwards', it.chainEnd, it.nextAfterEnd) : m === 'both' || m === 'pick' ? chainSel('ag-chain-end', 'After picking up', it.chainEnd, it.nextAfterEnd) : '') +
+        (it.recurring ? '<div id="ag-trip-scope" hidden style="margin:0.4rem 0 0; padding:0.5rem 0.7rem; border:1px dashed var(--border); border-radius:10px;"><span class="hint" style="margin:0 0.5rem 0 0;">Repeating appointment — for:</span><button type="button" class="btn-soft" data-scope="day">only this day</button> <button type="button" class="btn-soft" data-scope="series">the whole series</button></div>' : '') +
+        '</div>';
+    }
     if (it.needsCar) {
       html += '<table style="font-size:0.85rem; margin-top:0.4rem; width:100%;" class="ag-need">' +
-        (it.distanceKm != null ? '<tr><td>Distance (there and back)</td><td style="text-align:right;">2 × ' + nf(it.distanceKm, 0) + ' km</td></tr>' : '') +
+        (it.distanceKm != null ? '<tr><td>Distance (there and back)</td><td style="text-align:right;">' + (it.tripMode === 'both' ? '2 × ' : '') + '2 × ' + nf(it.distanceKm, 0) + ' km</td></tr>' : '') +
         '<tr><td>Basis</td><td style="text-align:right;">' + esc(it.needBasis || '') + '</td></tr>' +
         '<tr><td>Consumption</td><td style="text-align:right;">' + nf(it.kwhPerKm, 2) + ' kWh/km</td></tr>' +
         '<tr><td><strong>Needs</strong></td><td style="text-align:right;"><strong>' + (it.needKwh != null ? nf(it.needKwh, 1) + ' kWh' : '—') + '</strong></td></tr>' +
         (it.travelMin ? '<tr><td>Leave (travel ' + Math.floor(it.travelMin / 60) + ' h ' + String(it.travelMin % 60).padStart(2, '0') + ')</td><td style="text-align:right;">' + tm(it.leaveAt) + '</td></tr>' : '') +
         '<tr><td>Ready by</td><td style="text-align:right;">' + tm(it.readyAt) + '</td></tr></table>';
-      if (it.usableKwh && it.needKwh > it.usableKwh) html += '<p class="hint" style="margin:0.4rem 0 0; color:#b8860b;">More than the battery (' + nf(it.usableKwh, 1) + ' kWh): ' + (it.vehicleType === 'phev' ? 'it leaves full, the rest is fuel.' : 'plan a charging stop.') + '</p>';
+ // drop off / pick up, or a route past several appointments: each drive from home
+      var tours = it.tours || [];
+      if (tours.length && ((it.tripMode && it.tripMode !== 'stay') || tours.some(function (t) { return t.stops.length > 1; }))) html += tours.map(routeBlock).join('');
+ // more than the battery holds: per drive from home (the car can charge in between)
+      var most = tours.length ? Math.max.apply(null, tours.map(function (t) { return t.kwh || 0; })) : it.needKwh;
+      if (it.usableKwh && most > it.usableKwh) html += '<p class="hint" style="margin:0.4rem 0 0; color:#b8860b;">More than the battery (' + nf(it.usableKwh, 1) + ' kWh): ' + (it.vehicleType === 'phev' ? 'it leaves full, the rest is fuel.' : 'plan a charging stop.') + '</p>';
       if (it.geoError) html += '<p class="hint" style="margin:0.4rem 0 0; color:var(--danger);">Distance: ' + esc(it.geoError) + '</p>';
       if (it.location && it.distanceKm == null && canEdit) html += '<button type="button" class="btn-soft" id="ag-dist" style="margin-top:0.5rem;">' + (it.geoError ? 'Try again' : 'Look up distance') + '</button>';
     }
-    if (it.kind === 'event' && canEdit && it.needsCar) html += '<div style="margin-top:0.7rem;"><label>Own value (optional)</label><input type="text" id="ag-own" value="' + esc(it.own || '') + '" placeholder="150 km, 30 kWh or full"><button type="button" class="btn-soft" id="ag-own-save" style="margin-top:0.3rem;">Save</button></div>';
+    if (it.kind === 'event' && canEdit && it.needsCar) html += '<div class="ag-field" style="margin-top:0.7rem;"><span class="ag-lbl">Own value (optional)</span><input type="text" id="ag-own" value="' + esc(it.own || '') + '" placeholder="150 km, 30 kWh or full"><button type="button" class="btn-soft" id="ag-own-save" style="margin-top:0.35rem;">Save</button></div>';
     if (it.needsCar && (canEdit || it.climateC != null)) {
       var cm = (data.climate || {}).mode || 'log';
       var lead = (data.climate || {}).leadMin || 20;
@@ -310,7 +363,7 @@
         (canEdit ? '<label class="switch"><input type="checkbox" id="ag-clim-on"' + (climOn ? ' checked' : '') + (it.climateOk ? '' : ' disabled') + '><span class="switch-track"><span class="switch-thumb"></span></span></label>'
           : '<span>' + (climOn ? nf(it.climateC, 1) + ' °C' : 'off') + '</span>') + '</div>';
       if (canEdit && climOn) {
-        html += '<div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-top:0.35rem;"><span>' + (weekly ? 'Temperature (every week)' : 'Temperature') + '</span><select id="ag-climate" style="width:auto;">' + opts + '</select></div>';
+        html += '<div class="ag-field" style="margin-top:0.45rem;"><span class="ag-lbl">' + (weekly ? 'Temperature (every week)' : 'Temperature') + '</span><select id="ag-climate">' + opts + '</select></div>';
       }
       html += '<div class="hint" style="margin:0.25rem 0 0; font-size:0.75rem;">' +
         (!it.climateOk ? 'Needs a car with the Škoda API as data source.'
@@ -355,6 +408,20 @@
         b.onclick = function () { save(b.dataset.scope === 'series' ? { scope: 'series' } : {}); };
       });
     };
+    // how you drive / driving on: for a repeating appointment, this day or the whole series
+    var tripScope = document.getElementById('ag-trip-scope');
+    var setTrip = function (patch) {
+      var go = function (series) { post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.start }, patch, series ? { scope: 'series' } : {})).then(load); };
+      if (!tripScope) { go(false); return; }
+      tripScope.hidden = false;
+      tripScope.querySelectorAll('button').forEach(function (b) { b.onclick = function () { go(b.dataset.scope === 'series'); }; });
+    };
+    var modeEl = document.getElementById('ag-mode');
+    if (modeEl) modeEl.onchange = function () { setTrip({ trip_mode: modeEl.value }); };
+    var cs = document.getElementById('ag-chain-start');
+    if (cs) cs.onchange = function () { setTrip({ chain_start: cs.value }); };
+    var ce = document.getElementById('ag-chain-end');
+    if (ce) ce.onchange = function () { setTrip({ chain_end: ce.value }); };
     var own = document.getElementById('ag-own-save');
     if (own) own.onclick = function () { save(); };
     var dist = document.getElementById('ag-dist');

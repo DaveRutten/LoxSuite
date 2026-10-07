@@ -66,9 +66,15 @@ async function tick(nowMs = Date.now(), deps = {}) {
   const lead = clampLead(cfg.climate_lead_min);
   const list = await agenda.items(new Date(nowMs - 6 * 3600000).toISOString(), new Date(nowMs + (lead + 180) * 60000).toISOString());
   const done = [];
-  for (const item of list) {
+  // Each drive from home: an appointment can have two (drop off at the start, pick up at the end) or
+  // none of its own (driving on from the one before: the route left home earlier).
+  const departures = [];
+  for (const it of list) {
+    const deps = Array.isArray(it.departures) ? it.departures : [{ leaveAt: it.leaveAt, n: 0 }];
+    for (const d of deps) departures.push({ item: { ...it, leaveAt: d.leaveAt }, key: d.n ? `${itemKey(it)}|${d.n}` : itemKey(it) });
+  }
+  for (const { item, key } of departures) {
     if (!due(item, nowMs, lead)) continue;
-    const key = itemKey(item);
     const prev = await db.prepare('SELECT * FROM climate_runs WHERE item_key = ?').get(key);
     // handled already, or switched off for this time ('off')
     if (prev && (prev.status !== 'retry' || (prev.next_at && Date.parse(prev.next_at) > nowMs))) continue;

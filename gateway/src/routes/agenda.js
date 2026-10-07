@@ -29,6 +29,8 @@ router.get('/items.json', asyncHandler(async (req, res) => {
   const fromIso = new Date(from).toISOString();
   const toIso = new Date(to).toISOString();
   const items = await agenda.items(fromIso, toIso);
+  // the car's drives from home in this period (drop off / pick up, routes past several appointments)
+  const tours = (await agenda.tours(fromIso, toIso).catch(() => [])).map(({ firstItem, ...t }) => t);
   // Learned departures (as "ready by" markers), planned charging and past sessions for context.
   const learning = require('../learning');
   const deps = await learning.learnedDepartures(null).catch(() => []);
@@ -58,7 +60,7 @@ router.get('/items.json', asyncHandler(async (req, res) => {
     it.climateOff = r?.status === 'off';
   }
   const acfg = await agenda.getConfig();
-  res.json({ items, learned, plan: plan ? plan.slots : [], sessions, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
+  res.json({ items, tours, learned, plan: plan ? plan.slots : [], sessions, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
 }));
 
 // One or more ICS links (one per line). With several, or without a name, each calendar is named
@@ -154,6 +156,12 @@ router.post('/override.json', requirePermission('charging', 'edit'), asyncHandle
   if (!b.calendar_id || !b.uid || !b.start_at) return res.json({ ok: false, message: 'Missing event.' });
   await agenda.setOverride(b);
   require('../planner').recalc().catch(() => {});
+  // driving on: look up the road distance between those appointments, then plan again
+  if (['chain_start', 'chain_end', 'trip_mode'].some((k) => Object.prototype.hasOwnProperty.call(b, k))) {
+    const now = Date.now();
+    agenda.tours(new Date(now).toISOString(), new Date(now + 14 * 86400000).toISOString(), { fetchLegs: true })
+      .then(() => require('../planner').recalc()).catch(() => {});
+  }
   res.json({ ok: true });
 }));
 

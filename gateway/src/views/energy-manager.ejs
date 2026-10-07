@@ -15,7 +15,7 @@
 </div>
 
 <div class="card" data-card-key="plan">
-  <h2 style="margin-top:0;"><%= t('Plan — next 36 hours') %></h2>
+  <h2 style="margin-top:0;"><%= t('Plan') %> <span class="hint" id="em-plan-range" style="font-weight:400;"></span></h2>
   <div id="em-daytypes" style="margin:-0.3rem 0 0.5rem;"></div>
   <div id="em-plan"></div>
 </div>
@@ -117,7 +117,19 @@
   function planChart(d) {
     var el = document.getElementById('em-plan');
     if (!d.hours.length) { el.innerHTML = '<p class="hint" style="margin:0;">No plan yet (prices or solar forecast missing).</p>'; return; }
-    var W = lsChartW(el, 900), left = 150, rowH = 22, hrs = d.hours.filter(function (h) { return h.ms >= Math.floor(Date.now() / 3600000) * 3600000; }).slice(0, 36);
+    // as far as the prices are known (until midnight, or tomorrow midnight once they are out around
+    // 13:00) — beyond that the plan is only a guess with the median; at least 12 hours, at most 36
+    var all = d.hours.filter(function (h) { return h.ms >= Math.floor(Date.now() / 3600000) * 3600000; }).slice(0, 36);
+    var known = 0;
+    all.forEach(function (h, i) { if (!h.estimated) known = i + 1; });
+    var hrs = all.slice(0, Math.max(Math.min(12, all.length), known));
+    var W = lsChartW(el, 900), left = 150, rowH = 22;
+    var rg = document.getElementById('em-plan-range');
+    if (rg && hrs.length) {
+      var endMs = hrs[hrs.length - 1].ms + 3600000, endD = new Date(endMs);
+      var endTxt = endD.getHours() === 0 && endD.getMinutes() === 0 ? new Date(endMs - 1).toLocaleDateString([], { weekday: 'short' }) + ' 24:00' : endD.toLocaleDateString([], { weekday: 'short' }) + ' ' + hh(endMs).slice(0, 5);
+      rg.textContent = '· ' + TLx('until {0}').replace('{0}', endTxt) + (known >= hrs.length ? ' — ' + TLx('as far as the prices are known') : '');
+    }
     var bw = (W - left - 6) / hrs.length;
     var quarters = d.quarters || [];
     var qOf = function (h) { return quarters.filter(function (q) { var a = Date.parse(q.start); return a >= h.ms && a < h.ms + 3600000; }); };

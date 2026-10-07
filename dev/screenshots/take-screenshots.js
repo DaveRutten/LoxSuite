@@ -214,8 +214,21 @@ async function main() {
 
     await page.goto(`${BASE}/agenda`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(2500);
-    const visit = page.locator('[data-key^="event|"]', { hasText: 'Customer visit' }).first();
-    if (await visit.count()) { await visit.evaluate((e) => e.click()); await page.waitForTimeout(800); }
+    // a drop-off and pick-up, driving on to the garage after dropping off (a route)
+    const care = () => page.locator('[data-key^="event|"]', { hasText: 'Day care' }).first();
+    if (await care().count()) {
+      await care().evaluate((e) => e.click());
+      await page.waitForTimeout(800);
+      const chain = page.locator('#ag-chain-start');
+      if (await chain.count() && (await chain.inputValue()) !== '1') {
+        await chain.selectOption('1');
+        await page.waitForTimeout(3000); // the distance between the two looked up in the background
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.waitForTimeout(1500);
+        await care().evaluate((e) => e.click());
+      }
+      await page.waitForTimeout(800);
+    }
     await shoot(page, 'agenda', theme);
 
     await page.goto(`${BASE}/learned`, { waitUntil: 'networkidle' });

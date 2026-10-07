@@ -2,6 +2,37 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.46.0-alpha.1] - 2026-10-07
+
+### Added
+- **Drop off and pick up** (asked for: an appointment in the agenda is a period, but you drive there in the
+  morning, go home, and drive there again in the evening): an appointment with the car can now be *the car stays
+  there* (as before), **drop off and pick up** (there and back at the start, home in between — so it can charge —
+  and there and back again at the end), *only drop off* or *only pick up*. Set it with `#brengen` and/or `#halen`
+  in the title or description (also `#brengenhalen`, `#brengen en halen`, `#drop`, `#pickup`; it marks the car as
+  needed too), or choose it in the agenda — for a repeating appointment for that day or **the whole series**
+  (what you choose in LoxSuite goes before the calendar text). Each drive from home counts on its own: the plan
+  gets the car ready for the drop-off, may charge it at home in between, and again before the pick-up.
+- **Driving on** (asked for: from appointment 1 on to 2, then 3, then home): per stop *back home* or *drive on to
+  the next appointment* (after dropping off and after picking up separately), per day or for the series. The stops
+  become one route — home → 1 → 2 → 3 → home — with the road distances between them (OpenStreetMap OSRM, looked up
+  in the background and cached; until then an estimate, marked ≈), the margin once, and the car gone from leaving
+  home until back home. An appointment with its own value (km/kWh/full) counts at least that. A drive between two
+  appointments that takes longer than the time between them is marked *tight*.
+- The agenda shows each drive: *Coming up with the car* lists the drives from home (with their times and kWh), an
+  appointment shows its drop-off / pick-up / route with the stops and distances, and in the week view an
+  appointment you only drop off or pick up at has a thick edge at the start and/or the end instead of being filled
+  (the car isn't gone the whole time).
+
+### Changed
+- **Energy manager plan only as far as the prices are known** (asked for: why 36 hours when only part of it has
+  data): the chart now runs until the last known price — until midnight, or until tomorrow midnight once
+  tomorrow's prices are out — at least 12 hours; the title says until when.
+- Agenda detail: every choice (car needed, how you drive, after dropping off / picking up, temperature) has its
+  text above a dropdown as wide as the panel; the next appointment you would drive on to is shown in full under it.
+- The planner, plug-in reminders, the expected arrival home and climate at departure work per drive from home
+  (`agenda.tours`) instead of per appointment.
+
 ## [0.45.1-alpha.1] - 2026-10-07
 
 ### Fixed

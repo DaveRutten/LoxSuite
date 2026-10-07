@@ -459,10 +459,12 @@ async function computeTarget(nowMs, wb) {
   // or the learned departure time for the same trip, a few minutes earlier).
   const near = sameTrip(agendaTrip, readyAtMs) ? agendaTrip : null;
   const trip0 = tripItem || near;
-  const it = trip0?.item;
+  // the drive from home it belongs to (agenda.js): one appointment, drop off / pick up, or a route
+  // past several appointments — gone from leaving home until back home
+  const tour = trip0?.tour;
   let tripPart = null; // { kwh, backAtMs, leaveMs, title }
-  if (it && !it.allDay && it.end && trip0.needKwh) {
-    tripPart = { kwh: trip0.needKwh, backAtMs: Date.parse(it.end) + (it.travelMin || 0) * 60000, leaveMs: Math.min(readyAtMs, Date.parse(it.leaveAt || it.start)), title: trip0.title };
+  if (tour && !tour.allDay && trip0.needKwh) {
+    tripPart = { kwh: trip0.needKwh, backAtMs: Date.parse(tour.backAt), leaveMs: Math.min(readyAtMs, Date.parse(tour.leaveAt)), title: trip0.title };
   } else if (readyAtMs && drive && vehicle && !tripItem) {
     // No appointment: what the car usually drives on that weekday (odometer) and when it is usually back.
     const { localParts, localTimeOn } = require('./localTime');
@@ -473,20 +475,21 @@ async function computeTarget(nowMs, wb) {
       if (back > readyAtMs) tripPart = { kwh: (d.kmMedian + marginKm) * kpkNow, backAtMs: back, leaveMs: readyAtMs, title: `usual ${d.kmMedian} km` };
     }
   }
+  // the car's drives from home in the agenda (agenda.tours: drop off and pick up are two drives, a
+  // route past several appointments one)
   const agendaCar = async (fromMs, toMs) => {
     try {
-      const list = await require('./agenda').items(new Date(fromMs).toISOString(), new Date(toMs).toISOString());
-      return list.filter((n) => n.needsCar && !n.allDay && n.end && !(n.vehicle_id && vehicle && n.vehicle_id !== vehicle.id)).map((n) => ({
-        kwh: n.needKwh || 0, leaveMs: Date.parse(n.leaveAt || n.start), backAtMs: Date.parse(n.end) + (n.travelMin || 0) * 60000,
-        readyAtMs: Date.parse(n.readyAt || n.leaveAt || n.start), title: n.title,
+      const list = await require('./agenda').tours(new Date(fromMs).toISOString(), new Date(toMs).toISOString());
+      return list.filter((n) => !n.allDay && !(n.vehicle_id && vehicle && n.vehicle_id !== vehicle.id)).map((n) => ({
+        id: n.id, kwh: n.kwh || 0, leaveMs: Date.parse(n.leaveAt), backAtMs: Date.parse(n.backAt), readyAtMs: Date.parse(n.readyAt), title: n.title,
       }));
     } catch { return []; }
   };
   if (!away && tripPart && vehicle?.battery_kwh && reading) {
     // appointments right after each other are one trip (the car doesn't come home in between)
-    if (it) {
-      const firstLeave = Date.parse(it.leaveAt || it.start);
-      const nextOnes = (await agendaCar(tripPart.leaveMs, tripPart.backAtMs + 6 * 3600000)).filter((n) => n.leaveMs > firstLeave + 60000);
+    if (tour) {
+      const firstLeave = Date.parse(tour.leaveAt);
+      const nextOnes = (await agendaCar(tripPart.leaveMs, tripPart.backAtMs + 6 * 3600000)).filter((n) => n.id !== tour.id && n.leaveMs > firstLeave + 60000);
       tripPart = mergeTrips(tripPart, nextOnes);
     }
     const fullKwh = vehicle.battery_kwh * ((reading.limit_soc ?? vehicle.charge_limit_pct ?? 100) / 100);
@@ -552,11 +555,12 @@ async function expectedArrival(nowMs, target, untilMs) {
     return live.minAt >= untilMs ? null : { ...r, at: live.minAt, label: live.label };
   };
   try {
-    const list = await require('./agenda').items(new Date(nowMs - 12 * 3600000).toISOString(), new Date(nowMs + 3600000).toISOString());
-    const cur = list.find((i) => i.needsCar && Date.parse(i.start) <= nowMs && Date.parse(i.end) > nowMs && !i.allDay
-      && (!target.vehicle || !i.vehicle_id || i.vehicle_id === target.vehicle.id));
+    // the drive from home that is going on now (to an appointment, dropping off, a route): back then
+    const list = await require('./agenda').tours(new Date(nowMs - 12 * 3600000).toISOString(), new Date(nowMs + 3600000).toISOString());
+    const cur = list.find((t) => !t.allDay && Date.parse(t.leaveAt) <= nowMs && Date.parse(t.backAt) > nowMs
+      && (!target.vehicle || !t.vehicle_id || t.vehicle_id === target.vehicle.id));
     if (cur) {
-      const at = Date.parse(cur.end) + (cur.travelMin || 0) * 60000;
+      const at = Date.parse(cur.backAt);
       if (at > nowMs && at < untilMs) return notBefore({ at, source: 'agenda', label: `agenda: ${cur.title}`, confidence: 'set' });
     }
   } catch { /* no agenda */ }

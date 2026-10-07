@@ -238,6 +238,13 @@
   ]
  },
  {
+  "key": "? km",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "· {0} for this session",
   "module": "charging",
   "where": [
@@ -255,7 +262,6 @@
   "key": "· {0} kWh",
   "module": "charging",
   "where": [
-   "agenda (script)",
    "planner-log (script)"
   ]
  },
@@ -271,6 +277,13 @@
   "module": "vehicles",
   "where": [
    "vehicle-edit (script)"
+  ]
+ },
+ {
+  "key": "· {0}{1} kWh",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -1041,6 +1054,13 @@
   ]
  },
  {
+  "key": "{0} km incl. {1} km margin",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "{0} km on fuel",
   "module": "vehicles",
   "where": [
@@ -1451,6 +1471,13 @@
   ]
  },
  {
+  "key": "{0}2 × {1} km",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "{0}today {1}{2} kWh",
   "module": "energy",
   "where": [
@@ -1683,13 +1710,6 @@
   "module": "charging",
   "where": [
    "learned (script)"
-  ]
- },
- {
-  "key": "2 × {0} km",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
   ]
  },
  {
@@ -2108,6 +2128,13 @@
   ]
  },
  {
+  "key": "After dropping off",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "After it is back:",
   "module": "charging",
   "where": [
@@ -2115,10 +2142,24 @@
   ]
  },
  {
+  "key": "After picking up",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "afternoon",
   "module": "charging",
   "where": [
    "learned (script)"
+  ]
+ },
+ {
+  "key": "Afterwards",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -2422,6 +2463,13 @@
   ]
  },
  {
+  "key": "as far as the prices are known",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "as of",
   "module": "monitor",
   "where": [
@@ -2611,6 +2659,13 @@
   "module": "charging",
   "where": [
    "planner (script)"
+  ]
+ },
+ {
+  "key": "back home",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -2984,6 +3039,13 @@
    "src/agenda.js",
    "src/caldav.js",
    "src/routes/agenda.js"
+  ]
+ },
+ {
+  "key": "calendar —",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -4310,6 +4372,13 @@
   ]
  },
  {
+  "key": "default —",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Default range",
   "module": "monitor",
   "where": [
@@ -4610,6 +4679,13 @@
   ]
  },
  {
+  "key": "drive on to the next appointment",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Driven",
   "module": "charging",
   "where": [
@@ -4642,6 +4718,27 @@
   "module": "core",
   "where": [
    "src/modules.js"
+  ]
+ },
+ {
+  "key": "drop off",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "Drop off",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "drop off and pick up",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -5619,6 +5716,13 @@
   ]
  },
  {
+  "key": "From the calendar text (#brengen / #halen).",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Fuel",
   "module": "vehicles",
   "where": [
@@ -5956,6 +6060,13 @@
   ]
  },
  {
+  "key": "home",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "home ~{0}",
   "module": "charging",
   "where": [
@@ -6137,6 +6248,13 @@
   ]
  },
  {
+  "key": "How you drive",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "HTTP {0} (does the LoxSuite user have user-management rights?)",
   "module": "ocpp",
   "where": [
@@ -6276,6 +6394,13 @@
   "module": "monitor",
   "where": [
    "public/monitor-picks.js"
+  ]
+ },
+ {
+  "key": "In the calendar text: #brengen, #halen or both.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -8264,6 +8389,13 @@
   ]
  },
  {
+  "key": "Next appointment:",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "next to (OR) or instead of the \"grid < −0.6 kW\" release",
   "module": "energy_manager",
   "where": [
@@ -8327,6 +8459,13 @@
   "module": "charging",
   "where": [
    "src/agenda.js"
+  ]
+ },
+ {
+  "key": "No appointment with the car after it.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -9563,10 +9702,24 @@
   ]
  },
  {
+  "key": "only drop off",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Only my channel",
   "module": "core",
   "where": [
    "profile"
+  ]
+ },
+ {
+  "key": "only pick up",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -9891,6 +10044,20 @@
   "module": "core",
   "where": [
    "live-data (script)"
+  ]
+ },
+ {
+  "key": "pick up",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "Pick up",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -10763,6 +10930,13 @@
   "module": "core",
   "where": [
    "src/deviceTemplates.js"
+  ]
+ },
+ {
+  "key": "Route",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -12224,6 +12398,13 @@
   ]
  },
  {
+  "key": "the car stays there",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "The car waits without an error",
   "module": "charging",
   "where": [
@@ -12469,6 +12650,13 @@
   ]
  },
  {
+  "key": "There and back",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "This account has been disabled.",
   "module": "core",
   "where": [
@@ -12678,6 +12866,13 @@
   "module": "core",
   "where": [
    "settings-energy (script)"
+  ]
+ },
+ {
+  "key": "Tight: the drive between two appointments takes longer than the time in between.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -13333,6 +13528,13 @@
   "module": "core",
   "where": [
    "partials/panel-grid (script)"
+  ]
+ },
+ {
+  "key": "until {0}",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
