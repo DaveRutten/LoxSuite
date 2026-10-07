@@ -78,6 +78,9 @@
   var cursor = new Date();
   var data = null;
   var selected = null;
+  // per appointment (key): the choices below are for 'day' (only this one) or 'series' (every
+  // appointment with this name in the calendar)
+  var scopeOf = {};
   // weekday names in the user's language (Mon 5 Oct 2026 is a Monday)
   var DAYN = [0, 1, 2, 3, 4, 5, 6].map(function (i) { return new Date(2026, 9, 5 + i).toLocaleDateString([], { weekday: 'short' }); });
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -131,7 +134,10 @@
   document.getElementById('ag-today').onclick = function () { cursor = new Date(); load(); };
   document.querySelectorAll('#ag-views button').forEach(function (b) { b.onclick = function () { view = b.dataset.view; try { localStorage.setItem('agenda-view', view); } catch (e) { /* ignore */ } load(); }; });
 
-  document.getElementById('ag-legend').innerHTML = '<span style="margin-right:0.9rem;">🚗 = car needed</span><span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; border:1.5px dashed #9aa4b2; border-radius:2px;"></span> ready by (learned)</span>' +
+  document.getElementById('ag-legend').innerHTML = '<span style="margin-right:0.9rem;">🚗 = car needed</span>' +
+    '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:12px; background:currentColor; opacity:0.55; border-radius:2px; vertical-align:-1px;"></span> <span>the car stays there</span></span>' +
+    '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:12px; box-sizing:border-box; border:1px dashed currentColor; border-top:4px solid currentColor; border-bottom:4px solid currentColor; border-radius:2px; vertical-align:-1px; opacity:0.55;"></span> <span>drop off and pick up (home in between)</span></span>' +
+    '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; border:1.5px dashed #9aa4b2; border-radius:2px;"></span> ready by (learned)</span>' +
     '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; background:var(--accent); border-radius:2px;"></span> planned charging</span><span><span style="display:inline-block; width:10px; height:10px; background:#9aa4b2; opacity:0.6; border-radius:2px;"></span> charged earlier</span>';
 
   function itemColor(i) { return i.color || '#3b82c4'; }
@@ -188,21 +194,30 @@
         var col2 = itemColor(i);
         var sel = selected && key(i) === selected;
         var h = Math.max(20, y(b) - y(a) - 2);
-        // drop off / pick up: the car is only gone at the start and/or the end (a thick edge there)
+        // drop off / pick up: the car is only gone at the start and/or the end — a solid labelled band
+        // there, the time in between light with a dashed edge (the car is home); "the car stays there"
+        // is one solid block
         var dp = i.needsCar && i.tripMode && i.tripMode !== 'stay';
-        var style = i.needsCar && !dp ? 'background:' + col2 + '; color:' + textOn(col2) + ';' : 'background:color-mix(in srgb, ' + col2 + ' 18%, var(--surface, #fff)); color:var(--text); border-left:3px solid ' + col2 + ';' +
-          (dp && i.tripMode !== 'pick' ? ' border-top:5px solid ' + col2 + ';' : '') + (dp && i.tripMode !== 'drop' ? ' border-bottom:5px solid ' + col2 + ';' : '');
+        var capTop = dp && i.tripMode !== 'pick', capBot = dp && i.tripMode !== 'drop';
+        var capH = h >= 44 ? 15 : 0;
+        var style = i.needsCar && !dp ? 'background:' + col2 + '; color:' + textOn(col2) + ';'
+          : dp ? 'background:color-mix(in srgb, ' + col2 + ' 12%, var(--surface, #fff)); color:var(--text); border:1.5px dashed ' + col2 + ';' +
+            (capH ? (capTop ? ' padding-top:' + (capH + 2) + 'px;' : '') + (capBot ? ' padding-bottom:' + capH + 'px;' : '') : (capTop ? ' border-top:5px solid ' + col2 + ';' : '') + (capBot ? ' border-bottom:5px solid ' + col2 + ';' : ''))
+          : 'background:color-mix(in srgb, ' + col2 + ' 18%, var(--surface, #fff)); color:var(--text); border-left:3px solid ' + col2 + ';';
+        var cap = function (where, label, t) { return '<div style="position:absolute; left:0; right:0; ' + where + ':0; height:' + capH + 'px; line-height:' + capH + 'px; padding:0 5px; background:' + col2 + '; color:' + textOn(col2) + '; font-size:10px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🚗 <span>' + label + '</span> ' + tm(t) + '</div>'; };
+        var caps = capH ? (capTop ? cap('top', 'drop off', a) : '') + (capBot ? cap('bottom', 'pick up', b) : '') : '';
+        var mark = dp && capH ? (i.climateC != null && !i.climateOff ? '🌡️ ' : '') : carMark(i);
         // overlapping: each later one shifted right and on top (like a paper calendar), so every
         // title keeps a readable width instead of thin side-by-side strips
         var shift = L.lanes > 1 ? Math.min(35, 60 / (L.lanes - 1)) : 0;
         var leftPos = 'calc(6px + (100% - 16px) * ' + (shift * L.lane / 100) + ')';
         var width = 'calc((100% - 16px) * ' + ((100 - shift * (L.lanes - 1)) / 100) + ')';
         var one = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
-        var body = h < 34
-          ? '<div style="' + one + '"><strong>' + carMark(i) + esc(i.title) + '</strong> <span style="opacity:0.85;">' + tm(a) + '</span></div>'
-          : '<div style="' + (h >= 60 ? 'display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;' : one) + '"><strong>' + carMark(i) + esc(i.title) + '</strong></div><div style="' + one + ' opacity:0.85;">' + tm(a) + '–' + tm(b) + (i.location ? ' · ' + esc(i.location) : '') + '</div>' +
+        var body = caps + (h < 34
+          ? '<div style="' + one + '"><strong>' + mark + esc(i.title) + '</strong> <span style="opacity:0.85;">' + tm(a) + '</span></div>'
+          : '<div style="' + (h >= 60 ? 'display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;' : one) + '"><strong>' + mark + esc(i.title) + '</strong></div><div style="' + one + ' opacity:0.85;">' + tm(a) + '–' + tm(b) + (i.location ? ' · ' + esc(i.location) : '') + '</div>' +
             (h >= 50 && i.needsCar && i.needKwh != null ? '<div style="' + one + ' opacity:0.9;">' + nf(i.needKwh, 1) + ' kWh</div>' : '') +
-            (h >= 50 && i.askCar && canEdit ? '<div style="margin-top:2px; display:inline-block; border:1px solid ' + col2 + '; border-radius:8px; padding:0 5px; font-size:10px;">🚗 car needed?</div>' : '');
+            (h >= 50 && i.askCar && canEdit ? '<div style="margin-top:2px; display:inline-block; border:1px solid ' + col2 + '; border-radius:8px; padding:0 5px; font-size:10px;">🚗 car needed?</div>' : ''));
         col += '<div data-key="' + esc(key(i)) + '" title="' + esc(i.title + ' · ' + tm(a) + '–' + tm(b) + (i.location ? ' · ' + i.location : '')) + '" style="position:absolute; left:' + leftPos + '; width:' + width + '; top:' + (y(a) + 1) + 'px; height:' + h + 'px; box-sizing:border-box; border-radius:6px; padding:2px 5px; font-size:11px; line-height:1.3; overflow:hidden; cursor:pointer; z-index:' + (1 + L.lane) + '; ' + (L.lane ? 'box-shadow:0 0 0 1px var(--surface, #fff); ' : '') + style + (sel ? ' box-shadow:0 0 0 2px ' + col2 + ';' : '') + '">' + body + '</div>';
       });
       // learned "ready" moments on top, as a line with a small label that stays readable
@@ -308,33 +323,54 @@
       '<div style="font-size:1.1rem; font-weight:700; margin:0.15rem 0;">' + carMark(it) + esc(it.title) + '</div>' +
       '<div class="hint" style="margin:0;">' + when + (it.location ? ' · 📍 ' + esc(it.location) : '') + '</div>' +
       (it.movedFrom ? '<div class="hint" style="margin:0.2rem 0 0;">Moved from ' + new Date(it.movedFrom).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' — what you chose for the series still counts.</div>' : '');
+    // a repeating appointment: first choose whether what follows is for this day or the whole series
+    // (by name); a choice is then saved straight away
+    var day = it.day || {}, ser = it.series || {};
+    var sc = it.recurring ? (scopeOf[key(it)] || (['needs_car', 'trip_mode', 'chain_start', 'chain_end'].some(function (k) { return day[k] != null; }) ? 'day' : 'series')) : 'day';
+    var yn = function (v) { return Number(v) ? 'yes' : 'no'; };
     if (it.kind === 'event' && canEdit) {
-      html += '<div class="ag-box" style="margin-top:0.8rem; background:var(--accent-soft, #EAF7E4);"><div class="ag-field"><span class="ag-lbl">Car needed</span>' +
-        '<select id="ag-need"><option value="">auto' + (it.carTag ? ' (yes, marker)' : ' (no)') + '</option><option value="1"' + ((it.carSource === 'you' || it.carSource === 'series') && it.needsCar ? ' selected' : '') + '>yes</option><option value="0"' + ((it.carSource === 'you' || it.carSource === 'series') && !it.needsCar ? ' selected' : '') + '>no</option></select></div></div>' +
-        (it.recurring ? '<div id="ag-scope" hidden style="margin:0 0 0.4rem; padding:0.5rem 0.7rem; border:1px dashed var(--border); border-radius:10px;"><span class="hint" style="margin:0 0.5rem 0 0;">Repeating appointment — for:</span><button type="button" class="btn-soft" data-scope="day">only this day</button> <button type="button" class="btn-soft" data-scope="series">the whole series</button></div>' : '') +
-        (it.carSource === 'series' ? '<p class="hint" style="margin:0 0 0.3rem;">Set for the whole series.</p>' : '') +
+      if (it.linkedSeries) html += '<div class="hint" style="margin:0.5rem 0 0;"><span>Linked by name to the series</span> “' + esc(it.linkedSeries) + '” <span>— its choices count here.</span></div>';
+      if (it.recurring) {
+        html += '<div style="margin-top:0.8rem;"><span class="ag-lbl">Repeating appointment — for:</span>' +
+          '<div class="segmented" id="ag-sc" style="display:flex; width:100%;"><button type="button" data-sc="day" style="flex:1;"' + (sc === 'day' ? ' class="on"' : '') + '>only this day</button><button type="button" data-sc="series" style="flex:1;"' + (sc === 'series' ? ' class="on"' : '') + '>the whole series</button></div>' +
+          '<div class="hint" style="margin:0.25rem 0 0; font-size:0.75rem; overflow-wrap:anywhere;">' + (sc === 'series'
+            ? '<span>Every appointment in this calendar called</span> “' + esc(it.seriesTitle || it.title) + '”<span>, also on another day.</span>'
+            : '<span>Only this one; what is not chosen here comes from the series.</span>') + '</div></div>';
+      }
+      var needVal = sc === 'series' ? ser.needs_car : day.needs_car;
+      var needFirst = sc === 'day' && ser.needs_car != null ? 'as the series — ' + yn(ser.needs_car) : 'auto' + (it.carTag ? ' (yes, marker)' : ' (no)');
+      html += '<div class="ag-box" style="margin-top:0.6rem; background:var(--accent-soft, #EAF7E4);"><div class="ag-field"><span class="ag-lbl">Car needed</span>' +
+        '<select id="ag-need"><option value="">' + needFirst + '</option><option value="1"' + (needVal != null && Number(needVal) ? ' selected' : '') + '>yes</option><option value="0"' + (needVal != null && !Number(needVal) ? ' selected' : '') + '>no</option></select></div></div>' +
         '<div class="hint" style="margin:0 0 0.4rem; font-size:0.75rem;">Stored in LoxSuite only; your calendar isn\'t changed.</div>';
     }
     if (it.kind === 'event' && canEdit && it.needsCar && !it.allDay) {
-      var mOpt = function (v, l) { return '<option value="' + v + '"' + ((it.tripModeSource === 'you' || it.tripModeSource === 'series' ? it.tripMode : '') === v ? ' selected' : '') + '>' + l + '</option>'; };
+      var modeVal = (sc === 'series' ? ser.trip_mode : day.trip_mode) || '';
+      var mOpt = function (v, l) { return '<option value="' + v + '"' + (modeVal === v ? ' selected' : '') + '>' + l + '</option>'; };
+      var defMode = (it.tripTag ? 'calendar — ' : 'default — ') + modeName(it.tripTag || 'stay');
       // the next appointment with the car in full under the dropdown (a long title doesn't fit in it)
       // after an appointment also: back home via where the drive started (e.g. to pick up there)
-      var chainSel = function (id, label, on, next, via) {
-        var v = Number(on) || 0;
+      var chainName = function (v) { return Number(v) === 2 ? 'via the first address, then home' : Number(v) === 1 ? 'drive on to the next appointment' : 'back home'; };
+      var chainSel = function (id, label, field, next, via) {
+        // the value for the chosen scope; for one day '' = as the series
+        var own = sc === 'series' ? ser[field] : day[field];
+        var asSeries = sc === 'day' && ser[field] != null;
+        var v = own != null ? Number(own) : asSeries ? null : (Number(sc === 'series' ? 0 : it[field === 'chain_start' ? 'chainStart' : 'chainEnd']) || 0);
         return '<div class="ag-field"><span class="ag-lbl">' + label + '</span><select id="' + id + '">' +
+          (asSeries ? '<option value=""' + (v === null ? ' selected' : '') + '>as the series — ' + chainName(ser[field]) + '</option>' : '') +
           '<option value="0"' + (v === 0 ? ' selected' : '') + '>back home</option>' +
           '<option value="1"' + (v === 1 ? ' selected' : '') + (next ? '' : ' disabled') + '>drive on to the next appointment</option>' +
           (via ? '<option value="2"' + (v === 2 ? ' selected' : '') + '>via the first address, then home</option>' : '') + '</select>' +
-          '<div class="hint">' + (v === 2 && via ? '<span>Via:</span> ' + esc(via.title) + (via.location ? ' · ' + esc(via.location) : '') : next ? '<span>Next appointment:</span> ' + esc(next.title) + ' · ' + tm(next.at) : 'No appointment with the car after it.') + '</div></div>';
+          '<div class="hint">' + ((v === 2 || (v === null && Number(ser[field]) === 2)) && via ? '<span>Via:</span> ' + esc(via.title) + (via.location ? ' · ' + esc(via.location) : '') : next ? '<span>Next appointment:</span> ' + esc(next.title) + ' · ' + tm(next.at) : 'No appointment with the car after it.') + '</div></div>';
       };
       var m = it.tripMode || 'stay';
       html += '<div class="ag-box" style="background:var(--surface-alt, #f4f6f8);">' +
         '<div class="ag-field"><span class="ag-lbl">How you drive</span><select id="ag-mode">' +
-        mOpt('', (it.tripTag ? 'calendar — ' : 'default — ') + modeName(it.tripTag || 'stay')) + mOpt('stay', 'the car stays there') + mOpt('both', 'drop off and pick up') + mOpt('drop', 'only drop off') + mOpt('pick', 'only pick up') + '</select>' +
-        '<div class="hint">' + (it.tripModeSource === 'tag' ? 'From the calendar text (#brengen / #halen).' : it.tripModeSource === 'series' || it.chainSource === 'series' ? 'Set for the whole series.' : 'In the calendar text: #brengen, #halen or both.') + '</div></div>' +
-        (m === 'both' || m === 'drop' ? chainSel('ag-chain-start', 'After dropping off', it.chainStart, it.nextAfterStart) : '') +
-        (m === 'stay' ? chainSel('ag-chain-end', 'Afterwards', it.chainEnd, it.nextAfterEnd, it.viaAfterEnd) : m === 'both' || m === 'pick' ? chainSel('ag-chain-end', 'After picking up', it.chainEnd, it.nextAfterEnd, it.viaAfterEnd) : '') +
-        (it.recurring ? '<div id="ag-trip-scope" hidden style="margin:0.4rem 0 0; padding:0.5rem 0.7rem; border:1px dashed var(--border); border-radius:10px;"><span class="hint" style="margin:0 0.5rem 0 0;">Repeating appointment — for:</span><button type="button" class="btn-soft" data-scope="day">only this day</button> <button type="button" class="btn-soft" data-scope="series">the whole series</button></div>' : '') +
+        // for one day: as the series (when it has a choice), or explicitly the default whatever the series says
+        (sc === 'day' && ser.trip_mode ? mOpt('', 'as the series — ' + modeName(ser.trip_mode)) + mOpt('auto', defMode) : mOpt('', defMode)) +
+        mOpt('stay', 'the car stays there') + mOpt('both', 'drop off and pick up') + mOpt('drop', 'only drop off') + mOpt('pick', 'only pick up') + '</select>' +
+        '<div class="hint">' + (it.tripModeSource === 'tag' ? 'From the calendar text (#brengen / #halen).' : 'In the calendar text: #brengen, #halen or both.') + '</div></div>' +
+        (m === 'both' || m === 'drop' ? chainSel('ag-chain-start', 'After dropping off', 'chain_start', it.nextAfterStart) : '') +
+        (m === 'stay' ? chainSel('ag-chain-end', 'Afterwards', 'chain_end', it.nextAfterEnd, it.viaAfterEnd) : m === 'both' || m === 'pick' ? chainSel('ag-chain-end', 'After picking up', 'chain_end', it.nextAfterEnd, it.viaAfterEnd) : '') +
         '</div>';
     }
     if (it.needsCar) {
@@ -400,27 +436,22 @@
     if (clim) clim.onchange = function () { try { localStorage.setItem('ag-climate-last', clim.value); } catch (e) {} setTemp(clim.value).then(load); };
     var climAll = document.getElementById('ag-clim-all');
     if (climAll) climAll.onclick = function (e) { e.preventDefault(); (it.climateOff ? skip(false) : Promise.resolve()).then(function () { return setTemp(''); }).then(load); };
-    var save = function (patch) {
-      post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.occ || it.start, needs_car: document.getElementById('ag-need') ? document.getElementById('ag-need').value : '', own_value: document.getElementById('ag-own') ? document.getElementById('ag-own').value : it.own }, patch || {})).then(load);
+    // this day or the whole series: shows (and from then on saves) the choices for that scope
+    var scEl = document.getElementById('ag-sc');
+    if (scEl) scEl.querySelectorAll('button').forEach(function (b) { b.onclick = function () { scopeOf[key(it)] = b.dataset.sc; renderDetail(); }; });
+    var asScope = function (patch) {
+      if (sc === 'series') scopeOf[key(it)] = 'series';
+      return Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.occ || it.start }, patch, sc === 'series' ? { scope: 'series' } : {});
+    };
+    var save = function () {
+      var p = { needs_car: document.getElementById('ag-need') ? document.getElementById('ag-need').value : '' };
+      if (document.getElementById('ag-own')) p.own_value = document.getElementById('ag-own').value;
+      post('/agenda/override.json', asScope(p)).then(load);
     };
     var need = document.getElementById('ag-need');
-    var scope = document.getElementById('ag-scope');
-    if (need) need.onchange = function () {
-      if (!scope) { save(); return; }
-      // a repeating appointment: ask whether this is for this day or the whole series
-      scope.hidden = false;
-      scope.querySelectorAll('button').forEach(function (b) {
-        b.onclick = function () { save(b.dataset.scope === 'series' ? { scope: 'series' } : {}); };
-      });
-    };
-    // how you drive / driving on: for a repeating appointment, this day or the whole series
-    var tripScope = document.getElementById('ag-trip-scope');
-    var setTrip = function (patch) {
-      var go = function (series) { post('/agenda/override.json', Object.assign({ calendar_id: it.calendar_id, uid: it.uid, start_at: it.occ || it.start }, patch, series ? { scope: 'series' } : {})).then(load); };
-      if (!tripScope) { go(false); return; }
-      tripScope.hidden = false;
-      tripScope.querySelectorAll('button').forEach(function (b) { b.onclick = function () { go(b.dataset.scope === 'series'); }; });
-    };
+    if (need) need.onchange = function () { save(); };
+    // how you drive / driving on: saved straight away, for this day or the whole series
+    var setTrip = function (patch) { post('/agenda/override.json', asScope(patch)).then(load); };
     var modeEl = document.getElementById('ag-mode');
     if (modeEl) modeEl.onchange = function () { setTrip({ trip_mode: modeEl.value }); };
     var cs = document.getElementById('ag-chain-start');
@@ -428,7 +459,7 @@
     var ce = document.getElementById('ag-chain-end');
     if (ce) ce.onchange = function () { setTrip({ chain_end: ce.value }); };
     var own = document.getElementById('ag-own-save');
-    if (own) own.onclick = function () { save(); };
+    if (own) own.onclick = function () { post('/agenda/override.json', { calendar_id: it.calendar_id, uid: it.uid, start_at: it.occ || it.start, own_value: document.getElementById('ag-own').value }).then(load); };
     var dist = document.getElementById('ag-dist');
     var lookUp = function (force) { if (!dist) return; dist.disabled = true; dist.textContent = 'Looking up…'; post('/agenda/distance.json', { location: it.location, force: force }).then(load); };
     if (dist) dist.onclick = function () { lookUp(true); };

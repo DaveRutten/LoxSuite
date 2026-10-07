@@ -35,6 +35,13 @@
   ]
  },
  {
+  "key": "— its choices count here.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "— less than the {0} kWh minimum top-up, so no grid charging (solar surplus still counts)",
   "module": "charging",
   "where": [
@@ -165,6 +172,13 @@
   "module": "energy_manager",
   "where": [
    "energy-manager (script)"
+  ]
+ },
+ {
+  "key": ", also on another day.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -2504,6 +2518,13 @@
   ]
  },
  {
+  "key": "as the series — {0}",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Ascension",
   "module": "core",
   "where": [
@@ -4805,6 +4826,13 @@
   ]
  },
  {
+  "key": "drop off and pick up (home in between)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Dry run",
   "module": "ocpp",
   "where": [
@@ -5280,6 +5308,13 @@
   "module": "charging",
   "where": [
    "planner-log (script)"
+  ]
+ },
+ {
+  "key": "Every appointment in this calendar called",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -7070,6 +7105,13 @@
   "module": "energy_manager",
   "where": [
    "src/energyManager.js"
+  ]
+ },
+ {
+  "key": "Linked by name to the series",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -9885,6 +9927,13 @@
   ]
  },
  {
+  "key": "Only this one; what is not chosen here comes from the series.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "only visibly changes anything on a Chart panel:",
   "module": "core",
   "where": [
@@ -11506,13 +11555,6 @@
   "module": "vehicles",
   "where": [
    "driving (script)"
-  ]
- },
- {
-  "key": "Set for the whole series.",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
   ]
  },
  {

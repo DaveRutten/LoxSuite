@@ -13,6 +13,11 @@
 // both) or chosen in LoxSuite, per day or for the whole series. And after a stop you can drive on to
 // the next appointment with the car instead of going home: the stops then form one route
 // (home → 1 → 2 → 3 → home), with the real distances between them.
+//
+// A series is linked by name (v0.51): what you choose "for the whole series" counts for every
+// appointment in that calendar with the same name — also when the calendar keeps the series' ID on a
+// weekday and you swapped two appointments by renaming them, or when every week is a separate
+// appointment with the same name.
 const db = require('./db');
 const settings = require('./wallboxSettings');
 const { encrypt, decrypt } = require('./secretCrypto');
@@ -39,6 +44,83 @@ const DEFAULTS = {
 const TRIP_MODES = ['stay', 'both', 'drop', 'pick'];
 
 // ------------------------------------------------------------------ pure helpers
+
+// Pure: the name a series is recognised by — lowercase, without markers (#auto, #brengen, emoji) and
+// punctuation, with '&' / '+' / 'and' as 'en': "Opvang bij opa & oma" = "🚗 Opvang bij opa en oma".
+function seriesName(title) {
+  return String(title || '').toLowerCase()
+    .replace(/#[\p{L}\p{N}_/&-]+/gu, ' ')
+    .replace(/[&+]/g, ' en ')
+    .replace(/(^|[^\p{L}])(and|und|et)(?=$|[^\p{L}])/gu, '$1en')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Where the choices for a whole series by name are kept (event_overrides, start_at '*').
+function nameKey(name) { return `~name:${name}`.slice(0, 255); }
+
+// Pure: rows [{ calendar_id, uid, title, n }] (appointments per calendar, ID and title) -> per calendar
+// the name of each calendar series (the name most of its appointments have), which IDs carry a name,
+// how many appointments have it and the title shown for it.
+function seriesIndexOf(rows) {
+  const perUid = new Map();
+  const count = new Map();
+  const titles = new Map();
+  for (const r of rows || []) {
+    const nk = seriesName(r.title);
+    if (!nk) continue;
+    const n = Number(r.n) || 1;
+    const ku = `${r.calendar_id}|${r.uid}`;
+    const kn = `${r.calendar_id}|${nk}`;
+    if (!perUid.has(ku)) perUid.set(ku, { cal: r.calendar_id, uid: r.uid, names: new Map() });
+    const u = perUid.get(ku);
+    u.names.set(nk, (u.names.get(nk) || 0) + n);
+    count.set(kn, (count.get(kn) || 0) + n);
+    if (!titles.has(kn)) titles.set(kn, new Map());
+    titles.get(kn).set(r.title, (titles.get(kn).get(r.title) || 0) + n);
+  }
+  const canon = new Map();
+  const uidsOf = new Map();
+  for (const [ku, u] of perUid) {
+    const nk = [...u.names].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+    canon.set(ku, nk);
+    const kn = `${u.cal}|${nk}`;
+    uidsOf.set(kn, (uidsOf.get(kn) || []).concat(u.uid));
+  }
+  const titleOf = (cal, nk) => {
+    const m = titles.get(`${cal}|${nk}`);
+    return m ? [...m].sort((a, b) => b[1] - a[1])[0][0] : null;
+  };
+  return { canon, uidsOf, count, titleOf };
+}
+
+// Pure: the series choices that count for appointment e ({ calendar_id, uid, title }): those made for
+// its name, else — for older choices, stored per calendar ID — those of the calendar series with that
+// name; an appointment with a name of its own (renamed just once) keeps its own calendar series.
+// Returns { row, linked } (linked: the title of another calendar series it follows by name) or null.
+function seriesRowOf(ov, idx, e) {
+  const nk = seriesName(e.title);
+  const cal = e.calendar_id;
+  const byName = nk ? ov.get(`${cal}|${nameKey(nk)}|*`) : null;
+  const own = idx.canon.get(`${cal}|${e.uid}`);
+  const others = nk ? (idx.uidsOf.get(`${cal}|${nk}`) || []) : [];
+  let legacy = null;
+  let linked = null;
+  if (!nk || own === nk || !others.length) legacy = ov.get(`${cal}|${e.uid}|*`) || null;
+  else {
+    linked = idx.titleOf(cal, nk);
+    for (const u of others) { const r = ov.get(`${cal}|${u}|*`); if (r) { legacy = r; break; } }
+  }
+  if (!byName && !legacy) return linked ? { row: null, linked } : null;
+  const row = { ...(legacy || {}) };
+  if (byName) for (const k of SERIES_FIELDS) if (byName[k] !== null && byName[k] !== undefined) row[k] = byName[k];
+  return { row, linked };
+}
+
+async function seriesIndex() {
+  return seriesIndexOf(await db.prepare('SELECT calendar_id, uid, title, COUNT(*) AS n FROM calendar_events GROUP BY calendar_id, uid, title').all());
+}
 
 function hasCarTag(text, tags = DEFAULTS.tags) {
   const t = String(text || '').toLowerCase();
@@ -316,9 +398,11 @@ async function overridesMap() {
   return new Map(rows.map((r) => [`${r.calendar_id}|${r.uid}|${r.start_at}`, r]));
 }
 
-// Pure: '' / unknown -> null (not chosen: from the calendar text), else one of TRIP_MODES.
-function cleanMode(v) {
+// Pure: '' / unknown -> null (not chosen: the series', else from the calendar text), else one of
+// TRIP_MODES; 'auto' (for one day: the calendar text / the default, whatever the series says).
+function cleanMode(v, { series = false } = {}) {
   if (v === null || v === undefined || v === '') return null;
+  if (String(v) === 'auto') return series ? null : 'auto';
   return TRIP_MODES.includes(String(v)) ? String(v) : null;
 }
 // Pure: '' -> null (not chosen), else 1/0.
@@ -336,15 +420,45 @@ function cleanChain(v) {
 
 // Only the fields that are given change; the others (car needed, own value, climate, how you drive,
 // driving on) are kept. With scope 'series', car needed / how you drive / driving on go to the whole
-// series of a recurring appointment: one row with start_at '*'; the choices made per day for those
-// give way to it.
+// series: every appointment in that calendar with the same name (one row with start_at '*' under
+// nameKey()); the choices made per day for those, and older series choices per calendar ID, give way.
 const SERIES_FIELDS = ['needs_car', 'trip_mode', 'chain_start', 'chain_end'];
 async function setOverride(b) {
   const { calendar_id, uid } = b;
   const start_at = b.start_at;
   const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
-  const clean = (k, v) => (k === 'trip_mode' ? cleanMode(v) : k === 'chain_end' ? cleanChain(v) : cleanFlag(v));
-  if (b.scope === 'series' && SERIES_FIELDS.some(has)) {
+  const clean = (k, v, series = false) => (k === 'trip_mode' ? cleanMode(v, { series }) : k === 'chain_end' ? cleanChain(v) : cleanFlag(v));
+  const ev = b.scope === 'series' && start_at
+    ? await db.prepare('SELECT title FROM calendar_events WHERE calendar_id = ? AND uid = ? AND (start_at = ? OR recurrence_at = ?)').get(Number(calendar_id), String(uid), String(start_at), String(start_at))
+    : null;
+  const nk = ev ? seriesName(ev.title) : '';
+  if (b.scope === 'series' && nk && SERIES_FIELDS.some(has)) {
+    const keys = SERIES_FIELDS.filter(has);
+    const idx = await seriesIndex();
+    const cur = seriesRowOf(await overridesMap(), idx, { calendar_id: Number(calendar_id), uid: String(uid), title: ev.title })?.row || {};
+    const row = {
+      calendar_id: Number(calendar_id), uid: nameKey(nk), start_at: '*',
+      needs_car: cur.needs_car ?? null, own_value: null, climate_c: null,
+      trip_mode: cur.trip_mode ?? null, chain_start: cur.chain_start ?? null, chain_end: cur.chain_end ?? null,
+    };
+    for (const k of keys) row[k] = clean(k, b[k], true);
+    await db.upsert('event_overrides', row, ['calendar_id', 'uid', 'start_at']);
+    const nulls = keys.map((k) => `${k} = NULL`).join(', ');
+    // older choices for the calendar series with this name give way
+    for (const u of idx.uidsOf.get(`${Number(calendar_id)}|${nk}`) || []) {
+      await db.prepare(`UPDATE event_overrides SET ${nulls} WHERE calendar_id = ? AND uid = ? AND start_at = '*'`).run(Number(calendar_id), String(u));
+    }
+    // and so do the choices per day of every appointment with this name
+    const evs = await db.prepare('SELECT uid, title, start_at, recurrence_at FROM calendar_events WHERE calendar_id = ?').all(Number(calendar_id));
+    for (const e of evs) {
+      if (seriesName(e.title) !== nk) continue;
+      await db.prepare(`UPDATE event_overrides SET ${nulls} WHERE calendar_id = ? AND uid = ? AND start_at IN (?, ?)`).run(Number(calendar_id), String(e.uid), String(e.recurrence_at || e.start_at), String(e.start_at));
+    }
+    b = { ...b };
+    SERIES_FIELDS.forEach((k) => delete b[k]);
+    if (!['own_value', 'climate_c'].some((k) => Object.prototype.hasOwnProperty.call(b, k))) return;
+  } else if (b.scope === 'series' && SERIES_FIELDS.some(has)) {
+    // (an appointment that isn't in the calendar table: its calendar series by ID, as before)
     const ser = await db.prepare('SELECT * FROM event_overrides WHERE calendar_id = ? AND uid = ? AND start_at = ?').get(Number(calendar_id), String(uid), '*') || {};
     const row = {
       calendar_id: Number(calendar_id), uid: String(uid), start_at: '*',
@@ -352,7 +466,7 @@ async function setOverride(b) {
       trip_mode: ser.trip_mode ?? null, chain_start: ser.chain_start ?? null, chain_end: ser.chain_end ?? null,
     };
     for (const k of SERIES_FIELDS.filter(has)) {
-      row[k] = clean(k, b[k]);
+      row[k] = clean(k, b[k], true);
       await db.prepare(`UPDATE event_overrides SET ${k} = NULL WHERE calendar_id = ? AND uid = ? AND start_at <> '*'`).run(Number(calendar_id), String(uid));
     }
     await db.upsert('event_overrides', row, ['calendar_id', 'uid', 'start_at']);
@@ -403,6 +517,7 @@ async function build(fromIso, toIso, { withGeo = false, fetchLegs = false } = {}
   const cfg = await getConfig();
   const cals = new Map((await db.prepare('SELECT id, name, color, vehicle_id FROM calendars').all()).map((c) => [c.id, c]));
   const ov = await overridesMap();
+  const idx = await seriesIndex();
   const events = await db.prepare('SELECT * FROM calendar_events WHERE end_at > ? AND start_at < ? ORDER BY start_at').all(fromIso, toIso);
   const recurring = new Set((await db.prepare('SELECT calendar_id, uid FROM calendar_events GROUP BY calendar_id, uid HAVING COUNT(*) > 1').all()).map((r) => `${r.calendar_id}|${r.uid}`));
   const out = [];
@@ -413,7 +528,10 @@ async function build(fromIso, toIso, { withGeo = false, fetchLegs = false } = {}
     // appointment is moved to another day (before: under where it was then)
     const occ = e.recurrence_at || e.start_at;
     const o0 = ov.get(`${e.calendar_id}|${e.uid}|${occ}`) || ov.get(`${e.calendar_id}|${e.uid}|${e.start_at}`);
-    const so = ov.get(`${e.calendar_id}|${e.uid}|*`);
+    // the series' choices: by name (see seriesRowOf)
+    const sr = seriesRowOf(ov, idx, e);
+    const so = sr?.row || null;
+    const nk = seriesName(e.title);
     // the day's own choice, else the series' choice; own value and climate per day
     const o = o0 && o0.needs_car !== null ? o0 : so && so.needs_car !== null ? { ...(o0 || {}), needs_car: so.needs_car, series: true } : o0;
     const needsCar = o && o.needs_car !== null && o.needs_car !== undefined ? !!o.needs_car : !!e.car_tag;
@@ -426,7 +544,13 @@ async function build(fromIso, toIso, { withGeo = false, fetchLegs = false } = {}
       kind: 'event', id: e.id, calendar_id: e.calendar_id, calendar: cal.name, color: cal.color, uid: e.uid,
       start: e.start_at, end: e.end_at, allDay: !!e.all_day, title: e.title, location: e.location,
       carTag: !!e.car_tag, needsCar, carSource: o && o.needs_car !== null && o.needs_car !== undefined ? (o.series ? 'series' : 'you') : e.car_tag ? 'tag' : null,
-      recurring: recurring.has(`${e.calendar_id}|${e.uid}`) || !!e.recurrence_at, occ,
+      recurring: recurring.has(`${e.calendar_id}|${e.uid}`) || !!e.recurrence_at || (idx.count.get(`${e.calendar_id}|${nk}`) || 0) > 1, occ,
+      // the series it belongs to by name (shown with "the whole series"), and — when that is another
+      // calendar series than its own ID (renamed to swap two days) — which one it follows
+      seriesTitle: nk ? idx.titleOf(e.calendar_id, nk) : null, linkedSeries: sr?.linked || null,
+      // what is chosen for this day and for the series, as stored (null = not chosen)
+      day: { needs_car: o0?.needs_car ?? null, trip_mode: o0?.trip_mode ?? null, chain_start: o0?.chain_start ?? null, chain_end: o0?.chain_end ?? null },
+      series: { needs_car: so?.needs_car ?? null, trip_mode: so?.trip_mode ?? null, chain_start: so?.chain_start ?? null, chain_end: so?.chain_end ?? null },
       movedFrom: e.recurrence_at && e.recurrence_at !== e.start_at ? e.recurrence_at : null,
       own: o?.own_value || null, hint: e.car_hint ? JSON.parse(e.car_hint) : null, vehicle_id: o?.vehicle_id || cal.vehicle_id || null,
       askCar: !needsCar && !!e.location && !(o && Number(o.needs_car) === 0 && o.needs_car !== null),
@@ -782,6 +906,6 @@ function stopAgenda() {
 }
 
 module.exports = {
-  DEFAULTS, TRIP_MODES, hasCarTag, parseCarHint, parseTripTag, parseOwnValue, tripNeedKwh, stopsOf, chainStops, legOf, routeNeed, routeOf, crowKm, cleanMode, cleanFlag, cleanChain, tours, fetchLeg, icsUrl, expandEvents, tripOccurrences,
+  DEFAULTS, TRIP_MODES, seriesName, nameKey, seriesIndexOf, seriesRowOf, hasCarTag, parseCarHint, parseTripTag, parseOwnValue, tripNeedKwh, stopsOf, chainStops, legOf, routeNeed, routeOf, crowKm, cleanMode, cleanFlag, cleanChain, tours, fetchLeg, icsUrl, expandEvents, tripOccurrences,
   addressCandidates, icsName, fetchIcs, getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
 };

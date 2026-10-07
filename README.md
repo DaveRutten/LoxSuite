@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.50.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.51.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -794,7 +794,12 @@ before you have to leave. Learned departures, planned charging and past sessions
 **How you drive** to an appointment: by default the car stays there. **Drop off and pick up** (`#brengen` and
 `#halen` in the title or description, or chosen in LoxSuite per day or for the whole series) means there and back
 at the start, home in between (so it can charge), and there and back again at the end; also *only drop off* or
-*only pick up*. After a stop you can **drive on** to the next appointment with the car instead of going home:
+*only pick up*. In the week view drop off and pick up show as a solid band at the start and the end with a light,
+dashed middle; *the car stays there* is one solid block. A **series is linked by name**: what you choose for the
+whole series counts for every appointment in that calendar with the same name ("&" = "en"), also when two
+appointments are swapped by renaming them or when every week is a separate appointment. For a repeating
+appointment you first pick *only this day* or *the whole series*; a choice is saved straight away, and for one day
+*as the series* or the default (whatever the series says) can be chosen. After a stop you can **drive on** to the next appointment with the car instead of going home:
 the stops become one route (home → 1 → 2 → 3 → home) — or back home via where it started (home → 1 → 2 → 1 →
 home, e.g. to pick up) — with the road distances between them (OSRM, cached; an
 estimate until looked up), the margin once, and leave/back times for the whole route. The planner, the plug-in

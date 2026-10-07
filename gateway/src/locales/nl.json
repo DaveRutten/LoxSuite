@@ -4285,5 +4285,12 @@
   "own solar counts as {0} per kWh (feed-in tariff)": "eigen zon telt als {0} per kWh (terugleververgoeding)",
   "own solar counts as {0} per kWh (market price)": "eigen zon telt als {0} per kWh (marktprijs)",
   "own solar counts as {0} per kWh (net metering)": "eigen zon telt als {0} per kWh (salderen)",
-  "Prefer own solar (€/kWh)": "Voorkeur voor eigen zon (€/kWh)"
+  "Prefer own solar (€/kWh)": "Voorkeur voor eigen zon (€/kWh)",
+  "— its choices count here.": "— die keuzes gelden hier.",
+  ", also on another day.": ", ook op een andere dag.",
+  "as the series — {0}": "zoals de reeks — {0}",
+  "drop off and pick up (home in between)": "brengen en halen (ertussen thuis)",
+  "Every appointment in this calendar called": "Elke afspraak in deze agenda met de naam",
+  "Linked by name to the series": "Op naam gekoppeld aan de reeks",
+  "Only this one; what is not chosen here comes from the series.": "Alleen deze; wat je hier niet kiest, komt van de reeks."
 }

@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.51.0-alpha.1] - 2026-10-07
+
+### Changed
+- **A series is linked by name** (asked: "a series that is always on Monday, moved to Tuesday some weeks — the
+  setting should go along, but it seems to land on the appointment I always have on Tuesday"): the calendar keeps a
+  series' ID on its weekday, so two appointments swapped by renaming them took each other's choices. What you choose
+  *for the whole series* now counts for every appointment in that calendar with the same name — the name without
+  markers, emoji and punctuation, "&" / "+" / "and" = "en" ("Opvang bij opa & oma" = "Opvang bij opa en oma").
+  - An appointment renamed to the name of another series follows that series (the details say *Linked by name to the
+    series "…"*); one renamed to a name of its own keeps its own series.
+  - Separate appointments with the same name (every week a new one) are a series too.
+  - Choices made earlier for a series (stored per calendar ID) follow the name as well; setting it again stores it by
+    name and replaces the day choices of every appointment with that name.
+- **This day or the whole series, first**: for a repeating appointment the details start with *only this day* /
+  *the whole series*; the dropdowns show what is chosen for that, and a change is saved straight away (before, a
+  second step appeared below the dropdowns — easy to miss, and then nothing was saved, so choosing *default* again
+  seemed not to be accepted).
+- **Default for one day**: with *only this day*, *as the series — …* follows the series, and *default — …* gives the
+  default for that day even when the series has a choice (before, *default* for one day fell back to the series).
+- **Drop off and pick up stand out in the week view**: a solid band with 🚗 *drop off* / *pick up* and the time at
+  the start and the end, the time in between light with a dashed edge (the car is home then); *the car stays there*
+  stays one solid block. Also in the legend.
+
 ## [0.50.0-alpha.1] - 2026-10-07
 
 ### Changed
