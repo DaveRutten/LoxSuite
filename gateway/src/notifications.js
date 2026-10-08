@@ -40,9 +40,9 @@ const TRIGGER_TYPES = [
 // on a failed send with completely empty stdout/stderr, which would otherwise leave every error
 // this app ever surfaces (the admin page's "Send test", a rule's own failure logged via
 // logSystemEvent) as a useless generic "Command failed: apprise ...".
-function runApprise(url, title, body, notifyType, timeoutMs = 15000) {
+function runApprise(url, title, body, notifyType, timeoutMs = 15000, extraArgs = []) {
   return new Promise((resolve, reject) => {
-    execFile('apprise', ['-t', title, '-b', body, '-n', notifyType, '-v', url], { timeout: timeoutMs }, (err, stdout, stderr) => {
+    execFile('apprise', ['-t', title, '-b', body, '-n', notifyType, '-v', ...extraArgs, url], { timeout: timeoutMs }, (err, stdout, stderr) => {
       if (err) {
         // apprise's own -v logging actually writes to stdout (confirmed by testing — despite most
         // CLI conventions putting diagnostic/log output on stderr), so that's checked first here;
@@ -231,14 +231,54 @@ async function applyTemplate(event, triggerType) {
 
 const TELEGRAM_SEVERITY_EMOJI = { critical: '\u{1F534}', warning: '\u{1F7E0}', info: 'ℹ️' };
 
+// The installed apprise's major version (cached): 2.x (in the Docker image since October 2026)
+// converts Markdown into Telegram's own flavour itself — it bolds the title, and escapes what each
+// Telegram parse mode needs — while 1.x sent our text as it was. Unknown (no answer): taken as 2.
+let appriseMajorP = null;
+function appriseMajor() {
+  if (!appriseMajorP) {
+    appriseMajorP = new Promise((resolve) => {
+      execFile('apprise', ['--version'], { timeout: 5000 }, (err, stdout) => {
+        const m = /v?(\d+)\.\d+/.exec(String(stdout || ''));
+        resolve(m ? Number(m[1]) : 2);
+      });
+    });
+  }
+  return appriseMajorP;
+}
+
+// Pure: text that Markdown (CommonMark) shows exactly as written — every character that could
+// start formatting, a list or a heading escaped (CommonMark allows a backslash before any ASCII
+// punctuation; apprise 2.x turns that into what Telegram's parse mode needs).
+function escapeCommonMark(text) {
+  return String(text).replace(/([\\`*_{}[\]()<>#+\-.!|~&])/g, '\\$1');
+}
+
+// Pure: what goes to apprise for a Telegram channel. apprise 2.x: Markdown in (-i markdown), the
+// title plain (apprise bolds it), field labels in italics, and MarkdownV2 out — V2, because there
+// an escaped character inside bold/italic stays escaped, where legacy Markdown v1 ends the bold
+// at the first escaped '*' ("can't parse entities: can't find end of the entity"). apprise 1.x: as
+// before, our own legacy-Markdown (v1) text.
+function telegramMessage(event, url, major = 2) {
+  const emoji = TELEGRAM_SEVERITY_EMOJI[event.severity] || TELEGRAM_SEVERITY_EMOJI.info;
+  if (major < 2) return { url: ensureTelegramMarkdown(url, 'v1'), title: renderTelegramTitle(event), body: renderTelegramBody(event), args: [] };
+  const message = escapeCommonMark(event.message);
+  const fields = (event.fields || []).map((f) => `*${escapeCommonMark(f.label)}:* ${escapeCommonMark(f.value)}`).join('\n');
+  return {
+    url: ensureTelegramMarkdown(url, 'v2'),
+    title: `${emoji} ${escapeCommonMark(event.title)}`,
+    body: fields ? `${message}\n\n${fields}` : message,
+    args: ['-i', 'markdown'],
+  };
+}
+
 function isTelegramUrl(url) {
   return /^tgram:\/\//i.test(url || '');
 }
 
-// Apprise's Telegram plugin renders the message as Markdown once the URL says so (see
-// ensureTelegramMarkdown below) — legacy Markdown (mdv=v1), not the v2 default, since v1 only
-// treats `_*\`[` as special, so real content (a monitor label, a raw value) needs far less
-// escaping to stay safe than v2's much longer reserved-character list would require.
+// apprise 1.x: its Telegram plugin sends the message as Markdown once the URL says so (see
+// ensureTelegramMarkdown below) — legacy Markdown (mdv=v1), since v1 only treats `_*\`[` as
+// special, so real content (a monitor label, a raw value) needs far less escaping.
 function escapeTelegramMarkdown(text) {
   return String(text).replace(/([_*`[])/g, '\\$1');
 }
@@ -258,9 +298,9 @@ function renderTelegramBody(event) {
 // Applied at send time (not just when a channel is first saved) so an already-configured Telegram
 // channel gets the nicer formatting immediately too, without needing to re-save it — appends
 // rather than replaces so a URL someone already hand-edited with its own format= keeps that choice.
-function ensureTelegramMarkdown(url) {
+function ensureTelegramMarkdown(url, mdv = 'v1') {
   if (/[?&]format=/.test(url)) return url;
-  return url + (url.includes('?') ? '&' : '?') + 'format=markdown&mdv=v1';
+  return url + (url.includes('?') ? '&' : '?') + 'format=markdown&mdv=' + mdv;
 }
 
 async function sendToChannel(channel, event) {
@@ -273,11 +313,12 @@ async function sendToChannel(channel, event) {
     await webPush.send(target, webPush.eventToPayload(event));
     return;
   }
-  const telegram = isTelegramUrl(channel.url);
-  const url = telegram ? ensureTelegramMarkdown(channel.url) : channel.url;
-  const title = telegram ? renderTelegramTitle(event) : event.title;
-  const body = telegram ? renderTelegramBody(event) : renderBody(event);
-  await runApprise(url, title, body, apLevel(event.severity));
+  if (isTelegramUrl(channel.url)) {
+    const m = telegramMessage(event, channel.url, await appriseMajor());
+    await runApprise(m.url, m.title, m.body, apLevel(event.severity), 15000, m.args);
+    return;
+  }
+  await runApprise(channel.url, event.title, renderBody(event), apLevel(event.severity));
 }
 
 // Exercised directly by the Notifications admin page's own "Send test" button per channel — same
@@ -929,6 +970,8 @@ async function fireCarEvent(triggerType, key, event) {
 }
 
 module.exports = {
+  telegramMessage,
+  escapeCommonMark,
   TRIGGER_TYPES,
   triggerTypesFor,
   retryDelayMs,

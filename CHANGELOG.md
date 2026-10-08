@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.51.1-alpha.1] - 2026-10-08
+
+### Fixed
+- **Telegram stopped working** ("Bad Request: can't parse entities: Can't find end of the entity starting at byte
+  offset 29"): the Docker image installs the newest apprise, and apprise 2.0 now converts the text it gets into
+  Telegram's own Markdown itself — it made the title bold and escaped LoxSuite's own Markdown again, so Telegram
+  found a bold that never ended. LoxSuite now hands apprise 2 plain Markdown (`-i markdown`) with every special
+  character escaped, the title without formatting (apprise makes it bold) and the field labels in italics, and asks
+  for MarkdownV2 (where an escaped character inside bold text stays escaped — legacy Markdown ends the bold there).
+  With apprise 1.x it sends as before. A Telegram URL with its own `format=` is left alone.
+- The Docker image stays on apprise 2.x (`apprise>=2.0.1,<3`), so a next major can't change this unnoticed.
+
 ## [0.51.0-alpha.1] - 2026-10-07
 
 ### Changed

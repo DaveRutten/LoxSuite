@@ -561,8 +561,8 @@
       return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    // Telegram's own markdown v1 subset (see ensureTelegramMarkdown's own mdv=v1 choice in
-    // notifications.js) — *bold*, _italic_, `code`, [text](url) — rendered here as real HTML so
+    // Telegram's own markdown subset (see telegramMessage in notifications.js) — *bold*,
+    // _italic_, `code`, [text](url) — rendered here as real HTML so
     // the preview actually shows what a template with its own markdown in it would look like,
     // rather than the raw asterisks/underscores as plain text.
     function renderTelegramMarkdown(text) {

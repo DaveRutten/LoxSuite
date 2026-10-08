@@ -59,8 +59,10 @@ RUN apk add --no-cache mariadb-client
 # marks its system interpreter "externally managed" (PEP 668) by default, refusing a bare `pip
 # install`; --break-system-packages is safe here since this image has no other Python use that a
 # dependency conflict could break.
+# Kept on apprise 2.x: from 2.0 it converts the Markdown LoxSuite hands it into each service's own
+# flavour (Telegram: see telegramMessage in notifications.js), and a next major may change that again.
 RUN apk add --no-cache python3 py3-pip && \
-    pip install --no-cache-dir --break-system-packages apprise
+    pip install --no-cache-dir --break-system-packages 'apprise>=2.0.1,<3'
 
 # Mosquitto runs inside this same container, so the whole stack is a single container from the
 # outside — docker-entrypoint.sh starts and supervises both processes. Vendored directly from the
