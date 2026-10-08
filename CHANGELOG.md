@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.52.0-alpha.1] - 2026-10-08
+
+### Changed
+- **Negative prices in the charts** (asked: "have you taken into account that the hour / quarter prices are
+  sometimes negative — mainly the display?"): the planning already took a negative price as the cheapest, but the
+  charts drew it as a sliver (Smart charging) or almost invisible (energy manager). Now the price scale runs from the
+  lowest price to the highest, a negative price hangs below a zero line in green (*negative price* in the legend),
+  the details say *negative: you are paid to use power*, and an amount below zero reads as −€ 0,05. Note: the charts
+  show the all-in price (with energy tax), which is only negative when the market price is below about −€ 0,10.
+- **The energy manager's plan in the same style as the other energy charts** (asked: "the heatmap in the same
+  style, and more detail than blocks of an hour"; "the texts fall over the heatmap"): lanes over one time axis with
+  each label above its lane (never over the data, long names cut off); the price per quarter as soft columns, the
+  solar surplus as a smooth line with a light wash, the car's planned charging at its real times (e.g. 13:00–13:32)
+  instead of whole hours, and per consumer a run of hours as one bar — on/off neutral gray, a setpoint up or down in
+  orange / blue with its value inside. Hours, days, midnight and *now* like Smart charging; point at it for a summary
+  per quarter, tap for the details of that hour (highlighted). The consumers themselves are still planned per hour.
+
 ## [0.51.1-alpha.1] - 2026-10-08
 
 ### Fixed

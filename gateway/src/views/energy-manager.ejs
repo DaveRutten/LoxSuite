@@ -35,7 +35,13 @@
   var CAN = <%- JSON.stringify(canEdit('energy_manager')) %>;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
-  function eur(v, d) { return v == null ? '—' : '€ ' + nf(v, d == null ? 2 : d); }
+  // a negative amount (a negative price: you are paid to use power) as −€ 0,05
+  function eur(v, d) {
+    if (v == null) return '—';
+    var dd = d == null ? 2 : d, n = Number(v);
+    if (Math.abs(n) < 0.5 * Math.pow(10, -dd)) n = 0;
+    return (n < 0 ? '−€\u00a0' : '€\u00a0') + nf(Math.abs(n), dd);
+  }
   function hh(t) { return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
   function dayLabel(d) { var p = d.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }); }
   function post(u, b) { return fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }).then(function (r) { return r.json(); }); }
@@ -111,9 +117,13 @@
   }
   function sum(list, k) { return list.reduce(function (a, x) { return a + (Number(x[k]) || 0); }, 0); }
 
-  // The plan per hour. Price row: per quarter when the charts show quarters; an hour without a known
-  // price (the plan uses the median then) is hatched. Tap (or click) an hour for its details below.
+  // The plan in the same style as the other energy charts: lanes over one time axis, each with its
+  // label above it (never over the data) — the price per quarter (a negative price below a zero line,
+  // green), the solar surplus as a smooth line, the car's planned charging at its real times, and per
+  // consumer what it would do (a run of hours as one bar). Point at it for everything at that
+  // moment; tap for the details of that hour.
   var emSel = null;
+  var Q = 900000;
   function planChart(d) {
     var el = document.getElementById('em-plan');
     if (!d.hours.length) { el.innerHTML = '<p class="hint" style="margin:0;">No plan yet (prices or solar forecast missing).</p>'; return; }
@@ -123,64 +133,160 @@
     var known = 0;
     all.forEach(function (h, i) { if (!h.estimated) known = i + 1; });
     var hrs = all.slice(0, Math.max(Math.min(12, all.length), known));
-    var W = lsChartW(el, 900), left = 150, rowH = 22;
+    if (!hrs.length) { el.innerHTML = ''; return; }
     var rg = document.getElementById('em-plan-range');
-    if (rg && hrs.length) {
+    if (rg) {
       var endMs = hrs[hrs.length - 1].ms + 3600000, endD = new Date(endMs);
       var endTxt = endD.getHours() === 0 && endD.getMinutes() === 0 ? new Date(endMs - 1).toLocaleDateString([], { weekday: 'short' }) + ' 24:00' : endD.toLocaleDateString([], { weekday: 'short' }) + ' ' + hh(endMs).slice(0, 5);
       rg.textContent = '· ' + TLx('until {0}').replace('{0}', endTxt) + (known >= hrs.length ? ' — ' + TLx('as far as the prices are known') : '');
     }
-    var bw = (W - left - 6) / hrs.length;
-    var quarters = d.quarters || [];
+    var C = window.LsChart, f1 = function (v) { return (Math.round(v * 10) / 10).toString(); };
+    var W = lsChartW(el, 900), left = 42, right = 8, PW = W - left - right;
+    var t0 = hrs[0].ms, t1 = hrs[hrs.length - 1].ms + 3600000;
+    var X = function (ms) { return left + (Math.min(t1, Math.max(t0, ms)) - t0) / (t1 - t0) * PW; };
+    var hourOf = function (ms) { return hrs.find(function (h) { return ms >= h.ms && ms < h.ms + 3600000; }) || null; };
+    // price per quarter (or per hour when the source has no quarters)
+    var quarters = (d.quarters || []).filter(function (q) { var a = Date.parse(q.start); return a >= t0 && a < t1 && q.price != null; });
     var qOf = function (h) { return quarters.filter(function (q) { var a = Date.parse(q.start); return a >= h.ms && a < h.ms + 3600000; }); };
-    var maxP = Math.max.apply(null, hrs.map(function (h) { return h.price || 0; }).concat(quarters.map(function (q) { return q.price || 0; })).concat([0.1]));
-    var maxS = Math.max.apply(null, hrs.map(function (h) { return h.surplusKwh || 0; }).concat([1]));
-    var rows = [{ label: 'Price', kind: 'price' }, { label: 'Solar surplus (forecast)', kind: 'solar' }, { label: 'Car (Smart charging)', kind: 'car' }];
-    d.loads.forEach(function (l) { l.signals.forEach(function (s) { if (s.key === 'pause') return; rows.push({ label: l.name + ' · ' + s.key, load: l, sig: s }); }); });
-    var H = rows.length * rowH + 22, s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;">' +
-      '<defs><pattern id="em-noprice" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" stroke-width="2" opacity="0.35"/></pattern></defs>';
-    rows.forEach(function (r, ri) {
-      var y = ri * rowH;
-      s += '<text x="0" y="' + (y + 15) + '" font-size="11" fill="currentColor" opacity="0.8">' + esc(r.label) + '</text>';
-      hrs.forEach(function (h, i) {
-        var x = left + i * bw, fill = null, op = 1, tip = hh(h.ms) + ' ';
-        if (r.kind === 'price') {
-          if (h.estimated) { s += '<rect x="' + (x + 0.5) + '" y="' + (y + 3) + '" width="' + Math.max(1, bw - 1) + '" height="' + (rowH - 6) + '" rx="2" fill="url(#em-noprice)" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="2 2"><title>' + esc(hh(h.ms) + ' ' + TLx('no price yet — planned with the median {0}').replace('{0}', '€ ' + nf(h.price, 3))) + '</title></rect>'; return; }
-          var qs = qOf(h);
-          if (qs.length > 1) {
-            var qw = bw / qs.length;
-            qs.forEach(function (q, qi) { s += '<rect x="' + (x + 0.5 + qi * qw) + '" y="' + (y + 3) + '" width="' + Math.max(0.5, qw - 0.6) + '" height="' + (rowH - 6) + '" rx="1" style="fill:var(--en-price);" opacity="' + (0.25 + 0.75 * (q.price || 0) / maxP) + '"><title>' + esc(hh(Date.parse(q.start)) + ' € ' + nf(q.price, 3)) + '</title></rect>'; });
-            return;
-          }
-          fill = 'var(--en-price)'; op = 0.25 + 0.75 * (h.price || 0) / maxP; tip += '€ ' + nf(h.price, 3);
-        }
-        else if (r.kind === 'solar') { if (h.surplusKwh > 0.05) { fill = 'var(--en-solar)'; op = 0.2 + 0.8 * h.surplusKwh / maxS; } tip += nf(h.surplusKwh, 1) + ' kWh'; }
-        else if (r.kind === 'car') { var k = d.carKwh[h.ms] || 0; if (k > 0.05) fill = 'var(--en-car)'; tip += nf(k, 1) + ' kWh'; }
-        else {
-          var p = r.load.plan.find(function (x) { return Date.parse(x.hour) === h.ms; });
-          var v = p ? p.values[r.sig.key] : null;
-          if (r.sig.unit === '°C') { if (v && Number(v) !== 0 && r.sig.key === 'correction') { fill = Number(v) > 0 ? '#e67e22' : '#3498db'; } else if (r.sig.key === 'setpoint' && v != null && p && p.values.now) fill = '#e67e22'; op = 0.8; }
-          else if (Number(v)) fill = '#4caf50';
-          tip += (v == null ? '—' : v + ' ' + r.sig.unit) + (p && p.reason ? ' — ' + p.reason : '');
-        }
-        s += '<rect x="' + (x + 0.5) + '" y="' + (y + 3) + '" width="' + Math.max(1, bw - 1) + '" height="' + (rowH - 6) + '" rx="2" style="fill:' + (fill || 'currentColor') + ';" opacity="' + (fill ? op : 0.06) + '"><title>' + esc(tip) + '</title></rect>';
+    var priceAt = function (ms) {
+      var q = quarters.find(function (x) { return ms >= Date.parse(x.start) && ms < Date.parse(x.end); });
+      if (q) return { v: q.price, est: false };
+      var h = hourOf(ms);
+      return h ? { v: h.price, est: !!h.estimated } : { v: null, est: false };
+    };
+    var carSlots = (d.carSlots || []).filter(function (c) { return Date.parse(c.end) > t0 && Date.parse(c.start) < t1; });
+    var carAt = function (ms) { var c = carSlots.find(function (x) { return ms >= Date.parse(x.start) && ms < Date.parse(x.end); }); return c ? c.kw : 0; };
+    // lanes: label above, data below
+    var lanes = [{ kind: 'price', label: TLx('Price (all-in)'), h: 40 }, { kind: 'solar', label: TLx('Solar surplus (forecast)'), h: 28 }, { kind: 'car', label: TLx('Car (Smart charging)'), h: 14 }];
+    d.loads.forEach(function (l) { l.signals.forEach(function (sg) { if (sg.key === 'pause') return; lanes.push({ load: l, sig: sg, label: l.name, sub: sg.key, h: 14 }); }); });
+    var cy = 24;
+    lanes.forEach(function (ln) { ln.labelY = cy + 10; ln.y = cy + 14; cy = ln.y + ln.h + 9; });
+    var bottom = cy - 9, H = bottom + 40;
+    var maxChars = Math.max(12, Math.floor(PW / 6.2));
+    var cut = function (t) { t = String(t); return t.length > maxChars ? t.slice(0, maxChars - 1) + '…' : t; };
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block; overflow:visible;">' +
+      '<defs><pattern id="em-noprice" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" stroke-width="2" opacity="0.3"/></pattern></defs>';
+    var tick = function (y, txt) { return '<text x="' + (left - 5) + '" y="' + f1(y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + txt + '</text>'; };
+    var tickEur = function (v) { return (v < 0 ? '−€' : '€') + nf(Math.abs(v), 2); };
+    lanes.forEach(function (ln, i) {
+      if (i) svg += '<line x1="' + left + '" y1="' + f1(ln.labelY - 13.5) + '" x2="' + (W - right) + '" y2="' + f1(ln.labelY - 13.5) + '" stroke="currentColor" opacity="0.08"/>';
+      svg += '<text x="' + left + '" y="' + ln.labelY + '" font-size="10.5" fill="currentColor" opacity="0.8"><tspan font-weight="600">' + esc(cut(ln.label)) + '</tspan>' + (ln.sub ? '<tspan opacity="0.7"> · ' + esc(ln.sub) + '</tspan>' : '') + '</text>';
+      if (ln.kind || ln.load) svg += '<rect x="' + left + '" y="' + ln.y + '" width="' + PW + '" height="' + ln.h + '" rx="4" fill="currentColor" opacity="0.03"/>';
+    });
+    // ---- price
+    var pl = lanes[0];
+    var vals = (quarters.length ? quarters.map(function (q) { return q.price; }) : []).concat(hrs.filter(function (h) { return !h.estimated && h.price != null; }).map(function (h) { return h.price; }));
+    var maxP = Math.max(0.1, Math.max.apply(null, vals.concat([0])));
+    var minP = Math.min(0, Math.min.apply(null, vals.concat([0])));
+    var PY = function (v) { return pl.y + pl.h - (v - minP) / (maxP - minP) * pl.h * 0.92; };
+    var y0 = PY(0);
+    svg += C.hline(left, W - right, PY(maxP)) + tick(PY(maxP), tickEur(maxP)) + (minP < 0 ? '<line x1="' + left + '" y1="' + f1(y0) + '" x2="' + (W - right) + '" y2="' + f1(y0) + '" stroke="currentColor" opacity="0.28"/>' + tick(y0, '€0') + (PY(minP) - y0 >= 11 ? tick(PY(minP), tickEur(minP)) : '') : '');
+    var priceCol = function (a, b, v) {
+      var x = X(a), w = X(b) - x, cw = Math.max(0.6, Math.min(26, w - Math.min(1.5, w * 0.25)));
+      x += (w - cw) / 2;
+      if (v < 0) return C.col(x, y0, cw, Math.max(1.5, PY(v) - y0), { down: true, color: 'var(--en-export)', opacity: (0.45 + 0.45 * v / minP).toFixed(2), r: 3 });
+      return C.col(x, y0 - Math.max(1.5, y0 - PY(v)), cw, Math.max(1.5, y0 - PY(v)), { color: 'var(--en-price)', opacity: (0.3 + 0.5 * v / maxP).toFixed(2), r: 3 });
+    };
+    hrs.forEach(function (h) {
+      if (h.estimated) { svg += '<rect x="' + f1(X(h.ms) + 0.5) + '" y="' + pl.y + '" width="' + f1(Math.max(1, X(h.ms + 3600000) - X(h.ms) - 1)) + '" height="' + pl.h + '" rx="3" fill="url(#em-noprice)"/>'; return; }
+      var qs = qOf(h);
+      if (qs.length > 1) qs.forEach(function (q) { svg += priceCol(Date.parse(q.start), Date.parse(q.end), q.price); });
+      else if (h.price != null) svg += priceCol(h.ms, h.ms + 3600000, h.price);
+    });
+    // ---- solar surplus: a smooth line with a light wash (kWh in an hour = average kW)
+    var sl = lanes[1];
+    var maxS = Math.max(0.5, Math.max.apply(null, hrs.map(function (h) { return h.surplusKwh || 0; })));
+    var SY = function (v) { return sl.y + sl.h - (v / maxS) * (sl.h - 3); };
+    var spts = [[X(t0), SY(hrs[0].surplusKwh || 0)]].concat(hrs.map(function (h) { return [X(h.ms + 1800000), SY(h.surplusKwh || 0)]; })).concat([[X(t1), SY(hrs[hrs.length - 1].surplusKwh || 0)]]);
+    svg += tick(SY(maxS), nf(maxS, 1)) + C.wash(spts, sl.y + sl.h, 'var(--en-solar)', 0.26) + C.line(spts, 'var(--en-solar)');
+    // ---- the car: its planned charging at the real times
+    var cl = lanes[2];
+    carSlots.forEach(function (c) {
+      var a = Math.max(t0, Date.parse(c.start)), b = Math.min(t1, Date.parse(c.end)), x = X(a), w = X(b) - x;
+      if (w > 0.5) svg += '<rect x="' + f1(x) + '" y="' + (cl.y + 1) + '" width="' + f1(Math.max(1.5, w - 0.5)) + '" height="' + (cl.h - 2) + '" rx="' + Math.min(5, (cl.h - 2) / 2) + '" style="fill:var(--en-car);" opacity="0.8"><title>' + esc(hh(a).slice(0, 5) + '–' + hh(b).slice(0, 5) + ' · ' + nf(c.kw, 1) + ' kW') + '</title></rect>';
+    });
+    if (!carSlots.length) Object.keys(d.carKwh || {}).forEach(function (k) {
+      var ms = Number(k); if (ms < t0 || ms >= t1 || !(d.carKwh[k] > 0.05)) return;
+      svg += '<rect x="' + f1(X(ms) + 0.5) + '" y="' + (cl.y + 1) + '" width="' + f1(X(ms + 3600000) - X(ms) - 1) + '" height="' + (cl.h - 2) + '" rx="5" style="fill:var(--en-car);" opacity="0.8"/>';
+    });
+    // ---- consumers: per signal, a run of hours with the same value as one bar (value inside when it fits)
+    var stateOf = function (ln, h) {
+      var p = ln.load.plan.find(function (x) { return Date.parse(x.hour) === h.ms; });
+      var v = p ? p.values[ln.sig.key] : null;
+      if (ln.sig.unit === '°C') {
+        if (ln.sig.key === 'correction' && v && Number(v) !== 0) return { key: 'c' + Number(v), color: Number(v) > 0 ? '#e67e22' : '#3498db', text: (Number(v) > 0 ? '+' : '') + nf(Number(v), Number(v) % 1 ? 1 : 0) + ' °C', reason: p && p.reason };
+        if (ln.sig.key === 'setpoint' && v != null && p && p.values.now) return { key: 's' + Number(v), color: '#e67e22', text: nf(Number(v), Number(v) % 1 ? 1 : 0) + ' °C', reason: p && p.reason };
+        return null;
+      }
+      // on: neutral (the colors are the price, solar, car, and a setpoint up or down)
+      return Number(v) ? { key: 'on', color: 'currentColor', op: 0.5, text: '', reason: p && p.reason } : null;
+    };
+    lanes.forEach(function (ln) {
+      if (!ln.load) return;
+      var run = null, runs = [];
+      hrs.forEach(function (h) {
+        var st = stateOf(ln, h);
+        if (st && run && run.st.key === st.key && run.b === h.ms) { run.b = h.ms + 3600000; return; }
+        run = st ? { st: st, a: h.ms, b: h.ms + 3600000 } : null;
+        if (run) runs.push(run);
+      });
+      runs.forEach(function (r) {
+        var x = X(r.a) + 1, w = X(r.b) - X(r.a) - 2;
+        svg += '<rect x="' + f1(x) + '" y="' + (ln.y + 1) + '" width="' + f1(Math.max(1.5, w)) + '" height="' + (ln.h - 2) + '" rx="' + Math.min(5, (ln.h - 2) / 2) + '" style="fill:' + r.st.color + ';" opacity="' + (r.st.op || 0.85) + '"><title>' + esc(hh(r.a).slice(0, 5) + '–' + hh(r.b).slice(0, 5) + (r.st.text ? ' · ' + r.st.text : '') + (r.st.reason ? ' — ' + r.st.reason : '')) + '</title></rect>';
+        if (r.st.text && w > r.st.text.length * 5.6 + 8) svg += '<text x="' + f1(x + w / 2) + '" y="' + (ln.y + ln.h / 2 + 3.5) + '" text-anchor="middle" font-size="9.5" font-weight="600" fill="#15181c" pointer-events="none">' + esc(r.st.text) + '</text>';
       });
     });
-    hrs.forEach(function (h, i) { if (new Date(h.ms).getHours() % 3 === 0) s += '<text x="' + (left + i * bw) + '" y="' + (H - 6) + '" font-size="10" fill="currentColor" opacity="0.6">' + hh(h.ms).slice(0, 5) + '</text>'; });
-    // the chosen hour outlined, and one tap target per hour over all rows
-    hrs.forEach(function (h, i) {
-      var x = left + i * bw;
-      if (emSel === h.ms) s += '<rect x="' + (x + 0.5) + '" y="1" width="' + Math.max(1, bw - 1) + '" height="' + (rows.length * rowH) + '" rx="3" fill="none" stroke="var(--accent)" stroke-width="2"/>';
-      s += '<rect data-em-hour="' + h.ms + '" x="' + x + '" y="0" width="' + bw + '" height="' + (rows.length * rowH) + '" fill="transparent" style="cursor:pointer;"/>';
-    });
-    var hatch = '<span style="display:inline-block; width:0.9em; height:0.8em; vertical-align:-0.05em; background:repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 5px); opacity:0.5;"></span>';
-    el.innerHTML = s + '</svg><div class="hint" style="margin:0.3rem 0 0;"><span>Green = would be 1 (release / now / start). Orange = higher setpoint (pre-heat), blue = lower. Hover for the reason.</span> ' + hatch + ' <span>' + esc(TLx('no price yet (planned with the median)')) + '</span> · <span>' + esc(TLx('Tap an hour for the details.')) + '</span></div><div id="em-detail"></div>';
-    Array.prototype.forEach.call(el.querySelectorAll('[data-em-hour]'), function (t) {
-      t.addEventListener('click', function () { var ms = Number(t.getAttribute('data-em-hour')); emSel = emSel === ms ? null : ms; planChart(d); });
+    // ---- over all lanes (on their data only): midnight, the chosen hour, now
+    var vline = function (x, style, w) { return lanes.map(function (ln) { return '<line x1="' + f1(x) + '" y1="' + ln.y + '" x2="' + f1(x) + '" y2="' + (ln.y + ln.h) + '" style="' + style + '" stroke-width="' + (w || 1.2) + '"/>'; }).join(''); };
+    if (emSel !== null && emSel >= t0 && emSel < t1) svg += lanes.map(function (ln) { return '<rect x="' + f1(X(emSel)) + '" y="' + (ln.y - 1) + '" width="' + f1(X(emSel + 3600000) - X(emSel)) + '" height="' + (ln.h + 2) + '" rx="3" style="fill:var(--accent);" opacity="0.12" pointer-events="none"/>'; }).join('');
+    var nowMs = Date.now();
+    if (nowMs >= t0 && nowMs <= t1) {
+      var nx = X(nowMs);
+      svg += vline(nx, 'stroke:currentColor; opacity:0.4;') + '<circle cx="' + f1(nx) + '" cy="10" r="2.5" fill="currentColor"/><text x="' + f1(nx + 5) + '" y="13" font-size="10" fill="currentColor" opacity="0.85">' + esc(TLx('now')) + '</text>';
+    }
+    // ---- time axis: hours (1–3 apart, what fits), the days below, midnight over all lanes
+    var pxH = PW / Math.max(1, (t1 - t0) / 3600000), every = pxH >= 26 ? 1 : pxH >= 13 ? 2 : 3;
+    for (var hms = t0; hms <= t1; hms += 3600000) {
+      var hx = X(hms), hr = new Date(hms).getHours();
+      svg += '<line x1="' + f1(hx) + '" y1="' + bottom + '" x2="' + f1(hx) + '" y2="' + (bottom + (hr % every === 0 ? 5 : 3)) + '" stroke="currentColor" opacity="0.3"/>';
+      if (hr === 0 && hms > t0) svg += vline(hx, 'stroke:currentColor; opacity:0.12;', 1);
+      if (hr % every === 0 && hx > left + 6 && hx < W - right - 6) svg += '<text x="' + f1(hx) + '" y="' + (bottom + 16) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + String(hr).padStart(2, '0') + '</text>';
+    }
+    var dd = new Date(t0); dd.setHours(0, 0, 0, 0);
+    for (var ds = dd.getTime(); ds < t1;) {
+      var dn = new Date(ds); dn.setDate(dn.getDate() + 1);
+      var xa = X(Math.max(ds, t0)), xb = X(Math.min(dn.getTime(), t1));
+      if (xb - xa > 34) svg += '<text x="' + f1((xa + xb) / 2) + '" y="' + (bottom + 32) + '" text-anchor="middle" font-size="10.5" font-weight="600" fill="currentColor" opacity="0.72">' + esc(new Date(ds).toLocaleDateString([], xb - xa > 110 ? { weekday: 'long', day: 'numeric', month: 'short' } : { weekday: 'short', day: 'numeric' })) + '</text>';
+      ds = dn.getTime();
+    }
+    svg += '</svg>';
+    var key = function (style, txt) { return '<span style="white-space:nowrap; margin-right:0.8rem;"><span style="display:inline-block; width:0.75em; height:0.75em; border-radius:3px; vertical-align:-0.05em; ' + style + '"></span> <span>' + esc(txt) + '</span></span>'; };
+    var hatch = 'background:repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 5px); opacity:0.5;';
+    el.innerHTML = svg + '<div class="hint" style="margin:0.35rem 0 0; line-height:1.7;">' +
+      (minP < 0 ? key('background:var(--en-export);', TLx('negative price')) : '') +
+      key('background:currentColor; opacity:0.5;', TLx('would be 1 (release / now / start)')) + key('background:#e67e22;', TLx('higher setpoint (pre-heat)')) + key('background:#3498db;', TLx('lower setpoint')) +
+      key(hatch, TLx('no price yet (planned with the median)')) + '<span>' + esc(TLx('Tap for the details of that hour.')) + '</span></div><div id="em-detail"></div>';
+    // point: everything at that quarter; tap: the details of that hour
+    var n = Math.round((t1 - t0) / Q);
+    var at = function (i) { return t0 + i * Q; };
+    C.hover(el, {
+      W: W, top: lanes[0].y, bottom: bottom, n: n, x: function (i) { return X(at(i) + Q / 2); },
+      title: function (i) { var a = at(i); return new Date(a).toLocaleDateString([], { weekday: 'short' }) + ' ' + hh(a).slice(0, 5) + '–' + hh(a + Q).slice(0, 5); },
+      rows: function (i) {
+        var a = at(i), h = hourOf(a), pr = priceAt(a), rows = [];
+        rows.push([TLx('Price'), pr.v == null ? '—' : (pr.est ? '≈ ' : '') + eur(pr.v, 3), pr.v != null && pr.v < 0 ? 'var(--en-export)' : 'var(--en-price)']);
+        if (h) rows.push([TLx('Solar surplus (forecast)'), nf(h.surplusKwh || 0, 1) + ' kW', 'var(--en-solar)']);
+        var ck = carAt(a);
+        if (ck > 0.05) rows.push([TLx('Car (Smart charging)'), nf(ck, 1) + ' kW', 'var(--en-car)']);
+        lanes.forEach(function (ln) { if (!ln.load || !h) return; var st = stateOf(ln, h); if (st) rows.push([ln.label + ' · ' + ln.sig.key, st.text || '1', st.key === 'on' ? 'var(--en-house)' : st.color]); });
+        return rows;
+      },
+      click: function (i) { var h = hourOf(at(i)); if (!h) return; emSel = emSel === h.ms ? null : h.ms; planChart(d); },
     });
     if (emSel !== null) {
-      var h = hrs.find(function (x) { return x.ms === emSel; });
-      if (h) document.getElementById('em-detail').innerHTML = hourDetail(d, h, rows, qOf(h)); else emSel = null;
+      var hs = hrs.find(function (x) { return x.ms === emSel; });
+      var rowsD = lanes.filter(function (ln) { return ln.load; }).map(function (ln) { return { load: ln.load, sig: ln.sig, label: ln.label + ' · ' + ln.sig.key }; });
+      if (hs) document.getElementById('em-detail').innerHTML = hourDetail(d, hs, rowsD, qOf(hs)); else emSel = null;
     }
   }
 
@@ -188,7 +294,7 @@
   function hourDetail(d, h, rows, qs) {
     var day = new Date(h.ms).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
     var tiles = '<div class="ls-tiles" style="margin-top:0.5rem;">' +
-      tile(TLx('Price'), h.estimated ? '<span style="opacity:0.6;">€ ' + nf(h.price, 3) + '</span>' : '€ ' + nf(h.price, 3), h.estimated ? esc(TLx('no price yet — median')) : qs.length > 1 ? qs.map(function (q) { return esc(hh(Date.parse(q.start)).slice(0, 5)) + ' € ' + nf(q.price, 3); }).join('<br>') : '') +
+      tile(TLx('Price'), h.estimated ? '<span style="opacity:0.6;">' + eur(h.price, 3) + '</span>' : eur(h.price, 3), h.estimated ? esc(TLx('no price yet — median')) : (h.price < 0 ? esc(TLx('negative: you are paid to use power')) + (qs.length > 1 ? '<br>' : '') : '') + (qs.length > 1 ? qs.map(function (q) { return esc(hh(Date.parse(q.start)).slice(0, 5)) + ' ' + eur(q.price, 3); }).join('<br>') : '')) +
       tile(TLx('Solar surplus (forecast)'), nf(h.surplusKwh, 1) + ' kWh') +
       tile(TLx('Car (Smart charging)'), nf(d.carKwh[h.ms] || 0, 1) + ' kWh') + '</div>';
     var list = '';

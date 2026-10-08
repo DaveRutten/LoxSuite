@@ -4292,5 +4292,12 @@
   "drop off and pick up (home in between)": "brengen en halen (ertussen thuis)",
   "Every appointment in this calendar called": "Elke afspraak in deze agenda met de naam",
   "Linked by name to the series": "Op naam gekoppeld aan de reeks",
-  "Only this one; what is not chosen here comes from the series.": "Alleen deze; wat je hier niet kiest, komt van de reeks."
+  "Only this one; what is not chosen here comes from the series.": "Alleen deze; wat je hier niet kiest, komt van de reeks.",
+  "{0}–{1} · {2} kW": "{0}–{1} · {2} kW",
+  "higher setpoint (pre-heat)": "hogere setpoint (voorverwarmen)",
+  "lower setpoint": "lagere setpoint",
+  "negative price": "negatieve prijs",
+  "negative: you are paid to use power": "negatief: je krijgt geld om stroom af te nemen",
+  "Tap for the details of that hour.": "Tik voor de details van dat uur.",
+  "would be 1 (release / now / start)": "zou 1 zijn (vrijgeven / nu / start)"
 }

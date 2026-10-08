@@ -109,7 +109,9 @@ router.get('/data.json', asyncHandler(async (req, res) => {
       runs: runs.filter((r) => r.kind === 'run').slice(0, 15),
     });
   }
-  res.json({ unknown: rt.unknown || [], dayTypes: rt.plan?.dayTypes || {}, loads: out, hours: rt.plan?.hours || [], carKwh: rt.plan?.carKwh || {}, quarters: rt.plan?.hours?.length ? await require('../prices').chartQuarters(new Date(rt.plan.hours[0].ms).toISOString(), new Date(rt.plan.hours[rt.plan.hours.length - 1].ms + 3600000).toISOString()).catch(() => null) : null, status: rt.status, live: rt.plan?.live || null, planAt: rt.plan?.at || null, cfg: await em.getConfig() });
+  // the car's planned charging at its real times (Smart charging), for the plan chart
+  const carSlots = (require('../planner').getRuntime().plan?.slots || []).map((c) => ({ start: c.start, end: c.end, kw: c.kw, kwh: c.kwh, pvKwh: c.pvKwh ?? null }));
+  res.json({ unknown: rt.unknown || [], dayTypes: rt.plan?.dayTypes || {}, loads: out, hours: rt.plan?.hours || [], carKwh: rt.plan?.carKwh || {}, carSlots, quarters: rt.plan?.hours?.length ? await require('../prices').chartQuarters(new Date(rt.plan.hours[0].ms).toISOString(), new Date(rt.plan.hours[rt.plan.hours.length - 1].ms + 3600000).toISOString()).catch(() => null) : null, status: rt.status, live: rt.plan?.live || null, planAt: rt.plan?.at || null, cfg: await em.getConfig() });
 }));
 
 // The Loxone signals of a consumer (state uuids): on/off, status (+ value labels and which values mean

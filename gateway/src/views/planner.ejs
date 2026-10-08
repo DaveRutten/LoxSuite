@@ -67,7 +67,13 @@
   var canEdit = <%- JSON.stringify(canEdit('charging')) %>;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
-  function eur(v, d) { return v == null ? '—' : '€\u00a0' + nf(v, d == null ? 2 : d); }
+  // a negative amount (a negative price: you are paid to use power) as −€ 0,05
+  function eur(v, d) {
+    if (v == null) return '—';
+    var dd = d == null ? 2 : d, n = Number(v);
+    if (Math.abs(n) < 0.5 * Math.pow(10, -dd)) n = 0;
+    return (n < 0 ? '−€\u00a0' : '€\u00a0') + nf(Math.abs(n), dd);
+  }
   function tm(s) { return s ? new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'; }
   function dtm(s) { if (!s) return '—'; var d = new Date(s); var today = new Date(); var day = d.toDateString() === today.toDateString() ? '' : d.toLocaleDateString([], { weekday: 'short' }) + ' '; return day + tm(s); }
   function post(url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); }
@@ -230,7 +236,7 @@
     var level = batteryAt(p.battery, b);
     var day = new Date(a).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
     var tiles = '<div class="ls-tiles" style="margin-top:0.5rem; grid-template-columns:repeat(auto-fill, minmax(min(132px, 100%), 1fr));">' +
-      tile(T('Price'), s.price != null ? eur(s.price, 3) + '<small style="font-size:0.6em; opacity:0.7;"> /kWh</small>' : '—', s.price == null ? esc(T('no price (yet)')) : qs.length > 1 ? qs.map(function (q) { return esc(tm(q.start)) + ' ' + eur(q.price, 3); }).join('<br>') : '') +
+      tile(T('Price'), s.price != null ? eur(s.price, 3) + '<small style="font-size:0.6em; opacity:0.7;"> /kWh</small>' : '—', s.price == null ? esc(T('no price (yet)')) : (s.price < 0 ? esc(T('negative: you are paid to use power')) + (qs.length > 1 ? '<br>' : '') : '') + (qs.length > 1 ? qs.map(function (q) { return esc(tm(q.start)) + ' ' + eur(q.price, 3); }).join('<br>') : '')) +
       tile(T('Planned'), kwh > 0.05 ? nf(kwh, 1) + ' kWh' : esc(T('nothing planned')), kwh > 0.05 ? esc(T('{0} kW', nf(kw, 1))) + (pv > 0.05 ? ' · ☀️ ' + nf(pv, 1) + ' kWh' : '') : '') +
       tile(T('Solar surplus (forecast)'), nf(s.pvKw || 0, 1) + ' kW', esc(T('this hour: solar {0} kWh, house {1} kWh', nf(s.pvKwh || 0, 1), nf(s.houseKwh || 0, 1))) +
         // what a kWh of own solar counts as in the plan (Settings → Smart charging: value of exported solar)
@@ -268,6 +274,11 @@
   function barPath(x, y, w, h) {
     var r = Math.max(0, Math.min(4, w / 2, h)), f = function (v) { return v.toFixed(1); };
     return 'M' + f(x) + ',' + f(y + h) + 'V' + f(y + r) + 'Q' + f(x) + ',' + f(y) + ' ' + f(x + r) + ',' + f(y) + 'H' + f(x + w - r) + 'Q' + f(x + w) + ',' + f(y) + ' ' + f(x + w) + ',' + f(y + r) + 'V' + f(y + h) + 'Z';
+  }
+  // A column hanging down from y (a negative value): square at the top, rounded at the bottom.
+  function barDownPath(x, y, w, h) {
+    var r = Math.max(0, Math.min(4, w / 2, h)), f = function (v) { return v.toFixed(1); };
+    return 'M' + f(x) + ',' + f(y) + 'V' + f(y + h - r) + 'Q' + f(x) + ',' + f(y + h) + ' ' + f(x + r) + ',' + f(y + h) + 'H' + f(x + w - r) + 'Q' + f(x + w) + ',' + f(y + h) + ' ' + f(x + w) + ',' + f(y + h - r) + 'V' + f(y) + 'Z';
   }
   // Planned kWh (and its solar part) inside [a, b).
   function plannedIn(p, a, b) {
@@ -320,17 +331,31 @@
     // a column in the middle of its interval: about two thirds of it (at most 48px), at least 2px of air
     var colOf = function (a, b) { var x = X(a), w = X(b) - x, cw = Math.max(0.6, Math.min(48, w - Math.min(2, w * 0.25), Math.max(w * 0.66, Math.min(22, w - 2)))); return { x: x + (w - cw) / 2, w: cw }; };
 
-    // ---- price: planned intervals in green, the rest gray, lighter where cheaper
+    // ---- price: planned intervals in the car's color, the rest gray, lighter where cheaper; a
+    // negative price (you are paid to use power) hangs below a zero line, in green
     var pp = P.price;
-    var maxP = Math.max(0.1, Math.max.apply(null, slots.map(function (s) { return s.price || 0; })));
-    svg += label(pp, '<tspan font-weight="600">' + esc(T('Price (all-in)')) + '</tspan>' + key('fill:var(--pl-car)', T('planned hours'))) + track(pp) + hair(pp.y + pp.h * 0.08) + hair(pp.y + pp.h * 0.54) +
-      tick(pp.y + pp.h * 0.08, '€' + nf(maxP, 2)) + tick(pp.y + pp.h * 0.54, '€' + nf(maxP / 2, 2));
+    var prices = slots.map(function (s) { return s.price; }).filter(function (v) { return v != null; });
+    var maxP = Math.max(0.1, Math.max.apply(null, prices.concat([0])));
+    var minP = Math.min(0, Math.min.apply(null, prices.concat([0])));
+    var PY = function (v) { return pp.y + pp.h - (v - minP) / (maxP - minP) * pp.h * 0.92; };
+    var y0 = PY(0);
+    var tickEur = function (v) { return (v < 0 ? '−€' : '€') + nf(Math.abs(v), 2); };
+    svg += label(pp, '<tspan font-weight="600">' + esc(T('Price (all-in)')) + '</tspan>' + key('fill:var(--pl-car)', T('planned hours')) + (minP < 0 ? key('fill:var(--en-export)', T('negative price')) : '')) + track(pp) + hair(PY(maxP)) +
+      tick(PY(maxP), tickEur(maxP)) +
+      (minP < 0
+        ? '<line x1="' + left + '" y1="' + f1(y0) + '" x2="' + (W - right) + '" y2="' + f1(y0) + '" stroke="currentColor" opacity="0.28"/>' + tick(y0, '€0') + (PY(minP) - y0 >= 11 ? hair(PY(minP)) + tick(PY(minP), tickEur(minP)) : '')
+        : hair(PY(maxP / 2)) + tick(PY(maxP / 2), tickEur(maxP / 2)));
     slots.forEach(function (s) {
       if (s.price == null) return;
       var a = Date.parse(s.start), b = Date.parse(s.end), c = colOf(a, b);
-      var h = Math.max(1.5, s.price / maxP * pp.h * 0.92);
       var planned = plannedIn(p, a, b).kwh > 0.01;
-      svg += '<path d="' + barPath(c.x, pp.y + pp.h - h, c.w, h) + '" style="fill:' + (planned ? 'var(--pl-car)' : 'var(--pl-price)') + ';" opacity="' + (planned ? 0.75 : (0.22 + 0.36 * s.price / maxP).toFixed(2)) + '"/>';
+      if (s.price < 0) {
+        var hn = Math.max(1.5, PY(s.price) - y0);
+        svg += '<path d="' + barDownPath(c.x, y0, c.w, hn) + '" style="fill:' + (planned ? 'var(--pl-car)' : 'var(--en-export)') + ';" opacity="' + (planned ? 0.75 : (0.45 + 0.4 * s.price / minP).toFixed(2)) + '"/>';
+        return;
+      }
+      var h = Math.max(1.5, y0 - PY(s.price));
+      svg += '<path d="' + barPath(c.x, y0 - h, c.w, h) + '" style="fill:' + (planned ? 'var(--pl-car)' : 'var(--pl-price)') + ';" opacity="' + (planned ? 0.75 : (0.22 + 0.36 * s.price / maxP).toFixed(2)) + '"/>';
     });
     // no price: hatched over the whole height of the panels, with what is going on
     var runs = [], run = null;

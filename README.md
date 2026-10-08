@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.51.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.52.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -714,7 +714,8 @@ charging page itself is the overview.
   hybrid intervals above the fuel break-even price (fuel price x l/100 km vs kWh/km) are skipped. Every planned
   interval shows its solar and grid part (e.g. *11.0 kWh (2.9 ☀️ + 8.1 ⚡)*), also in the chart.
 - **The chart**: four panels over one time axis, each with its own scale — **price** (the planned intervals in
-  green, cheaper = lighter), **charging** (kW, the solar part yellow), the **expected battery level** (%; up while
+  the car's blue, the rest gray, cheaper = lighter; a **negative price** — you are paid to use power — hangs below
+  a zero line, in green), **charging** (kW, the solar part yellow), the **expected battery level** (%; up while
   charging, down during the drives in the agenda or the usual drive of that day, with the level at the start,
   when it has to be ready and around each drive) and **solar surplus with the import from the grid** (kW). Soft
   fills, smooth lines with a light wash, a tick every hour, the days below, *now*, *ready by* and *expected home*
@@ -889,6 +890,12 @@ is the overview. It learns usage **patterns** (hot water every day around 07:00,
 morning) and plans ahead of them, works with the **real values** as well as the forecast (the current hour from
 the meters, the next hours corrected when the solar forecast is off; an hour planned on solar that isn't there
 waits), and shows per day what each load cost and what better timing would have saved.
+
+The **plan** is drawn like the other energy charts: lanes over one time axis, each with its label above it — the
+price per quarter (a negative price below a zero line, green), the solar surplus as a smooth line, the car's
+planned charging at its real times, and per consumer what it would do (a run of hours as one bar, a setpoint up
+or down in orange / blue with its value). Point at it for everything at that quarter; tap for the details of that
+hour. The consumers themselves are planned per hour.
 
 Each consumer can have several **signals from Loxone**, all optional next to its meter: **on/off** (the basis —
 when and how long it runs), a **status** (an enumerator such as *0 = Off, 1 = Washing, 2 = Spinning*, with the

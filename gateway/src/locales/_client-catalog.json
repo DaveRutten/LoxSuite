@@ -1351,6 +1351,13 @@
   ]
  },
  {
+  "key": "{0}–{1} · {2} kW",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "{0}–{1} {2} kWh{3}",
   "module": "charging",
   "where": [
@@ -6001,13 +6008,6 @@
   ]
  },
  {
-  "key": "Green = would be 1 (release / now / start). Orange = higher setpoint (pre-heat), blue = lower. Hover for the reason.",
-  "module": "energy_manager",
-  "where": [
-   "energy-manager (script)"
-  ]
- },
- {
   "key": "grid",
   "module": "energy",
   "where": [
@@ -6170,6 +6170,13 @@
   "module": "charging",
   "where": [
    "learned (script)"
+  ]
+ },
+ {
+  "key": "higher setpoint (pre-heat)",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
@@ -7414,6 +7421,13 @@
   ]
  },
  {
+  "key": "lower setpoint",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
+  ]
+ },
+ {
   "key": "Loxone",
   "module": "ocpp",
   "where": [
@@ -8475,6 +8489,22 @@
   ]
  },
  {
+  "key": "negative price",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)",
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "negative: you are paid to use power",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)",
+   "planner (script)"
+  ]
+ },
+ {
   "key": "network error",
   "module": "charging",
   "where": [
@@ -9040,13 +9070,6 @@
   ]
  },
  {
-  "key": "no price yet — planned with the median {0}",
-  "module": "energy_manager",
-  "where": [
-   "energy-manager (script)"
-  ]
- },
- {
   "key": "no price yet (planned with the median)",
   "module": "energy_manager",
   "where": [
@@ -9569,8 +9592,9 @@
  },
  {
   "key": "now",
-  "module": "charging",
+  "module": "energy_manager",
   "where": [
+   "energy-manager (script)",
    "planner (script)"
   ]
  },
@@ -10557,8 +10581,9 @@
  },
  {
   "key": "Price (all-in)",
-  "module": "charging",
+  "module": "energy_manager",
   "where": [
+   "energy-manager (script)",
    "planner (script)"
   ]
  },
@@ -12391,7 +12416,7 @@
   ]
  },
  {
-  "key": "Tap an hour for the details.",
+  "key": "Tap for the details of that hour.",
   "module": "energy_manager",
   "where": [
    "energy-manager (script)"
@@ -14390,6 +14415,13 @@
   "module": "core",
   "where": [
    "src/notifications.js"
+  ]
+ },
+ {
+  "key": "would be 1 (release / now / start)",
+  "module": "energy_manager",
+  "where": [
+   "energy-manager (script)"
   ]
  },
  {
