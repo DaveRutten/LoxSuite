@@ -75,9 +75,23 @@
     return '<line x1="' + f(x1) + '" y1="' + f(y) + '" x2="' + f(x2) + '" y2="' + f(y) + '" stroke="currentColor" opacity="' + (opacity == null ? 0.07 : opacity) + '"/>';
   }
 
+  // A legend key that looks like its mark: kind 'line' (a stripe, default), 'col' (a square: columns,
+  // bars), 'dash' (a dashed stripe), 'band' (a light block). HTML, for legends, tiles and the hover card.
+  function key(color, kind) {
+    var k = kind && kind !== 'line' ? ' ls-key-' + kind : '';
+    return '<i class="ls-key' + k + '" style="' + (kind === 'dash' ? 'border-top-color:' : 'background:') + color + ';"></i>';
+  }
+  function keyEl(color, kind) {
+    var i = document.createElement('i');
+    i.className = 'ls-key' + (kind && kind !== 'line' ? ' ls-key-' + kind : '');
+    if (kind === 'dash') i.style.borderTopColor = color; else i.style.background = color;
+    return i;
+  }
+
   // Point at a chart: a vertical crosshair snaps to the nearest position and a small card lists every
   // series there. host: the element around the <svg>; o: { W (viewBox width), top, bottom (viewBox y),
-  // n, x(i) (viewBox x of position i), title(i), rows(i) -> [[label, value, color?], …], click(i)? }.
+  // n, x(i) (viewBox x of position i), title(i), rows(i) -> [[label, value, color?, kind?], …] (kind as
+  // in key()), click(i)? }.
   function hover(host, o) {
     var svg = host && host.querySelector('svg');
     if (!svg || !o || !o.n) return;
@@ -104,8 +118,9 @@
         if (!rw) return;
         var div = document.createElement('div');
         var l = document.createElement('span');
-        if (rw[2]) { var k = document.createElement('i'); k.className = 'ls-tip-key'; k.style.background = rw[2]; l.appendChild(k); }
-        l.appendChild(document.createTextNode(rw[0]));
+        l.className = 'ls-tip-l';
+        if (rw[2]) l.appendChild(keyEl(rw[2], rw[3]));
+        var lt = document.createElement('span'); lt.textContent = rw[0]; l.appendChild(lt);
         var v = document.createElement('strong'); v.textContent = rw[1];
         div.appendChild(l); div.appendChild(v); tip.appendChild(div);
       });
@@ -119,5 +134,5 @@
     if (o.click) { svg.style.cursor = 'pointer'; svg.addEventListener('click', function (ev) { o.click(at(ev)); }); }
   }
 
-  window.LsChart = { smooth: smooth, area: area, between: between, line: line, wash: wash, col: col, hline: hline, hover: hover };
+  window.LsChart = { smooth: smooth, area: area, between: between, line: line, wash: wash, col: col, hline: hline, hover: hover, key: key, keyEl: keyEl };
 })();

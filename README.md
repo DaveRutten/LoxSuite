@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.52.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.52.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -719,7 +719,9 @@ charging page itself is the overview.
   charging, down during the drives in the agenda or the usual drive of that day, with the level at the start,
   when it has to be ready and around each drive) and **solar surplus with the import from the grid** (kW). Soft
   fills, smooth lines with a light wash, a tick every hour, the days below, *now*, *ready by* and *expected home*
-  over all panels. Point at an hour for a summary, **tap** it for the details: its price (per quarter), what is
+  over all panels. Every legend, the summary when you point and the details show a key shaped like the mark — a
+  stripe for a line (solar surplus yellow, import from the grid pink, the battery violet), a square for columns.
+  Point at an hour for a summary, **tap** it for the details: its price (per quarter), what is
   planned (kWh, kW, solar part), solar and house, import from the grid, what it costs and the battery after it.
 - **One chart style** in the whole energy part (Smart charging, Meters, energy manager, consumers, Learned, Driving
   & costs, charge log): smooth lines, a light wash, soft columns, hairline grid, point at a chart for the values,

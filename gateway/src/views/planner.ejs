@@ -56,7 +56,7 @@
   .pl-tip { position:absolute; z-index:5; pointer-events:none; min-width:150px; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:10px; background:var(--surface, #fff); box-shadow:0 6px 18px rgba(0,0,0,0.12); font-size:0.78rem; line-height:1.35; }
   .pl-tip > div { display:flex; justify-content:space-between; gap:0.8rem; }
   .pl-tip > div strong { order:2; font-variant-numeric:tabular-nums; }
-  .pl-tip > div span { opacity:0.7; }
+  .pl-tip .ls-tip-l > span { opacity:0.7; }
   .pl-tip .pl-tip-h { font-weight:600; margin-bottom:0.15rem; }
 </style>
 
@@ -77,8 +77,9 @@
   function tm(s) { return s ? new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'; }
   function dtm(s) { if (!s) return '—'; var d = new Date(s); var today = new Date(); var day = d.toDateString() === today.toDateString() ? '' : d.toLocaleDateString([], { weekday: 'short' }) + ' '; return day + tm(s); }
   function post(url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); }
-  function tile(label, value, sub, color) {
-    return '<div class="ls-tile"><div class="ls-tile-label">' + esc(label) + '</div>' +
+  // keyHtml: a legend key in front of the label (LsChart.key), when the tile stands for a series in the chart
+  function tile(label, value, sub, color, keyHtml) {
+    return '<div class="ls-tile"><div class="ls-tile-label">' + (keyHtml || '') + esc(label) + '</div>' +
       '<div class="ls-tile-value"' + (color ? ' style="color:' + color + ';"' : '') + '>' + value + '</div>' + (sub ? '<div class="ls-tile-sub">' + sub + '</div>' : '') + '</div>';
   }
   // Adjacent intervals with the same source shown as one block.
@@ -235,15 +236,17 @@
     var qs = (p.quarterPrices || []).filter(function (q) { return Date.parse(q.start) >= a && Date.parse(q.end) <= b; });
     var level = batteryAt(p.battery, b);
     var day = new Date(a).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+    // (the --en-* colors: the details sit outside #pl-chart, where the --pl-* names are defined)
+    var K = window.LsChart.key, plannedHere = kwh > 0.05;
     var tiles = '<div class="ls-tiles" style="margin-top:0.5rem; grid-template-columns:repeat(auto-fill, minmax(min(132px, 100%), 1fr));">' +
-      tile(T('Price'), s.price != null ? eur(s.price, 3) + '<small style="font-size:0.6em; opacity:0.7;"> /kWh</small>' : '—', s.price == null ? esc(T('no price (yet)')) : (s.price < 0 ? esc(T('negative: you are paid to use power')) + (qs.length > 1 ? '<br>' : '') : '') + (qs.length > 1 ? qs.map(function (q) { return esc(tm(q.start)) + ' ' + eur(q.price, 3); }).join('<br>') : '')) +
-      tile(T('Planned'), kwh > 0.05 ? nf(kwh, 1) + ' kWh' : esc(T('nothing planned')), kwh > 0.05 ? esc(T('{0} kW', nf(kw, 1))) + (pv > 0.05 ? ' · ☀️ ' + nf(pv, 1) + ' kWh' : '') : '') +
+      tile(T('Price'), s.price != null ? eur(s.price, 3) + '<small style="font-size:0.6em; opacity:0.7;"> /kWh</small>' : '—', s.price == null ? esc(T('no price (yet)')) : (s.price < 0 ? esc(T('negative: you are paid to use power')) + (qs.length > 1 ? '<br>' : '') : '') + (qs.length > 1 ? qs.map(function (q) { return esc(tm(q.start)) + ' ' + eur(q.price, 3); }).join('<br>') : ''), undefined, K(s.price != null && s.price < 0 ? 'var(--en-export)' : plannedHere ? 'var(--en-car)' : 'var(--en-price)', 'col')) +
+      tile(T('Planned'), kwh > 0.05 ? nf(kwh, 1) + ' kWh' : esc(T('nothing planned')), kwh > 0.05 ? esc(T('{0} kW', nf(kw, 1))) + (pv > 0.05 ? ' · ☀️ ' + nf(pv, 1) + ' kWh' : '') : '', undefined, K('var(--en-car)', 'col')) +
       tile(T('Solar surplus (forecast)'), nf(s.pvKw || 0, 1) + ' kW', esc(T('this hour: solar {0} kWh, house {1} kWh', nf(s.pvKwh || 0, 1), nf(s.houseKwh || 0, 1))) +
         // what a kWh of own solar counts as in the plan (Settings → Smart charging: value of exported solar)
-        (s.pvKw > 0.05 && s.solarValue != null ? '<br>' + esc(T(s.solarRule === 'fixed' ? 'own solar counts as {0} per kWh (feed-in tariff)' : s.solarRule === 'market' ? 'own solar counts as {0} per kWh (market price)' : 'own solar counts as {0} per kWh (net metering)', eur(s.solarValue, 3))) : '')) +
-      tile(T('Import from the grid (expected)'), gridKw != null ? nf(gridKw, 1) + ' kW' : '—') +
+        (s.pvKw > 0.05 && s.solarValue != null ? '<br>' + esc(T(s.solarRule === 'fixed' ? 'own solar counts as {0} per kWh (feed-in tariff)' : s.solarRule === 'market' ? 'own solar counts as {0} per kWh (market price)' : 'own solar counts as {0} per kWh (net metering)', eur(s.solarValue, 3))) : ''), undefined, K('var(--en-solar)')) +
+      tile(T('Import from the grid (expected)'), gridKw != null ? nf(gridKw, 1) + ' kW' : '—', undefined, undefined, K('var(--en-import)')) +
       tile(T('Costs'), kwh > 0.05 && s.price != null ? eur(grid * s.price) : '—', kwh > 0.05 ? esc(T('{0} kWh from the grid', nf(grid, 1))) : '') +
-      tile(T('Battery level'), level != null ? (p.battery.estimated ? '≈ ' : '') + nf(level, 0) + '%' : '—', level != null ? esc(T('at {0}', tm(s.end))) : '') +
+      tile(T('Battery level'), level != null ? (p.battery.estimated ? '≈ ' : '') + nf(level, 0) + '%' : '—', level != null ? esc(T('at {0}', tm(s.end))) : '', undefined, K('var(--en-battery)', p.battery && p.battery.estimated ? 'dash' : 'line')) +
       '</div>';
     return '<div class="card" style="margin:0.6rem 0 0; padding:0.7rem 0.9rem;"><div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;"><strong>' + esc(day + ' ' + tm(s.start) + '–' + tm(s.end)) + '</strong><a href="#" class="hint" id="pl-detail-close" style="margin:0;">' + esc(T('Close')) + '</a></div>' + tiles + '</div>';
   }
@@ -391,7 +394,7 @@
     // ---- battery (%): smooth, with a light wash below; the level at the start, when ready, around drives, at the end
     var bpn = P.battery, bat = p.battery;
     var BY = function (pct) { return bpn.y + bpn.h - Math.max(0, Math.min(100, pct)) / 100 * bpn.h; };
-    svg += label(bpn, '<tspan font-weight="600">' + esc(T('Battery (expected)')) + '</tspan>' + (bat && bat.estimated ? '<tspan dx="8" opacity="0.8">' + esc(T('estimated level')) + '</tspan>' : '')) + track(bpn) + hair(BY(100)) + hair(BY(50)) + tick(BY(100), '100%') + tick(BY(50), '50%');
+    svg += label(bpn, '<tspan font-weight="600">' + esc(T('Battery (expected)')) + '</tspan>' + lineKey('fill:var(--pl-battery)', T(bat && bat.estimated ? 'estimated level' : 'Battery level'))) + track(bpn) + hair(BY(100)) + hair(BY(50)) + tick(BY(100), '100%') + tick(BY(50), '50%');
     if (bat && bat.points && bat.points.length > 1) {
       if (bat.reservePct > 0) svg += '<line x1="' + left + '" y1="' + f1(BY(bat.reservePct)) + '" x2="' + (W - right) + '" y2="' + f1(BY(bat.reservePct)) + '" style="stroke:var(--pl-battery);" stroke-width="1" stroke-dasharray="1 3" opacity="0.7"/>';
       var bp = [];
@@ -430,7 +433,7 @@
     var hGrid = hrs.map(gridOf);
     var maxKw = Math.max(1, Math.max.apply(null, hrs.map(function (s) { return s.pvKw || 0; }).concat(hGrid.map(function (v) { return v || 0; }))));
     var KY = function (kw) { return wp.y + wp.h - Math.max(0, kw) / maxKw * wp.h * 0.9; };
-    svg += label(wp, (W < 480 ? '<tspan font-weight="600">kW</tspan>' : '<tspan font-weight="600">' + esc(T('Solar and grid (kW)')) + '</tspan>') + key('fill:var(--pl-solar)', T('solar surplus')) + lineKey('fill:var(--pl-import)', T('import from the grid'))) + track(wp) + hair(KY(maxKw)) + tick(KY(maxKw), nf(maxKw, 1));
+    svg += label(wp, (W < 480 ? '<tspan font-weight="600">kW</tspan>' : '<tspan font-weight="600">' + esc(T('Solar and grid (kW)')) + '</tspan>') + lineKey('fill:var(--pl-solar)', T('solar surplus')) + lineKey('fill:var(--pl-import)', T('import from the grid'))) + track(wp) + hair(KY(maxKw)) + tick(KY(maxKw), nf(maxKw, 1));
     var sp = hrs.map(function (s) { return [X(mid(s)), KY(s.pvKw || 0)]; });
     if (sp.length > 1) {
       var sl = smoothPath(sp);
@@ -506,16 +509,23 @@
       var i = indexAt(ev), s = slots[i], a = Date.parse(s.start), b = Date.parse(s.end), cx = X((a + b) / 2);
       xh.setAttribute('transform', 'translate(' + f1(cx) + ',0)'); xh.setAttribute('opacity', '0.45');
       var pl = plannedIn(p, a, b), lv = batteryAt(p.battery, b), rows = [];
+      // each row with a key that looks like its mark in the chart (a square for columns, a stripe for a line)
       rows.push([dtm(s.start) + '–' + tm(s.end), '']);
-      rows.push([T('Price'), s.price != null ? eur(s.price, 3) : T('no price (yet)')]);
-      if (pl.kwh > 0.05) rows.push([T('Planned'), nf(pl.kwh, 1) + ' kWh']);
-      if (lv != null) rows.push([T('Battery level'), nf(lv, 0) + '%']);
-      rows.push([T('solar surplus'), nf(s.pvKw || 0, 1) + ' kW']);
-      if (gridKw[i] != null) rows.push([T('import from the grid'), nf(gridKw[i], 1) + ' kW']);
+      rows.push([T('Price'), s.price != null ? eur(s.price, 3) : T('no price (yet)'), s.price != null && s.price < 0 ? 'var(--en-export)' : pl.kwh > 0.01 ? 'var(--pl-car)' : 'var(--pl-price)', 'col']);
+      if (pl.kwh > 0.05) rows.push([T('Planned'), nf(pl.kwh, 1) + ' kWh', 'var(--pl-car)', 'col']);
+      if (lv != null) rows.push([T('Battery level'), nf(lv, 0) + '%', 'var(--pl-battery)', p.battery && p.battery.estimated ? 'dash' : 'line']);
+      rows.push([T('solar surplus'), nf(s.pvKw || 0, 1) + ' kW', 'var(--pl-solar)', 'line']);
+      if (gridKw[i] != null) rows.push([T('import from the grid'), nf(gridKw[i], 1) + ' kW', 'var(--pl-import)', 'line']);
       tip.textContent = '';
       rows.forEach(function (rw, k) {
         var div = document.createElement('div');
-        if (!k) { div.className = 'pl-tip-h'; div.textContent = rw[0]; } else { var v = document.createElement('strong'); v.textContent = rw[1]; var l = document.createElement('span'); l.textContent = rw[0]; div.appendChild(v); div.appendChild(l); }
+        if (!k) { div.className = 'pl-tip-h'; div.textContent = rw[0]; } else {
+          var v = document.createElement('strong'); v.textContent = rw[1];
+          var l = document.createElement('span'); l.className = 'ls-tip-l';
+          if (rw[2]) l.appendChild(window.LsChart.keyEl(rw[2], rw[3]));
+          var lt = document.createElement('span'); lt.textContent = rw[0]; l.appendChild(lt);
+          div.appendChild(v); div.appendChild(l);
+        }
         tip.appendChild(div);
       });
       var r = svgEl.getBoundingClientRect(), px = ev.clientX - r.left;

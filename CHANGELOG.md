@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.52.1-alpha.1] - 2026-10-08
+
+### Changed
+- **Keys in every legend** (asked: "in the details overview it would help to see that import from the grid is the
+  pink stripe and solar surplus the yellow one — for all legends"): a key shaped like the mark it stands for — a
+  stripe for a line, a square for columns, a dashed stripe for a dashed line, a light block for a band
+  (`LsChart.key`, `.ls-key` in style.css).
+  - **Smart charging**: the summary when you point (price, planned, battery level, solar surplus, import from the
+    grid), the details of a tapped hour, and the panel legends (solar surplus and the battery as a line, not a
+    square).
+  - **Energy manager**: the summary when you point (columns and bars as squares, solar as a stripe) and the details
+    of an hour.
+  - **Meters**: solar and house as stripes, the Wallbox, import and export as squares.
+  - **Learned**: the solar forecast (expected stripe, low – high as a light block, now with a legend under the
+    chart), the last days (measured yield square, the forecast stripe) and the house profile (workday stripe,
+    weekend dashed).
+
 ## [0.52.0-alpha.1] - 2026-10-08
 
 ### Changed

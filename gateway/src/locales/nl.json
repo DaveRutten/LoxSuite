@@ -4299,5 +4299,9 @@
   "negative price": "negatieve prijs",
   "negative: you are paid to use power": "negatief: je krijgt geld om stroom af te nemen",
   "Tap for the details of that hour.": "Tik voor de details van dat uur.",
-  "would be 1 (release / now / start)": "zou 1 zijn (vrijgeven / nu / start)"
+  "would be 1 (release / now / start)": "zou 1 zijn (vrijgeven / nu / start)",
+  "(kWh per hour, median of the last 4 weeks)": "(kWh per uur, mediaan van de laatste 4 weken)",
+  "Last {0} days:": "Laatste {0} dagen:",
+  "measured yield": "gemeten opbrengst",
+  "the forecast": "de verwachting"
 }

@@ -112,8 +112,9 @@
     var col = { away: '#e67e22', holiday: '#9b59b6', home: '#16a085', weekend: '#7f8c8d', workday: '#4a7bd0' };
     el.innerHTML = keys.map(function (k) { var t = map[k].type, p = k.split('-'); return '<span class="chip" style="color:' + col[t] + ';">' + esc(new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { weekday: 'short' })) + ' · ' + esc(TLx(t)) + '</span>'; }).join('') + '<a href="/settings/energy#day-types" class="hint" style="font-size:0.75rem;">' + esc(TLx('days away & holidays')) + '</a>';
   }
-  function tile(label, value, sub, color) {
-    return '<div class="ls-tile"><div class="ls-tile-label">' + esc(label) + '</div><div class="ls-tile-value"' + (color ? ' style="color:' + color + ';"' : '') + '>' + value + '</div>' + (sub ? '<div class="ls-tile-sub">' + sub + '</div>' : '') + '</div>';
+  // keyHtml: a legend key in front of the label (LsChart.key), when the tile stands for a series in the chart
+  function tile(label, value, sub, color, keyHtml) {
+    return '<div class="ls-tile"><div class="ls-tile-label">' + (keyHtml || '') + esc(label) + '</div><div class="ls-tile-value"' + (color ? ' style="color:' + color + ';"' : '') + '>' + value + '</div>' + (sub ? '<div class="ls-tile-sub">' + sub + '</div>' : '') + '</div>';
   }
   function sum(list, k) { return list.reduce(function (a, x) { return a + (Number(x[k]) || 0); }, 0); }
 
@@ -274,11 +275,11 @@
       title: function (i) { var a = at(i); return new Date(a).toLocaleDateString([], { weekday: 'short' }) + ' ' + hh(a).slice(0, 5) + '–' + hh(a + Q).slice(0, 5); },
       rows: function (i) {
         var a = at(i), h = hourOf(a), pr = priceAt(a), rows = [];
-        rows.push([TLx('Price'), pr.v == null ? '—' : (pr.est ? '≈ ' : '') + eur(pr.v, 3), pr.v != null && pr.v < 0 ? 'var(--en-export)' : 'var(--en-price)']);
-        if (h) rows.push([TLx('Solar surplus (forecast)'), nf(h.surplusKwh || 0, 1) + ' kW', 'var(--en-solar)']);
+        rows.push([TLx('Price'), pr.v == null ? '—' : (pr.est ? '≈ ' : '') + eur(pr.v, 3), pr.v != null && pr.v < 0 ? 'var(--en-export)' : 'var(--en-price)', 'col']);
+        if (h) rows.push([TLx('Solar surplus (forecast)'), nf(h.surplusKwh || 0, 1) + ' kW', 'var(--en-solar)', 'line']);
         var ck = carAt(a);
-        if (ck > 0.05) rows.push([TLx('Car (Smart charging)'), nf(ck, 1) + ' kW', 'var(--en-car)']);
-        lanes.forEach(function (ln) { if (!ln.load || !h) return; var st = stateOf(ln, h); if (st) rows.push([ln.label + ' · ' + ln.sig.key, st.text || '1', st.key === 'on' ? 'var(--en-house)' : st.color]); });
+        if (ck > 0.05) rows.push([TLx('Car (Smart charging)'), nf(ck, 1) + ' kW', 'var(--en-car)', 'col']);
+        lanes.forEach(function (ln) { if (!ln.load || !h) return; var st = stateOf(ln, h); if (st) rows.push([ln.label + ' · ' + ln.sig.key, st.text || '1', st.key === 'on' ? 'var(--en-house)' : st.color, 'col']); });
         return rows;
       },
       click: function (i) { var h = hourOf(at(i)); if (!h) return; emSel = emSel === h.ms ? null : h.ms; planChart(d); },
@@ -294,9 +295,9 @@
   function hourDetail(d, h, rows, qs) {
     var day = new Date(h.ms).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
     var tiles = '<div class="ls-tiles" style="margin-top:0.5rem;">' +
-      tile(TLx('Price'), h.estimated ? '<span style="opacity:0.6;">' + eur(h.price, 3) + '</span>' : eur(h.price, 3), h.estimated ? esc(TLx('no price yet — median')) : (h.price < 0 ? esc(TLx('negative: you are paid to use power')) + (qs.length > 1 ? '<br>' : '') : '') + (qs.length > 1 ? qs.map(function (q) { return esc(hh(Date.parse(q.start)).slice(0, 5)) + ' ' + eur(q.price, 3); }).join('<br>') : '')) +
-      tile(TLx('Solar surplus (forecast)'), nf(h.surplusKwh, 1) + ' kWh') +
-      tile(TLx('Car (Smart charging)'), nf(d.carKwh[h.ms] || 0, 1) + ' kWh') + '</div>';
+      tile(TLx('Price'), h.estimated ? '<span style="opacity:0.6;">' + eur(h.price, 3) + '</span>' : eur(h.price, 3), h.estimated ? esc(TLx('no price yet — median')) : (h.price < 0 ? esc(TLx('negative: you are paid to use power')) + (qs.length > 1 ? '<br>' : '') : '') + (qs.length > 1 ? qs.map(function (q) { return esc(hh(Date.parse(q.start)).slice(0, 5)) + ' ' + eur(q.price, 3); }).join('<br>') : ''), undefined, window.LsChart.key(!h.estimated && h.price < 0 ? 'var(--en-export)' : 'var(--en-price)', 'col')) +
+      tile(TLx('Solar surplus (forecast)'), nf(h.surplusKwh, 1) + ' kWh', '', undefined, window.LsChart.key('var(--en-solar)')) +
+      tile(TLx('Car (Smart charging)'), nf(d.carKwh[h.ms] || 0, 1) + ' kWh', '', undefined, window.LsChart.key('var(--en-car)', 'col')) + '</div>';
     var list = '';
     rows.forEach(function (r) {
       if (!r.load) return;

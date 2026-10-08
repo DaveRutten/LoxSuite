@@ -185,11 +185,12 @@
       rows: function (i) {
         var kwh = function (v) { return v == null ? '—' : nf(v, 2) + ' kWh'; };
         return [
-          s.series.pv ? [TL(LABELS.pv), kwh(s.series.pv[i]), COLORS.pv] : null,
-          s.series.house ? [TL(LABELS.house), kwh(s.series.house[i]), COLORS.house] : null,
-          s.series.wallbox ? [TL(LABELS.wallbox), kwh(s.series.wallbox[i]), COLORS.wallbox] : null,
-          [TL('Import from the grid'), kwh(imp[i]), IMPORT_COLOR],
-          [TL('Export to the grid'), kwh(ex[i]), EXPORT_COLOR],
+          // keys shaped like the marks: solar and house are lines, the rest columns
+          s.series.pv ? [TL(LABELS.pv), kwh(s.series.pv[i]), COLORS.pv, 'line'] : null,
+          s.series.house ? [TL(LABELS.house), kwh(s.series.house[i]), COLORS.house, 'line'] : null,
+          s.series.wallbox ? [TL(LABELS.wallbox), kwh(s.series.wallbox[i]), COLORS.wallbox, 'col'] : null,
+          [TL('Import from the grid'), kwh(imp[i]), IMPORT_COLOR, 'col'],
+          [TL('Export to the grid'), kwh(ex[i]), EXPORT_COLOR, 'col'],
         ];
       },
     });

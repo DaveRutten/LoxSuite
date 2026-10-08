@@ -696,6 +696,13 @@
   ]
  },
  {
+  "key": "(kWh per hour, median of the last 4 weeks)",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "(last 8 weeks, {0} days measured{1})",
   "module": "energy_manager",
   "where": [
@@ -6806,7 +6813,7 @@
   ]
  },
  {
-  "key": "Last {0} days: yield (bar) and forecast (line){1}",
+  "key": "Last {0} days:",
   "module": "charging",
   "where": [
    "learned (script)"
@@ -7728,6 +7735,13 @@
  },
  {
   "key": "measured from the next homecomings",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
+  "key": "measured yield",
   "module": "charging",
   "where": [
    "learned (script)"
@@ -12715,6 +12729,13 @@
   ]
  },
  {
+  "key": "the forecast",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "The Home Assistant data source of vehicle \"Skoda\" is failing: no update for 3 h (limit 2 h).",
   "module": "core",
   "where": [
@@ -14293,13 +14314,6 @@
   "module": "charging",
   "where": [
    "agenda"
-  ]
- },
- {
-  "key": "weekend (kWh per hour, median of the last 4 weeks)",
-  "module": "charging",
-  "where": [
-   "learned (script)"
   ]
  },
  {

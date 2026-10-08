@@ -4969,3 +4969,11 @@ tr.ls-extra { display: none; }
 .ls-tip > div > strong { font-variant-numeric: tabular-nums; }
 .ls-tip .ls-tip-h { display: block; font-weight: 600; margin-bottom: 0.15rem; }
 .ls-tip .ls-tip-key { display: inline-block; width: 0.7em; height: 3px; border-radius: 2px; margin-right: 0.35em; vertical-align: 0.2em; }
+.ls-tip > div > span.ls-tip-l { opacity: 1; }
+.ls-tip-l > span { opacity: 0.75; }
+/* A legend key that looks like the mark it stands for (LsChart.key): a stripe for a line (default), a
+   square for columns/bars, a dashed stripe for a dashed line, a light block for a band. */
+.ls-key { display: inline-block; flex: none; width: 0.9em; height: 3px; border-radius: 2px; margin-right: 0.4em; vertical-align: 0.22em; background: currentColor; }
+.ls-key.ls-key-col { width: 0.7em; height: 0.7em; border-radius: 2px; vertical-align: -0.05em; }
+.ls-key.ls-key-band { width: 0.9em; height: 0.7em; border-radius: 2px; vertical-align: -0.05em; opacity: 0.35; }
+.ls-key.ls-key-dash { width: 1.25em; height: 0; background: none; border-top: 2px dashed currentColor; vertical-align: 0.25em; }

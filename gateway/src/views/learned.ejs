@@ -137,7 +137,9 @@
       var svg = '<svg viewBox="0 0 ' + W + ' ' + (H + 28) + '" width="100%" style="display:block;">' + C.hline(30, W - 10, Y(max / 1.15)) + C.hline(30, W - 10, 8 + H, 0.18) +
         '<path d="' + C.between(up, lo) + '" style="fill:var(--en-solar);" opacity="0.1"/>' + C.wash(mid, 8 + H, 'var(--en-solar)', 0.14) + C.line(mid, 'var(--en-solar)');
       hours.forEach(function (h, i) { if (i % 3 === 0) svg += '<text x="' + X(i) + '" y="' + (H + 24) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + new Date(h.hour).toLocaleTimeString([], { hour: '2-digit' }) + '</text>'; });
-      html += '<div class="ln-solar-chart">' + svg + '</svg></div>';
+      var TLk = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
+      html += '<div class="ln-solar-chart">' + svg + '</svg></div>' +
+        '<div class="hint" style="margin:0.1rem 0 0;">' + C.key('var(--en-solar)') + '<span>' + esc(TLk('expected')) + '</span> &nbsp; ' + C.key('var(--en-solar)', 'band') + '<span>' + esc(TLk('low – high')) + '</span></div>';
     }
     var f = s.status && s.status.factors;
     html += '<p class="hint" style="margin:0.2rem 0 0;">Weather forecast (irradiance on your panels, Open-Meteo) &times; your ' + nf(s.config.kwp, 1) + ' kWp, corrected per hour with what the PV meter really produced' + (f ? ' (overall factor ' + nf(f.overall, 2) + ', ' + f.samples + ' hours compared)' : '') + '.</p>';
@@ -153,7 +155,8 @@
       });
       svg2 += '</svg>';
       var band2 = s.tomorrow.band;
-      html += '<div class="hint" style="margin:0.6rem 0 0.2rem; font-size:0.8rem;">Last ' + hist.length + ' days: yield (bar) and forecast (line)' + (band2.mape != null ? ' — avg. deviation <strong>±' + Math.round(band2.mape * 100) + '%</strong>' : '') + '</div>' + svg2;
+      var K2 = window.LsChart.key;
+      html += '<div class="hint" style="margin:0.6rem 0 0.2rem; font-size:0.8rem;"><span>Last ' + hist.length + ' days:</span> ' + K2('var(--en-solar)', 'col') + '<span>measured yield</span> &nbsp;' + K2('currentColor') + '<span>the forecast</span>' + (band2.mape != null ? ' <span>— avg. deviation</span> <strong>±' + Math.round(band2.mape * 100) + '%</strong>' : '') + '</div>' + svg2;
     } else {
       html += '<p class="hint" style="margin:0.5rem 0 0;">The comparison with the PV meter starts as soon as forecasts and measured hours overlap (a day or two).</p>';
     }
@@ -164,7 +167,7 @@
       window.LsChart.hover(sc, {
         W: W, top: 8, bottom: 8 + H, n: hours.length, x: X,
         title: function (i) { return new Date(hours[i].hour).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); },
-        rows: function (i) { var v = hours[i].corrected_kwh || 0; return [[TLs('expected'), nf(v, 2) + ' kWh', 'var(--en-solar)'], [TLs('low – high'), nf(v * band.low, 2) + ' – ' + nf(v * band.high, 2) + ' kWh']]; },
+        rows: function (i) { var v = hours[i].corrected_kwh || 0; return [[TLs('expected'), nf(v, 2) + ' kWh', 'var(--en-solar)', 'line'], [TLs('low – high'), nf(v * band.low, 2) + ' – ' + nf(v * band.high, 2) + ' kWh', 'var(--en-solar)', 'band']]; },
       });
     }
   }
@@ -214,7 +217,7 @@
     var hw = d.houseWeather, TLw = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
     if (hw && hw.usable) chg += '<p class="hint" style="margin:0 0 0.4rem;">' + esc(TLw('Weather: +{0} kWh per degree colder (fits {1}%)').replace('{0}', nf(hw.b, 2)).replace('{1}', Math.round(hw.r2 * 100))) + ' — ' + esc(TLw('the plan expects more on cold days.')) + '</p>';
     var html = chg + '<div style="display:flex; gap:1.2rem; align-items:baseline; flex-wrap:wrap;"><div style="font-size:1.6rem; font-weight:700;">' + nf(h.perDay, 1) + ' <span style="font-size:0.85rem; font-weight:500;">kWh/day</span></div><div class="hint" style="margin:0;">base load ±' + nf(h.baseLoadKw, 2) + ' kW · without the Wallbox · ' + h.days + ' full days</div></div><div class="ln-house-chart">' + svg + '</div>' +
-      '<div class="hint" style="margin:0.1rem 0 0;"><span style="color:var(--en-house); font-weight:700;">━</span> workday &nbsp; <span style="color:var(--en-house); font-weight:700; opacity:0.75;">┅</span> weekend &nbsp;(kWh per hour, median of the last 4 weeks)</div>' +
+      '<div class="hint" style="margin:0.1rem 0 0;">' + window.LsChart.key('var(--en-house)') + '<span>workday</span> &nbsp; ' + window.LsChart.key('var(--en-house)', 'dash') + '<span>weekend</span> &nbsp;<span>(kWh per hour, median of the last 4 weeks)</span></div>' +
       '<p class="hint" style="margin:0.5rem 0 0;">Calculated per hour as grid import &minus; export + solar &minus; Wallbox from the meters.</p>';
     var s = d.surplus;
     if (d.solar.config.kwp) html += '<div style="margin-top:0.9rem; padding:0.7rem 0.9rem; border-radius:10px; border:1px solid var(--border);"><strong>Expected solar surplus tomorrow:</strong> ±' + nf(s.kwh, 1) + ' kWh' + (s.from ? ' between ' + new Date(s.from).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' and ' + new Date(s.to).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '') + '<div class="hint" style="margin:0.2rem 0 0;">= solar ' + nf(d.solar.tomorrow.total_kwh, 1) + ' &minus; house during the day ±' + nf(s.houseDay, 1) + ' kWh. The smart plan uses this first, the rest in the cheapest hours.</div></div>';
@@ -223,7 +226,7 @@
     if (hc) window.LsChart.hover(hc, {
       W: W, top: 8, bottom: 8 + H, n: 24, x: X,
       title: function (i) { return String(i).padStart(2, '0') + ':00'; },
-      rows: function (i) { return [[TLw('on a workday'), h.workday[i] == null ? '—' : nf(h.workday[i], 2) + ' kWh', 'var(--en-house)'], [TLw('in the weekend'), h.weekend[i] == null ? '—' : nf(h.weekend[i], 2) + ' kWh']]; },
+      rows: function (i) { return [[TLw('on a workday'), h.workday[i] == null ? '—' : nf(h.workday[i], 2) + ' kWh', 'var(--en-house)', 'line'], [TLw('in the weekend'), h.weekend[i] == null ? '—' : nf(h.weekend[i], 2) + ' kWh', 'var(--en-house)', 'dash']]; },
     });
   }
 
