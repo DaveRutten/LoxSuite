@@ -61,10 +61,17 @@ function confidence(n) { return n >= 12 ? 'high' : n >= 6 ? 'medium' : n > 0 ? '
 
 // ------------------------------------------------------------------ departures
 
+// The local date of an instant, 'YYYY-MM-DD'.
+const dateKeyOf = (ms, tz) => { const p = localParts(ms, tz); return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`; };
+
 // sessions: [{connect (ms), disconnect (ms|null), kwh}]
 // certainty: 'safe' = ready before 9 in 10 departures, 'normal' = 3 in 4, 'relaxed' = half of them.
+// overrides: per weekday your own ready time ('HH:MM') or 'none' (no usual departure that weekday).
+// days: your corrections per date { 'YYYY-MM-DD': { ready: 'HH:MM' | 'none' } } — a corrected day that
+// has passed and on which the car didn't leave in the morning counts as a departure at that time (15
+// minutes after "ready"), so the learned pattern follows what you tell it; real departures go first.
 const CERTAINTY_Q = { safe: 0.1, normal: 0.25, relaxed: 0.5 };
-function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {}, certainty = 'normal', halfLifeDays = 45 } = {}) {
+function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {}, days = {}, certainty = 'normal', halfLifeDays = 45 } = {}) {
   const done = sessions.filter((s) => s.disconnect);
   const firstMs = sessions.length ? Math.min(...sessions.map((s) => s.connect)) : nowMs;
   // How many of each weekday the observation window holds (denominator for "usually").
@@ -87,6 +94,21 @@ function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {}, cert
     if (min >= 12 * 60) out[p.weekday].arrivals.push(min);
     out[p.weekday].kwh.push(s.kwh || 0);
   }
+  // your corrections of days that have passed (see above)
+  const today = dateKeyOf(nowMs, tz);
+  for (const [date, c] of Object.entries(days || {})) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date >= today || !c || !/^\d{1,2}:\d{2}$/.test(String(c.ready || ''))) continue;
+    const [y, m, dd] = date.split('-').map(Number);
+    const noon = localMidnight(Date.UTC(y, m - 1, dd, 12), tz) + 12 * 3600000;
+    const wd = localParts(noon, tz).weekday;
+    const d = out[wd];
+    const dayKey = `${y}-${m}-${dd}`;
+    if (d.morningDays.has(dayKey)) continue;
+    const min = toMin(c.ready) + 15;
+    if (min < MORNING[0] || min > MORNING[1]) continue;
+    d.morningDays.add(dayKey); d.morning.push(min); d.morningW.push(recencyWeight(noon, nowMs, halfLifeDays));
+    d.corrected = (d.corrected || 0) + 1;
+  }
   return out.map((d) => {
     const n = d.morning.length;
     const share = weekdayCount[d.weekday] ? n / weekdayCount[d.weekday] : 0;
@@ -98,8 +120,8 @@ function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {}, cert
     const readyMin = pick === null ? null : Math.floor((pick - 15) / 5) * 5;
     const override = overrides[d.key] || null;
     return {
-      key: d.key, weekday: d.weekday, n, share: Math.round(share * 100) / 100, usual,
-      departure: fmtMin(med), early: fmtMin(p25), earliest: fmtMin(p10), certainty, ready: override || fmtMin(readyMin), learnedReady: fmtMin(readyMin), override,
+      key: d.key, weekday: d.weekday, n, share: Math.round(share * 100) / 100, usual, corrected: d.corrected || 0,
+      departure: fmtMin(med), early: fmtMin(p25), earliest: fmtMin(p10), certainty, ready: override === 'none' ? null : override || fmtMin(readyMin), learnedReady: fmtMin(readyMin), override,
       arrival: fmtMin(median(d.arrivals)), arrivalN: d.arrivals.length, kwh_median: round1(median(d.kwh.filter((k) => k > 0.3))),
       confidence: confidence(n), allUnplugs: d.all.sort((a, b) => a - b), morningUnplugs: d.morning.sort((a, b) => a - b),
     };
@@ -107,10 +129,19 @@ function departureStats(sessions, { tz, nowMs = Date.now(), overrides = {}, cert
 }
 
 // The next time the car should be ready, from now: the first weekday "ready" time (learned or
-// overridden) that is at least `minLeadMin` ahead. Null when no weekday has one.
-function nextReadyTime(stats, nowMs, { tz, horizonDays = 8, minLeadMin = 30, skip = null } = {}) {
+// overridden) that is at least `minLeadMin` ahead. Null when no weekday has one. A day you corrected
+// (days, or the stats' own .days) goes first: your time, or no departure that day — also on a day off.
+function nextReadyTime(stats, nowMs, { tz, horizonDays = 8, minLeadMin = 30, skip = null, days = null } = {}) {
+  const fix = days || stats?.days || {};
   for (let i = 0; i < horizonDays; i++) {
     const dayMs = localMidnight(nowMs, tz, i) + 12 * 3600000;
+    const c = fix[dateKeyOf(dayMs, tz)];
+    if (c && c.ready === 'none') continue;
+    if (c && /^\d{1,2}:\d{2}$/.test(String(c.ready || ''))) {
+      const t = localTimeOn(dayMs, c.ready, tz);
+      if (t - nowMs >= minLeadMin * 60000) return { at: t, weekday: WEEKDAYS[localParts(dayMs, tz).weekday], source: 'day', confidence: 'set' };
+      continue;
+    }
     if (skip && skip(dayMs)) continue; // away or a public holiday: no usual departure
     const wd = localParts(dayMs, tz).weekday;
     const st = stats[wd];
@@ -276,10 +307,59 @@ async function loadSessions(days = 180, vehicleId = null) {
 async function getOverrides() { return settings.get('departure_overrides', {}); }
 async function setOverrides(o) { return settings.set('departure_overrides', o); }
 
+// Your corrections per date (moved, or no departure that day), kept 120 days: they count for that day
+// and, once it has passed, as what really happened (departureStats).
+async function getDepartureDays() { return settings.get('departure_days', {}); }
+const cleanReady = (v) => {
+  const s = String(v ?? '').trim().toLowerCase();
+  if (s === 'none' || s === '-' || s === 'geen') return 'none';
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? `${m[1].padStart(2, '0')}:${m[2]}` : null;
+};
+// date 'YYYY-MM-DD'; ready 'HH:MM' | 'none' | '' / null (back to the weekday's own or learned time)
+async function setDepartureDay(date, ready, nowMs = Date.now()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error('Bad date.');
+  const days = { ...(await getDepartureDays()) };
+  const r = cleanReady(ready);
+  if (r) days[date] = { ready: r, at: new Date(nowMs).toISOString() }; else delete days[date];
+  const oldest = new Date(nowMs - 120 * 86400000).toISOString().slice(0, 10);
+  for (const k of Object.keys(days)) if (k < oldest) delete days[k];
+  await settings.set('departure_days', days);
+  return days;
+}
+// key 'mon'…'sun'; ready 'HH:MM' | 'none' | '' / null (learned)
+async function setWeekdayDeparture(key, ready) {
+  if (!WEEKDAYS.includes(key)) throw new Error('Bad weekday.');
+  const o = { ...(await getOverrides()) };
+  const r = cleanReady(ready);
+  if (r) o[key] = r; else delete o[key];
+  await setOverrides(o);
+  return o;
+}
+
+// Pure: what your corrections of one weekday say over the last 8 weeks — "no departure" twice or
+// more, or a time twice or more within half an hour of each other: worth setting for every week.
+function correctionHint(days, weekday, { tz, nowMs = Date.now() } = {}) {
+  const from = dateKeyOf(nowMs - 56 * 86400000, tz);
+  const mine = Object.entries(days || {}).filter(([date, c]) => {
+    if (date < from || !c) return false;
+    const [y, m, d] = date.split('-').map(Number);
+    return localParts(localMidnight(Date.UTC(y, m - 1, d, 12), tz) + 12 * 3600000, tz).weekday === weekday;
+  }).map(([, c]) => c.ready);
+  const none = mine.filter((r) => r === 'none').length;
+  const times = mine.filter((r) => r && r !== 'none').map(toMin).sort((a, b) => a - b);
+  if (none >= 2 && none >= times.length) return { ready: 'none', n: none };
+  if (times.length >= 2 && times[times.length - 1] - times[0] <= 30) return { ready: fmtMin(Math.round(median(times) / 5) * 5), n: times.length };
+  return null;
+}
+
 async function learnedDepartures(vehicleId = null) {
   const { displayTz } = require('./localTime');
   const certainty = (await settings.get('planner', {}))?.depart_certainty || 'normal';
-  return departureStats(await loadSessions(180, vehicleId), { tz: displayTz(), overrides: await getOverrides(), certainty });
+  const days = await getDepartureDays();
+  const stats = departureStats(await loadSessions(180, vehicleId), { tz: displayTz(), overrides: await getOverrides(), days, certainty });
+  stats.days = days; // the corrections per date go along (nextReadyTime)
+  return stats;
 }
 
 async function learnedTrips(vehicle = null) {
@@ -320,5 +400,6 @@ module.exports = {
   weightedQuantile, recencyWeight, detectChange, CERTAINTY_Q,
   median, quantile, fmtMin, toMin, departureStats, nextReadyTime, tripStats, expectedTripKwh, houseProfile, expectedHouseKwh,
   slotOf, durationClass, syncSessions, loadSessions, getOverrides, setOverrides, learnedDepartures, learnedTrips, learnedHouse,
+  getDepartureDays, setDepartureDay, setWeekdayDeparture, correctionHint, cleanReady, dateKeyOf,
   startLearning, stopLearning, wallboxControl,
 };

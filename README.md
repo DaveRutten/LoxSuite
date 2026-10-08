@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.52.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.53.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -792,7 +792,11 @@ holds a marker (🚗 / #auto by default) or when you switch *Car needed* on in L
 Hints like `🚗 120 km`, `🚗 30 kWh` or `🚗 full` are understood. For car appointments with an address LoxSuite
 looks up the driving distance and time from home (OpenStreetMap Nominatim + OSRM; only those addresses are sent,
 results cached), adds the margin (default 20 km) and turns it into kWh; the planner makes sure the car is ready
-before you have to leave. Learned departures, planned charging and past sessions are shown in the views.
+before you have to leave. Learned departures, planned charging and past sessions are shown in the views. A
+**"ready" line can be changed**: drag it up or down to move that one day, or click it to set a time or *no
+departure* — for that day only or for every week on that weekday (also under Learned). A day you corrected counts,
+once it has passed, for what LoxSuite learns (a real departure that morning goes first); change the same weekday
+a few times and it offers to make it your time for every week.
 
 **How you drive** to an appointment: by default the car stays there. **Drop off and pick up** (`#brengen` and
 `#halen` in the title or description, or chosen in LoxSuite per day or for the whole series) means there and back

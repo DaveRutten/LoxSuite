@@ -487,17 +487,17 @@ async function computeTarget(nowMs, wb) {
     const skip = (ms) => { const p = lp(ms, tz); const t = dts.get(`${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`)?.type; return t === 'away' || t === 'holiday' || t === 'home'; };
     learnedNext = (fromMs) => {
       const n = learning.nextReadyTime(stats, fromMs, { tz, skip });
-      return n ? { ...n, at: n.at - (n.source === 'override' ? 0 : learnedShift) * 60000 } : null;
+      return n ? { ...n, at: n.at - (n.source !== 'learned' ? 0 : learnedShift) * 60000 } : null;
     };
     const nx = learning.nextReadyTime(stats, nowMs, { tz, skip });
     // it often left before it was ready: the learned time moves earlier (forecastLog.js)
     learnedShift = (await require('./forecastLog').corrections(nowMs).catch(() => ({}))).departShiftMin || 0;
-    const shift = nx && nx.source !== 'override' ? learnedShift : 0;
+    const shift = nx && nx.source === 'learned' ? learnedShift : 0;
     const nxAt = nx ? nx.at - shift * 60000 : null;
     if (nx && nxAt > nowMs && (!readyAtMs || nxAt < readyAtMs)) {
       const day = WEEKDAY_NAMES[WEEKDAY_KEYS.indexOf(nx.weekday)] || nx.weekday;
       readyAtMs = nxAt;
-      readySource = nx.source === 'override' ? `your departure time on ${day}` : `learned departure on ${day} (${nx.confidence} confidence)`;
+      readySource = nx.source === 'day' ? `your departure time for this ${day}` : nx.source === 'override' ? `your departure time on ${day}` : `learned departure on ${day} (${nx.confidence} confidence)`;
       if (shift) readySource += ' · ' + `${shift} min earlier: it often left before it was ready`;
     }
   }

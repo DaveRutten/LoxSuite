@@ -11,6 +11,7 @@
   <p class="hint" style="margin:0 0 0.5rem;"><%= t('Each dot is an unplug; green = a morning departure, red line = median. "Ready by" = the early quartile of that day\'s departures minus 15 minutes, so the car is almost always ready in time. A weekday without a regular morning departure has none.') %></p>
   <form method="post" action="/learned/overrides">
     <div style="overflow-x:auto;"><table id="ln-dep"><tbody><tr><td class="hint"><%= t('Loading…') %></td></tr></tbody></table></div>
+    <p class="hint" style="margin:0.5rem 0 0;"><%= t('Own time: a time (07:15) for every week, or "-" for no usual departure on that weekday; empty = learned. One day you change in the agenda: click the dashed "ready" line there (or drag it). A day you corrected counts for what LoxSuite learns, once it has passed — real departures go first.') %></p>
     <% if (canEdit('charging')) { %><div class="btn-row" style="margin-top:0.6rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save own times') %></button><button type="button" class="btn-soft" id="ln-sync"><%= t('Read sessions from the Wallbox now') %></button></div><% } %>
   </form>
 </div>
@@ -69,12 +70,13 @@
   function axis(labels, max, w) { var s = '<svg width="' + w + '" height="14" viewBox="0 0 ' + w + ' 14" style="display:block;">'; labels.forEach(function (l) { s += '<text x="' + Math.min(w - 14, l / max * w) + '" y="11" font-size="10" fill="currentColor" opacity="0.6">' + l + '</text>'; }); return s + '</svg>'; }
   function toMin(t) { if (!t) return null; var p = t.split(':'); return +p[0] * 60 + +p[1]; }
 
+  var TLd = function (k) { return (window.LS_I18N && window.LS_I18N[k]) || k; };
   function renderDep(d) {
     var rows = '<thead><tr><th>Day</th><th>' + axis([0, 6, 12, 18, 24], 24, TW).replace(/>(\d+)</g, function (m, h) { return '>' + String(h).padStart(2, '0') + '<'; }) + '</th><th>Leaves</th><th>Ready by</th><th>Back home</th><th>Charges</th><th>Confidence</th><th>Own time</th></tr></thead><tbody>';
     d.departures.forEach(function (x) {
       rows += '<tr><td style="font-weight:600;">' + DAYS[x.key] + '</td><td>' + timeline(x.allUnplugs, x.morningUnplugs, toMin(x.departure)) + '</td>' +
-        '<td><strong>' + (x.departure || '—') + '</strong></td><td>' + (x.ready || '—') + (x.override ? ' <span class="hint">(own)</span>' : '') + '</td><td>' + (x.arrival || '—') + '</td>' +
-        '<td>' + (x.kwh_median != null ? nf(x.kwh_median, 1) + ' kWh' : '—') + '</td><td>' + conf(x.confidence) + ' <span class="hint">(' + x.n + ')</span></td>' +
+        '<td><strong>' + (x.departure || '—') + '</strong></td><td>' + (x.override === 'none' ? '<span class="hint">no departure (own)</span>' : (x.ready || '—') + (x.override ? ' <span class="hint">(own)</span>' : '')) + '</td><td>' + (x.arrival || '—') + '</td>' +
+        '<td>' + (x.kwh_median != null ? nf(x.kwh_median, 1) + ' kWh' : '—') + '</td><td>' + conf(x.confidence) + ' <span class="hint">(' + x.n + ')</span>' + (x.corrected ? '<div class="hint" style="margin:0;">' + esc(TLd('incl. {0} corrected by you').replace('{0}', x.corrected)) + '</div>' : '') + '</td>' +
         '<td><input type="text" name="ready_' + x.key + '" value="' + esc(x.override || '') + '" placeholder="' + esc(x.learnedReady || 'auto') + '" style="width:5.5rem;"' + (canEdit ? '' : ' disabled') + '></td></tr>';
     });
     document.getElementById('ln-dep').innerHTML = rows + '</tbody>';

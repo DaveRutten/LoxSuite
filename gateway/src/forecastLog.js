@@ -130,7 +130,7 @@ function quantile(arr, q) {
 }
 
 async function rowsOf(kind, horizon, fromIso) {
-  return db.prepare('SELECT target, predicted, actual FROM forecast_log WHERE kind = ? AND horizon = ? AND target >= ? AND actual IS NOT NULL ORDER BY target').all(kind, horizon, fromIso);
+  return db.prepare('SELECT target, predicted, actual, note FROM forecast_log WHERE kind = ? AND horizon = ? AND target >= ? AND actual IS NOT NULL ORDER BY target').all(kind, horizon, fromIso);
 }
 
 // Everything for the "How good are my predictions?" card.
@@ -177,7 +177,9 @@ async function corrections(nowMs = Date.now(), { fresh = false } = {}) {
     const house = summarize([...await rowsOf('house', 'd1', from), ...await rowsOf('house', 'h1', from)]);
     const loads = {};
     for (const l of await db.prepare('SELECT id FROM energy_loads').all().catch(() => [])) loads[l.id] = summarize(await rowsOf(`load:${l.id}`, 'd1', from));
-    const depart = summarize(await rowsOf('depart', 'event', new Date(nowMs - 42 * DAY).toISOString()), { event: true });
+    // only departures LoxSuite learned itself: a time you set (for a weekday or one day) or an agenda
+    // appointment says nothing about whether the learned pattern is too late
+    const depart = summarize((await rowsOf('depart', 'event', new Date(nowMs - 42 * DAY).toISOString())).filter((r) => !r.note || /^learned departure/.test(r.note)), { event: true });
     value = correctionsFrom({ house, loads, depart });
   } catch { /* no table yet / no data */ }
   cache = { at: nowMs, value };

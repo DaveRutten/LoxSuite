@@ -344,6 +344,13 @@
   ]
  },
  {
+  "key": "· day off",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "· incomplete",
   "module": "ocpp",
   "where": [
@@ -1838,6 +1845,13 @@
   ]
  },
  {
+  "key": "A day off (away, holiday or working from home): the plan doesn't count on it unless you set a time for this day.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "A first mapping (MQTT → Loxone or Loxone → MQTT)",
   "module": "core",
   "where": [
@@ -2539,6 +2553,13 @@
   ]
  },
  {
+  "key": "As usual",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Ascension",
   "module": "core",
   "where": [
@@ -2745,6 +2766,13 @@
   ]
  },
  {
+  "key": "Back to learned",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Back to picker",
   "module": "mqtt",
   "where": [
@@ -2838,10 +2866,25 @@
   ]
  },
  {
+  "key": "Bad date.",
+  "module": "charging",
+  "where": [
+   "src/learning.js",
+   "src/routes/agenda.js"
+  ]
+ },
+ {
   "key": "Bad range.",
   "module": "charging",
   "where": [
    "src/routes/agenda.js"
+  ]
+ },
+ {
+  "key": "Bad weekday.",
+  "module": "charging",
+  "where": [
+   "src/learning.js"
   ]
  },
  {
@@ -3294,10 +3337,24 @@
   ]
  },
  {
+  "key": "Change for:",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Change in progress",
   "module": "core",
   "where": [
    "src/format.js"
+  ]
+ },
+ {
+  "key": "changed for this day",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -3612,6 +3669,13 @@
   "module": "core",
   "where": [
    "partials/panel-grid (script)"
+  ]
+ },
+ {
+  "key": "Click to change, drag to move this day",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -5325,6 +5389,20 @@
   ]
  },
  {
+  "key": "every {0}: no departure (you)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "every {0}: ready {1} (you)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Every appointment in this calendar called",
   "module": "charging",
   "where": [
@@ -6567,6 +6645,13 @@
   ]
  },
  {
+  "key": "incl. {0} corrected by you",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "instead of the fixed tap-water setpoint (optional)",
   "module": "energy_manager",
   "where": [
@@ -6969,6 +7054,13 @@
   "module": "charging",
   "where": [
    "src/learning.js"
+  ]
+ },
+ {
+  "key": "learned: ready {0}",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -7561,6 +7653,13 @@
   "module": "core",
   "where": [
    "app (script)"
+  ]
+ },
+ {
+  "key": "LoxSuite plans with it that day. Once the day has passed it counts for what it learns (a real departure goes first).",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -8774,6 +8873,27 @@
   ]
  },
  {
+  "key": "no departure",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "No departure",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "no departure (own)",
+  "module": "charging",
+  "where": [
+   "learned (script)"
+  ]
+ },
+ {
   "key": "no departure known — within 24 h",
   "module": "charging",
   "where": [
@@ -9126,6 +9246,13 @@
   ]
  },
  {
+  "key": "no regular departure learned on this weekday",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "No room",
   "module": "energy_manager",
   "where": [
@@ -9274,8 +9401,8 @@
    "admin-ai (script)",
    "admin-backup (script)",
    "admin-security (script)",
-   "driving (script)",
-   "hardware (script)"
+   "agenda (script)",
+   "driving (script)"
   ]
  },
  {
@@ -9840,6 +9967,13 @@
   "module": "vehicles",
   "where": [
    "driving (script)"
+  ]
+ },
+ {
+  "key": "on every {0}",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -10808,6 +10942,20 @@
   ]
  },
  {
+  "key": "ready {0} (learned)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "Ready at",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Ready by",
   "module": "charging",
   "where": [
@@ -10819,7 +10967,7 @@
   ]
  },
  {
-  "key": "ready by (learned)",
+  "key": "ready by (learned — click or drag to change)",
   "module": "charging",
   "where": [
    "agenda (script)"
@@ -12981,6 +13129,20 @@
   ]
  },
  {
+  "key": "this day: no departure (you)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "this day: ready {0} (you)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "this hour: solar {0} kWh, house {1} kWh",
   "module": "charging",
   "where": [
@@ -13935,6 +14097,13 @@
   ]
  },
  {
+  "key": "Use it for every {0}",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "used for planning",
   "module": "vehicles",
   "where": [
@@ -14019,6 +14188,13 @@
   "module": "charging",
   "where": [
    "learned (script)"
+  ]
+ },
+ {
+  "key": "usually leaves {0}",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -14397,6 +14573,13 @@
   ]
  },
  {
+  "key": "with {0} confidence",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "with a valid certificate (for example via a reverse proxy with Let's Encrypt, Tailscale or a Cloudflare tunnel).",
   "module": "core",
   "where": [
@@ -14503,6 +14686,20 @@
   ]
  },
  {
+  "key": "You moved {0} to about {1} {2} times lately.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "You said no departure on {0} {1} times lately.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Your account signs in via SSO — there is no local password to change.",
   "module": "core",
   "where": [
@@ -14538,6 +14735,13 @@
   ]
  },
  {
+  "key": "your departure time for this {0}",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
+ },
+ {
   "key": "your departure time on {0}",
   "module": "charging",
   "where": [
@@ -14563,6 +14767,20 @@
   "module": "vehicles",
   "where": [
    "driving (script)"
+  ]
+ },
+ {
+  "key": "your own time (every week)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "Your own time for that weekday, every week (also under Learned). The days you changed separately keep their own.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {

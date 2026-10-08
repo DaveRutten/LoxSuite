@@ -34,12 +34,31 @@ router.get('/items.json', asyncHandler(async (req, res) => {
   // Learned departures (as "ready by" markers), planned charging and past sessions for context.
   const learning = require('../learning');
   const deps = await learning.learnedDepartures(null).catch(() => []);
-  const { localMidnight, localTimeOn, localParts } = require('../localTime');
+  const { localMidnight, localTimeOn, localParts, displayTz } = require('../localTime');
   const learned = [];
   if (to - from <= 45 * 86400000) {
+    // per day: the time it has to be ready — learned, your own for that weekday, or corrected for that
+    // one day (moved, or no departure) — and a day off (away, holiday, working from home) where the
+    // planner doesn't count on it; everything the agenda needs to change it
+    const days = deps.days || {};
+    const types = await require('../dayType').typesBetween(from, to).catch(() => new Map());
+    const tz = displayTz();
     for (let t = localMidnight(from); t < to; t = localMidnight(t, undefined, 1)) {
-      const st = deps[localParts(t + 12 * 3600000).weekday];
-      if (st?.ready) learned.push({ at: new Date(localTimeOn(t + 12 * 3600000, st.ready)).toISOString(), departure: st.departure, source: st.override ? 'own' : 'learned', confidence: st.confidence });
+      const noon = t + 12 * 3600000;
+      const st = deps[localParts(noon).weekday];
+      if (!st) continue;
+      const date = learning.dateKeyOf(noon, tz);
+      const fix = days[date] || null;
+      const off = types.get(date)?.type;
+      const base = {
+        date, weekday: st.key, departure: st.departure, confidence: st.confidence, learnedReady: st.learnedReady, weekdayReady: st.override || null,
+        hint: learning.correctionHint(days, st.weekday, { tz }),
+      };
+      if (fix && fix.ready !== 'none') { learned.push({ ...base, at: new Date(localTimeOn(noon, fix.ready)).toISOString(), source: 'day' }); continue; }
+      const shown = st.ready || st.learnedReady;
+      if (fix && fix.ready === 'none') { if (shown) learned.push({ ...base, at: new Date(localTimeOn(noon, shown)).toISOString(), source: 'day', none: true }); continue; }
+      if (st.override === 'none') { if (st.learnedReady) learned.push({ ...base, at: new Date(localTimeOn(noon, st.learnedReady)).toISOString(), source: 'own', none: true }); continue; }
+      if (st.ready) learned.push({ ...base, at: new Date(localTimeOn(noon, st.ready)).toISOString(), source: st.override ? 'own' : 'learned', off: off === 'away' || off === 'holiday' || off === 'home' ? off : null });
     }
   }
   const plan = require('../planner').getRuntime().plan;
@@ -162,6 +181,30 @@ router.post('/override.json', requirePermission('charging', 'edit'), asyncHandle
     agenda.tours(new Date(now).toISOString(), new Date(now + 14 * 86400000).toISOString(), { fetchLegs: true })
       .then(() => require('../planner').recalc()).catch(() => {});
   }
+  res.json({ ok: true });
+}));
+
+// Change a "ready by" line: date (YYYY-MM-DD), scope 'day' (only that date) or 'weekday' (every week
+// on that weekday); ready 'HH:MM', 'none' (no departure) or '' (back to learned / the weekday's own).
+router.post('/departure.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
+  const b = req.body || {};
+  const learning = require('../learning');
+  try {
+    if (b.scope === 'weekday') {
+      const [y, m, d] = String(b.date || '').split('-').map(Number);
+      if (!y || !m || !d) return res.json({ ok: false, message: 'Bad date.' });
+      const { localParts, localMidnight } = require('../localTime');
+      const key = require('../localTime').WEEKDAYS[localParts(localMidnight(Date.UTC(y, m - 1, d, 12)) + 12 * 3600000).weekday];
+      await learning.setWeekdayDeparture(key, b.ready);
+      // a choice for every week replaces what was corrected for this day
+      if (b.clearDay !== false) await learning.setDepartureDay(b.date, '');
+    } else {
+      await learning.setDepartureDay(b.date, b.ready);
+    }
+  } catch (err) {
+    return res.json({ ok: false, message: err.message });
+  }
+  require('../planner').recalc().catch(() => {});
   res.json({ ok: true });
 }));
 

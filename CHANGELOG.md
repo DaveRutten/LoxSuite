@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.53.0-alpha.1] - 2026-10-08
+
+### Added
+- **Change a learned departure** (asked: "move, change or delete the learned departure lines — in a good way, so
+  that everything gets better from it"): the "ready" lines in the agenda's week and day view are handles.
+  - **Drag** a line up or down (5 minutes a step) to move that one day; **click** it for the details: what it is
+    based on (learned ready time, when it usually leaves, confidence) and *only this day* / *on every Monday* — a
+    time, *No departure*, or back (*As usual* / *Back to learned*).
+  - **Only this day** plans with your time that day — also on a day off (away, holiday, working from home), where
+    the plan otherwise doesn't count on a departure — or with no departure that day.
+  - **Every week**: your own time for that weekday, or *no usual departure* on it (also on the Learned page: "-"
+    in *Own time*).
+  - **It learns from it**: a corrected day that has passed counts as what really happened on that day (a real
+    departure that morning goes first), so the learned pattern follows what you tell it; the Learned page shows
+    how many of a weekday's departures were your corrections. Change the same weekday a few times (twice or more in
+    eight weeks, within half an hour) and the details offer to make it your time for every week.
+  - The lines show where they come from: learned (gray, dashed), your own every week (violet, dashed), changed for
+    this day (violet, solid), no departure (faint, struck through), a day off (faint) — with a legend.
+- The "left before it was ready" correction (the learned time moves earlier) now only learns from departures
+  LoxSuite planned with its learned time — not from a time you set or an agenda appointment.
+
 ## [0.52.1-alpha.1] - 2026-10-08
 
 ### Changed

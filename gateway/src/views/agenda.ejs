@@ -86,6 +86,8 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
   function tm(d) { return new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  // translated text with {0}, {1}… filled in
+  function T(k) { var a = arguments, s = (window.LS_I18N && window.LS_I18N[k]) || k; return s.replace(/\{(\d+)\}/g, function (m, i) { return a[+i + 1] != null ? a[+i + 1] : m; }); }
   function startOfDay(d) { var x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
   function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
   function startOfWeek(d) { var x = startOfDay(d); var wd = (x.getDay() + 6) % 7; return addDays(x, -wd); }
@@ -134,11 +136,13 @@
   document.getElementById('ag-today').onclick = function () { cursor = new Date(); load(); };
   document.querySelectorAll('#ag-views button').forEach(function (b) { b.onclick = function () { view = b.dataset.view; try { localStorage.setItem('agenda-view', view); } catch (e) { /* ignore */ } load(); }; });
 
-  document.getElementById('ag-legend').innerHTML = '<span style="margin-right:0.9rem;">🚗 = car needed</span>' +
-    '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:12px; background:currentColor; opacity:0.55; border-radius:2px; vertical-align:-1px;"></span> <span>the car stays there</span></span>' +
-    '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:12px; box-sizing:border-box; border:1px dashed currentColor; border-top:4px solid currentColor; border-bottom:4px solid currentColor; border-radius:2px; vertical-align:-1px; opacity:0.55;"></span> <span>drop off and pick up (home in between)</span></span>' +
-    '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; border:1.5px dashed #9aa4b2; border-radius:2px;"></span> ready by (learned)</span>' +
-    '<span style="margin-right:0.9rem;"><span style="display:inline-block; width:10px; height:10px; background:var(--accent); border-radius:2px;"></span> planned charging</span><span><span style="display:inline-block; width:10px; height:10px; background:#9aa4b2; opacity:0.6; border-radius:2px;"></span> charged earlier</span>';
+  document.getElementById('ag-legend').innerHTML = '<span style="margin-right:0.9rem; white-space:nowrap;">🚗 = car needed</span>' +
+    '<span style="margin-right:0.9rem; white-space:nowrap;"><span style="display:inline-block; width:10px; height:12px; background:currentColor; opacity:0.55; border-radius:2px; vertical-align:-1px;"></span> <span>the car stays there</span></span>' +
+    '<span style="margin-right:0.9rem; white-space:nowrap;"><span style="display:inline-block; width:10px; height:12px; box-sizing:border-box; border:1px dashed currentColor; border-top:4px solid currentColor; border-bottom:4px solid currentColor; border-radius:2px; vertical-align:-1px; opacity:0.55;"></span> <span>drop off and pick up (home in between)</span></span>' +
+    '<span style="margin-right:0.9rem; white-space:nowrap;"><span style="display:inline-block; width:14px; border-top:2px dashed #9aa4b2; vertical-align:0.25em;"></span> <span>ready by (learned — click or drag to change)</span></span>' +
+    '<span style="margin-right:0.9rem; white-space:nowrap;"><span style="display:inline-block; width:14px; border-top:2px dashed var(--en-battery); vertical-align:0.25em;"></span> <span>your own time (every week)</span></span>' +
+    '<span style="margin-right:0.9rem; white-space:nowrap;"><span style="display:inline-block; width:14px; border-top:2px solid var(--en-battery); vertical-align:0.25em;"></span> <span>changed for this day</span></span>' +
+    '<span style="margin-right:0.9rem; white-space:nowrap;"><span style="display:inline-block; width:10px; height:10px; background:var(--accent); border-radius:2px;"></span> planned charging</span><span style="white-space:nowrap;"><span style="display:inline-block; width:10px; height:10px; background:#9aa4b2; opacity:0.6; border-radius:2px;"></span> charged earlier</span>';
 
   function itemColor(i) { return i.color || '#3b82c4'; }
   var textOn = AgendaLayout.textOn, lanes = AgendaLayout.lanes;
@@ -220,11 +224,19 @@
             (h >= 50 && i.askCar && canEdit ? '<div style="margin-top:2px; display:inline-block; border:1px solid ' + col2 + '; border-radius:8px; padding:0 5px; font-size:10px;">🚗 car needed?</div>' : ''));
         col += '<div data-key="' + esc(key(i)) + '" title="' + esc(i.title + ' · ' + tm(a) + '–' + tm(b) + (i.location ? ' · ' + i.location : '')) + '" style="position:absolute; left:' + leftPos + '; width:' + width + '; top:' + (y(a) + 1) + 'px; height:' + h + 'px; box-sizing:border-box; border-radius:6px; padding:2px 5px; font-size:11px; line-height:1.3; overflow:hidden; cursor:pointer; z-index:' + (1 + L.lane) + '; ' + (L.lane ? 'box-shadow:0 0 0 1px var(--surface, #fff); ' : '') + style + (sel ? ' box-shadow:0 0 0 2px ' + col2 + ';' : '') + '">' + body + '</div>';
       });
-      // learned "ready" moments on top, as a line with a small label that stays readable
+      // "ready" moments on top, as a line with a small label that stays readable: learned (gray, dashed),
+      // your own for that weekday (violet, dashed), corrected for this one day (violet, solid), no
+      // departure (faint, struck through), a day off where the plan doesn't count on it (faint). The
+      // label is a handle: click to change it, drag it up or down to move this day.
       (data.learned || []).forEach(function (l) {
         var a = new Date(l.at);
         if (a < day2 || a >= dayEnd) return;
-        col += '<div style="position:absolute; left:0; right:0; top:' + y(a) + 'px; border-top:2px dashed #9aa4b2; z-index:2; pointer-events:none;"><span style="position:absolute; right:10px; top:-9px; font-size:10px; line-height:1; padding:2px 5px; border-radius:6px; background:var(--surface, #fff); color:var(--text); border:1px solid #9aa4b2; white-space:nowrap;">ready ' + tm(a) + '</span></div>';
+        var c = l.source === 'learned' ? '#9aa4b2' : 'var(--en-battery)', faint = l.none || l.off;
+        var txt = l.none ? T('no departure') : T('ready {0}', tm(a));
+        var tag = ''; // solid violet = this day, dashed violet = your own every week (the legend says so)
+        var sel = selected === 'dep|' + l.date;
+        col += '<div data-dep-line="' + esc(l.date) + '" style="position:absolute; left:0; right:0; top:' + y(a) + 'px; border-top:2px ' + (l.source === 'day' && !l.none ? 'solid' : 'dashed') + ' ' + c + '; z-index:6; pointer-events:none;' + (faint ? ' opacity:0.45;' : '') + '">' +
+          '<span data-dep="' + esc(l.date) + '" title="' + esc(canEdit ? T('Click to change, drag to move this day') : '') + '" style="position:absolute; right:10px; top:-10px; font-size:10px; line-height:1; padding:3px 6px; border-radius:6px; background:var(--surface, #fff); color:var(--text); border:1px solid ' + c + '; white-space:nowrap; max-width:calc(100% - 16px); overflow:hidden; text-overflow:ellipsis; pointer-events:auto; cursor:' + (canEdit ? 'ns-resize' : 'pointer') + '; touch-action:none;' + (l.none ? ' text-decoration:line-through;' : '') + (sel ? ' box-shadow:0 0 0 2px ' + c + ';' : '') + '"><span>' + txt + '</span>' + tag + (l.off && !l.none ? ' <span>' + esc(T('· day off')) + '</span>' : '') + '</span></div>';
       });
       if (sameDay(day2, new Date())) col += '<div style="position:absolute; left:0; right:0; top:' + y(new Date()) + 'px; border-top:2px solid #e5534b; z-index:3; pointer-events:none;"></div>';
       html += col + '</div>';
@@ -235,6 +247,46 @@
     el.innerHTML = html;
     el.scrollTop = 7 * PX;
     bindClicks(el);
+    bindDepartures(el, PX);
+  }
+
+  // A "ready" label: click = change it below the agenda; drag up or down = move this one day (5 minutes
+  // a step) — saved on release.
+  function bindDepartures(el, PX) {
+    el.querySelectorAll('[data-dep]').forEach(function (h) {
+      var date = h.dataset.dep;
+      var l = (data.learned || []).find(function (x) { return x.date === date; });
+      var line = h.parentNode;
+      var startY = null, startTop = 0, moved = 0, base = l ? new Date(l.at) : null;
+      h.addEventListener('pointerdown', function (ev) {
+        if (!canEdit || !l) return;
+        startY = ev.clientY; startTop = parseFloat(line.style.top) || 0; moved = 0;
+        h.setPointerCapture(ev.pointerId);
+        ev.preventDefault();
+      });
+      h.addEventListener('pointermove', function (ev) {
+        if (startY === null) return;
+        var dy = ev.clientY - startY;
+        moved = Math.round(dy / PX * 12) * 5; // minutes, 5 at a time
+        if (!moved) return;
+        line.style.top = (startTop + moved / 60 * PX) + 'px';
+        var t = new Date(base.getTime() + moved * 60000);
+        h.firstChild.textContent = T('ready {0}', tm(t));
+        line.style.borderTopStyle = 'solid';
+      });
+      var end = function () {
+        if (startY === null) return;
+        startY = null;
+        if (moved) {
+          var t = new Date(base.getTime() + moved * 60000);
+          selected = 'dep|' + date;
+          post('/agenda/departure.json', { date: date, scope: 'day', ready: String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') }).then(load);
+        } else { selected = 'dep|' + date; render(); }
+      };
+      h.addEventListener('pointerup', end);
+      h.addEventListener('pointercancel', function () { startY = null; render(); });
+      if (!canEdit) h.addEventListener('click', function () { selected = 'dep|' + date; render(); });
+    });
   }
 
   function renderMonth() {
@@ -306,8 +358,57 @@
       (tight ? '<div class="hint" style="margin:0.15rem 0 0; color:#b8860b;">Tight: the drive between two appointments takes longer than the time in between.</div>' : '') + '</div>';
   }
 
+  // The "ready by" of one day: what it is based on, and changing it for this day or every week.
+  var depScope = {};
+  function departureDetail(el, l) {
+    var d = new Date(l.date + 'T12:00:00');
+    var wdName = d.toLocaleDateString([], { weekday: 'long' });
+    var sc = depScope[l.date] || (l.source === 'own' ? 'weekday' : 'day');
+    var cur = l.none ? '' : tm(l.at);
+    var learnedTxt = l.learnedReady ? T('learned: ready {0}', l.learnedReady) + (l.departure ? ' · ' + T('usually leaves {0}', l.departure) : '') + (l.confidence ? ' · ' + T('with {0} confidence', T(l.confidence)) : '') : T('no regular departure learned on this weekday');
+    var now = l.source === 'day' ? (l.none ? T('this day: no departure (you)') : T('this day: ready {0} (you)', cur)) : l.source === 'own' ? (l.none ? T('every {0}: no departure (you)', wdName) : T('every {0}: ready {1} (you)', wdName, l.weekdayReady)) : T('ready {0} (learned)', cur);
+    var canBack = sc === 'day' ? l.source === 'day' : !!l.weekdayReady;
+    var html = '<div style="border:1px solid var(--border); border-radius:12px; padding:0.9rem 1rem;">' +
+      '<div class="hint" style="margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;">' + esc(T('Ready by')) + '</div>' +
+      '<div style="font-size:1.1rem; font-weight:700; margin:0.15rem 0;">' + esc(d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })) + '</div>' +
+      '<div class="hint" style="margin:0;"><strong>' + esc(now) + '</strong></div>' +
+      '<div class="hint" style="margin:0.15rem 0 0;">' + esc(learnedTxt) + '</div>' +
+      (l.off ? '<div class="hint" style="margin:0.15rem 0 0;">' + esc(T('A day off (away, holiday or working from home): the plan doesn\'t count on it unless you set a time for this day.')) + '</div>' : '');
+    if (canEdit) {
+      html += '<div style="margin-top:0.8rem;"><span class="ag-lbl">' + esc(T('Change for:')) + '</span>' +
+        '<div class="segmented" id="ag-dep-sc" style="display:flex; width:100%;"><button type="button" data-sc="day" style="flex:1;"' + (sc === 'day' ? ' class="on"' : '') + '>' + esc(T('only this day')) + '</button><button type="button" data-sc="weekday" style="flex:1;"' + (sc === 'weekday' ? ' class="on"' : '') + '>' + esc(T('on every {0}', wdName)) + '</button></div>' +
+        '<div class="hint" style="margin:0.25rem 0 0; font-size:0.75rem;">' + esc(sc === 'day'
+          ? T('LoxSuite plans with it that day. Once the day has passed it counts for what it learns (a real departure goes first).')
+          : T('Your own time for that weekday, every week (also under Learned). The days you changed separately keep their own.')) + '</div></div>' +
+        '<div class="ag-box" style="background:var(--surface-alt, #f4f6f8);"><div class="ag-field"><span class="ag-lbl">' + esc(T('Ready at')) + '</span>' +
+        '<div style="display:flex; gap:0.4rem; align-items:center;"><input type="time" id="ag-dep-time" step="300" value="' + esc(sc === 'weekday' && l.weekdayReady && l.weekdayReady !== 'none' ? l.weekdayReady : cur || l.learnedReady || '07:00') + '" style="flex:1; min-width:0;"><button type="button" class="btn-edit" id="ag-dep-save">' + esc(T('Save')) + '</button></div></div>' +
+        '<div class="btn-row" style="margin:0.5rem 0 0; flex-wrap:wrap;"><button type="button" class="btn-soft" id="ag-dep-none">' + esc(T('No departure')) + '</button>' +
+        (canBack ? '<button type="button" class="btn-soft" id="ag-dep-back">' + esc(sc === 'day' ? T('As usual') : T('Back to learned')) + '</button>' : '') + '</div></div>';
+      if (l.hint && !(l.weekdayReady && l.weekdayReady === l.hint.ready)) {
+        html += '<div class="hint" style="margin:0.5rem 0 0; padding:0.45rem 0.6rem; border:1px dashed var(--border); border-radius:10px;">' +
+          esc(l.hint.ready === 'none' ? T('You said no departure on {0} {1} times lately.', wdName, l.hint.n) : T('You moved {0} to about {1} {2} times lately.', wdName, l.hint.ready, l.hint.n)) +
+          ' <a href="#" id="ag-dep-hint">' + esc(T('Use it for every {0}', wdName)) + '</a></div>';
+      }
+    }
+    html += '<p style="margin:0.6rem 0 0;"><a href="#" id="ag-close">' + esc(T('Close')) + '</a></p></div>';
+    el.innerHTML = html;
+    var send = function (scope, ready) { post('/agenda/departure.json', { date: l.date, scope: scope, ready: ready }).then(load); };
+    var q = function (id) { return document.getElementById(id); };
+    if (q('ag-dep-sc')) q('ag-dep-sc').querySelectorAll('button').forEach(function (b) { b.onclick = function () { depScope[l.date] = b.dataset.sc; renderDetail(); }; });
+    if (q('ag-dep-save')) q('ag-dep-save').onclick = function () { var v = q('ag-dep-time').value; if (v) send(sc, v); };
+    if (q('ag-dep-none')) q('ag-dep-none').onclick = function () { send(sc, 'none'); };
+    if (q('ag-dep-back')) q('ag-dep-back').onclick = function () { send(sc, ''); };
+    if (q('ag-dep-hint')) q('ag-dep-hint').onclick = function (e) { e.preventDefault(); depScope[l.date] = 'weekday'; send('weekday', l.hint.ready); };
+    q('ag-close').onclick = function (e) { e.preventDefault(); selected = null; render(); };
+  }
+
   function renderDetail() {
     var el = document.getElementById('ag-detail');
+    if (selected && selected.indexOf('dep|') === 0) {
+      var dl = (data.learned || []).find(function (x) { return 'dep|' + x.date === selected; });
+      if (dl) { departureDetail(el, dl); return; }
+      selected = null;
+    }
     var it = selected && (data.items || []).find(function (i) { return key(i) === selected; });
     if (!it) {
       // the drives from home coming up: one per appointment, two for drop off and pick up, one for a route

@@ -59,8 +59,9 @@ router.get('/data.json', asyncHandler(async (req, res) => {
 router.post('/overrides', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const o = {};
   for (const k of ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']) {
-    const v = String(req.body[`ready_${k}`] || '').trim();
-    if (/^\d{1,2}:\d{2}$/.test(v)) o[k] = v.padStart(5, '0');
+    // a time, or '-' / 'none' / 'geen': no usual departure on that weekday
+    const v = learning.cleanReady(req.body[`ready_${k}`]);
+    if (v) o[k] = v;
   }
   await learning.setOverrides(o);
   res.redirect('/learned?saved=1');
