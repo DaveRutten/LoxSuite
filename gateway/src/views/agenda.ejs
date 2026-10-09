@@ -545,6 +545,8 @@
       '<div class="hint" style="margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;">' + esc(it.calendar || (it.kind === 'trip' ? 'LoxSuite trip' : '')) + '</div>' +
       '<div style="font-size:1.1rem; font-weight:700; margin:0.15rem 0;">' + carMark(it) + esc(it.title) + '</div>' +
       '<div class="hint" style="margin:0;">' + when + (it.location ? ' · 📍 ' + esc(it.location) : '') + '</div>' +
+      // where it is: a small map with home (once the address has been found)
+      (Number.isFinite(it.lat) && Number.isFinite(it.lon) ? '<div id="ag-map" style="margin-top:0.5rem;"></div>' : '') +
       (it.movedFrom ? '<div class="hint" style="margin:0.2rem 0 0;">Moved from ' + new Date(it.movedFrom).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' — what you chose for the series still counts.</div>' : '');
     // a repeating appointment: first choose whether what follows is for this day or the whole series
     // (by name); a choice is then saved straight away
@@ -706,6 +708,13 @@
     // an address without a distance: look it up straight away (once per address on this page)
     if (dist && !it.geoError && !distTried[it.location]) { distTried[it.location] = true; lookUp(false); }
     document.getElementById('ag-close').onclick = function (e) { e.preventDefault(); selected = null; render(); };
+    var mapEl = document.getElementById('ag-map');
+    if (mapEl && window.lsMiniMap) {
+      var hm = data.home || {};
+      var pins = [{ lat: it.lat, lon: it.lon, title: it.location || it.title }];
+      if (Number.isFinite(hm.lat) && Number.isFinite(hm.lon)) pins.unshift({ lat: Number(hm.lat), lon: Number(hm.lon), label: T('home'), home: true });
+      window.lsMiniMap(mapEl, pins, { height: 140 });
+    }
     var rm = document.getElementById('ag-remove');
     if (rm) rm.onclick = function (e) {
       e.preventDefault();

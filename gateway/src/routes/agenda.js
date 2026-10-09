@@ -83,7 +83,8 @@ router.get('/items.json', asyncHandler(async (req, res) => {
   const vehicleList = (await db.prepare('SELECT id, name FROM vehicles WHERE enabled = 1 ORDER BY id').all().catch(() => [])).map((v) => ({ id: v.id, name: v.name }));
   // the calendars a new appointment can go into (an ICS link only reads)
   const calendars = (await agenda.listCalendars()).filter((c) => c.enabled !== 0).map((c) => ({ id: c.id, name: c.name, color: c.color, kind: c.kind, writable: c.writable }));
-  res.json({ items, tours, learned, plan: plan ? plan.slots : [], sessions, vehicles: vehicleList, calendars, routeClasses: agenda.ROUTE_CLASSES, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
+  const site = await settings.get('site', { lat: null, lon: null });
+  res.json({ items, tours, learned, plan: plan ? plan.slots : [], sessions, vehicles: vehicleList, calendars, home: { lat: site.lat ?? null, lon: site.lon ?? null }, routeClasses: agenda.ROUTE_CLASSES, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
 }));
 
 // One or more ICS links (one per line). With several, or without a name, each calendar is named

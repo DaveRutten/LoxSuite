@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.56.0-alpha.1] - 2026-10-09
+
+### Added
+- **Small maps** (asked: "a small picture of the location (maps) would be nice — here", in an appointment's details):
+  - **An appointment's details**: a small street map under the time and address, with the address and home (as
+    soon as the address has been found); a click opens OpenStreetMap.
+  - **Agenda settings**: home and where the car goes in the next two weeks (the appointments with the car whose
+    address was found; their name on hover).
+  - **Home & solar forecast**: home on a map under its latitude / longitude, redrawn while you type them.
+  - OpenStreetMap tiles like the car map on the vehicle pages; home is a blue pin.
+
+### Fixed
+- **Smart charging after a trip that needs it all**: when the battery was (nearly) full before leaving and the trip
+  needed what was in it, the plan stopped at leaving and planned nothing for after the car is back — so a longer
+  route (without the ferry) could show less charging that afternoon than a shorter one. What the trip uses is now
+  planned back after it is back, in the cheapest or sunniest hours, like the rest of a split plan.
+
 ## [0.55.0-alpha.1] - 2026-10-09
 
 ### Added

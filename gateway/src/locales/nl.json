@@ -4391,5 +4391,7 @@
   "This calendar is an ICS link: it can only be read. Choose a calendar over iCloud / CalDAV, or LoxSuite.": "Deze agenda is een ICS-link: die kan alleen gelezen worden. Kies een agenda via iCloud / CalDAV, of LoxSuite.",
   "Unknown calendar.": "Onbekende agenda.",
   "next day": "volgende dag",
-  "min": "min"
+  "min": "min",
+  "Home and where the car goes in the next two weeks.": "Thuis en waar de auto de komende twee weken heen gaat.",
+  "Home; the appointments with the car show here once their address is found.": "Thuis; de afspraken met de auto verschijnen hier zodra hun adres gevonden is."
 }

@@ -68,6 +68,7 @@
         <div><label><%= t('Home longitude') %></label><input type="text" name="lon" value="<%= site.lon ?? '' %>" placeholder="5.12"></div>
         <div><label><%= t('Forecast on') %></label><%- toggleSwitch('enabled', !!solarCfg.enabled) %></div>
       </div>
+      <div id="home-map" style="margin-top:0.7rem; max-width:460px;" hidden></div>
       <div class="form-grid" style="margin-top:0.8rem;">
         <div data-show-if="enabled"><label><%= t('Installed power (kWp)') %></label><input type="text" name="kwp" value="<%= solarCfg.kwp ?? '' %>" placeholder="8.4"></div>
         <div data-show-if="enabled"><label><%= t('Tilt (°)') %></label><input type="text" name="tilt" value="<%= solarCfg.tilt %>"></div>
@@ -184,6 +185,7 @@
       </div></div>
     </div>
     <p class="hint" style="margin:0.5rem 0 0;" data-show-if="geo"><%= t('The default for every address. Where it matters, an appointment lets you choose otherwise for that address.') %></p>
+    <% if (site.lat != null && site.lon != null) { %><div data-show-if="geo" style="margin-top:0.7rem; max-width:460px;"><div id="agenda-map" hidden></div><p class="hint" style="margin:0.25rem 0 0; font-size:0.78rem;"><%= agendaPins.length ? t('Home and where the car goes in the next two weeks.') : t('Home; the appointments with the car show here once their address is found.') %></p></div><% } %>
     <h3 class="subhead"><%= t('Climate at departure') %></h3>
     <div class="form-grid">
       <div><label><%= t('Climate at departure') %></label><select name="climate_mode">
@@ -421,6 +423,34 @@
       post('/planner/recalc.json', body).then(function (d) { var r = d[b.dataset.recalc]; b.textContent = r && r.ok ? 'Done' : 'Failed: ' + (r && r.message || ''); }).finally(function () { b.disabled = false; });
     });
   });
+  // small maps: home (live from the latitude / longitude fields) and, in the agenda settings, where the
+  // car goes in the next two weeks
+  (function () {
+    if (!window.lsMiniMap) return;
+    var num = function (v) { var n = Number(String(v || '').trim().replace(',', '.')); return String(v || '').trim() && Number.isFinite(n) ? n : NaN; };
+    var homeEl = document.getElementById('home-map');
+    var latIn = document.querySelector('input[name="lat"]');
+    var lonIn = document.querySelector('input[name="lon"]');
+    var HOME_LBL = <%- JSON.stringify(t('home')) %>;
+    var drawHome = function () {
+      if (!homeEl || !latIn || !lonIn) return;
+      var la = num(latIn.value), lo = num(lonIn.value);
+      window.lsMiniMap(homeEl, Number.isFinite(la) && Number.isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180 ? [{ lat: la, lon: lo, label: HOME_LBL, home: true }] : [], { height: 170 });
+    };
+    var agEl = document.getElementById('agenda-map');
+    var drawAgenda = function () {
+      if (!agEl) return;
+      // (titles come from the calendar: "<" escaped, so no text can close this script)
+      var pins = <%- JSON.stringify(agendaPins).replace(/</g, '\\u003c') %>;
+      window.lsMiniMap(agEl, [{ lat: <%- JSON.stringify(site.lat ?? null) %>, lon: <%- JSON.stringify(site.lon ?? null) %>, label: HOME_LBL, home: true }].concat(pins), { height: 190 });
+    };
+    var t;
+    [latIn, lonIn].forEach(function (i) { if (i) i.addEventListener('input', function () { clearTimeout(t); t = setTimeout(drawHome, 400); }); });
+    // drawn to the width it has once its section is open
+    document.querySelectorAll('details').forEach(function (d) { d.addEventListener('toggle', function () { if (d.open) { if (homeEl && d.contains(homeEl)) drawHome(); if (agEl && d.contains(agEl)) drawAgenda(); } }); });
+    drawHome();
+    drawAgenda();
+  })();
   // a calendar's name, colour and car: open its form under the row
   document.querySelectorAll('[data-cal-edit]').forEach(function (b) {
     b.onclick = function (e) {

@@ -654,11 +654,15 @@ function planSplit({ needKwh, batteryKwh, soc, reservePct = 15, readyAtMs, trip,
   const energyNow = Number.isFinite(energyNowKwh) ? energyNowKwh : batteryKwh * soc / 100;
   const reserveKwh = batteryKwh * (Number(reservePct) || 0) / 100;
   const must = Math.max(0, Math.min(needKwh, trip.kwh + reserveKwh - energyNow));
-  if (!(needKwh - must > 1) || !(trip.backAtMs > readyAtMs)) return null;
+  if (!(trip.backAtMs > readyAtMs)) return null;
   const fullKwh = energyNow + needKwh; // the level the car charges to (its limit)
   const afterTrip = Math.max(0, energyNow + must - trip.kwh);
   const target = Number.isFinite(restTargetKwh) ? Math.min(fullKwh, Math.max(0, restTargetKwh)) : fullKwh;
   const rest = Math.max(0, target - afterTrip);
+  // nothing left over before leaving and nothing to make up after it is back: one plan to the deadline.
+  // A trip that needs it all still gets what it used back after it is back (v0.56: before, the plan
+  // then stopped at leaving — a longer route showed less charging that afternoon than a shorter one)
+  if (!(needKwh - must > 1) && !(rest > 1)) return null;
   return {
     mustKwh: round3(must), restKwh: round3(rest), preMaxKwh: round3(needKwh - must), energyAfterKwh: round3(afterTrip), fullKwh: round3(fullKwh),
     backAtMs: trip.backAtMs, tripKwh: round3(trip.kwh), reserveKwh: round3(reserveKwh),

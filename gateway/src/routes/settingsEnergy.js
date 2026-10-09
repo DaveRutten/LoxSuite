@@ -27,6 +27,13 @@ router.get('/', asyncHandler(async (req, res) => {
     priceStatus: await settings.get('prices_status', null), solarStatus: await settings.get('solar_status', null),
     fuel: await fuelPrice.currentFuelPrice(), fuelTypes: fuelPrice.FUEL_TYPES, spo: await prices.findSpotOptimizer().catch(() => null),
     calendars: await agenda.listCalendars(), vehicles,
+    // the agenda settings' map: the appointments with the car in the next two weeks (once found)
+    agendaPins: await agenda.items(new Date().toISOString(), new Date(Date.now() + 14 * 86400000).toISOString())
+      .then((list) => {
+        const seen = new Set();
+        return list.filter((i) => i.needsCar && Number.isFinite(i.lat) && Number.isFinite(i.lon)).filter((i) => { const k = `${i.lat.toFixed(4)},${i.lon.toFixed(4)}`; if (seen.has(k)) return false; seen.add(k); return true; })
+          .slice(0, 12).map((i) => ({ lat: i.lat, lon: i.lon, title: `${i.title}${i.location ? ` · ${i.location}` : ''}` }));
+      }).catch(() => []),
     climateRuns: await require('../carClimate').recent(8),
     skodaCars: vehicles.some((v) => vehiclesMod.sourceKind(v) === 'skoda'),
     remCfg: await require('../reminders').getConfig().catch(() => ({})), chargingSaved: req.query.saved || null,

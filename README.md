@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.55.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.56.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -799,7 +799,9 @@ holds a marker (🚗 / #auto by default) or when you switch *Car needed* on in L
 Hints like `🚗 120 km`, `🚗 30 kWh` or `🚗 full` are understood. For car appointments with an address LoxSuite
 looks up the driving distance and time from home (OpenStreetMap Nominatim + OSRM, Valhalla for a route without
 ferries / toll roads / motorways; only those addresses are sent, results cached), adds the margin (default 20 km) and turns it into kWh; the planner makes sure the car is ready
-before you have to leave. **Route options**: by default the shortest route, or avoid ferries, toll roads and/or
+before you have to leave. An appointment's details show a **small map** with the address and home (OpenStreetMap; a
+click opens it larger), the agenda settings a map of home and where the car goes in the next two weeks, and the
+home location in the settings its own map while you type it. **Route options**: by default the shortest route, or avoid ferries, toll roads and/or
 motorways for every address (agenda settings); where an appointment's route takes one of them (or you avoid it),
 the appointment shows a chip like *without the ferry* to choose otherwise for that address — on or off, ↺ back to
 the default. With **more than one car** in LoxSuite an appointment has a *Which car* choice (default: the

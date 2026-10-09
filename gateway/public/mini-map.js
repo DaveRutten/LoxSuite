@@ -1,5 +1,6 @@
-// A small street map (OpenStreetMap tiles, no satellite) with a pin per car. No library: the tiles
-// around the point are laid out as plain images. lsMiniMap(el, [{ lat, lon, label }], { height })
+// A small street map (OpenStreetMap tiles, no satellite) with a pin per car (or address). No library:
+// the tiles around the point are laid out as plain images. lsMiniMap(el, [{ lat, lon, label, title,
+// home }], { height }) — label: shown under the pin; title: only on hover; home: a pin in another colour.
 // One point: zoom 15. Several: the closest zoom that shows them all. Click opens openstreetmap.org.
 (function () {
   var TILE = 256;
@@ -37,7 +38,7 @@
     }
     points.forEach(function (p, i) {
       var x = Math.round(pts[i].x - left), y = Math.round(pts[i].y - top);
-      html += '<div class="mini-map-pin" style="left:' + x + 'px; top:' + y + 'px;" title="' + esc(p.label) + '"></div>' +
+      html += '<div class="mini-map-pin' + (p.home ? ' mini-map-home' : '') + '" style="left:' + x + 'px; top:' + y + 'px;" title="' + esc(p.title || p.label) + '"></div>' +
         (p.label ? '<div class="mini-map-label" style="left:' + x + 'px; top:' + (y + 6) + 'px;">' + esc(p.label) + '</div>' : '');
     });
     var c = points.length === 1 ? points[0] : { lat: points.reduce(function (a, p) { return a + p.lat; }, 0) / points.length, lon: points.reduce(function (a, p) { return a + p.lon; }, 0) / points.length };

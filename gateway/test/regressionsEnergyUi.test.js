@@ -31,10 +31,21 @@ test('split: only the trip + reserve before leaving (Kodiaq at 4%, 8.8 kWh trip)
   assert.deepEqual(s.away, [[ready, ready + 2 * H]]);
 });
 
-test('split: none when almost nothing is left over, or the car is not back after the deadline', () => {
+test('split: a trip that needs it all — all of it before leaving, what it used back after it is back', () => {
   const ready = Date.parse('2026-10-06T04:30:00Z');
   const trip = { kwh: 20, backAtMs: ready + H, title: 'Long' };
-  assert.equal(planSplit({ needKwh: 10, batteryKwh: 25.7, soc: 40, readyAtMs: ready, trip }), null); // the trip needs it all
+  // v0.56: this was "no split", so the plan stopped at leaving and planned nothing for after the trip
+  const s = planSplit({ needKwh: 10, batteryKwh: 25.7, soc: 40, readyAtMs: ready, trip });
+  assert.equal(s.mustKwh, 10);
+  assert.equal(s.preMaxKwh, 0);
+  assert.ok(Math.abs(s.restKwh - 20) < 0.01, `rest ${s.restKwh}`);
+  // nothing left over before and nothing to make up after: one plan to the deadline, as before
+  assert.equal(planSplit({ needKwh: 0.5, batteryKwh: 25.7, soc: 90, reservePct: 0, readyAtMs: ready, trip: { ...trip, kwh: 0.3 } }), null);
+});
+
+test('split: none when the car is not back after the deadline, or its level is unknown', () => {
+  const ready = Date.parse('2026-10-06T04:30:00Z');
+  const trip = { kwh: 20, backAtMs: ready + H, title: 'Long' };
   assert.equal(planSplit({ needKwh: 25, batteryKwh: 25.7, soc: 4, readyAtMs: ready, trip: { ...trip, kwh: 5, backAtMs: ready - H } }), null);
   assert.equal(planSplit({ needKwh: 25, batteryKwh: 25.7, soc: null, readyAtMs: ready, trip }), null);
 });
@@ -243,4 +254,25 @@ test('a link to a card unfolds it, and a header row keeps its fold button at the
   const cc = fs.readFileSync(path.join(__dirname, '..', 'public', 'card-collapse.js'), 'utf8');
   assert.ok(/hashchange/.test(cc) && /targeted\(card\)/.test(cc), 'unfolds the card a link points to');
   assert.ok(/hd\.head\.appendChild\(btn\)/.test(cc), 'header rows get the chevron at the end of the row');
+});
+
+test('split plan: a trip that needs it all — what it uses is planned back after it is back (v0.56)', () => {
+  // nearly full (97%) before an 11.9 kWh drive at 08:28, back 10:22; the sun in the afternoon
+  const t0 = Date.parse('2026-10-09T04:00:00Z');
+  const slots = [];
+  for (let i = 0; i < 30; i++) {
+    const s = t0 + i * H;
+    const h = new Date(s).getUTCHours();
+    slots.push({ start: new Date(s).toISOString(), end: new Date(s + H).toISOString(), price: h >= 11 && h < 13 ? 0.21 : 0.35, pvKw: h >= 11 && h < 14 ? 5 : 0 });
+  }
+  const ready = Date.parse('2026-10-09T06:28:00Z');
+  const back = Date.parse('2026-10-09T08:22:00Z');
+  const split = planSplit({ needKwh: 0.8, batteryKwh: 26, soc: 97, reservePct: 0, readyAtMs: ready, trip: { kwh: 11.9, leaveMs: ready, backAtMs: back, title: 'Dentist' } });
+  assert.ok(split, 'a split, so the plan goes on after the trip');
+  const args = { nowMs: t0, readyAtMs: ready, needKwh: split.mustKwh, slots, mode: 'plan', minKw: 4.16, maxKw: 11, solarTrust: 'expected', priceCap: 0.55, insufficient: 'stop' };
+  const plan = withRest(makePlan(args), args, slots, split, ready);
+  const after = plan.split.restSlots.reduce((a, s) => a + s.kwh, 0);
+  assert.ok(Math.abs(after - split.restKwh) < 0.1, `after the trip ${after} of ${split.restKwh}`);
+  assert.ok(Math.abs(split.restKwh - 11.9) < 0.9, `what the trip uses (+ what was missing): ${split.restKwh}`);
+  assert.ok(plan.split.restSlots.every((s) => Date.parse(s.start) >= back), 'not while it is away');
 });
