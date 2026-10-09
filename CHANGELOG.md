@@ -13,6 +13,25 @@ All notable changes to this project are documented in this file.
   pull requests are tested as before, and both workflows can be run by hand (a hand-run image build on main also
   writes `:latest`).
 
+## [0.58.0-alpha.1] - 2026-10-09
+
+### Changed
+- **The heat pump and the solar panels each have their own page** (Energy manager → *Heat pump →* / *Solar panels →*)
+  instead of one shared page.
+- **Found across Gateway and Client**: room controllers and the objects of the own Loxone logic are looked for on
+  every Miniserver (Gateway first, the same object once); each role is read, sent and given its statistics on its
+  own Miniserver. A device whose outputs fell into two uuid groups is found once, complete.
+- **Search again** reads the structure of every Miniserver again and says what it found.
+
+### Added
+- Own flow / flow-temperature / return sensors for the tap-water circuit, used while the 3-way valve is on tap water.
+- **Stops** at Fine-tuning: from how long the heat pump stands still before it starts again, the advice to run ½–1 °C
+  past its stop point (advice only).
+- A hint at the role table for objects with another display name in Loxone (*Name shown*): search them by that name.
+
+### Fixed
+- The opened list of a dropdown is readable in dark mode (themed options).
+
 ## [0.57.1-alpha.1] - 2026-10-09
 
 ### Fixed
