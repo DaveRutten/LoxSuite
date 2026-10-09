@@ -4,7 +4,7 @@
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 
 <p class="hint"><%= t('The other big consumers, planned together with the car from the prices, the solar forecast and your house load.') %></p>
-<p class="hint" style="margin-top:-0.8rem;"><a href="/energy-manager/modules"><%= t('Modules: heat pump and solar panels →') %></a></p>
+<p class="hint" style="margin-top:-0.8rem;" data-hint-keep><a href="/energy-manager/modules/heatpump"><%= t('Heat pump →') %></a> · <a href="/energy-manager/modules/solar"><%= t('Solar panels →') %></a></p>
 
 <div class="card" data-card-key="now">
   <div>

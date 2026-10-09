@@ -4695,5 +4695,9 @@
   "long enough": "lang genoeg",
   "usually {m} min still before it starts again": "staat meestal {m} min stil voor hij weer start",
   "too few runs to say": "te weinig runs om iets te zeggen",
-  "Not recognised because of another display name in Loxone (\"Name shown\")? LoxSuite only sees that name: choose \"Other Loxone object\" at the role and search it by that name — objects of every Miniserver (Gateway and Client) are listed.": "Niet herkend door een andere weergavenaam in Loxone (\"Naam weergeven\")? LoxSuite ziet alleen die naam: kies bij de functie \"Ander Loxone-object\" en zoek op die naam — objecten van elke Miniserver (Gateway en Client) staan erbij."
+  "Not recognised because of another display name in Loxone (\"Name shown\")? LoxSuite only sees that name: choose \"Other Loxone object\" at the role and search it by that name — objects of every Miniserver (Gateway and Client) are listed.": "Niet herkend door een andere weergavenaam in Loxone (\"Naam weergeven\")? LoxSuite ziet alleen die naam: kies bij de functie \"Ander Loxone-object\" en zoek op die naam — objecten van elke Miniserver (Gateway en Client) staan erbij.",
+  "Heat pump →": "Warmtepomp →",
+  "Solar panels →": "Zonnepanelen →",
+  "The solar inverter, found in Loxone; limited when exporting costs money under your contract.": "De omvormer, gevonden in Loxone; begrensd als teruglevering onder je contract geld kost.",
+  "The heat pump, found in Loxone like the Home Connect appliances. LoxSuite decides, Loxone carries it out and keeps the safety limits.": "De warmtepomp, gevonden in Loxone zoals de Home Connect-apparaten. LoxSuite beslist, Loxone voert uit en bewaakt de veiligheidsgrenzen."
 }

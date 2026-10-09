@@ -258,11 +258,14 @@ router.post('/recalc.json', requirePermission('energy_manager', 'edit'), asyncHa
 const mods = () => require('../energyModules');
 const kindOk = (k) => ['heatpump', 'solar'].includes(k);
 
-router.get('/modules', asyncHandler(async (req, res) => {
-  const m = mods();
-  const [heatpump, solar] = await Promise.all([m.status('heatpump').catch((e) => ({ error: e.message })), m.status('solar').catch((e) => ({ error: e.message }))]);
+// Each device its own page: /modules/heatpump, /modules/solar (/modules: the heat pump).
+router.get('/modules', (req, res) => res.redirect('/energy-manager/modules/heatpump'));
+router.get('/modules/:kind', asyncHandler(async (req, res, next) => {
+  if (!kindOk(req.params.kind)) return next();
+  const kind = req.params.kind;
+  const st = await mods().status(kind).catch((e) => ({ error: e.message }));
   const reasons = require('../reasonText');
-  res.render('energy-manager-modules', { heatpump, solar, saved: req.query.saved || null, roles: require('../energyTypes').ROLES, tr: (r) => reasons.tr(res.locals.t, r) });
+  res.render('energy-manager-modules', { only: kind, heatpump: kind === 'heatpump' ? st : {}, solar: kind === 'solar' ? st : {}, saved: req.query.saved || null, roles: require('../energyTypes').ROLES, tr: (r) => reasons.tr(res.locals.t, r) });
 }));
 
 router.get('/modules/:kind/status.json', asyncHandler(async (req, res) => {

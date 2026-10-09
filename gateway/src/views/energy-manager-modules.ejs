@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: 'Energy manager modules', active: 'energymanager' }) %>
+<%- include('partials/head', { pageTitle: only === 'solar' ? 'Solar panels' : 'Heat pump', active: 'energymanager' }) %>
 <%
   const hpS = heatpump || {}; const soS = solar || {};
   const nf = (v, d = 1) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -34,7 +34,7 @@
 </style>
 
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
-<p class="hint"><%= t('The heat pump and the solar inverter as modules, found in Loxone like the Home Connect appliances. LoxSuite decides, Loxone carries it out and keeps the safety limits.') %> <a href="/energy-manager"><%= t('← Energy manager') %></a></p>
+<p class="hint"><a href="/energy-manager"><%= t('← Energy manager') %></a> · <%= only === 'solar' ? t('The solar inverter, found in Loxone; limited when exporting costs money under your contract.') : t('The heat pump, found in Loxone like the Home Connect appliances. LoxSuite decides, Loxone carries it out and keeps the safety limits.') %></p>
 
 <% function moduleHead(kind, st) { const cfg = st.cfg || {}; %>
   <div class="mm-head">
@@ -102,6 +102,7 @@
   </details>
 <% } %>
 
+<% if (only === 'heatpump') { %>
 <div class="card" data-module="heatpump">
   <h2 style="margin-top:0;"><%= t('Heat pump') %></h2>
   <% if (hpS.error) { %><p class="error"><%= hpS.error %></p><% } else { %>
@@ -230,7 +231,9 @@
   <div class="btn-row" style="margin-top:0.8rem;"><button type="button" class="primary" data-save="heatpump"><%= t('Save') %></button><span class="hint" data-save-msg="heatpump" style="margin:0;"></span></div>
   <% } %>
 </div>
+<% } %>
 
+<% if (only === 'solar') { %>
 <div class="card" data-module="solar">
   <h2 style="margin-top:0;"><%= t('Solar panels') %></h2>
   <% if (soS.error) { %><p class="error"><%= soS.error %></p><% } else { %>
@@ -259,6 +262,7 @@
   <div class="btn-row" style="margin-top:0.8rem;"><button type="button" class="primary" data-save="solar"><%= t('Save') %></button><span class="hint" data-save-msg="solar" style="margin:0;"></span></div>
   <% } %>
 </div>
+<% } %>
 
 <datalist id="mm-objects"></datalist>
 <datalist id="mm-actions"></datalist>
@@ -329,7 +333,7 @@
     btn.addEventListener('click', function () {
       var kind = btn.getAttribute('data-save'), card = btn.closest('[data-module]');
       fetch('/energy-manager/modules/' + kind + '.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collect(card, kind)) })
-        .then(function (r) { return r.json(); }).then(function (j) { if (j.ok) location.href = '/energy-manager/modules?saved=' + kind + '#' + kind; else card.querySelector('[data-save-msg]').textContent = j.message || 'Error'; });
+        .then(function (r) { return r.json(); }).then(function (j) { if (j.ok) location.href = '/energy-manager/modules/' + kind + '?saved=1'; else card.querySelector('[data-save-msg]').textContent = j.message || 'Error'; });
     });
   });
   document.querySelectorAll('[data-rediscover]').forEach(function (btn) {
