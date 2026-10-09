@@ -119,3 +119,9 @@ test('a heat meter without power (Kamstrup: flow temp, return, flow in l/h): the
   assert.equal(st.thermalKw, 6.89, 'the meter wins over the unit\'s own figure');
   assert.equal(st.cop, 3.45);
 });
+
+test('heat meter flow unit automatic: 19 is l/min (Loxone scaled 3600 -> 60), 1140 is l/h', () => {
+  const v = { heatMeterFlowTemp: 32.4, heatMeterReturnTemp: 27.2 };
+  assert.equal(hp.heatFromMeter({ ...v, heatMeterFlowRate: 19 }), 6.89);
+  assert.equal(hp.heatFromMeter({ ...v, heatMeterFlowRate: 1140 }), 6.89);
+});

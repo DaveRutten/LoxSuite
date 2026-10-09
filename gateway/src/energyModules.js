@@ -33,7 +33,7 @@ const KINDS = ['heatpump', 'solar'];
 
 const DEFAULTS = {
   heatpump: {
-    enabled: false, mode: 'shadow', miniserver_id: null, device: null, type_key: null, links: {}, source: 'air', heat_meter_flow_unit: 'l/h',
+    enabled: false, mode: 'shadow', miniserver_id: null, device: null, type_key: null, links: {}, source: 'air', heat_meter_flow_unit: 'auto',
     room: { enabled: true, controller: null, schedule: 'loxone', comfort_c: 20.5, setback_c: 19, comfort_from: '07:00', comfort_until: '22:30' },
     // bijsturen for long, calm runs: 'off' | 'advise' (shows it) | 'live' (sends it, with the module live)
     tuning: { mode: 'advise', flow_min: 25, flow_max: 45 },
@@ -198,7 +198,7 @@ async function heatpumpStatus(nowMs = Date.now()) {
   const r = await resolve('heatpump');
   const { cfg, type, msId } = r;
   const v = msId ? et.fromRaw(type, readRaw(type, msId)) : {};
-  const state = hp.interpret(v, { meterFlowUnit: cfg.heat_meter_flow_unit || 'l/h' });
+  const state = hp.interpret(v, { meterFlowUnit: cfg.heat_meter_flow_unit || 'auto' });
   const { localOf, clock, localHour } = localTools();
   const { limits, warnings } = lg.dhwLimits({ ...cfg.limits, hpMaxC: cfg.limits.hpMaxC });
   // draws learned from the kept tank temperature
@@ -466,7 +466,7 @@ async function importStatistics(kind, { days = 14, callTool = null, nowMs = Date
       const heatingTank = x.valveDhw === 1 || (x.valveDhw === undefined && x.forceDhw === 1);
       if (Number.isFinite(x.tankTemp)) tank.push({ ms: x.ms, temp: x.tankTemp, heating: heatingTank, ...(Number.isFinite(x.dhwPipeTemp) ? { pipe: x.dhwPipeTemp } : {}) });
       if (Number.isFinite(x.outdoorTemp)) {
-        const meterKw = Number.isFinite(x.heatMeterPower) ? x.heatMeterPower : hp.heatFromMeter(x, r.cfg.heat_meter_flow_unit || 'l/h');
+        const meterKw = Number.isFinite(x.heatMeterPower) ? x.heatMeterPower : hp.heatFromMeter(x, r.cfg.heat_meter_flow_unit || 'auto');
         const heatKw = Number.isFinite(meterKw) && x.valveDhw !== 1 ? meterKw : x.thermalPower;
         weather.push({ ms: x.ms, outdoorC: x.outdoorTemp, rh: x.outdoorRh ?? null, defrost: x.defrost === 2, elecKw: x.electricPower ?? null, heatKw: heatKw ?? null, step: Number.isFinite(x.powerStep) ? x.powerStep : hw.stepOf(x.powerLimit1 === 1, x.powerLimit2 === 1), ntc: Number.isFinite(x.ntcMode) ? x.ntcMode : 0 });
         if (Number.isFinite(x.roomTemp)) room.push({ ms: x.ms, roomC: x.roomTemp, outdoorC: x.outdoorTemp, heating: (x.compressorHz || 0) > 0 && x.valveDhw !== 1 && x.defrost !== 2, ...(Number.isFinite(x.roomTarget) ? { targetC: x.roomTarget } : {}) });

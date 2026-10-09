@@ -18,15 +18,17 @@ const WATER_KJ_PER_L_K = 4.186;
 //   Immersion Heater, Heat Source ≠ 0); otherwise guessed from the power: power while the compressor
 //   stands still (and it is not defrosting), or more than the compressor can draw on its own.
 // Pure: the heat a meter without its own power output measures: water flow × (flow − return) × 4.186.
-//   unit of the flow: 'l/h' (Kamstrup), 'l/min' or 'm3/h'
-function heatFromMeter(v, unit = 'l/h') {
+//   unit of the flow: 'auto' (below 100: l/min — a heat pump never runs below 100 l/h — else l/h), 'l/h',
+//   'l/min' or 'm3/h'. Loxone's unit label can be wrong when the value is scaled (3600 -> 60: l/min).
+function heatFromMeter(v, unit = 'auto') {
   if (!Number.isFinite(v.heatMeterFlowRate) || !Number.isFinite(v.heatMeterFlowTemp) || !Number.isFinite(v.heatMeterReturnTemp)) return null;
+  if (unit === 'auto') unit = Math.abs(v.heatMeterFlowRate) < 100 ? 'l/min' : 'l/h';
   const lpm = unit === 'l/min' ? v.heatMeterFlowRate : unit === 'm3/h' ? (v.heatMeterFlowRate * 1000) / 60 : v.heatMeterFlowRate / 60;
   const dT = v.heatMeterFlowTemp - v.heatMeterReturnTemp;
   return lpm > 0 && dT > 0 ? r2((lpm * dT * WATER_KJ_PER_L_K) / 60) : 0;
 }
 
-function interpret(v, { electricKw = null, compressorMaxKw = 3.5, meterFlowUnit = 'l/h' } = {}) {
+function interpret(v, { electricKw = null, compressorMaxKw = 3.5, meterFlowUnit = 'auto' } = {}) {
   const fault = v.fault === 1 || (v.errorCode !== undefined && v.errorCode !== 8000 && v.errorCode !== 0 && v.fault !== undefined);
   const defrost = v.defrost === 2;
   const elec = electricKw ?? v.electricPower ?? null;

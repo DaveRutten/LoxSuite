@@ -4703,5 +4703,7 @@
   "Heat meter: flow temperature": "Warmtemeter: aanvoertemperatuur",
   "Heat meter: return temperature": "Warmtemeter: retourtemperatuur",
   "Heat meter: water flow (unit per installation)": "Warmtemeter: waterflow (eenheid per installatie)",
-  "Heat meter flow in": "Flow van de warmtemeter in"
+  "Heat meter flow in": "Flow van de warmtemeter in",
+  "automatic (below 100: l/min)": "automatisch (onder 100: l/min)",
+  "What the value really is — Loxone's label can say l/h while a correction (3600 → 60) makes it l/min.": "Wat de waarde echt is — in Loxone kan l/h staan terwijl een correctie (3600 → 60) er l/min van maakt."
 }
