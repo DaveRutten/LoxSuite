@@ -18,6 +18,7 @@ function parseOpenMeteo(body, cfg) {
   const kwp = Number(cfg.kwp) || 0;
   const eff = Number(cfg.efficiency) || 0.85;
   const temps = body?.hourly?.temperature_2m || [];
+  const rhs = body?.hourly?.relative_humidity_2m || [];
   const out = [];
   times.forEach((t, i) => {
     const end = Date.parse(/Z$|[+-]\d\d:\d\d$/.test(t) ? t : `${t}Z`);
@@ -27,7 +28,11 @@ function parseOpenMeteo(body, cfg) {
     const tNow = Number(temps[i]);
     const tPrev = i > 0 ? Number(temps[i - 1]) : tNow;
     const temp = temps[i] === null || temps[i] === undefined || !Number.isFinite(tNow) ? null : Math.round(((Number.isFinite(tPrev) ? tPrev : tNow) + tNow) / 2 * 10) / 10;
-    out.push({ hour: new Date(end - 3600000).toISOString(), raw_kwh: round3(Math.max(0, w) / 1000 * kwp * eff), temp_c: temp });
+    // humidity the same way (an instant too)
+    const rNow = Number(rhs[i]);
+    const rPrev = i > 0 ? Number(rhs[i - 1]) : rNow;
+    const rh = rhs[i] === null || rhs[i] === undefined || !Number.isFinite(rNow) ? null : Math.round(((Number.isFinite(rPrev) ? rPrev : rNow) + rNow) / 2);
+    out.push({ hour: new Date(end - 3600000).toISOString(), raw_kwh: round3(Math.max(0, w) / 1000 * kwp * eff), temp_c: temp, rh_pct: rh });
   });
   return out;
 }
@@ -89,7 +94,7 @@ async function fetchJson(url) {
 }
 
 function openMeteoUrl(site, cfg) {
-  return `https://api.open-meteo.com/v1/forecast?latitude=${site.lat}&longitude=${site.lon}&hourly=global_tilted_irradiance,temperature_2m`
+  return `https://api.open-meteo.com/v1/forecast?latitude=${site.lat}&longitude=${site.lon}&hourly=global_tilted_irradiance,temperature_2m,relative_humidity_2m`
     + `&tilt=${Number(cfg.tilt) || 0}&azimuth=${Number(cfg.azimuth) || 0}&timezone=GMT&forecast_days=3&past_days=2`;
 }
 
@@ -109,11 +114,11 @@ async function refreshForecast(nowMs = Date.now(), { fetchImpl = fetchJson } = {
     const corrected = round3(r.raw_kwh * factorFor(factors, localParts(Date.parse(r.hour)).hour));
     if (Date.parse(r.hour) < nowMs - 3600000 && existing) {
       // past hours: keep what was forecast then — only the temperature is updated (closest to what it was)
-      if (r.temp_c !== null) await db.prepare('UPDATE solar_forecast SET temp_c = ? WHERE hour = ?').run(r.temp_c, r.hour).catch(() => {});
+      if (r.temp_c !== null) await db.prepare('UPDATE solar_forecast SET temp_c = ?, rh_pct = ? WHERE hour = ?').run(r.temp_c, r.rh_pct, r.hour).catch(() => {});
       continue;
     }
     await db.upsert('solar_forecast', {
-      hour: r.hour, raw_kwh: r.raw_kwh, corrected_kwh: corrected, made_at: now, temp_c: r.temp_c,
+      hour: r.hour, raw_kwh: r.raw_kwh, corrected_kwh: corrected, made_at: now, temp_c: r.temp_c, rh_pct: r.rh_pct,
       dayahead_raw_kwh: existing?.dayahead_raw_kwh ?? (isDayAhead ? r.raw_kwh : null),
     }, ['hour']);
   }

@@ -54,4 +54,15 @@ function ownSolarCost(worth, bonus = 0) {
   return w < 0 ? w : Math.max(0, Math.round((w - b) * 10000) / 10000);
 }
 
-module.exports = { NET_METERING_ENDS_MS, MODES, marketFromAllin, ruleAt, exportWorth, ownSolarCost };
+// What exporting a kWh really yields under the contract at `atMs`: its worth (exportWorth) minus the
+// supplier's feed-in costs. -> { value, worth, rule, cost } — rule: 'saldering' (net metering: the
+// all-in price of that moment, so a normal price means export all), 'market' (the market price, a
+// dynamic contract after net metering) or 'fixed' (the feed-in tariff).
+function exportNet({ atMs, price = null, market = null, feedIn = 'saldering', feedInEur = 0.05, feedInCostEur = 0, priceCfg = {} } = {}) {
+  const rule = ruleAt(feedIn, atMs);
+  const worth = exportWorth({ atMs, price, market, feedIn, feedInEur, priceCfg });
+  const cost = Math.max(0, num(feedInCostEur) ?? 0);
+  return { value: worth === null ? null : Math.round((worth - cost) * 10000) / 10000, worth, rule, cost };
+}
+
+module.exports = { NET_METERING_ENDS_MS, MODES, marketFromAllin, ruleAt, exportWorth, exportNet, ownSolarCost };

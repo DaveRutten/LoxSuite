@@ -112,10 +112,11 @@ const MODULES = [
   {
     key: 'energy_manager', group: 'energy', label: 'Energy manager', defaultOn: false, requires: ['energy'],
     description: 'Plan other big consumers (tap water, heat pump, washer, dryer) together with the car — shadow mode first.',
-    parts: ['Consumers with their own meter', 'Shadow plan and signals', 'Daily overview and savings'],
+    parts: ['Consumers with their own meter', 'Shadow plan and signals', 'Daily overview and savings', 'Modules: heat pump (tap water, legionella) and solar inverter, found in Loxone'],
     routes: ['/energy-manager'],
     workers: [
       { start: lazy('./energyManager', 'startEnergyManager'), stop: lazy('./energyManager', 'stopEnergyManager') },
+      { start: lazy('./energyModules', 'startEnergyModules'), stop: lazy('./energyModules', 'stopEnergyModules') },
     ],
     inUse: async () => (await count('SELECT COUNT(*) AS n FROM energy_loads')) > 0,
   },

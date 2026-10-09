@@ -1,0 +1,39 @@
+# Local demo: LoxSuite with a simulated Miniserver (gateway/src/dev/demo.js) — an Ecodan heat pump and
+# a SolarEdge inverter with made-up values, to try the energy-manager modules without a real Loxone.
+# Its own container, port and data volume, separate from a real install.
+#
+#   docker compose -f dev/docker-compose.demo.yml up --build
+#   http://localhost:5590   (admin / demo-loxsuite — local test login only)
+#
+# Remove it again (data included): docker compose -f dev/docker-compose.demo.yml down -v
+name: loxsuite-demo
+
+services:
+  loxsuite-demo:
+    build: ../gateway
+    container_name: loxsuite-demo
+    environment:
+      LOXSUITE_DEMO: '1'
+      SESSION_SECRET: demo-only-not-a-secret
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: demo-loxsuite
+      MQTT_URL: mqtt://127.0.0.1:1883
+      MQTT_USERNAME: loxsuite
+      MQTT_PASSWORD: demo-mqtt
+      MQTT_ADMIN_USERNAME: admin
+      MQTT_ADMIN_PASSWORD: demo-mqtt-admin
+      DB_PATH: /data/gateway.db
+      PORT: 5582
+      TZ: Europe/Amsterdam
+      DEVICE_TEMPLATES_PATH: /device-templates
+    ports:
+      - "5590:5582"
+    volumes:
+      - demo_data:/data
+      - demo_templates:/device-templates
+      - demo_mosquitto:/mosquitto/config
+
+volumes:
+  demo_data:
+  demo_templates:
+  demo_mosquitto:

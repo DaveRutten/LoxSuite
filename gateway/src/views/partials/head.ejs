@@ -192,6 +192,7 @@
           <span><%= t('Energy & charging') %></span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('wallbox', wallboxExpanded) ? 'hidden' : '' %>>
+          <% if (em('energy_manager')) { %><a href="/energy-manager" class="<%= active === 'energymanager' ? 'active' : '' %>"><%= t('Energy manager') %></a><% } %>
           <% if (em('charging')) { %>
             <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>"><%= t('Smart charging') %></a>
             <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>"><%= t('Agenda') %></a>
@@ -202,7 +203,6 @@
             <a href="/driving" class="<%= active === 'driving' ? 'active' : '' %>"><%= t('Driving & costs') %></a>
           <% } %>
           <% if (em('energy')) { %><a href="/energy" class="<%= active === 'energy' ? 'active' : '' %>"><%= t('Meters') %></a><% } %>
-          <% if (em('energy_manager')) { %><a href="/energy-manager" class="<%= active === 'energymanager' ? 'active' : '' %>"><%= t('Energy manager') %></a><% } %>
           <% if (em('ocpp')) { %><a href="/ocpp" class="<%= active === 'ocpp' ? 'active' : '' %>"><%= t('OCPP (charging costs)') %></a><% } %>
         </div>
       <% } %>

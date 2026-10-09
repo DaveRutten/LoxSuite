@@ -254,4 +254,120 @@ router.post('/recalc.json', requirePermission('energy_manager', 'edit'), asyncHa
   try { await em.recalc(); await em.tick(); res.json({ ok: true }); } catch (err) { res.json({ ok: false, message: err.message }); }
 }));
 
+// Modules: the heat pump and the solar inverter, found in Loxone (energyModules.js).
+const mods = () => require('../energyModules');
+const kindOk = (k) => ['heatpump', 'solar'].includes(k);
+
+router.get('/modules', asyncHandler(async (req, res) => {
+  const m = mods();
+  const [heatpump, solar] = await Promise.all([m.status('heatpump').catch((e) => ({ error: e.message })), m.status('solar').catch((e) => ({ error: e.message }))]);
+  const reasons = require('../reasonText');
+  res.render('energy-manager-modules', { heatpump, solar, saved: req.query.saved || null, roles: require('../energyTypes').ROLES, tr: (r) => reasons.tr(res.locals.t, r) });
+}));
+
+router.get('/modules/:kind/status.json', asyncHandler(async (req, res) => {
+  if (!kindOk(req.params.kind)) return res.status(404).json({ error: 'Unknown module' });
+  try { res.json(await mods().status(req.params.kind)); } catch (err) { res.status(500).json({ error: err.message }); }
+}));
+
+router.get('/modules/:kind/discover.json', asyncHandler(async (req, res) => {
+  if (!kindOk(req.params.kind)) return res.status(404).json({ error: 'Unknown module' });
+  const list = await mods().discover(req.params.kind, { refresh: req.query.refresh === '1' });
+  res.json({ found: list.map((c) => (c.error ? c : { uuid: c.uuid, name: c.name, room: c.room, score: c.score, ok: c.check.ok, known: c.known, miniserver: c.miniserver, missingFromLoxone: c.missingFromLoxone })) });
+}));
+
+// The states of a Miniserver to choose an own read link from (an object, a virtual output …) and the
+// controls with an action to send to directly.
+router.get('/modules/:kind/objects.json', asyncHandler(async (req, res) => {
+  const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(Number(req.query.ms));
+  if (!ms) return res.status(404).json({ error: 'Miniserver not found' });
+  const s = await require('../loxoneStructure').getStructure(ms).catch(() => null);
+  const rooms = s?.rooms || {};
+  const out = [];
+  for (const [uuid, c] of Object.entries(s?.controls || {})) {
+    const state = Object.values(c.states || {}).find((x) => typeof x === 'string');
+    out.push({ uuid, name: c.name, type: c.type, room: rooms[c.room]?.name || null, state: state || null, action: c.uuidAction || null });
+  }
+  res.json({ objects: out.sort((a, b) => String(a.name).localeCompare(String(b.name))) });
+}));
+
+const MODULE_NUM = { heatpump: ['heat_c_per_h', 'loss_c_per_h', 'hold_h'], solar: ['inverter_kw', 'step_pct', 'margin_kw'] };
+router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
+  const kind = req.params.kind;
+  if (!kindOk(kind)) return res.status(404).json({ ok: false, message: 'Unknown module' });
+  const b = req.body || {};
+  const roles = require('../energyTypes').ROLES[kind].roles;
+  const c = {};
+  if (b.enabled !== undefined) c.enabled = !!b.enabled;
+  if (kind === 'solar' && b.grid_invert !== undefined) c.grid_invert = !!b.grid_invert;
+  if (b.mode !== undefined) c.mode = b.mode === 'live' ? 'live' : 'shadow';
+  if (b.device !== undefined) { c.device = b.device ? String(b.device).slice(0, 80) : null; c.miniserver_id = b.miniserver_id ? Number(b.miniserver_id) : null; }
+  if (b.type_key !== undefined) c.type_key = b.type_key ? String(b.type_key).slice(0, 80) : null;
+  if (kind === 'heatpump' && b.source !== undefined) c.source = ['air', 'water', 'ground'].includes(b.source) ? b.source : 'air';
+  if (b.links && typeof b.links === 'object') {
+    c.links = {};
+    for (const [role, l] of Object.entries(b.links)) {
+      if (!roles[role] || !l || typeof l !== 'object') continue;
+      const one = {};
+      if (l.read && l.read.uuid) one.read = { uuid: String(l.read.uuid).slice(0, 80), name: String(l.read.name || '').slice(0, 120), ...(l.read.control ? { control: String(l.read.control).slice(0, 80) } : {}) };
+      if (l.write && ['direct', 'vi', 'off'].includes(l.write.via)) one.write = { via: l.write.via, ...(l.write.vi ? { vi: String(l.write.vi).replace(/[^\w.-]/g, '_').slice(0, 60) } : {}), ...(l.write.action ? { action: String(l.write.action).slice(0, 80), name: String(l.write.name || '').slice(0, 120) } : {}) };
+      if (one.read || one.write) c.links[role] = one;
+    }
+  }
+  for (const k of MODULE_NUM[kind]) if (b[k] !== undefined) c[k] = num(b[k], require('../energyModules').DEFAULTS[kind][k]);
+  if (kind === 'heatpump' && b.limits) {
+    const checked = require('../legionella').dhwLimits(Object.fromEntries(['comfortMinC', 'targetC', 'bufferMaxC', 'hpMaxC', 'absoluteMaxC'].map((k) => [k, num(b.limits[k])]).concat([['boosterForBuffer', !!b.limits.boosterForBuffer]])));
+    const limits = checked.limits;
+    c.limits = { comfortMinC: limits.comfortMinC, targetC: limits.targetC, bufferMaxC: Number(num(b.limits.bufferMaxC, limits.bufferMaxC)), hpMaxC: limits.hpMaxC, absoluteMaxC: limits.absoluteMaxC, boosterForBuffer: limits.boosterForBuffer };
+    c._warnings = checked.warnings;
+  }
+  for (const k of ['step_names', 'ntc_names']) {
+    if (kind === 'heatpump' && b[k] && typeof b[k] === 'object') c[k] = Object.fromEntries([0, 1, 2].map((i) => [i, String(b[k][i] ?? '').trim().slice(0, 40) || String(i)]));
+  }
+  if (kind === 'heatpump' && b.room) {
+    const R = b.room; const hhmmOk = (x, d) => (/^\d{1,2}:\d{2}$/.test(String(x || '')) ? String(x) : d);
+    c.room = { enabled: !!R.enabled, controller: R.controller ? String(R.controller).slice(0, 80) : null, schedule: R.schedule === 'own' ? 'own' : 'loxone', comfort_c: Math.max(15, Math.min(25, num(R.comfort_c, 20.5))), setback_c: Math.max(10, Math.min(23, num(R.setback_c, 19))), comfort_from: hhmmOk(R.comfort_from, '07:00'), comfort_until: hhmmOk(R.comfort_until, '22:30') };
+  }
+  if (kind === 'heatpump' && b.tuning) {
+    const T = b.tuning;
+    c.tuning = { mode: ['off', 'advise', 'live'].includes(T.mode) ? T.mode : 'advise', flow_min: Math.max(20, Math.min(45, num(T.flow_min, 25))), flow_max: Math.max(25, Math.min(60, num(T.flow_max, 45))) };
+  }
+  if (kind === 'heatpump' && b.legionella) {
+    const L = b.legionella;
+    c.legionella = { enabled: !!L.enabled, interval_days: Math.max(1, Math.min(30, num(L.interval_days, 7))), temp_c: Math.max(55, Math.min(70, num(L.temp_c, 60))), hold_min: Math.max(5, Math.min(240, num(L.hold_min, 30))), from_hour: Math.max(0, Math.min(23, num(L.from_hour, 10))), to_hour: Math.max(1, Math.min(24, num(L.to_hour, 17))), duration_h: Math.max(1, Math.min(6, num(L.duration_h, 2))), unit_backup: !!L.unit_backup };
+  }
+  const warnings = c._warnings || [];
+  delete c._warnings;
+  await mods().saveConfig(kind, c);
+  res.json({ ok: true, warnings });
+}));
+
+// The history of the linked objects that keep statistics in Loxone, so learning doesn't start from zero.
+router.post('/modules/:kind/history.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
+  if (!kindOk(req.params.kind)) return res.status(404).json({ ok: false, message: 'Unknown module' });
+  try { res.json({ ok: true, ...(await mods().importStatistics(req.params.kind, { days: num(req.body?.days, 14) })) }); } catch (err) { res.json({ ok: false, message: err.message }); }
+}));
+
+// A Loxone Modbus template (.LxAddon from the Library, or .xml) as an own type, the backup when the
+// device isn't found in Loxone.
+const multer = require('multer');
+const templateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
+router.post('/modules/:kind/import.json', requirePermission('energy_manager', 'edit'), templateUpload.single('file'), asyncHandler(async (req, res) => {
+  const kind = req.params.kind;
+  // multipart is not covered by the global CSRF check (see middleware/csrf.js): checked here
+  if (!req.body || req.body._csrf !== req.session.csrfToken) return res.status(403).json({ ok: false, message: 'Refresh the page and try again.' });
+  if (!kindOk(kind) || !req.file) return res.json({ ok: false, message: 'Choose a .LxAddon or .xml file.' });
+  try {
+    const imported = require('../loxoneTemplate').importTemplate(kind, req.file.buffer, { name: req.file.originalname });
+    const type = imported.type;
+    const check = imported.check;
+    const fs = require('fs');
+    const path = require('path');
+    const dir = path.join(process.env.DEVICE_TEMPLATES_PATH || path.join(__dirname, '../../device-templates'), 'user', 'energy', kind);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${type.key}.json`), JSON.stringify(type, null, 2));
+    res.json({ ok: true, key: type.key, label: type.label, source: type.source, registers: type.registers.length, recognised: type.registers.filter((r) => r.role).length, check });
+  } catch (err) { res.json({ ok: false, message: err.message }); }
+}));
+
 module.exports = router;

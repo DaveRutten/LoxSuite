@@ -109,6 +109,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
 COPY public ./public
+# Built-in heat pump / inverter types of the energy-manager modules (energyTypes.js).
+COPY energy-types ./energy-types
 # Seed-only copy, kept separate from the bind-mounted runtime folder (/device-templates, see
 # docker-compose.yml and docker-entrypoint.sh) — a bind mount replaces a directory's contents
 # entirely rather than merging with what the image already has there, so the built-in HeatMeister

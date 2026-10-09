@@ -4736,7 +4736,7 @@ body.panel-hints-hidden .hint.hint-clamp::before {
   content: "ⓘ"; position: absolute; left: 0; top: 0; color: var(--accent, #5CA83F); font-style: normal; font-weight: 600;
 }
 body.panel-hints-hidden .hint.hint-clamp:hover, body.panel-hints-hidden .hint.hint-clamp:focus-visible { color: var(--text); }
-/* A field's explanation behind an ⓘ after its label (hint-info.js), shown in full with the lightbulb on. */
+/* Explanations behind one ⓘ per tile, after its title (hint-info.js), shown in full with the lightbulb on. */
 .hint-i { display: none; }
 body.panel-hints-hidden .hint-i {
   display: inline-flex; align-items: center; justify-content: center; margin-left: 0.3rem; padding: 0; width: 1.15em; height: 1.15em;
@@ -4744,6 +4744,7 @@ body.panel-hints-hidden .hint-i {
 }
 body.panel-hints-hidden .hint-i[aria-expanded="true"] { color: var(--text); }
 body.panel-hints-hidden .hint.hint-field:not(.hint-field-open) { display: none; }
+body.panel-hints-hidden .hint.hint-field.hint-field-open { display: block; }
 body.panel-hints-hidden .hint.hint-clamp.hint-open { -webkit-line-clamp: unset; line-clamp: unset; display: block; cursor: pointer; }
 
 /* "Use in Monitor" pickers (monitor-picks.js): compact tiles, monitored ones marked and linked. */

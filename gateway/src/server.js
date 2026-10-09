@@ -1,4 +1,7 @@
 require('dotenv').config();
+// Demo mode for trying things locally without a Miniserver (src/dev/demo.js) — before anything
+// else talks to a Miniserver, so its connections can be replaced by the simulation.
+if (process.env.LOXSUITE_DEMO === '1') require('./dev/demo').patch();
 
 // Both the session-cookie signing key (below) and every secret-at-rest's encryption key
 // (secretCrypto.js) derive from this, and BOTH silently fall back to a hardcoded dev string if
@@ -129,6 +132,7 @@ async function main() {
   await db.init();
   // Which modules are on (Administration > Modules); seeded on the first start after the update.
   await modules.init().catch((err) => console.error('Modules init failed:', err.message));
+  if (process.env.LOXSUITE_DEMO === '1') await require('./dev/demo').seed().catch((err) => console.error('Demo seed failed:', err.message));
   // Languages and translations (Administration > Languages, Translations page).
   await i18n.init().catch((err) => console.error('Languages init failed:', err.message));
   // Eagerly, once — getDisplayTimezone() (formatDateTime, res.locals.displayTimezone below) is

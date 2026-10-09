@@ -137,7 +137,7 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
       pv_allowed_import_kw: num(b.pv_allowed_import_kw, 0.5), pv_opportunistic: !!b.pv_opportunistic,
       solar_trust: ['low', 'expected', 'bonus'].includes(b.solar_trust) ? b.solar_trust : 'low',
       max_price_eur_kwh: num(b.max_price_eur_kwh), insufficient: b.insufficient === 'stop' ? 'stop' : 'charge',
-      feed_in: ['saldering', 'market', 'fixed'].includes(b.feed_in) ? b.feed_in : 'saldering', feed_in_eur_kwh: num(b.feed_in_eur_kwh, 0.05),
+      feed_in: ['saldering', 'market', 'fixed'].includes(b.feed_in) ? b.feed_in : 'saldering', feed_in_eur_kwh: num(b.feed_in_eur_kwh, 0.05), feed_in_cost_eur_kwh: Math.max(0, Math.min(1, num(b.feed_in_cost_eur_kwh, 0))),
       solar_bonus_eur: Math.max(0, Math.min(0.5, num(b.solar_bonus_eur, 0.05))),
       target_policy: b.target_policy === 'needed' ? 'needed' : 'full',
       buffer_km: Math.max(0, Math.min(500, num(b.buffer_km, 40))), buffer_h: Math.max(1, Math.min(12, num(b.buffer_h, 3))),

@@ -42,6 +42,7 @@ const DEFAULTS = {
   feed_in: 'saldering',           // value of exported solar (solarValue.js): 'saldering' (= price of that moment, until
                                   // net metering ends on 1 January 2027, then the market price) | 'market' | 'fixed'
   feed_in_eur_kwh: 0.05,
+  feed_in_cost_eur_kwh: 0,        // the supplier's feed-in costs per exported kWh (terugleverkosten), also with net metering
   // solar_bonus_eur: "prefer own solar" (€/kWh): own solar counts this much cheaper than exporting it
   // yields. Not in the defaults: getConfig() takes the energy manager's old setting when it is not set yet.
   target_policy: 'full',          // after a trip: 'full' again before the next departure | 'needed' (what that departure

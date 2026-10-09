@@ -1,0 +1,194 @@
+{
+  "key": "solaredge",
+  "label": "SolarEdge (Modbus TCP)",
+  "source": "Loxone Library template SolarEdge Inverter (solaredge-inverter-127 v3.0.3) + SolarEdge power control",
+  "values": "loxone",
+  "notes": [
+    "Raw values with a scale factor (X_RAW + X_SF): value = RAW × 10^SF; LoxSuite does that when both are linked.",
+    "Power control: three outputs a user adds in Loxone — Active Power Limit (0–100 %), AdvancedPwrControlEn (0 = off, 4 = active) and ReactivePwrConfig (0 = off, 1 = active). LoxSuite puts the two enables on once and leaves them on (they are stored in the inverter); the limit alone does the work, 100 % = no limit."
+  ],
+  "registers": [
+    {
+      "reg": 40100,
+      "label": "I_DC_Power_RAW",
+      "comment": "DC Power Raw",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "i_dc_power_raw",
+      "sf": "i_dc_power_sf",
+      "role": "dcPower",
+      "div": 1000
+    },
+    {
+      "reg": 40101,
+      "label": "I_DC_Power_SF",
+      "comment": "DC Power Scaling Factor",
+      "rw": "r",
+      "unit": "x",
+      "scale": 1,
+      "key": "i_dc_power_sf"
+    },
+    {
+      "reg": 40107,
+      "label": "I_Status",
+      "comment": "Inverter Status",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "i_status",
+      "role": "status",
+      "map": {
+        "1": "Uit",
+        "2": "Slaapstand (nacht)",
+        "3": "Opstarten",
+        "4": "Produceert",
+        "5": "Produceert (begrensd)",
+        "6": "Afschakelen",
+        "7": "Storing",
+        "8": "Onderhoud"
+      }
+    },
+    {
+      "reg": 40206,
+      "label": "M_AC_Power_RAW",
+      "comment": "Grid Power Raw",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "m_ac_power_raw",
+      "sf": "m_ac_power_sf",
+      "role": "gridPower",
+      "div": 1000
+    },
+    {
+      "reg": 40210,
+      "label": "M_AC_Power_SF",
+      "comment": "Grid Power Scaling Factor",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "m_ac_power_sf"
+    },
+    {
+      "reg": 40226,
+      "label": "M_Exported_Energy_RAW",
+      "comment": "Grid Exported Energy Raw",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "m_exported_energy_raw",
+      "sf": "m_energy_sf",
+      "role": "exportEnergy",
+      "div": 1000
+    },
+    {
+      "reg": 40234,
+      "label": "M_Imported_Energy_RAW",
+      "comment": "Grid Imported Energy Raw",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "m_imported_energy_raw",
+      "sf": "m_energy_sf",
+      "role": "importEnergy",
+      "div": 1000
+    },
+    {
+      "reg": 40242,
+      "label": "M_Energy_SF",
+      "comment": "Grid Energy Scaling Factor",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "m_energy_sf"
+    },
+    {
+      "reg": 57732,
+      "label": "B1_State_of_Energy",
+      "comment": "Battery 1 Storage Level",
+      "rw": "r",
+      "unit": "%",
+      "scale": 1,
+      "key": "b1_state_of_energy",
+      "role": "batterySoc"
+    },
+    {
+      "reg": 57716,
+      "label": "B1_Instantaneous_Power",
+      "comment": "Battery 1 Power",
+      "rw": "r",
+      "unit": "kW",
+      "scale": 1000,
+      "key": "b1_instantaneous_power",
+      "role": "batteryPower"
+    },
+    {
+      "reg": 57972,
+      "label": "B2_State_of_Energy",
+      "comment": "Battery 2 Storage Level",
+      "rw": "r",
+      "unit": "%",
+      "scale": 1,
+      "key": "b2_state_of_energy"
+    },
+    {
+      "reg": 57988,
+      "label": "B2_Instantaneus_Power",
+      "comment": "Battery 2 Power",
+      "rw": "r",
+      "unit": "kW",
+      "scale": 1000,
+      "key": "b2_instantaneus_power"
+    },
+    {
+      "reg": 61762,
+      "key": "advancedpwrcontrolen",
+      "label": "AdvancedPwrControlEn",
+      "rw": "rw",
+      "unit": null,
+      "scale": 1,
+      "role": "powerControlEnable",
+      "map": {
+        "0": "Uit",
+        "4": "Begrenzing actief"
+      },
+      "onValue": 4,
+      "extra": true
+    },
+    {
+      "reg": 61700,
+      "key": "reactivepwrconfig",
+      "label": "ReactivePwrConfig",
+      "rw": "rw",
+      "unit": null,
+      "scale": 1,
+      "role": "reactivePowerConfig",
+      "map": {
+        "0": "Uit",
+        "1": "Begrenzing actief"
+      },
+      "onValue": 1,
+      "extra": true
+    },
+    {
+      "reg": 61441,
+      "key": "active_power_limit",
+      "label": "Active Power Limit",
+      "rw": "rw",
+      "unit": "%",
+      "scale": 1,
+      "role": "powerLimitPct",
+      "min": 0,
+      "max": 100,
+      "extra": true
+    }
+  ],
+  "defaults": {
+    "inverterKw": 8,
+    "minPct": 0,
+    "stepPct": 5,
+    "marginKw": 0.2,
+    "maxWritesPerHour": 20
+  }
+}

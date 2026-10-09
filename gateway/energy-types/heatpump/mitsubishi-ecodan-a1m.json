@@ -1,0 +1,612 @@
+{
+  "key": "mitsubishi-ecodan-a1m",
+  "label": "Mitsubishi Ecodan (MelcoBEMS MINI A1M)",
+  "source": "Loxone Library template Mitshubishi Heat Pump (mitshubishi-heat-pump-1197 v1.0.0) + Procon A1M ATW Modbus register tables v1.0.7",
+  "values": "loxone",
+  "notes": [
+    "Names as in the Loxone Library template, so they match the objects in Loxone. Registers marked extra are in the A1M but not in that template: add them as a Modbus sensor in Loxone to use them.",
+    "Force DHW (37) starts one tap-water cycle up to the tank setpoint; the unit puts it back to 0 itself.",
+    "Holiday (38) is writable on the A1M but only a sensor in the Library template; DHW / heating prohibit (39, 40, 42) are read only on firmware 3.0.28+.",
+    "Tap-water setpoint above ~55 °C: the booster or immersion heater helps. Keep hpMaxC at what the heat pump reaches on its own.",
+    "Tank Water Temp Target accepts up to 70 °C; LoxSuite only goes above the buffer maximum for the legionella cycle."
+  ],
+  "registers": [
+    {
+      "reg": 102,
+      "label": "Flow Temp",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "flow_temp",
+      "role": "flowTemp",
+      "comment": "Flow Temp Up"
+    },
+    {
+      "reg": 27,
+      "label": "Operating Mode DHW",
+      "rw": "rw",
+      "unit": null,
+      "scale": 1,
+      "writeLabel": "Set DHW Mode",
+      "key": "operating_mode_dhw",
+      "role": "dhwMode",
+      "map": {
+        "0": "Normaal",
+        "1": "Eco"
+      }
+    },
+    {
+      "reg": 25,
+      "label": "Ecodan On-Off",
+      "rw": "rw",
+      "unit": null,
+      "scale": 1,
+      "writeLabel": "Set Ecodan On-Off",
+      "key": "ecodan_on_off",
+      "role": "systemOn",
+      "map": {
+        "0": "Systeem uit",
+        "1": "Systeem aan",
+        "2": "Noodbedrijf",
+        "3": "Testbedrijf"
+      }
+    },
+    {
+      "reg": 106,
+      "label": "Tank Water Temp Actual",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "tank_water_temp_actual",
+      "role": "tankTemp"
+    },
+    {
+      "reg": 28,
+      "label": "Heating Mode – Zone 1",
+      "rw": "rw",
+      "unit": null,
+      "scale": 1,
+      "writeLabel": "Set Zone 1 Heating Mode",
+      "key": "heating_mode_zone_1",
+      "role": "heatingMode",
+      "map": {
+        "0": "Verwarmen op ruimtetemperatuur",
+        "1": "Verwarmen op aanvoertemperatuur",
+        "2": "Verwarmen op stooklijn",
+        "3": "Koelen op ruimtetemperatuur",
+        "4": "Koelen op aanvoertemperatuur",
+        "5": "Vloer droogstoken"
+      },
+      "comment": "Ecodan Zone 1 Mode"
+    },
+    {
+      "reg": 29,
+      "label": "Heating Mode – Zone 2",
+      "rw": "rw",
+      "unit": null,
+      "scale": 1,
+      "writeLabel": "Set Zone 2 Heating Mode",
+      "key": "heating_mode_zone_2",
+      "map": {
+        "0": "Verwarmen op ruimtetemperatuur",
+        "1": "Verwarmen op aanvoertemperatuur",
+        "2": "Verwarmen op stooklijn",
+        "3": "Koelen op ruimtetemperatuur",
+        "4": "Koelen op aanvoertemperatuur",
+        "5": "Vloer droogstoken"
+      },
+      "comment": "Ecodan Zone 2 Mode"
+    },
+    {
+      "reg": 127,
+      "label": "Heat Pump On-Off",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "heat_pump_on_off",
+      "role": "running",
+      "map": {
+        "0": "Stop",
+        "1": "In bedrijf"
+      }
+    },
+    {
+      "reg": 104,
+      "label": "Return Temp",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "return_temp",
+      "role": "returnTemp"
+    },
+    {
+      "reg": 108,
+      "label": "Flow Temp Zone 1",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "flow_temp_zone_1"
+    },
+    {
+      "reg": 112,
+      "label": "Flow Temp Zone 2",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "flow_temp_zone_2"
+    },
+    {
+      "reg": 110,
+      "label": "Return Temp Zone 1",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "return_temp_zone_1"
+    },
+    {
+      "reg": 114,
+      "label": "Return Temp Zone 2",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "return_temp_zone_2"
+    },
+    {
+      "reg": 149,
+      "label": "Water Pump 1",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "water_pump_1",
+      "role": "pumpOn",
+      "map": {
+        "0": "Uit",
+        "1": "Aan"
+      }
+    },
+    {
+      "reg": 150,
+      "label": "Water Pump 2",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "water_pump_2",
+      "map": {
+        "0": "Uit",
+        "1": "Aan"
+      }
+    },
+    {
+      "reg": 299,
+      "label": "Flow Rate",
+      "rw": "r",
+      "unit": "l/min",
+      "scale": 1,
+      "key": "flow_rate",
+      "role": "flowRate"
+    },
+    {
+      "reg": 282,
+      "label": "Last Measured Heating Consumption 1",
+      "rw": "r",
+      "unit": "kWh",
+      "scale": 1,
+      "key": "last_measured_heating_consumption_1"
+    },
+    {
+      "reg": 286,
+      "label": "Last Measured DHW Consumption 1",
+      "rw": "r",
+      "unit": "kWh",
+      "scale": 1,
+      "key": "last_measured_dhw_consumption_1"
+    },
+    {
+      "reg": 281,
+      "label": "Energy Consumption Measured Day",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "energy_consumption_measured_day"
+    },
+    {
+      "reg": 280,
+      "label": "Energy Consumption Measured Month",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "energy_consumption_measured_month"
+    },
+    {
+      "reg": 279,
+      "label": "Energy Consumption Measured Year",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "energy_consumption_measured_year"
+    },
+    {
+      "reg": 291,
+      "label": "Energy Production Measured Day",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "energy_production_measured_day"
+    },
+    {
+      "reg": 290,
+      "label": "Energy Production Measured Month",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "energy_production_measured_month"
+    },
+    {
+      "reg": 289,
+      "label": "Energy Production Measured Year",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "energy_production_measured_year"
+    },
+    {
+      "reg": 292,
+      "label": "Last Measured Heating Production 1",
+      "rw": "r",
+      "unit": "kWh",
+      "scale": 1,
+      "key": "last_measured_heating_production_1"
+    },
+    {
+      "reg": 296,
+      "label": "Last Measured DHW Production 1",
+      "rw": "r",
+      "unit": "kWh",
+      "scale": 1,
+      "key": "last_measured_dhw_production_1"
+    },
+    {
+      "reg": 379,
+      "label": "Consumed Power (actual)",
+      "rw": "r",
+      "unit": "kW",
+      "scale": 1,
+      "key": "consumed_power_actual",
+      "role": "electricPower",
+      "comment": "Current"
+    },
+    {
+      "reg": 380,
+      "label": "Produced Power (actual)",
+      "rw": "r",
+      "unit": "kW",
+      "scale": 1,
+      "key": "produced_power_actual",
+      "role": "thermalPower"
+    },
+    {
+      "reg": 86,
+      "label": "Flow Temp Setpoint Zone 1",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "flow_temp_setpoint_zone_1",
+      "role": "flowSetpoint"
+    },
+    {
+      "reg": 88,
+      "label": "Flow Temp Setpoint Zone 2",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "flow_temp_setpoint_zone_2",
+      "role": "flowSetpointZone2"
+    },
+    {
+      "reg": 31,
+      "label": "Tank Water Temp Target",
+      "rw": "rw",
+      "unit": "ºC",
+      "scale": 100,
+      "writeLabel": "Set Tank Water Temperature",
+      "key": "tank_water_temp_target",
+      "role": "dhwSetpoint",
+      "min": 40,
+      "max": 70
+    },
+    {
+      "reg": 39,
+      "label": "DHW Prohibited",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "dhw_prohibited",
+      "map": {
+        "0": "Aan",
+        "1": "Geblokkeerd"
+      }
+    },
+    {
+      "reg": 40,
+      "label": "Heating Zone 1 Prohibited",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "heating_zone_1_prohibited",
+      "map": {
+        "0": "Aan",
+        "1": "Geblokkeerd"
+      }
+    },
+    {
+      "reg": 42,
+      "label": "Heating Zone 2 Prohibited",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "heating_zone_2_prohibited",
+      "map": {
+        "0": "Aan",
+        "1": "Geblokkeerd"
+      }
+    },
+    {
+      "reg": 92,
+      "label": "DHW Temperature Drop",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 10,
+      "key": "dhw_temperature_drop",
+      "role": "dhwDrop"
+    },
+    {
+      "reg": 287,
+      "label": "Last Measured DHW Consumption 2",
+      "rw": "r",
+      "unit": "kW",
+      "scale": 100,
+      "key": "last_measured_dhw_consumption_2"
+    },
+    {
+      "reg": 283,
+      "label": "Last Measured Heating Consumption 2",
+      "rw": "r",
+      "unit": "kW",
+      "scale": 100,
+      "key": "last_measured_heating_consumption_2"
+    },
+    {
+      "reg": 297,
+      "label": "Last Measured DHW Production 2",
+      "rw": "r",
+      "unit": "kW",
+      "scale": 100,
+      "key": "last_measured_dhw_production_2"
+    },
+    {
+      "reg": 293,
+      "label": "Last Measured Heating Production 2",
+      "rw": "r",
+      "unit": "kW",
+      "scale": 100,
+      "key": "last_measured_heating_production_2"
+    },
+    {
+      "reg": 70,
+      "label": "Display Error Code Digit 1",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "display_error_code_digit_1",
+      "role": "errorCode"
+    },
+    {
+      "reg": 71,
+      "label": "Display Error Code Digit 2",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "display_error_code_digit_2"
+    },
+    {
+      "reg": 145,
+      "label": "Booster Heater 1",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "booster_heater_1",
+      "role": "boosterHeater",
+      "map": {
+        "0": "Uit",
+        "1": "Aan"
+      }
+    },
+    {
+      "reg": 146,
+      "label": "Booster Heater 2",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "booster_heater_2",
+      "map": {
+        "0": "Uit",
+        "1": "Aan"
+      }
+    },
+    {
+      "reg": 151,
+      "label": "Water Pump 3",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "water_pump_3",
+      "map": {
+        "0": "Uit",
+        "1": "Aan"
+      }
+    },
+    {
+      "reg": 37,
+      "label": "Force DHW",
+      "rw": "rw",
+      "unit": null,
+      "scale": 1,
+      "key": "force_dhw",
+      "role": "forceDhw",
+      "map": {
+        "0": "Normaal",
+        "1": "Tapwater forceren"
+      }
+    },
+    {
+      "reg": 38,
+      "label": "Holiday",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "holiday",
+      "map": {
+        "0": "Normaal",
+        "1": "Vakantie"
+      }
+    },
+    {
+      "reg": 350,
+      "label": "Legionella Prevention",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "legionella_prevention",
+      "role": "legionella"
+    },
+    {
+      "reg": 364,
+      "label": "Heat Source Phase DHW",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "heat_source_phase_dhw",
+      "role": "heatSource",
+      "map": {
+        "0": "Warmtepomp",
+        "1": "Dompelaar",
+        "2": "Bijverwarming",
+        "3": "Dompelaar + bijverwarming",
+        "4": "Ketel"
+      }
+    },
+    {
+      "reg": 11,
+      "label": "Modbus Counter",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "key": "modbus_counter"
+    },
+    {
+      "reg": 33,
+      "label": "Set Zone 1 Thermostat",
+      "rw": "w",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "set_zone_1_thermostat",
+      "role": "roomSetpoint",
+      "min": 10,
+      "max": 60,
+      "comment": "Zone 1 target: a room temperature on room-temperature mode, the flow temperature on flow mode (Heating Mode – Zone 1 = 1)"
+    },
+    {
+      "reg": 35,
+      "label": "Set Zone 2 Thermostat",
+      "rw": "w",
+      "unit": "ºC",
+      "scale": 100,
+      "key": "set_zone_2_thermostat"
+    },
+    {
+      "reg": 152,
+      "key": "3_way_valve",
+      "label": "3-Way Valve",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "role": "valveDhw",
+      "map": {
+        "0": "CV",
+        "1": "Tapwater"
+      },
+      "extra": true
+    },
+    {
+      "reg": 148,
+      "key": "immersion_heater",
+      "label": "Immersion Heater",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "role": "immersionHeater",
+      "map": {
+        "0": "Uit",
+        "1": "Aan"
+      },
+      "extra": true
+    },
+    {
+      "reg": 73,
+      "key": "heat_pump_frequency",
+      "label": "Heat Pump Frequency",
+      "rw": "r",
+      "unit": "Hz",
+      "scale": 1,
+      "role": "compressorHz",
+      "extra": true
+    },
+    {
+      "reg": 100,
+      "key": "outdoor_ambient_temperature",
+      "label": "Outdoor Ambient Temperature",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 10,
+      "role": "outdoorTemp",
+      "extra": true
+    },
+    {
+      "reg": 94,
+      "key": "room_temperature_zone_1",
+      "label": "Room Temperature – Zone 1",
+      "rw": "r",
+      "unit": "ºC",
+      "scale": 100,
+      "role": "roomTemp",
+      "extra": true
+    },
+    {
+      "reg": 26,
+      "key": "defrost",
+      "label": "Defrost",
+      "rw": "r",
+      "unit": null,
+      "scale": 1,
+      "role": "defrost",
+      "map": {
+        "0": "Normaal",
+        "1": "Standby",
+        "2": "Ontdooien",
+        "3": "Wachten op herstart"
+      },
+      "fn": 4,
+      "note": "input register 26 (function 4)",
+      "extra": true
+    }
+  ],
+  "defaults": {
+    "comfortMinC": 45,
+    "targetC": 50,
+    "bufferMaxC": 55,
+    "hpMaxC": 55,
+    "absoluteMaxC": 60,
+    "legionellaC": 60,
+    "maxWritesPerHour": 6
+  }
+}

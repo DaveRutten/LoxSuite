@@ -188,7 +188,7 @@ function devicesFromStructure(structure) {
     for (const [, c] of members) { const u = Object.values(c.states || {}).find((x) => typeof x === 'string'); if (u && !states[c.name]) states[c.name] = u; }
     const commands = {};
     for (const [key, re] of DEVICE_COMMANDS) { const m = members.find(([, c]) => re.test(String(c.name).trim())); if (m) commands[key] = { uuid: m[1].uuidAction || m[0], name: m[1].name }; }
-    out.push({ uuid: `group:${prefix}`, name, type: 'Device', room: rooms[first.room]?.name || null, category: cats[first.cat]?.name || null, states: Object.keys(states).length, signals: mapDeviceStates({ states }), commands, members: members.map(([u, c]) => ({ uuid: u, name: c.name, type: c.type })) });
+    out.push({ uuid: `group:${prefix}`, name, type: 'Device', room: rooms[first.room]?.name || null, category: cats[first.cat]?.name || null, states: Object.keys(states).length, signals: mapDeviceStates({ states }), commands, members: members.map(([u, c]) => ({ uuid: u, name: c.name, type: c.type, state: Object.values(c.states || {}).find((x) => typeof x === 'string') || null, action: c.uuidAction || null })) });
   }
   return out.sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
