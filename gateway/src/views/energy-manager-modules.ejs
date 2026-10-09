@@ -15,7 +15,8 @@
   .mm-hr .bar { border-radius:3px 3px 0 0; background:var(--border); min-height:2px; } .mm-hr.dhw .bar { background:#3b82f6; } .mm-hr.sun .bar { background:#f2b632; }
   .mm-hr .ice { position:absolute; top:12px; left:0; right:0; text-align:center; color:#3b82f6; font-size:0.7rem; }
   .mm-hr .lbl { font-size:0.65rem; color:var(--text-muted); text-align:center; margin-top:2px; } .mm-hr .drop { position:absolute; top:0; left:0; right:0; text-align:center; color:var(--danger); font-size:0.7rem; }
-  .mm-chart { width:100%; height:300px; display:block; margin-top:0.4rem; }
+  .mm-chart { width:100%; height:330px; display:block; margin-top:0.4rem; }
+  .mm-chart path, .mm-chart line { vector-effect:non-scaling-stroke; }
   .mm-chart .mm-cl { font-size:11px; fill:var(--text-muted); }
   .mm-chart .mm-cx { font-size:10px; fill:var(--text-muted); }
   .mm-chart .mm-ct { font-size:11px; fill:var(--danger); }
@@ -151,7 +152,7 @@
       const chPf = chPrice.filter(Number.isFinite), chPMax = Math.max(0.01, ...chPf, 0), chPMin = Math.min(0, ...chPf), chYP = (v) => chL4.top + chL4.h - ((v - chPMin) / (chPMax - chPMin)) * chL4.h;
       const chTip = (h) => [hhmm(h.ms), { dhw: t('Tap water'), legionella: t('Legionella'), preheat: t('Pre-heating'), comfort: t('Comfort'), cool: t('Cooling'), setback: t('Set back'), free: t('Heating / Loxone itself') }[h.does] || '', h.roomTargetC !== null ? t('room') + ' ' + nf(h.roomTargetC) + ' °C' : '', t('tank') + ' ' + nf(h.predC) + ' °C', h.outdoorC !== null && h.outdoorC !== undefined ? t('outside') + ' ' + nf(h.outdoorC) + ' °C' : '', h.cop ? 'COP ' + nf(h.cop, 1) : '', h.defrost > 0.02 ? t('defrosting ~{p}% of the time', { p: Math.round(h.defrost * 100) }) : '', '€ ' + nf(h.price, 3), tr(h.reason)].filter(Boolean).join(' · ');
     %>
-    <svg class="mm-chart" viewBox="0 0 <%= chW %> 330" preserveAspectRatio="none" role="img" aria-label="<%= t('Plan, next 24 hours') %>">
+    <svg class="mm-chart" viewBox="0 0 <%= chW %> 330" data-w="<%= chW %>" preserveAspectRatio="xMinYMin meet" role="img" aria-label="<%= t('Plan, next 24 hours') %>"><g class="mm-g">
       <text x="0" y="12" class="mm-cl"><%= t('What it does') %></text>
       <% chP.forEach((h, i) => { %><rect x="<%= chX(i) + 1 %>" y="<%= chL1.top %>" width="<%= chCw - 2 %>" height="<%= chL1.h %>" rx="3" fill="<%= chCOL[h.does] || chCOL.free %>"><title><%= chTip(h) %></title></rect><% if (h.drop > 0.5) { %><text x="<%= chX(i) + chCw / 2 %>" y="<%= chL1.top + chL1.h - 6 %>" class="mm-ct" text-anchor="middle">▼</text><% } %><% }) %>
       <text x="0" y="<%= chL2.top - 6 %>" class="mm-cl"><%= t('Room target and tank (°C)') %></text>
@@ -165,7 +166,7 @@
       <% if (chPMin < 0) { %><line x1="0" x2="<%= chW %>" y1="<%= chYP(0) %>" y2="<%= chYP(0) %>" class="mm-zero"/><% } %>
       <% chP.forEach((h, i) => { if (i % 2) return; %><text x="<%= chX(i) + chCw / 2 %>" y="324" class="mm-cx" text-anchor="middle"><%= hhmm(h.ms).slice(0, 2) %></text><% }) %>
       <% chP.forEach((h, i) => { %><rect x="<%= chX(i) %>" y="0" width="<%= chCw %>" height="310" fill="transparent"><title><%= chTip(h) %></title></rect><% }) %>
-    </svg>
+    </g></svg>
     <div class="mm-legend"><span><i style="background:#3b82f6"></i><%= t('tap water') %></span><span><i style="background:#d64545"></i><%= t('legionella') %></span><span><i style="background:#f59e0b"></i><%= t('pre-heating') %></span><span><i style="background:var(--accent)"></i><%= hpS.cooling ? t('cooling') : t('comfort') %></span><span><i style="background:var(--border)"></i><%= t('set back') %></span><span><i class="mm-k-room"></i><%= t('room target') %></span><span><i class="mm-k-tank"></i><%= t('tank') %></span><span style="color:var(--danger)">▼ <%= t('usual draw') %></span><span style="color:#3b82f6">❄ <%= t('expected defrosting') %></span></div>
     <p class="hint" style="margin:0.3rem 0 0;"><%= t('The plan compares the cost per kWh of heat: the price divided by the COP expected in that hour\'s weather.') %></p>
   </div>
@@ -312,6 +313,20 @@
 <datalist id="mm-actions"></datalist>
 
 <script>
+(function () {
+  // the plan chart: drawn on 960 wide; the shapes stretch with the card, the texts keep their size
+  function fitChart(svg) {
+    var g = svg.querySelector('.mm-g'), w0 = Number(svg.getAttribute('data-w')) || 960, w = svg.clientWidth || w0, sx = w / w0;
+    svg.setAttribute('viewBox', '0 0 ' + w + ' 330');
+    g.setAttribute('transform', 'scale(' + sx + ',1)');
+    Array.prototype.forEach.call(svg.querySelectorAll('text'), function (tx) {
+      if (!tx.hasAttribute('data-x')) { tx.setAttribute('data-x', tx.getAttribute('x') || '0'); svg.appendChild(tx); }
+      tx.setAttribute('x', String(Number(tx.getAttribute('data-x')) * sx));
+    });
+  }
+  function fitAll() { Array.prototype.forEach.call(document.querySelectorAll('svg.mm-chart'), fitChart); }
+  fitAll(); window.addEventListener('resize', fitAll);
+})();
 (function () {
   var CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
   var objects = null;
