@@ -13,6 +13,12 @@ All notable changes to this project are documented in this file.
   pull requests are tested as before, and both workflows can be run by hand (a hand-run image build on main also
   writes `:latest`).
 
+## [0.59.1-alpha.1] - 2026-10-09
+
+### Fixed
+- **Heat pump plan chart**: on a wide screen the labels were stretched along with the chart; now the shapes stretch with
+  the card and the texts keep their size.
+
 ## [0.59.0-alpha.1] - 2026-10-09
 
 ### Added
