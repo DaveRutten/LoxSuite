@@ -222,7 +222,116 @@ async function getConfig() { return settings.get('agenda', DEFAULTS); }
 async function listCalendars() {
   const rows = await db.prepare('SELECT * FROM calendars ORDER BY name').all();
   const { decodeEntities } = require('./caldav');
-  return rows.map((c) => ({ ...c, name: decodeEntities(c.name), url: undefined, secret: undefined, kind: c.kind || 'ics', urlHost: hostOf(c.url) }));
+  return rows.map((c) => ({ ...c, name: decodeEntities(c.name), url: undefined, secret: undefined, kind: c.kind || 'ics', urlHost: c.kind === 'local' ? '' : hostOf(c.url), writable: isWritable(c) }));
+}
+
+// ------------------------------------------------------------------ appointments added in LoxSuite
+
+// A calendar LoxSuite can add an appointment to: one over CalDAV (iCloud, Nextcloud, …; written there
+// too, so it is on your phone), or LoxSuite's own (kind 'local', created when first used). An ICS link
+// can only be read.
+function isWritable(cal) { return !!cal && (cal.kind === 'caldav' || cal.kind === 'local'); }
+
+async function localCalendar() {
+  const cur = await db.prepare("SELECT * FROM calendars WHERE kind = 'local' ORDER BY id LIMIT 1").get();
+  if (cur) return cur;
+  const id = await db.insertReturningId(
+    'INSERT INTO calendars (name, url, color, vehicle_id, enabled, created_at, kind) VALUES (?, ?, ?, ?, 1, ?, ?)',
+    ['LoxSuite', encrypt('local'), '#5ca83f', null, new Date().toISOString(), 'local']
+  );
+  return db.prepare('SELECT * FROM calendars WHERE id = ?').get(id);
+}
+
+// Pure: text for an ICS property (RFC 5545: \ ; , and new lines escaped).
+function icsText(v) { return String(v ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
+// Pure: a content line folded at 75 octets (continuation lines start with a space).
+function icsFold(line) {
+  const out = [];
+  let cur = '';
+  let bytes = 0;
+  for (const ch of line) {
+    const n = Buffer.byteLength(ch);
+    if (bytes + n > (out.length ? 74 : 75)) { out.push(cur); cur = ''; bytes = 0; }
+    cur += ch;
+    bytes += n;
+  }
+  out.push(cur);
+  return out.join('\r\n ');
+}
+const icsDate = (iso) => String(iso).slice(0, 10).replace(/-/g, '');
+
+// Pure: one appointment as an ICS text. Timed: start/end in UTC (…Z), so every calendar app shows it
+// in its own zone; all day: the dates (end = the day after, as ICS wants).
+function eventIcs({ uid, title, location = null, start, end, allDay = false, nowMs = Date.now() }) {
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//LoxSuite//Agenda//EN', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT', `UID:${uid}`, `DTSTAMP:${require('./caldav').icalTime(nowMs)}`];
+  if (allDay) lines.push(`DTSTART;VALUE=DATE:${icsDate(start)}`, `DTEND;VALUE=DATE:${icsDate(end)}`);
+  else lines.push(`DTSTART:${require('./caldav').icalTime(Date.parse(start))}`, `DTEND:${require('./caldav').icalTime(Date.parse(end))}`);
+  lines.push(`SUMMARY:${icsText(title)}`);
+  if (location) lines.push(`LOCATION:${icsText(location)}`);
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+  return `${lines.map(icsFold).join('\r\n')}\r\n`;
+}
+
+// Pure: what the form sends -> { title, location, start, end, allDay } (ISO; all day: UTC midnight of
+// the dates, like a synced all-day appointment), or throws. Timed: end before start = the next day.
+function cleanNewEvent(b = {}) {
+  const title = String(b.title || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (!title) throw new Error('Give the appointment a name.');
+  const location = String(b.location || '').replace(/\s+/g, ' ').trim().slice(0, 300) || null;
+  if (b.all_day === true || b.all_day === 1 || b.all_day === '1' || b.all_day === 'true') {
+    const d0 = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? Date.parse(`${b.date}T00:00:00Z`) : NaN;
+    let d1 = /^\d{4}-\d{2}-\d{2}$/.test(String(b.end_date || '')) ? Date.parse(`${b.end_date}T00:00:00Z`) : d0;
+    if (!Number.isFinite(d0)) throw new Error('Choose a date.');
+    if (!Number.isFinite(d1) || d1 < d0) d1 = d0;
+    if (d1 - d0 > 31 * 86400000) throw new Error('At most a month.');
+    return { title, location, allDay: true, start: new Date(d0).toISOString(), end: new Date(d1 + 86400000).toISOString() };
+  }
+  const s = Date.parse(b.start);
+  let e = Date.parse(b.end);
+  if (!Number.isFinite(s)) throw new Error('Choose a date and time.');
+  if (!Number.isFinite(e)) e = s + 3600000;
+  while (e <= s) e += 86400000;
+  if (e - s > 14 * 86400000) throw new Error('At most two weeks.');
+  return { title, location, allDay: false, start: new Date(s).toISOString(), end: new Date(e).toISOString() };
+}
+
+// Adds an appointment: to a CalDAV calendar (written there, so it is on your phone too) or LoxSuite's
+// own ('local'). Shows at once; the choices (car needed, trip, car) are stored in LoxSuite like for any
+// appointment. -> { calendar_id, uid, start }
+async function addEvent(b = {}, { fetchFn, nowMs = Date.now() } = {}) {
+  const ev = cleanNewEvent(b);
+  const cal = b.calendar_id === 'local' || b.calendar_id === '' || b.calendar_id == null
+    ? await localCalendar()
+    : await db.prepare('SELECT * FROM calendars WHERE id = ?').get(Number(b.calendar_id));
+  if (!cal) throw new Error('Unknown calendar.');
+  if (!isWritable(cal)) throw new Error('This calendar is an ICS link: it can only be read. Choose a calendar over iCloud / CalDAV, or LoxSuite.');
+  const uid = `${require('crypto').randomUUID()}@loxsuite`;
+  if (cal.kind === 'caldav') {
+    await require('./caldav').putEvent({ url: decrypt(cal.url), username: cal.username, password: decrypt(cal.secret), uid, ics: eventIcs({ uid, ...ev, nowMs }), fetchFn });
+  }
+  await db.upsert('calendar_events', {
+    calendar_id: cal.id, uid, start_at: ev.start, end_at: ev.end, all_day: ev.allDay ? 1 : 0, title: ev.title, location: ev.location,
+    car_tag: 0, car_hint: null, trip_tag: null, recurrence_at: null,
+  }, ['calendar_id', 'uid', 'start_at']);
+  const choice = {};
+  if (b.needs_car !== undefined && b.needs_car !== null && b.needs_car !== '') choice.needs_car = b.needs_car;
+  if (b.trip_mode && !ev.allDay) choice.trip_mode = b.trip_mode;
+  if (b.vehicle_id) choice.vehicle_id = b.vehicle_id;
+  if (Object.keys(choice).length) await setOverride({ calendar_id: cal.id, uid, start_at: ev.start, ...choice });
+  return { calendar_id: cal.id, uid, start: ev.start, kind: cal.kind };
+}
+
+// Removes an appointment that was added in LoxSuite (also from the CalDAV calendar); others can't be
+// removed here.
+async function removeEvent({ calendar_id, uid } = {}, { fetchFn } = {}) {
+  const u = String(uid || '');
+  if (!/@loxsuite$/.test(u)) throw new Error('Only an appointment added in LoxSuite can be removed here.');
+  const cal = await db.prepare('SELECT * FROM calendars WHERE id = ?').get(Number(calendar_id));
+  if (!cal || !isWritable(cal)) throw new Error('Unknown calendar.');
+  if (cal.kind === 'caldav') await require('./caldav').deleteEvent({ url: decrypt(cal.url), username: cal.username, password: decrypt(cal.secret), uid: u, fetchFn });
+  await db.prepare('DELETE FROM calendar_events WHERE calendar_id = ? AND uid = ?').run(cal.id, u);
+  await db.prepare('DELETE FROM event_overrides WHERE calendar_id = ? AND uid = ?').run(cal.id, u);
+  return { ok: true };
 }
 
 function hostOf(enc) {
@@ -289,6 +398,8 @@ async function fetchIcs(url) {
 }
 
 async function syncCalendar(cal, { nowMs = Date.now(), fetchText = fetchIcs } = {}) {
+  // LoxSuite's own calendar: nothing to fetch
+  if (cal.kind === 'local') return { ok: true, events: (await db.prepare('SELECT COUNT(*) AS n FROM calendar_events WHERE calendar_id = ?').get(cal.id))?.n || 0 };
   const cfg = await getConfig();
   const ical = require('node-ical');
   const from = nowMs - cfg.window_days_back * 86400000;
@@ -1034,5 +1145,5 @@ function stopAgenda() {
 
 module.exports = {
   DEFAULTS, TRIP_MODES, ROUTE_CLASSES, cleanVehicle, addrKey, avoidFor, routeFlags, valhallaFlags, roadRoute, routePrefs, setRoutePref, seriesName, nameKey, seriesIndexOf, seriesRowOf, hasCarTag, parseCarHint, parseTripTag, parseOwnValue, tripNeedKwh, stopsOf, chainStops, legOf, routeNeed, routeOf, crowKm, cleanMode, cleanFlag, cleanChain, tours, fetchLeg, icsUrl, expandEvents, tripOccurrences,
-  addressCandidates, icsName, fetchIcs, getConfig, listCalendars, addCalendar, updateCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
+  addressCandidates, icsName, fetchIcs, getConfig, listCalendars, addCalendar, updateCalendar, isWritable, localCalendar, icsText, icsFold, eventIcs, cleanNewEvent, addEvent, removeEvent, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
 };

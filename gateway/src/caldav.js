@@ -1,8 +1,9 @@
 // CalDAV client for the agenda: iCloud (caldav.icloud.com, with an app-specific password from
-// appleid.apple.com), Nextcloud, Fastmail and other CalDAV servers. Only reads: finds the calendars
-// of the account, and fetches the events of a time window as ICS, which the agenda then expands
-// exactly like an ICS link. Redirects are followed by hand so the sign-in goes along (iCloud sends
-// every account to its own pNN-caldav.icloud.com host, and fetch drops credentials across hosts).
+// appleid.apple.com), Nextcloud, Fastmail and other CalDAV servers. Finds the calendars of the account
+// and fetches the events of a time window as ICS, which the agenda then expands exactly like an ICS
+// link. It only writes an appointment you add in LoxSuite (putEvent), and only removes one it added
+// itself (deleteEvent). Redirects are followed by hand so the sign-in goes along (iCloud sends every
+// account to its own pNN-caldav.icloud.com host, and fetch drops credentials across hosts).
 const { XMLParser } = require('fast-xml-parser');
 
 const ICLOUD = 'https://caldav.icloud.com/';
@@ -21,7 +22,7 @@ function decodeEntities(text) {
 }
 const arr = (x) => (x === undefined || x === null ? [] : Array.isArray(x) ? x : [x]);
 
-async function request(method, url, { username, password, depth = null, body = null, fetchFn = fetch } = {}) {
+async function request(method, url, { username, password, depth = null, body = null, fetchFn = fetch, contentType = 'application/xml; charset=utf-8', headers = {}, okStatus = [] } = {}) {
   let target = url;
   for (let hop = 0; hop < 5; hop++) {
     const ctrl = new AbortController();
@@ -32,8 +33,9 @@ async function request(method, url, { username, password, depth = null, body = n
         method, redirect: 'manual', signal: ctrl.signal,
         headers: {
           Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`,
-          'Content-Type': 'application/xml; charset=utf-8', 'User-Agent': 'LoxSuite',
+          'Content-Type': contentType, 'User-Agent': 'LoxSuite',
           ...(depth !== null ? { Depth: String(depth) } : {}),
+          ...headers,
         },
         body: body || undefined,
       });
@@ -49,8 +51,11 @@ async function request(method, url, { username, password, depth = null, body = n
     }
     const text = await res.text();
     if (res.status === 401) throw new Error('Sign-in refused — check the user name and the (app-specific) password.');
-    if (res.status >= 400) throw new Error(`The CalDAV server answered HTTP ${res.status}.`);
-    return { url: target, text };
+    if (res.status >= 400 && !okStatus.includes(res.status)) {
+      if (res.status === 403) throw new Error('The CalDAV server refused this (HTTP 403) — the calendar may be read-only for this account.');
+      throw new Error(`The CalDAV server answered HTTP ${res.status}.`);
+    }
+    return { url: target, text, status: res.status };
   }
   throw new Error('Too many redirects.');
 }
@@ -139,4 +144,24 @@ function joinIcs(list) {
   return `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//LoxSuite//CalDAV//EN\n${[...tz.values()].join('')}${parts.join('')}END:VCALENDAR\n`;
 }
 
-module.exports = { decodeEntities, ICLOUD, discover, fetchRange, parseMultistatus, calendarsFrom, joinIcs, icalTime, request };
+// The address of one appointment in a calendar collection: <collection>/<uid>.ics
+function eventUrl(collection, uid) {
+  const base = String(collection || '').endsWith('/') ? String(collection) : `${collection}/`;
+  return new URL(`${encodeURIComponent(String(uid))}.ics`, base).toString();
+}
+
+// Writes a new appointment (an ICS text with one VEVENT) to the calendar; never overwrites one that is
+// there (If-None-Match: *).
+async function putEvent({ url, username, password, uid, ics, fetchFn } = {}) {
+  if (!uid || !ics) throw new Error('No appointment to write.');
+  const r = await request('PUT', eventUrl(url, uid), { username, password, body: ics, fetchFn, contentType: 'text/calendar; charset=utf-8', headers: { 'If-None-Match': '*' } });
+  return { url: r.url, status: r.status };
+}
+
+// Removes an appointment LoxSuite wrote; already gone (404 / 410) is fine.
+async function deleteEvent({ url, username, password, uid, fetchFn } = {}) {
+  const r = await request('DELETE', eventUrl(url, uid), { username, password, fetchFn, okStatus: [404, 410] });
+  return { status: r.status };
+}
+
+module.exports = { decodeEntities, ICLOUD, discover, fetchRange, parseMultistatus, calendarsFrom, joinIcs, icalTime, request, eventUrl, putEvent, deleteEvent };

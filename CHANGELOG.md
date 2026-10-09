@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.55.0-alpha.1] - 2026-10-09
+
+### Added
+- **Add an appointment from LoxSuite** (asked: "I'd like to put an appointment in the agenda from LoxSuite and, if
+  possible, have it flow back to the calendar on my phone — you choose which calendar it goes into"):
+  *+ Appointment* in the agenda, or click an empty spot in the week / day view (on the half hour) or a day in the
+  month view (with a mouse; on a phone the button). The form opens in the detail panel, in the same chips:
+  name, which calendar, date and time (or all day; an end before the start is the next day), address, car needed,
+  which car and the trip.
+  - **Which calendar**: every calendar over **iCloud / CalDAV** (Nextcloud, Fastmail, …) — the appointment is
+    written there with the app password LoxSuite already has, so it is on your phone too — or **LoxSuite only**
+    (LoxSuite's own calendar, made when first used). A calendar added as an **ICS link** (Google's secret
+    address, Outlook) can only be read: it is shown greyed out. LoxSuite remembers the last one chosen.
+  - It shows at once, with its distance, kWh and the plan; the car choices are stored in LoxSuite like for any
+    appointment, the calendar on your phone just gets the name, time and address.
+  - **Remove appointment** in its details — only for one added in LoxSuite (also from the calendar on your phone,
+    after asking); appointments made elsewhere are only read. LoxSuite never overwrites an existing appointment
+    (If-None-Match).
+- In the settings the calendar list says which are *read only* (ICS link) and which is *LoxSuite only*.
+
+### Changed
+- **24-hour times and readable dates everywhere** (asked: "that time field is very ugly — and mind the 24 hours"):
+  a browser draws its own time and date-time fields in the language of the browser — *02:00 PM* on an English
+  Windows, whatever LoxSuite's language, and unthemed in dark mode. Every time field is now a small 24-hour field:
+  type *1430*, *14.30*, *14:30* or just *9*; ↑ / ↓ step a quarter of an hour; something unreadable goes back to
+  what it was. A date and time becomes a readable date (*fri 9 Oct 2026* in your language, ‹ › a day, a click
+  opens the calendar) plus such a time. For the new appointment, the trip, *Ready by* in Smart charging and the
+  energy manager, a departure's time, scheduled imports and absolute chart ranges; the values sent stay as they
+  were, so nothing else changes.
+- A new appointment's length in chips (*30 min*, *1 hour*, *1.5 hours*, *2 hours*, *3 hours*; a new start keeps
+  the length) with the length next to the times — past midnight: *(next day)*.
+
 ## [0.54.1-alpha.1] - 2026-10-09
 
 ### Fixed

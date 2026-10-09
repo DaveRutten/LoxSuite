@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.54.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.55.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -787,7 +787,14 @@ calendars as you like: **ICS links** (Google's private "secret address in iCal f
 several at once, one per line) or **iCloud / CalDAV** — iCloud only offers a *public* ICS link, so LoxSuite signs
 in with an **app-specific password** (appleid.apple.com), lists the account's calendars and you tick which to
 add; also Nextcloud, Fastmail and other CalDAV servers. Addresses and passwords are stored encrypted, LoxSuite
-only reads. A calendar's name, colour and car can be changed in the settings (in LoxSuite only). An appointment needs the car when its title
+reads them. A calendar's name, colour and car can be changed in the settings (in LoxSuite only).
+
+**Add an appointment** in LoxSuite with *+ Appointment* (or click an empty spot in the week, day or month view):
+a name, when (or all day), an address and the car choices, and which calendar it goes into — a calendar over
+**iCloud / CalDAV** gets it too (written with the same app password), so it is on your phone; *LoxSuite only*
+keeps it in LoxSuite's own calendar. A calendar added as an ICS link can only be read (shown, but not to choose).
+An appointment added in LoxSuite can be removed again there (from the calendar on your phone too); others are
+only read. An appointment needs the car when its title
 holds a marker (🚗 / #auto by default) or when you switch *Car needed* on in LoxSuite (stored in LoxSuite only).
 Hints like `🚗 120 km`, `🚗 30 kWh` or `🚗 full` are understood. For car appointments with an address LoxSuite
 looks up the driving distance and time from home (OpenStreetMap Nominatim + OSRM, Valhalla for a route without

@@ -81,7 +81,9 @@ router.get('/items.json', asyncHandler(async (req, res) => {
   const acfg = await agenda.getConfig();
   // the cars to choose from (when there are several)
   const vehicleList = (await db.prepare('SELECT id, name FROM vehicles WHERE enabled = 1 ORDER BY id').all().catch(() => [])).map((v) => ({ id: v.id, name: v.name }));
-  res.json({ items, tours, learned, plan: plan ? plan.slots : [], sessions, vehicles: vehicleList, routeClasses: agenda.ROUTE_CLASSES, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
+  // the calendars a new appointment can go into (an ICS link only reads)
+  const calendars = (await agenda.listCalendars()).filter((c) => c.enabled !== 0).map((c) => ({ id: c.id, name: c.name, color: c.color, kind: c.kind, writable: c.writable }));
+  res.json({ items, tours, learned, plan: plan ? plan.slots : [], sessions, vehicles: vehicleList, calendars, routeClasses: agenda.ROUTE_CLASSES, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
 }));
 
 // One or more ICS links (one per line). With several, or without a name, each calendar is named
@@ -231,6 +233,34 @@ router.post('/route.json', requirePermission('charging', 'edit'), asyncHandler(a
   agenda.tours(new Date(now).toISOString(), new Date(now + 14 * 86400000).toISOString(), { fetchLegs: true })
     .then(() => require('../planner').recalc()).catch(() => {});
   res.json({ ok: !!r && !r.error, pref, ...(r || {}) });
+}));
+
+// A new appointment: in a CalDAV calendar (written there too, so it is on your phone) or LoxSuite's own.
+router.post('/events.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
+  let r;
+  try {
+    r = await agenda.addEvent(req.body || {});
+  } catch (err) {
+    return res.json({ ok: false, message: err.message });
+  }
+  await logSystemEvent(`Agenda: appointment added (${r.kind === 'caldav' ? 'CalDAV' : 'LoxSuite'}) by ${req.session?.username || 'unknown user'}`).catch(() => {});
+  // its distance and the plan follow in the background
+  const b = req.body || {};
+  (b.location ? agenda.distanceFromHome(b.location).catch(() => null) : Promise.resolve())
+    .then(() => require('../planner').recalc()).catch(() => {});
+  res.json({ ok: true, ...r });
+}));
+
+// Removes an appointment that was added in LoxSuite (from the CalDAV calendar too).
+router.post('/events/delete.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
+  try {
+    await agenda.removeEvent(req.body || {});
+  } catch (err) {
+    return res.json({ ok: false, message: err.message });
+  }
+  await logSystemEvent(`Agenda: appointment added in LoxSuite removed by ${req.session?.username || 'unknown user'}`).catch(() => {});
+  require('../planner').recalc().catch(() => {});
+  res.json({ ok: true });
 }));
 
 router.post('/distance.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {

@@ -4943,6 +4943,18 @@ details.mod-status[open] > summary::before { transform: rotate(45deg); vertical-
 .on > .chip-tick rect, input:checked + span > .chip-tick rect { opacity: 0.9; }
 .on > .chip-tick path, input:checked + span > .chip-tick path { opacity: 1; }
 
+/* 24-hour time and readable date fields (ls-time.js): a time is a small text field "14:30"; a date a
+   pill "wed 7 Oct 2026" with ‹ › and the browser's calendar under it. The same height as other fields. */
+input.ls-time, .form-grid input.ls-time:not([type="checkbox"]):not([type="radio"]) { width: 4.6em; min-width: 0; text-align: center; font-variant-numeric: tabular-nums; }
+input.ls-time.ls-bad { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft, rgba(229, 83, 75, 0.2)); }
+.ls-dt { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; max-width: 100%; }
+.ls-datepick { position: relative; display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); font-size: 0.88rem; max-width: 100%; }
+.ls-datepick:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ls-datepick .ls-date-label { padding: 0.5rem 0.2rem; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; outline: none; }
+.ls-datepick .ls-step { border: 0; background: none; color: inherit; padding: 0 0.55rem; margin: 0; cursor: pointer; font-size: 1.05rem; line-height: 1; opacity: 0.6; }
+.ls-datepick .ls-step:hover, .ls-datepick .ls-step:focus-visible { opacity: 1; }
+.ls-datepick input.ls-date-native, .form-grid .ls-datepick input.ls-date-native { position: absolute; left: 0; bottom: 0; width: 100%; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+
 /* A colour as a small square (a calendar's colour) instead of a full-width bar; clicking it opens the
    browser's own colour picker. Also inside a .form-grid (whose inputs are otherwise full width). */
 input[type="color"].color-square, .form-grid input[type="color"].color-square { width: 2.1rem; height: 2.1rem; min-width: 0; padding: 0; border: 1.5px solid var(--border); border-radius: 6px; overflow: hidden; background: none; cursor: pointer; display: block; }

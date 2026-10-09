@@ -2043,6 +2043,13 @@
   ]
  },
  {
+  "key": "Add appointment",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "add one",
   "module": "ocpp",
   "where": [
@@ -2127,6 +2134,13 @@
   "module": "core",
   "where": [
    "live-data (script)"
+  ]
+ },
+ {
+  "key": "Address (optional)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -2333,6 +2347,13 @@
   ]
  },
  {
+  "key": "all day",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "all from the grid",
   "module": "charging",
   "where": [
@@ -2396,6 +2417,13 @@
   "module": "monitor",
   "where": [
    "src/routes/dashboards.js"
+  ]
+ },
+ {
+  "key": "Also goes into that calendar, so it is on your phone too.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -2601,6 +2629,20 @@
   "module": "core",
   "where": [
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "At most a month.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js"
+  ]
+ },
+ {
+  "key": "At most two weeks.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js"
   ]
  },
  {
@@ -3155,6 +3197,7 @@
   "key": "Calendar",
   "module": "charging",
   "where": [
+   "agenda (script)",
    "src/agenda.js",
    "src/caldav.js",
    "src/routes/agenda.js"
@@ -3176,8 +3219,9 @@
  },
  {
   "key": "Cancel",
-  "module": "core",
+  "module": "charging",
   "where": [
+   "agenda (script)",
    "partials/foot (script)",
    "public/tabulator-table.js"
   ]
@@ -3641,6 +3685,20 @@
   "module": "vehicles",
   "where": [
    "src/routes/vehicles.js"
+  ]
+ },
+ {
+  "key": "Choose a date and time.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js"
+  ]
+ },
+ {
+  "key": "Choose a date.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js"
   ]
  },
  {
@@ -4235,6 +4293,13 @@
   "module": "core",
   "where": [
    "src/routes/liveData.js"
+  ]
+ },
+ {
+  "key": "Could not save — try again.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -5202,6 +5267,7 @@
    "admin-notifications (script)",
    "public/ai-chat-widget.js",
    "public/hint-info.js",
+   "public/ls-time.js",
    "settings-general (script)"
   ]
  },
@@ -5277,13 +5343,13 @@
  },
  {
   "key": "Error",
-  "module": "monitor",
+  "module": "charging",
   "where": [
+   "agenda (script)",
    "app (script)",
    "public/monitor-picks.js",
    "settings-energy (script)",
-   "src/format.js",
-   "src/routes/miniservers.js"
+   "src/format.js"
   ]
  },
  {
@@ -6083,6 +6149,14 @@
   "module": "core",
   "where": [
    "src/deviceTemplatesUpdate.js"
+  ]
+ },
+ {
+  "key": "Give the appointment a name.",
+  "module": "charging",
+  "where": [
+   "agenda (script)",
+   "src/agenda.js"
   ]
  },
  {
@@ -7657,6 +7731,13 @@
   ]
  },
  {
+  "key": "LoxSuite only",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "LoxSuite plans with it that day. Once the day has passed it counts for what it learns (a real departure goes first).",
   "module": "charging",
   "where": [
@@ -7935,6 +8016,13 @@
   "module": "ocpp",
   "where": [
    "src/ocppBridge.js"
+  ]
+ },
+ {
+  "key": "min",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -8554,6 +8642,13 @@
   ]
  },
  {
+  "key": "Name, e.g. Dentist",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Name, host, username and password are all required to add a Miniserver — or leave every field blank to skip this step.",
   "module": "core",
   "where": [
@@ -8630,6 +8725,13 @@
   ]
  },
  {
+  "key": "New appointment",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "New conversation",
   "module": "ai",
   "where": [
@@ -8685,6 +8787,13 @@
   "module": "core",
   "where": [
    "public/tables.js"
+  ]
+ },
+ {
+  "key": "next day",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -8759,6 +8868,13 @@
   "module": "charging",
   "where": [
    "src/agenda.js"
+  ]
+ },
+ {
+  "key": "No appointment to write.",
+  "module": "core",
+  "where": [
+   "src/caldav.js"
   ]
  },
  {
@@ -10059,6 +10175,20 @@
   ]
  },
  {
+  "key": "Only an appointment added in LoxSuite can be removed here.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js"
+  ]
+ },
+ {
+  "key": "Only in LoxSuite, not on your phone.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Only my channel",
   "module": "core",
   "where": [
@@ -10893,6 +11023,13 @@
   ]
  },
  {
+  "key": "Read only (ICS link) — add it as iCloud / CalDAV to write to it",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Reading NFC tags from the Miniserver…",
   "module": "ocpp",
   "where": [
@@ -11125,6 +11262,13 @@
   ]
  },
  {
+  "key": "Remove appointment",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Remove device type",
   "module": "mqtt",
   "where": [
@@ -11145,6 +11289,20 @@
   "where": [
    "dashboards",
    "partials/panel-grid"
+  ]
+ },
+ {
+  "key": "Remove this appointment?",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "Remove this appointment? It is removed from the calendar on your phone too.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -12445,6 +12603,13 @@
   ]
  },
  {
+  "key": "Street 1, Town",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Style",
   "module": "core",
   "where": [
@@ -12788,6 +12953,13 @@
   ]
  },
  {
+  "key": "The CalDAV server refused this (HTTP 403) — the calendar may be read-only for this account.",
+  "module": "core",
+  "where": [
+   "src/caldav.js"
+  ]
+ },
+ {
   "key": "The car is not accepting requests right now (e.g. deep sleep or no connection).",
   "module": "vehicles",
   "where": [
@@ -13114,6 +13286,13 @@
   "module": "core",
   "where": [
    "app (script)"
+  ]
+ },
+ {
+  "key": "This calendar is an ICS link: it can only be read. Choose a calendar over iCloud / CalDAV, or LoxSuite.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js"
   ]
  },
  {
@@ -13849,6 +14028,13 @@
   ]
  },
  {
+  "key": "Unknown calendar.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js"
+  ]
+ },
+ {
   "key": "Unknown command.",
   "module": "mqtt",
   "where": [
@@ -14520,8 +14706,9 @@
  },
  {
   "key": "When",
-  "module": "energy_manager",
+  "module": "charging",
   "where": [
+   "agenda (script)",
    "energy-manager (script)"
   ]
  },

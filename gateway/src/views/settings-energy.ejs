@@ -109,7 +109,7 @@
         <% calendars.forEach(c => { %>
           <tr>
             <td><span style="display:inline-block; width:10px; height:10px; border-radius:3px; background:<%= c.color %>;"></span> <% if (canEdit('charging')) { %><a href="#" data-cal-edit="<%= c.id %>" title="<%= t('Name, colour and car') %>"><%= c.name %></a><% } else { %><%= c.name %><% } %><%= c.enabled ? '' : ' (off)' %></td>
-            <td class="hint"><%= c.kind === 'caldav' ? (/icloud\.com$/.test(c.urlHost) ? 'iCloud' : 'CalDAV') + ' · ' + (c.username || '') : c.urlHost %></td>
+            <td class="hint"><%= c.kind === 'local' ? t('LoxSuite only') : c.kind === 'caldav' ? (/icloud\.com$/.test(c.urlHost) ? 'iCloud' : 'CalDAV') + ' · ' + (c.username || '') : c.urlHost + ' · ' + t('read only') %></td>
             <td><%= (vehicles.find(v => v.id === c.vehicle_id) || {}).name || '—' %></td>
             <td class="hint"><%= c.last_sync_at ? formatDateTime(c.last_sync_at) : '—' %><% if (c.last_error) { %> <span style="color:var(--danger);"><%= c.last_error %></span><% } %></td>
             <td><div style="display:flex; gap:0.3rem; justify-content:flex-end;">
@@ -160,10 +160,10 @@
         <%= t('Google\'s secret address is private: only someone with the link can read it, the calendar is not made public.') %>
       </p>
       <p class="hint" style="margin:0.5rem 0 0;" data-show-if="kind=icloud">
-        <%= t('iCloud only shares a calendar as an ICS link when you make it public. Instead LoxSuite signs in with an app-specific password: appleid.apple.com → Sign-In and Security → App-Specific Passwords → create one named "LoxSuite". Your Apple ID password is never asked for; you can revoke the app password there at any time. It is stored encrypted and only used to read calendars.') %>
+        <%= t('iCloud only shares a calendar as an ICS link when you make it public. Instead LoxSuite signs in with an app-specific password: appleid.apple.com → Sign-In and Security → App-Specific Passwords → create one named "LoxSuite". Your Apple ID password is never asked for; you can revoke the app password there at any time. It is stored encrypted and only used to read the calendars and to write an appointment you add in LoxSuite.') %>
       </p>
       <p class="hint" style="margin:0.5rem 0 0;" data-show-if="kind=caldav">
-        <%= t('Nextcloud: https://<server>/remote.php/dav with an app password (Settings → Security). Fastmail: https://caldav.fastmail.com. LoxSuite only reads.') %>
+        <%= t('Nextcloud: https://<server>/remote.php/dav with an app password (Settings → Security). Fastmail: https://caldav.fastmail.com. LoxSuite reads; it only writes an appointment you add in LoxSuite.') %>
       </p>
       <div class="btn-row" style="margin-top:0.7rem;"><button type="submit" class="primary" id="ag-cal-add"><%- icon('plus') %> <%= t('Add') %></button></div>
     </form>

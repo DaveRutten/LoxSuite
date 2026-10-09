@@ -12,6 +12,7 @@
       <strong id="ag-title" style="margin-left:0.4rem;"></strong>
     </div>
     <div style="display:inline-flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+    <% if (canEdit('charging')) { %><button type="button" class="btn-soft" id="ag-new" title="<%= t('Add an appointment (or click an empty spot in the agenda)') %>"><%- icon('plus') %> <%= t('Appointment') %></button><% } %>
     <% if (canEdit('charging')) { %><button type="button" class="btn-soft" id="ag-sync-now" title="<%= t('Fetch the calendars again now') %>"><%- icon('refresh') %> <%= t('Sync') %></button><% } %>
     <div id="ag-views" style="display:inline-flex; border:1px solid var(--border); border-radius:10px; overflow:hidden;">
       <% [['day', t('Day')], ['week', t('Week')], ['month', t('Month')], ['year', t('Year')]].forEach(([k, l]) => { %>
@@ -108,6 +109,7 @@
   function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
   function weekNo(d) { var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); var day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day); var y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return Math.ceil(((t - y0) / 86400000 + 1) / 7); }
   var distTried = {};
+  var FINE = !!(window.matchMedia && matchMedia('(pointer: fine)').matches);
   var syncNow = document.getElementById('ag-sync-now');
   if (syncNow) syncNow.onclick = function () {
     syncNow.disabled = true;
@@ -194,7 +196,7 @@
     for (var c = 0; c < ndays; c++) {
       var day2 = addDays(r[0], c);
       var dayEnd = addDays(day2, 1);
-      var col = '<div style="position:relative; height:' + ((H1 - H0) * PX) + 'px; border-left:1px solid var(--border);' + (sameDay(day2, new Date()) ? ' background:color-mix(in srgb, var(--accent) 7%, transparent);' : (day2.getDay() + 6) % 7 >= 5 ? ' background:color-mix(in srgb, currentColor 3%, transparent);' : '') + '">';
+      var col = '<div data-col-day="' + c + '" style="position:relative; height:' + ((H1 - H0) * PX) + 'px; border-left:1px solid var(--border);' + (canEdit && FINE ? ' cursor:copy;' : '') + (sameDay(day2, new Date()) ? ' background:color-mix(in srgb, var(--accent) 7%, transparent);' : (day2.getDay() + 6) % 7 >= 5 ? ' background:color-mix(in srgb, currentColor 3%, transparent);' : '') + '">';
       for (var hh = H0 + 1; hh < H1; hh += 1) col += '<div style="position:absolute; left:0; right:0; top:' + ((hh - H0) * PX) + 'px; border-top:1px ' + (hh % 2 ? 'dotted' : 'solid') + ' var(--border);"></div>';
       var y = function (t) { var dd = new Date(t); return Math.max(0, Math.min(H1 - H0, (dd - day2) / 3600000 - H0)) * PX; };
       (data.sessions || []).forEach(function (s) {
@@ -262,6 +264,15 @@
     el.scrollTop = 7 * PX;
     bindClicks(el);
     bindDepartures(el, PX);
+    // an empty spot: a new appointment there (on the half hour)
+    // (with a mouse; on a touch screen a tap is for scrolling and the + button adds one)
+    if (canEdit && FINE) el.querySelectorAll('[data-col-day]').forEach(function (colEl) {
+      colEl.addEventListener('click', function (e) {
+        if (e.target.closest('[data-key], [data-dep], [data-dep-line]')) return;
+        var mins = Math.max(0, Math.min(23.5 * 60, Math.round(((e.clientY - colEl.getBoundingClientRect().top) / PX + H0) * 2) * 30));
+        openNew(addDays(r[0], Number(colEl.dataset.colDay)), pad2(Math.floor(mins / 60)) + ':' + pad2(mins % 60));
+      });
+    });
   }
 
   // A "ready" label: click = change it below the agenda; drag up or down = move this one day (5 minutes
@@ -313,7 +324,7 @@
       var day = addDays(r[0], i);
       var list = itemsOnDay(day);
       var kwh = (data.sessions || []).filter(function (s) { return sameDay(new Date(s.connect_at), day); }).reduce(function (a, s) { return a + (s.kwh || 0); }, 0);
-      var cell = '<div style="min-height:92px; padding:4px 5px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); font-size:11px;' + (day.getMonth() !== month ? ' opacity:0.45;' : '') + (sameDay(day, new Date()) ? ' background:color-mix(in srgb, var(--accent) 8%, transparent);' : '') + '">' +
+      var cell = '<div data-cell-day="' + i + '" style="min-height:92px; padding:4px 5px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); font-size:11px;' + (day.getMonth() !== month ? ' opacity:0.45;' : '') + (sameDay(day, new Date()) ? ' background:color-mix(in srgb, var(--accent) 8%, transparent);' : '') + '">' +
         '<div style="display:flex; justify-content:space-between;"><span style="font-weight:600;">' + (sameDay(day, new Date()) ? '<span class="ag-today-num">' + day.getDate() + '</span>' : day.getDate()) + '</span>' + (kwh ? '<span class="hint" style="margin:0;">⚡' + nf(kwh, 1) + '</span>' : '') + '</div>';
       list.slice(0, 3).forEach(function (it) { cell += '<div data-key="' + esc(key(it)) + '" style="margin-top:2px; padding:1px 4px; border-radius:4px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ' + (it.needsCar ? 'background:' + itemColor(it) + '; color:' + textOn(itemColor(it)) + ';' : 'background:color-mix(in srgb, ' + itemColor(it) + ' 15%, transparent);') + '">' + carSlot(it) + (it.allDay ? '' : tm(it.start) + ' ') + (it.needsCar && it.climateC != null && !it.climateOff ? '🌡️' : '') + esc(titleNoCar(it)) + '</div>'; });
       if (list.length > 3) cell += '<div class="hint" style="margin:2px 0 0;">+' + (list.length - 3) + ' more</div>';
@@ -322,6 +333,9 @@
     var el = document.getElementById('ag-view');
     el.innerHTML = html + '</div>';
     bindClicks(el);
+    if (canEdit && FINE) el.querySelectorAll('[data-cell-day]').forEach(function (cellEl) {
+      cellEl.addEventListener('click', function (e) { if (!e.target.closest('[data-key]')) openNew(addDays(r[0], Number(cellEl.dataset.cellDay)), '09:00'); });
+    });
   }
 
   function renderYear() {
@@ -415,8 +429,103 @@
     q('ag-close').onclick = function (e) { e.preventDefault(); selected = null; render(); };
   }
 
+  // ------------------------------------------------------------ a new appointment
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function ymd(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function plusHour(hm) { return addMins(hm, 60); }
+  function addMins(hm, n) { var p = String(hm).split(':'); var t = (((Number(p[0]) * 60 + Number(p[1]) + n) % 1440) + 1440) % 1440; return pad2(Math.floor(t / 60)) + ':' + pad2(t % 60); }
+  // minutes from one time to the next (past midnight: the next day)
+  function minsBetween(a, b) { var x = String(a).split(':'), y = String(b).split(':'); var m = (Number(y[0]) * 60 + Number(y[1])) - (Number(x[0]) * 60 + Number(x[1])); return m <= 0 ? m + 1440 : m; }
+  // a length in the page's language: "30 min", "1,5 uur" / "1.5 hr", "1 uur 15 min" (Intl, no translations needed)
+  var LANG = document.documentElement.lang || undefined;
+  function unitFmt(n, unit) { try { return new Intl.NumberFormat(LANG, { style: 'unit', unit: unit, unitDisplay: 'short', maximumFractionDigits: 1 }).format(n); } catch (e) { return [n, unit === 'hour' ? 'h' : 'min'].join(' '); } }
+  function lenText(m) { return m < 60 ? unitFmt(m, 'minute') : m % 60 === 0 || m % 60 === 30 ? unitFmt(m / 60, 'hour') : unitFmt(Math.floor(m / 60), 'hour') + ' ' + unitFmt(m % 60, 'minute'); }
+  function durText(a, b) { var m = minsBetween(a, b); var x = String(a).split(':'); return lenText(m) + (m + Number(x[0]) * 60 + Number(x[1]) > 1440 ? ' (' + T('next day') + ')' : ''); }
+  var draft = null;
+  function lastCal() { try { return localStorage.getItem('ag-new-cal') || ''; } catch (e) { return ''; } }
+  function openNew(day, time) {
+    var now = new Date();
+    if (!time) { now.setMinutes(now.getMinutes() < 30 ? 30 : 60, 0, 0); time = pad2(now.getHours()) + ':' + pad2(now.getMinutes()); }
+    draft = { title: '', date: ymd(day || new Date()), from: time, to: plusHour(time), allDay: false, location: '', cal: lastCal(), needs: '1', mode: 'stay', car: '' };
+    selected = 'new';
+    renderDetail();
+    var t = document.getElementById('ag-n-title');
+    if (t) { t.focus(); try { document.getElementById('ag-detail').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* old browser */ } }
+  }
+  var newBtn = document.getElementById('ag-new');
+  if (newBtn) newBtn.onclick = function () { openNew(view === 'day' ? cursor : new Date(), null); };
+  // the form, in the detail panel: which calendar (an ICS link can't be written; LoxSuite's own can),
+  // when, where, and the car choices — chips like an appointment's details
+  function newDetail(el) {
+    var d = draft;
+    var cals = data.calendars || [];
+    var dav = cals.filter(function (c) { return c.kind === 'caldav'; });
+    var ro = cals.filter(function (c) { return !c.writable; });
+    var ok = dav.some(function (c) { return String(c.id) === String(d.cal); }) || d.cal === 'local';
+    if (!ok) d.cal = dav.length ? String(dav[0].id) : 'local';
+    var dot = function (c) { return '<span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:' + esc(c || '#5ca83f') + ';"></span>'; };
+    var chip = function (v, label, on, extra) { return '<button type="button" data-v="' + esc(v) + '"' + (on ? ' class="on"' : '') + (extra || '') + '>' + label + '</button>'; };
+    var row = function (lbl, body) { return '<div class="ag-row"><span class="ag-lbl">' + esc(lbl) + '</span>' + body + '</div>'; };
+    var cars = data.vehicles || [];
+    var html = '<div style="border:1px solid var(--border); border-radius:12px; padding:0.9rem 1rem;">' +
+      '<div style="font-size:1.1rem; font-weight:700; margin:0 0 0.5rem;">' + esc(T('New appointment')) + '</div>' +
+      '<input type="text" id="ag-n-title" maxlength="300" placeholder="' + esc(T('Name, e.g. Dentist')) + '" value="' + esc(d.title) + '" style="width:100%; box-sizing:border-box;">' +
+      '<div class="ag-box" style="background:var(--surface-alt, #f4f6f8);">' +
+      row(T('Calendar'), '<div class="ag-chips" id="ag-n-cal">' +
+        dav.map(function (c) { return chip(String(c.id), dot(c.color) + '<span>' + esc(c.name) + '</span>', String(c.id) === d.cal); }).join('') +
+        chip('local', dot('#5ca83f') + '<span>' + esc(T('LoxSuite only')) + '</span>', d.cal === 'local') +
+        ro.map(function (c) { return chip('', dot(c.color) + '<span>' + esc(c.name) + '</span>', false, ' disabled style="opacity:0.45; cursor:not-allowed;" title="' + esc(T('Read only (ICS link) — add it as iCloud / CalDAV to write to it')) + '"'); }).join('') + '</div>' +
+        '<div class="hint" style="margin:0.25rem 0 0; font-size:0.75rem;">' + esc(d.cal === 'local' ? T('Only in LoxSuite, not on your phone.') : T('Also goes into that calendar, so it is on your phone too.')) + '</div>') +
+      row(T('When'), '<div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;"><input type="date" data-ls-date id="ag-n-date" value="' + esc(d.date) + '">' +
+        '<div class="ag-chips ag-multi" id="ag-n-allday">' + chip('1', TICK + '<span>' + esc(T('all day')) + '</span>', d.allDay) + '</div></div>' +
+        (d.allDay ? '' : '<div style="display:flex; gap:0.4rem; align-items:center; margin-top:0.4rem;"><input type="time" step="900" id="ag-n-from" value="' + esc(d.from) + '"><span>–</span><input type="time" step="900" id="ag-n-to" value="' + esc(d.to) + '"><span class="hint" id="ag-n-dur" style="margin:0;">' + esc(durText(d.from, d.to)) + '</span></div>' +
+          // how long: sets the end from the start
+          '<div class="ag-chips" id="ag-n-len" style="margin-top:0.35rem;">' + [30, 60, 90, 120, 180].map(function (m) { return chip(String(m), '<span>' + esc(lenText(m)) + '</span>', minsBetween(d.from, d.to) === m); }).join('') + '</div>')) +
+      row(T('Address (optional)'), '<input type="text" id="ag-n-loc" maxlength="300" placeholder="' + esc(T('Street 1, Town')) + '" value="' + esc(d.location) + '" style="width:100%; box-sizing:border-box;">') +
+      row(T('Car needed'), '<div class="ag-chips" id="ag-n-need">' + chip('1', '<span>' + esc(T('yes')) + '</span>', d.needs === '1') + chip('0', '<span>' + esc(T('no')) + '</span>', d.needs === '0') + '</div>') +
+      (d.needs === '1' && cars.length > 1 ? row(T('Which car'), '<div class="ag-chips" id="ag-n-car">' + cars.map(function (v, i) { return chip(String(v.id), '<span>' + esc(v.name) + '</span>', d.car ? String(v.id) === d.car : i === 0); }).join('') + '</div>') : '') +
+      (d.needs === '1' && !d.allDay ? row(T('Trip'), '<div class="ag-chips" id="ag-n-mode">' + [['stay', T('there and back')], ['drop', T('drop off')], ['pick', T('pick up')], ['both', T('drop off and pick up')]].map(function (o) { return chip(o[0], '<span>' + esc(o[1]) + '</span>', d.mode === o[0]); }).join('') + '</div>') : '') +
+      '</div>' +
+      '<div class="btn-row" style="margin-top:0.6rem;"><button type="button" class="primary" id="ag-n-save">' + esc(T('Add appointment')) + '</button><button type="button" class="btn-soft" id="ag-n-cancel">' + esc(T('Cancel')) + '</button></div>' +
+      '<div class="hint" id="ag-n-msg" style="margin:0.4rem 0 0; color:var(--danger);"></div></div>';
+    el.innerHTML = html;
+    var q = function (id) { return document.getElementById(id); };
+    // typed text stays in the draft when a chip redraws the form
+    q('ag-n-title').oninput = function () { d.title = this.value; };
+    q('ag-n-loc').oninput = function () { d.location = this.value; };
+    q('ag-n-date').onchange = function () { d.date = this.value || d.date; };
+    // a new start keeps the length; a new end changes it
+    if (q('ag-n-from')) q('ag-n-from').onchange = function () { var len = minsBetween(d.from, d.to); d.from = this.value || d.from; d.to = addMins(d.from, len); renderDetail(); };
+    if (q('ag-n-to')) q('ag-n-to').onchange = function () { d.to = this.value || d.to; renderDetail(); };
+    var pick = function (id, fn) { var c = q(id); if (c) c.querySelectorAll('button:not([disabled])').forEach(function (b) { b.onclick = function () { fn(b.dataset.v, b); renderDetail(); }; }); };
+    pick('ag-n-cal', function (v) { d.cal = v; });
+    pick('ag-n-allday', function () { d.allDay = !d.allDay; });
+    pick('ag-n-need', function (v) { d.needs = v; });
+    pick('ag-n-car', function (v) { d.car = v; });
+    pick('ag-n-mode', function (v) { d.mode = v; });
+    pick('ag-n-len', function (v) { d.to = addMins(d.from, Number(v)); });
+    q('ag-n-cancel').onclick = function () { draft = null; selected = null; render(); };
+    q('ag-n-save').onclick = function () {
+      var btn = this;
+      if (!d.title.trim()) { q('ag-n-msg').textContent = T('Give the appointment a name.'); q('ag-n-title').focus(); return; }
+      var body = { calendar_id: d.cal, title: d.title, location: d.location, needs_car: d.needs, trip_mode: d.needs === '1' && !d.allDay ? d.mode : '', vehicle_id: d.needs === '1' && cars.length > 1 ? (d.car || String(cars[0].id)) : '' };
+      if (d.allDay) { body.all_day = 1; body.date = d.date; } else { var st = new Date(d.date + 'T' + d.from); body.start = st.toISOString(); body.end = new Date(st.getTime() + minsBetween(d.from, d.to) * 60000).toISOString(); }
+      btn.disabled = true;
+      post('/agenda/events.json', body).then(function (r) {
+        btn.disabled = false;
+        if (!r.ok) { q('ag-n-msg').textContent = T(r.message || 'Error'); return; }
+        try { localStorage.setItem('ag-new-cal', d.cal); } catch (e) { /* storage blocked */ }
+        draft = null;
+        selected = 'event|' + r.calendar_id + '|' + r.uid + '|' + r.start;
+        cursor = new Date(d.date + 'T12:00');
+        load();
+      }).catch(function () { btn.disabled = false; q('ag-n-msg').textContent = T('Could not save — try again.'); });
+    };
+  }
+
   function renderDetail() {
     var el = document.getElementById('ag-detail');
+    if (selected === 'new' && draft) { newDetail(el); return; }
     if (selected && selected.indexOf('dep|') === 0) {
       var dl = (data.learned || []).find(function (x) { return 'dep|' + x.date === selected; });
       if (dl) { departureDetail(el, dl); return; }
@@ -547,7 +656,9 @@
         (it.climateRun && it.climateRun.status !== 'off' ? '<div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;' + (it.climateRun.status === 'failed' ? ' color:var(--danger);' : '') + '">' + esc(it.climateRun.message || it.climateRun.status) + '</div>' : '') +
         '</div>';
     }
-    html += '<p style="margin:0.6rem 0 0;"><a href="#" id="ag-close">Close</a></p></div>';
+    // added in LoxSuite: can be removed here again (also from the calendar on your phone)
+    var mine = it.kind === 'event' && canEdit && /@loxsuite$/.test(it.uid || '') && (data.calendars || []).some(function (c) { return c.id === it.calendar_id && c.writable; });
+    html += '<p style="margin:0.6rem 0 0; display:flex; justify-content:space-between; gap:0.6rem;"><a href="#" id="ag-close">Close</a>' + (mine ? '<a href="#" id="ag-remove" style="color:var(--danger);">' + esc(T('Remove appointment')) + '</a>' : '') + '</p></div>';
     el.innerHTML = html;
     var setTemp = function (v) {
       if (it.kind === 'trip') return post('/agenda/trips/' + it.id + '/climate.json', { climate_c: v });
@@ -595,6 +706,16 @@
     // an address without a distance: look it up straight away (once per address on this page)
     if (dist && !it.geoError && !distTried[it.location]) { distTried[it.location] = true; lookUp(false); }
     document.getElementById('ag-close').onclick = function (e) { e.preventDefault(); selected = null; render(); };
+    var rm = document.getElementById('ag-remove');
+    if (rm) rm.onclick = function (e) {
+      e.preventDefault();
+      var onPhone = (data.calendars || []).some(function (c) { return c.id === it.calendar_id && c.kind === 'caldav'; });
+      if (!window.confirm(onPhone ? T('Remove this appointment? It is removed from the calendar on your phone too.') : T('Remove this appointment?'))) return;
+      post('/agenda/events/delete.json', { calendar_id: it.calendar_id, uid: it.uid }).then(function (r) {
+        if (!r.ok) { window.alert(T(r.message || 'Error')); return; }
+        selected = null; load();
+      });
+    };
   }
 
   var tf = document.getElementById('ag-trip-form');
