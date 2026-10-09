@@ -98,3 +98,13 @@ test('the comfort schedule is learned from the room controller target, per weekd
   assert.deepEqual(sc.days[0], { from: '06:30', until: '22:30', n: 2 });
   assert.equal(sc.days[5].from, '08:00', 'Saturday later');
 });
+
+test('room forecast: when the heat pump comes on and when the room is at its target', () => {
+  const m = rw.learn(roomSamples(8)); // 0.4 °C/h at 0 °C outside
+  const T = Date.parse('2026-10-10T00:00:00Z');
+  const hours = Array.from({ length: 10 }, (_, i) => ({ ms: T + i * HOUR, targetC: i >= 5 ? 20.5 : 19, outdoorC: 0.5 }));
+  const f = rw.forecast(m, { startC: 19.2, hours, k: 0.005 });
+  assert.equal(f.onAt, T + 5 * HOUR, 'comes on when the target goes up');
+  assert.ok(f.reachAt > T + 7 * HOUR && f.reachAt < T + 10 * HOUR, new Date(f.reachAt).toISOString());
+  assert.ok(f.rows[4].roomC < 19.2, 'cools down before');
+});

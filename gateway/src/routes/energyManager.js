@@ -330,8 +330,9 @@ router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), 
     c.limits = { comfortMinC: limits.comfortMinC, targetC: limits.targetC, bufferMaxC: Number(num(b.limits.bufferMaxC, limits.bufferMaxC)), hpMaxC: limits.hpMaxC, absoluteMaxC: limits.absoluteMaxC, boosterForBuffer: limits.boosterForBuffer };
     c._warnings = checked.warnings;
   }
+  // own names per value seen (a step 0–2, a percentage, an NTC temperature): { "14": "Fake 14 graden" }
   for (const k of ['step_names', 'ntc_names']) {
-    if (kind === 'heatpump' && b[k] && typeof b[k] === 'object') c[k] = Object.fromEntries([0, 1, 2].map((i) => [i, String(b[k][i] ?? '').trim().slice(0, 40) || String(i)]));
+    if (kind === 'heatpump' && b[k] && typeof b[k] === 'object') c[k] = Object.fromEntries(Object.entries(b[k]).filter(([v, n]) => Number.isFinite(Number(v)) && String(n || '').trim()).slice(0, 20).map(([v, n]) => [String(Number(v)), String(n).trim().slice(0, 40)]));
   }
   if (kind === 'heatpump' && b.room) {
     const R = b.room; const hhmmOk = (x, d) => (/^\d{1,2}:\d{2}$/.test(String(x || '')) ? String(x) : d);

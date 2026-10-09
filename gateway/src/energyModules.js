@@ -38,7 +38,7 @@ const DEFAULTS = {
     // bijsturen for long, calm runs: 'off' | 'advise' (shows it) | 'live' (sends it, with the module live)
     tuning: { mode: 'advise', flow_min: 25, flow_max: 45 },
     // the user's own names for the power steps and the outdoor-sensor (NTC) settings of their Loxone logic
-    step_names: { 0: '100%', 1: '75%', 2: '50%' }, ntc_names: { 0: 'Echte buitentemperatuur', 1: 'Vaste waarde 1', 2: 'Vaste waarde 2' },
+    step_names: {}, ntc_names: {},
     limits: { ...lg.DEFAULT_LIMITS }, heat_c_per_h: 10, loss_c_per_h: 0.6, hold_h: 2,
     legionella: { enabled: true, interval_days: 7, temp_c: 60, hold_min: 30, from_hour: 10, to_hour: 17, duration_h: 2, unit_backup: true },
   },
@@ -50,7 +50,7 @@ const rt = { conflicts: { heatpump: {}, solar: {} }, tank: [], weather: [], room
 async function getConfig(kind) {
   const d = DEFAULTS[kind];
   const c = await settings.get(`energy_module_${kind}`, d);
-  return { ...d, ...c, ...(kind === 'heatpump' ? { limits: { ...d.limits, ...(c.limits || {}) }, legionella: { ...d.legionella, ...(c.legionella || {}) }, room: { ...d.room, ...(c.room || {}) }, tuning: { ...d.tuning, ...(c.tuning || {}) }, step_names: { ...d.step_names, ...(c.step_names || {}) }, ntc_names: { ...d.ntc_names, ...(c.ntc_names || {}) } } : {}), links: c.links || {} };
+  return { ...d, ...c, ...(kind === 'heatpump' ? { limits: { ...d.limits, ...(c.limits || {}) }, legionella: { ...d.legionella, ...(c.legionella || {}) }, room: { ...d.room, ...(c.room || {}) }, tuning: { ...d.tuning, ...(c.tuning || {}) }, step_names: c.step_names || {}, ntc_names: c.ntc_names || {} } : {}), links: c.links || {} };
 }
 async function saveConfig(kind, c) { return settings.set(`energy_module_${kind}`, { ...(await getConfig(kind)), ...c }); }
 
@@ -178,8 +178,19 @@ function roomPlan({ R, nowMs, roomC, rmodel, outdoorAt, localOf, sched = null })
   const pre = rwu.preheat(rmodel, { atMs: comfortAt, nowMs, fromC, comfortC, outdoorAt });
   const preheating = !inComfort && nowMs >= pre.startMs && nowMs < comfortAt;
   const rate = rwu.rate(rmodel, outdoorAt(comfortAt - HOUR));
+  // per hour of the plan: comfort, pre-heating (the same lead as now) or set back, with its target
+  const leadMs = pre.hours > 0 ? pre.hours * HOUR : 0;
+  const hourly = (list) => list.map((ms) => {
+    const mid = ms + HOUR / 2;
+    for (const d of [-DAY, 0, DAY]) {
+      const from = localTimeOn(mid + d, fromOf(mid + d)); let until = localTimeOn(mid + d, untilOf(mid + d)); if (until <= from) until += DAY;
+      if (mid >= from && mid < until) return { ms, room: 'comfort', targetC: comfortC };
+      if (leadMs && mid >= from - leadMs && mid < from) return { ms, room: 'preheat', targetC: comfortC };
+    }
+    return { ms, room: 'setback', targetC: setbackC };
+  });
   return {
-    comfortC, setbackC, comfortAt, untilAt, inComfort, preheating, preheat: pre.hours > 0 ? pre : null, rate, fromLoxone: !!useLox,
+    hourly, comfortC, setbackC, comfortAt, untilAt, inComfort, preheating, preheat: pre.hours > 0 ? pre : null, rate, fromLoxone: !!useLox,
     setpointNow: inComfort || preheating ? comfortC : setbackC,
     why: inComfort ? 'comfort' : preheating ? `pre-heating for ${comfortC} °C at ${String(localOf(comfortAt).hour).padStart(2, '0')}:${String(localOf(comfortAt).minute).padStart(2, '0')}` : 'set back',
   };
@@ -247,6 +258,12 @@ async function heatpumpStatus(nowMs = Date.now()) {
   const lastDoneMs = lg.lastDone(samples, { targetC: Number(L.temp_c) || 60, holdMin: Number(L.hold_min) || 30 }) ?? (cfg.legionella_last_ms || null);
   const leg = L.enabled ? lg.planLegionella({ hours, nowMs, lastDoneMs, intervalDays: Number(L.interval_days) || 7, fromHour: Number(L.from_hour), toHour: Number(L.to_hour), durationH: Number(L.duration_h) || 2, localHour }) : null;
   const legNow = leg?.block && nowMs >= leg.block.startMs && nowMs < leg.block.endMs;
+  const cooling = v.heatingMode === 3 || v.heatingMode === 4;
+  const roomHours = new Map(room ? room.hourly(plan.hours.map((h) => h.ms)).map((x) => [x.ms, x]) : []);
+  // the room ahead: when the heat pump is expected to come on, and when the room is at its target
+  const cool = rwu.learnCooling(rt.room.filter((x) => x.ms > nowMs - 30 * DAY));
+  const rf = room && Number.isFinite(state.roomC) ? rwu.forecast(rmodel, { startC: state.roomC, k: cool.k, hours: plan.hours.map((h) => ({ ms: h.ms, targetC: roomHours.get(h.ms)?.targetC ?? null, outdoorC: wx.get(h.ms)?.t ?? state.outdoorC ?? null })) }) : null;
+  const roomAhead = new Map(rf ? rf.rows.map((x) => [x.ms, x]) : []);
   const hourPlan = plan.hours.find((h) => h.ms === Math.floor(nowMs / HOUR) * HOUR) || plan.hours[0] || { mode: 'free' };
   const mode = legNow ? 'legionella' : hourPlan.mode;
   const tuneLive = T.mode === 'live' && advice && tu.keyOf(advice.setting) !== tu.keyOf(current);
@@ -256,9 +273,9 @@ async function heatpumpStatus(nowMs = Date.now()) {
     kind: 'heatpump', cfg, check: r.check, found: summary(r.found), chosen: r.chosen ? summaryOne(r.chosen) : null, msId,
     roles: rolesView('heatpump', type, r.chosen), values: v, state, limits, warnings,
     learned: { threshold: th, fromPipe: withPipe, draws: draws.slice(-20), patterns, samples: samples.length, days: prof?.days || 0 },
-    plan: plan.hours.map((h, i) => { const e = exps.get(h.ms) || {}; return { ...h, price: hours[i]?.price ?? null, surplusKwh: hours[i]?.surplusKwh ?? 0, estimated: !!hours[i]?.estimated, drop: Math.round(dropOf(h.ms) * 10) / 10, cop: e.cop ?? null, defrost: e.defrost ?? null, outdoorC: e.outdoorC, rh: e.rh, heatCost: hw.costPerHeat(hours[i]?.price ?? null, e) }; }),
+    plan: plan.hours.map((h, i) => { const e = exps.get(h.ms) || {}; const rh2 = roomHours.get(h.ms) || {}; const legH = leg?.block && h.ms >= leg.block.startMs && h.ms < leg.block.endMs; return { ...h, roomC: roomAhead.get(h.ms)?.roomC ?? null, heatOn: !!roomAhead.get(h.ms)?.on, room: rh2.room || null, roomTargetC: rh2.targetC ?? null, does: legH ? 'legionella' : h.mode === 'dhw' ? 'dhw' : rh2.room === 'preheat' ? 'preheat' : rh2.room === 'comfort' ? (cooling ? 'cool' : 'comfort') : rh2.room === 'setback' ? 'setback' : 'free', price: hours[i]?.price ?? null, surplusKwh: hours[i]?.surplusKwh ?? 0, estimated: !!hours[i]?.estimated, drop: Math.round(dropOf(h.ms) * 10) / 10, cop: e.cop ?? null, defrost: e.defrost ?? null, outdoorC: e.outdoorC, rh: e.rh, heatCost: hw.costPerHeat(hours[i]?.price ?? null, e) }; }),
     weather: { source, model: wmodel, now: exps.get(Math.floor(nowMs / HOUR) * HOUR) || null, steps: hw.learnSteps(rt.weather.filter((x) => x.ms > nowMs - 60 * DAY)) },
-    room: room ? { ...room, model: rmodel, schedule: sched, controller: r.roomController ? { uuid: r.roomController.uuid, name: r.roomController.name, room: r.roomController.room } : null } : null,
+    cooling, roomForecast: rf ? { onAt: rf.onAt, reachAt: rf.reachAt, cooling: cool } : null, room: room ? { ...room, hourly: undefined, model: rmodel, schedule: sched, controller: r.roomController ? { uuid: r.roomController.uuid, name: r.roomController.name, room: r.roomController.room } : null } : null,
     controllers: (await roomControllerList()).map((x) => ({ value: x.value, uuid: x.uuid, name: x.name, room: x.room, msName: x.msName })),
     tuning: { overshoot, mode: T.mode, current, advice, model: Object.values(tmodel).filter((x) => advice && x.weather === advice.weather).map((x) => ({ ...x, score: tu.score(x) })).sort((a, b) => a.score - b.score), runs: rt.tune.length },
     legionella: leg ? { ...leg, lastDoneMs, now: legNow } : null, mode, reason: legNow ? leg.reason : hourPlan.reason, writes, sent: rt.sent.heatpump.slice(-15),

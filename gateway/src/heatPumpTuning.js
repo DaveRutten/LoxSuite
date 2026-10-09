@@ -19,6 +19,8 @@ const r2 = (x) => Math.round(x * 100) / 100;
 const { tbin, band } = require('./heatPumpWeather');
 
 const keyOf = (s) => `${s.flowC ?? '-'}|${s.step ?? 0}|${s.ntc ?? 0}`;
+// a flow setpoint passed on ×100 / ×10 (kept in older samples) as °C
+const plainC = (v) => (!Number.isFinite(v) ? v : Math.abs(v) > 1000 ? r2(v / 100) : Math.abs(v) > 100 ? r2(v / 10) : v);
 
 // Pure: runs from minute samples [{ ms, running, defrost, elecKw, heatKw, outdoorC, rh, flowC, step, ntc }].
 function runs(samples, { maxGapMin = 5 } = {}) {
@@ -30,7 +32,7 @@ function runs(samples, { maxGapMin = 5 } = {}) {
     const gap = cur && s.ms - cur.lastMs > maxGapMin * MIN;
     if (cur && (!on || gap)) { out.push(cur); cur = null; }
     if (!on) continue;
-    if (!cur) cur = { startMs: s.ms, lastMs: s.ms, minutes: 0, defrosts: 0, inDefrost: false, elec: 0, heat: 0, outdoorC: 0, rh: 0, rhN: 0, setting: { flowC: s.flowC ?? null, step: s.step ?? 0, ntc: s.ntc ?? 0 } };
+    if (!cur) cur = { startMs: s.ms, lastMs: s.ms, minutes: 0, defrosts: 0, inDefrost: false, elec: 0, heat: 0, outdoorC: 0, rh: 0, rhN: 0, setting: { flowC: Number.isFinite(s.flowC) ? plainC(s.flowC) : null, step: s.step ?? 0, ntc: s.ntc ?? 0 } };
     cur.minutes += 1; cur.lastMs = s.ms;
     if (s.defrost && !cur.inDefrost) cur.defrosts += 1;
     cur.inDefrost = !!s.defrost;

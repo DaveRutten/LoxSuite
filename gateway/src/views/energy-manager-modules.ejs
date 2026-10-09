@@ -15,6 +15,19 @@
   .mm-hr .bar { border-radius:3px 3px 0 0; background:var(--border); min-height:2px; } .mm-hr.dhw .bar { background:#3b82f6; } .mm-hr.sun .bar { background:#f2b632; }
   .mm-hr .ice { position:absolute; top:12px; left:0; right:0; text-align:center; color:#3b82f6; font-size:0.7rem; }
   .mm-hr .lbl { font-size:0.65rem; color:var(--text-muted); text-align:center; margin-top:2px; } .mm-hr .drop { position:absolute; top:0; left:0; right:0; text-align:center; color:var(--danger); font-size:0.7rem; }
+  .mm-chart { width:100%; height:300px; display:block; margin-top:0.4rem; }
+  .mm-chart .mm-cl { font-size:11px; fill:var(--text-muted); }
+  .mm-chart .mm-cx { font-size:10px; fill:var(--text-muted); }
+  .mm-chart .mm-ct { font-size:11px; fill:var(--danger); }
+  .mm-chart .mm-ice { font-size:11px; fill:#3b82f6; }
+  .mm-chart .mm-room { fill:none; stroke:var(--accent); stroke-width:2.5; }
+  .mm-chart .mm-roomf { fill:none; stroke:#f59e0b; stroke-width:2; stroke-dasharray:5 3; }
+  .mm-chart .mm-on { font-size:11px; font-weight:600; fill:#f59e0b; } .mm-chart .mm-ok { font-size:11px; font-weight:600; fill:var(--success); }
+  .mm-chart .mm-tank { fill:none; stroke:#3b82f6; stroke-width:1.5; stroke-dasharray:4 3; }
+  .mm-chart .mm-out { fill:none; stroke:var(--text-muted); stroke-width:1.8; }
+  .mm-chart .mm-price { fill:var(--text-muted); opacity:0.45; } .mm-chart .mm-neg { fill:var(--success); }
+  .mm-chart .mm-zero { stroke:var(--text-muted); stroke-width:1; stroke-dasharray:2 2; }
+  .mm-k-room { background:var(--accent); height:3px !important; } .mm-k-roomf { border-top:2px dashed #f59e0b; background:none !important; height:0 !important; } .mm-k-tank { border-top:2px dashed #3b82f6; background:none !important; height:0 !important; }
   .mm-legend { display:flex; gap:0.9rem; flex-wrap:wrap; font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem; } .mm-legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:0.3rem; vertical-align:-1px; }
   .mm-sub { border-top:1px solid var(--border); margin-top:1rem; padding-top:0.8rem; } .mm-sub h3 { margin:0 0 0.3rem; font-size:1rem; }
   .mm-table td, .mm-table th { white-space:normal; vertical-align:top; } .mm-table select, .mm-table input { width:100%; font-size:0.85rem; }
@@ -120,15 +133,40 @@
     <div class="mm-kpi"><span><%= t('Plan this hour') %></span><b><%= modeText[hpS.mode] || hpS.mode %></b><span><%= tr(hpS.reason || '') %></span></div>
   </div>
 
-  <div class="mm-sub"><h3><%= t('Tap-water plan, next 24 hours') %></h3>
+  <div class="mm-sub"><h3><%= hpS.cooling ? t('Plan: cooling and tap water, next 24 hours') : t('Plan: heating and tap water, next 24 hours') %></h3>
     <p class="hint" style="margin:0;">
       <% if (hpS.learned && hpS.learned.patterns.length) { %><%= hpS.learned.fromPipe ? t('Learned from the hot-water pipe:') : t('Learned from the tank temperature:') %> <% hpS.learned.patterns.forEach((p, i) => { %><%= i ? ', ' : '' %>~<%= String(p.from).padStart(2, '0') %>:00 (−<%= nf(p.kwh, 1) %> °C)<% }) %>.<% } else { %><%= t('Still learning the usual draws from the tank temperature ({n} samples).', { n: (hpS.learned && hpS.learned.samples) || 0 }) %><% } %>
-      <%= t('Height = predicted tank temperature.') %><% if ((hpS.plan || []).some((h) => h.estimated)) { %> <%= t('No prices yet: estimated.') %><% } %>
+      <% if ((hpS.plan || []).some((h) => h.estimated)) { %> <%= t('No prices yet: estimated.') %><% } %>
     </p>
-    <div class="mm-strip"><% (hpS.plan || []).slice(0, 24).forEach((h) => { const cls = h.mode === 'dhw' ? (h.surplusKwh > 0.5 ? 'sun' : 'dhw') : ''; %>
-      <div class="mm-hr <%= cls %>" title="<%= hhmm(h.ms) %> · € <%= nf(h.price, 2) %><%= h.cop ? ' · COP ' + nf(h.cop, 1) + ' → € ' + nf(h.heatCost, 3) + ' ' + t('per kWh heat') : '' %><%= h.outdoorC !== null && h.outdoorC !== undefined ? ' · ' + nf(h.outdoorC) + ' °C' : '' %><%= h.rh ? ' · ' + nf(h.rh, 0) + '%' : '' %><%= h.defrost > 0.02 ? ' · ' + t('defrosting ~{p}% of the time', { p: Math.round(h.defrost * 100) }) : '' %> · <%= nf(h.predC) %> °C · <%= tr(h.reason) %>"><% if (h.drop > 0.5) { %><div class="drop">▼</div><% } %><% if (h.defrost > 0.05) { %><div class="ice" title="<%= t('defrosting ~{p}% of the time', { p: Math.round(h.defrost * 100) }) %>">❄</div><% } %><div class="bar" style="height:<%= Math.max(2, Math.round((h.predC - 35) * 3.5)) %>px"></div><div class="lbl"><%= hhmm(h.ms).slice(0, 2) %></div></div>
-    <% }) %></div>
-    <div class="mm-legend"><span><i style="background:#3b82f6"></i><%= t('tap water (cheap hour)') %></span><span><i style="background:#f2b632"></i><%= t('tap water on solar') %></span><span><i style="background:var(--border)"></i><%= t('heating / Loxone itself') %></span><span style="color:var(--danger)">▼ <%= t('usual draw') %></span><span style="color:#3b82f6">❄ <%= t('expected defrosting') %></span></div>
+    <%
+      const chP = (hpS.plan || []).slice(0, 24); const chW = 960, chCw = chW / Math.max(1, chP.length), chX = (i) => i * chCw;
+      const chCOL = { dhw: '#3b82f6', legionella: '#d64545', preheat: '#f59e0b', comfort: 'var(--accent)', cool: '#06b6d4', setback: 'var(--border)', free: 'var(--border)' };
+      const chLane = (top, h) => ({ top, h });
+      const chL1 = chLane(18, 22), chL2 = chLane(64, 70), chL3 = chLane(158, 60), chL4 = chLane(242, 60);
+      const chYs = (vals, ln, pad = 0.5) => { const f = vals.filter(Number.isFinite); if (!f.length) return () => ln.top + ln.h / 2; let lo = Math.min(...f) - pad, hi = Math.max(...f) + pad; if (hi - lo < 1) { hi += 0.5; lo -= 0.5; } return (v) => ln.top + ln.h - ((v - lo) / (hi - lo)) * ln.h; };
+      const chPath = (vals, y) => vals.map((v, i) => Number.isFinite(v) ? `${i && Number.isFinite(vals[i - 1]) ? 'L' : 'M'}${(chX(i) + chCw / 2).toFixed(1)},${y(v).toFixed(1)}` : '').join(' ');
+      const chStep = (vals, y) => vals.map((v, i) => Number.isFinite(v) ? `${i && Number.isFinite(vals[i - 1]) ? 'L' : 'M'}${chX(i).toFixed(1)},${y(v).toFixed(1)} L${(chX(i) + chCw).toFixed(1)},${y(v).toFixed(1)}` : '').join(' ');
+      const chRoom = chP.map((h) => h.roomTargetC), chRoomF = chP.map((h) => h.roomC), chTank = chP.map((h) => h.predC), chOut = chP.map((h) => h.outdoorC), chPrice = chP.map((h) => h.price);
+      const chYR = chYs([...chRoom, ...chRoomF], chL2), chYT = chYs(chTank, chL2, 1), chYO = chYs(chOut, chL3);
+      const chPf = chPrice.filter(Number.isFinite), chPMax = Math.max(0.01, ...chPf, 0), chPMin = Math.min(0, ...chPf), chYP = (v) => chL4.top + chL4.h - ((v - chPMin) / (chPMax - chPMin)) * chL4.h;
+      const chTip = (h) => [hhmm(h.ms), { dhw: t('Tap water'), legionella: t('Legionella'), preheat: t('Pre-heating'), comfort: t('Comfort'), cool: t('Cooling'), setback: t('Set back'), free: t('Heating / Loxone itself') }[h.does] || '', h.roomTargetC !== null ? t('room') + ' ' + nf(h.roomTargetC) + ' °C' : '', t('tank') + ' ' + nf(h.predC) + ' °C', h.outdoorC !== null && h.outdoorC !== undefined ? t('outside') + ' ' + nf(h.outdoorC) + ' °C' : '', h.cop ? 'COP ' + nf(h.cop, 1) : '', h.defrost > 0.02 ? t('defrosting ~{p}% of the time', { p: Math.round(h.defrost * 100) }) : '', '€ ' + nf(h.price, 3), tr(h.reason)].filter(Boolean).join(' · ');
+    %>
+    <svg class="mm-chart" viewBox="0 0 <%= chW %> 330" preserveAspectRatio="none" role="img" aria-label="<%= t('Plan, next 24 hours') %>">
+      <text x="0" y="12" class="mm-cl"><%= t('What it does') %></text>
+      <% chP.forEach((h, i) => { %><rect x="<%= chX(i) + 1 %>" y="<%= chL1.top %>" width="<%= chCw - 2 %>" height="<%= chL1.h %>" rx="3" fill="<%= chCOL[h.does] || chCOL.free %>"><title><%= chTip(h) %></title></rect><% if (h.drop > 0.5) { %><text x="<%= chX(i) + chCw / 2 %>" y="<%= chL1.top + chL1.h - 6 %>" class="mm-ct" text-anchor="middle">▼</text><% } %><% }) %>
+      <text x="0" y="<%= chL2.top - 6 %>" class="mm-cl"><%= t('Room target and tank (°C)') %></text>
+      <path d="<%= chStep(chRoom, chYR) %>" class="mm-room"/><path d="<%= chPath(chRoomF, chYR) %>" class="mm-roomf"/>
+      <% const RF = hpS.roomForecast || {}; chP.forEach((h, i) => { const nx = chP[i + 1]; if (RF.onAt && RF.onAt >= h.ms && RF.onAt < h.ms + 3600000) { %><text x="<%= chX(i) + 2 %>" y="<%= chL2.top + 10 %>" class="mm-on">▲ <%= t('on') %></text><% } if (RF.reachAt && RF.reachAt >= h.ms && RF.reachAt < h.ms + 3600000) { %><text x="<%= chX(i) + 2 %>" y="<%= chL2.top + chL2.h - 2 %>" class="mm-ok">✓ <%= t('at temperature') %></text><% } }) %><path d="<%= chPath(chTank, chYT) %>" class="mm-tank"/>
+      <text x="0" y="<%= chL3.top - 6 %>" class="mm-cl"><%= t('Outside (°C)') %></text>
+      <path d="<%= chPath(chOut, chYO) %>" class="mm-out"/>
+      <% chP.forEach((h, i) => { if (h.defrost > 0.05) { %><text x="<%= chX(i) + chCw / 2 %>" y="<%= chL3.top + 10 %>" class="mm-ice" text-anchor="middle">❄</text><% } }) %>
+      <text x="0" y="<%= chL4.top - 6 %>" class="mm-cl"><%= t('Price (€/kWh)') %></text>
+      <% chP.forEach((h, i) => { if (!Number.isFinite(h.price)) return; const y0 = chYP(0), y1 = chYP(h.price); %><rect x="<%= chX(i) + 3 %>" y="<%= Math.min(y0, y1) %>" width="<%= chCw - 6 %>" height="<%= Math.max(1, Math.abs(y1 - y0)) %>" class="<%= h.price < 0 ? 'mm-neg' : 'mm-price' %>"><title><%= chTip(h) %></title></rect><% }) %>
+      <% if (chPMin < 0) { %><line x1="0" x2="<%= chW %>" y1="<%= chYP(0) %>" y2="<%= chYP(0) %>" class="mm-zero"/><% } %>
+      <% chP.forEach((h, i) => { if (i % 2) return; %><text x="<%= chX(i) + chCw / 2 %>" y="324" class="mm-cx" text-anchor="middle"><%= hhmm(h.ms).slice(0, 2) %></text><% }) %>
+      <% chP.forEach((h, i) => { %><rect x="<%= chX(i) %>" y="0" width="<%= chCw %>" height="310" fill="transparent"><title><%= chTip(h) %></title></rect><% }) %>
+    </svg>
+    <div class="mm-legend"><span><i style="background:#3b82f6"></i><%= t('tap water') %></span><span><i style="background:#d64545"></i><%= t('legionella') %></span><span><i style="background:#f59e0b"></i><%= t('pre-heating') %></span><span><i style="background:var(--accent)"></i><%= hpS.cooling ? t('cooling') : t('comfort') %></span><span><i style="background:var(--border)"></i><%= t('set back') %></span><span><i class="mm-k-room"></i><%= t('room target') %></span><span><i class="mm-k-tank"></i><%= t('tank') %></span><span style="color:var(--danger)">▼ <%= t('usual draw') %></span><span style="color:#3b82f6">❄ <%= t('expected defrosting') %></span></div>
     <p class="hint" style="margin:0.3rem 0 0;"><%= t('The plan compares the cost per kWh of heat: the price divided by the COP expected in that hour\'s weather.') %></p>
   </div>
 
@@ -151,14 +189,15 @@
     <% if (rp) { %><div class="mm-kpis">
       <div class="mm-kpi"><span><%= t('Room now') %></span><b><%= nf(st.roomC) %> °C</b><span><%= t('setpoint now') %> <%= nf(rp.setpointNow) %> °C · <%= tr(rp.why) %></span></div>
       <div class="mm-kpi"><span><%= t('Warms up') %></span><b><%= nf(rp.rate.rate, 2) %> °C/h</b><span><%= rp.rate.learned ? t('learned at this outdoor temperature') : t('start value, still learning') %></span></div>
+      <% const RF2 = hpS.roomForecast; %><div class="mm-kpi"><span><%= t('Expected') %></span><b style="font-size:1rem;"><%= RF2 && RF2.onAt ? t('on at {t}', { t: hhmm(RF2.onAt) }) : t('no heating needed') %></b><span><%= RF2 && RF2.reachAt ? t('at temperature at {t}', { t: hhmm(RF2.reachAt) }) : '' %><%= RF2 && RF2.cooling ? ' · ' + (RF2.cooling.learned ? t('cools down learned') : t('cools down: start value')) : '' %></span></div>
       <div class="mm-kpi"><span><%= t('Next comfort') %></span><b><%= day(rp.comfortAt) %></b><span><%= rp.preheat ? t('start pre-heating at {t} ({h} h before)', { t: hhmm(rp.preheat.startMs), h: nf(rp.preheat.hours, 1) }) : t('already warm enough') %></span></div>
     </div><% } %>
     <p class="hint" style="margin:0.3rem 0 0;"><%= t('Tap water is planned right before or after pre-heating the room, never in between.') %></p>
   </div>
 
   <div class="mm-sub" data-tuning><h3><%= t('Fine-tuning for long, calm runs') %></h3>
-    <% const TU = hpS.tuning || {}; const TC = hpS.cfg.tuning || {}; const SN2 = hpS.cfg.step_names || {}, NN2 = hpS.cfg.ntc_names || {}; const stepTxt = (v) => (v === null || v === undefined ? null : SN2[v] || (v > 2 ? v + '%' : String(v)));
-    const ntcTxt = (v) => (v === null || v === undefined ? null : NN2[v] || (v > 2 ? 'NTC ' + nf(v, 1) + ' °C' : String(v)));
+    <% const TU = hpS.tuning || {}; const TC = hpS.cfg.tuning || {}; const SN2 = hpS.cfg.step_names || {}, NN2 = hpS.cfg.ntc_names || {}; const stepTxt = (v) => (v === null || v === undefined ? null : SN2[String(v)] || (v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v })));
+    const ntcTxt = (v) => (v === null || v === undefined ? null : NN2[String(v)] || (v > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(v, 0) }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v })));
     const setTxt = (x) => x ? [Number.isFinite(x.flowC) ? t('flow {c} °C', { c: nf(x.flowC, 1) }) : null, stepTxt(x.step), ntcTxt(x.ntc)].filter((y) => y !== null && y !== undefined).join(' · ') : '—'; %>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
       <div><label><%= t('Fine-tuning') %></label><select data-tu="mode"><option value="off" <%= TC.mode === 'off' ? 'selected' : '' %>><%= t('Off') %></option><option value="advise" <%= !TC.mode || TC.mode === 'advise' ? 'selected' : '' %>><%= t('Advise only') %></option><option value="live" <%= TC.mode === 'live' ? 'selected' : '' %>><%= t('Steer (with the module live)') %></option></select></div>
@@ -185,14 +224,16 @@
     <% const steps = (W.steps || []); if (steps.length) { %><h3 style="margin:0.8rem 0 0.3rem; font-size:0.95rem;"><%= t('Power steps and outdoor sensor (NTC)') %></h3>
     <p class="hint" style="margin:0 0 0.3rem;"><%= t('What running calmer brings, per outdoor temperature: learned from your own Loxone logic.') %></p>
     <div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Outside') %></th><th><%= t('Power step') %></th><th>NTC</th><th><%= t('Hours seen') %></th><th><%= t('Power') %></th><th><%= t('Heat') %></th><th>COP</th></tr></thead><tbody>
-      <% const SN = hpS.cfg.step_names || {}, NN = hpS.cfg.ntc_names || {}; steps.forEach((r) => { %><tr><td><%= r.t %> … <%= r.t + 2 %> °C</td><td><%= SN[r.step] || (r.step > 2 ? r.step + '%' : r.step) %></td><td><%= NN[r.ntc] || (r.ntc > 2 ? 'NTC ' + nf(r.ntc, 1) + ' °C' : r.ntc) %></td><td><%= nf(r.hours, 0) %></td><td><%= nf(r.elecKw, 2) %> kW</td><td><%= nf(r.heatKw, 2) %> kW</td><td><%= nf(r.cop, 2) %></td></tr><% }) %>
+      <% const SN = hpS.cfg.step_names || {}, NN = hpS.cfg.ntc_names || {}; steps.forEach((r) => { %><tr><td><%= r.t %> … <%= r.t + 2 %> °C</td><td><%= SN[String(r.step)] || (r.step > 2 ? r.step + '%' : r.step === 0 ? t('full power') : t('step {n}', { n: r.step })) %></td><td><%= NN[String(r.ntc)] || (r.ntc > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(r.ntc, 0) }) : r.ntc === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: r.ntc })) %></td><td><%= nf(r.hours, 0) %></td><td><%= nf(r.elecKw, 2) %> kW</td><td><%= nf(r.heatKw, 2) %> kW</td><td><%= nf(r.cop, 2) %></td></tr><% }) %>
     </tbody></table></div><% } %>
+    <% const seenStep = [...new Set([...(W.steps || []).map((r) => r.step), ...((hpS.tuning || {}).model || []).map((r) => r.setting.step), (hpS.tuning || {}).current ? hpS.tuning.current.step : null, ...Object.keys(hpS.cfg.step_names || {}).map(Number)].filter(Number.isFinite))].sort((a, b) => a - b);
+       const seenNtc = [...new Set([...(W.steps || []).map((r) => r.ntc), ...((hpS.tuning || {}).model || []).map((r) => r.setting.ntc), (hpS.tuning || {}).current ? hpS.tuning.current.ntc : null, ...Object.keys(hpS.cfg.ntc_names || {}).map(Number)].filter(Number.isFinite))].sort((a, b) => a - b); %>
     <details style="margin-top:0.5rem;"><summary class="hint" style="cursor:pointer; margin:0;"><%= t('Names of the steps') %></summary>
-      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); margin-top:0.4rem;">
-        <% [0, 1, 2].forEach((i) => { %><div><label><%= t('Power step {n}', { n: i }) %></label><input type="text" data-sn="<%= i %>" value="<%= (hpS.cfg.step_names || {})[i] %>"></div><% }) %>
-        <% [0, 1, 2].forEach((i) => { %><div><label><%= t('NTC setting {n}', { n: i }) %></label><input type="text" data-nn="<%= i %>" value="<%= (hpS.cfg.ntc_names || {})[i] %>"></div><% }) %>
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:0.4rem;">
+        <% seenStep.forEach((v) => { %><div><label><%= t('Power: value {v}', { v }) %></label><input type="text" data-sn="<%= v %>" value="<%= (hpS.cfg.step_names || {})[String(v)] || '' %>" placeholder="<%= v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v }) %>"></div><% }) %>
+        <% seenNtc.forEach((v) => { %><div><label><%= t('Outdoor sensor: value {v}', { v }) %></label><input type="text" data-nn="<%= v %>" value="<%= (hpS.cfg.ntc_names || {})[String(v)] || '' %>" placeholder="<%= v > 2 ? t('outdoor sensor fixed at {c} °C', { c: v }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v }) %>"></div><% }) %>
       </div>
-      <p class="hint" style="margin:0.3rem 0 0;"><%= t('e.g. 100% / 75% / 50%, or "Fake 14 °C" for a fixed value of the outdoor sensor. Step 0 = both relays off, 1 = relay 1, 2 = both.') %></p>
+      <p class="hint" style="margin:0.3rem 0 0;"><%= t('Every value your Loxone logic has shown (a step, a percentage, an outdoor temperature the heat pump is shown) — give it a name, e.g. "Fake 14 graden". Empty: the description shown greyed.') %></p>
     </details>
   </div>
 

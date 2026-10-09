@@ -116,4 +116,46 @@ function learnSchedule(samples, localOf, { minDays = 2 } = {}) {
   return { comfortC: r2(hi), setbackC: r2(lo), days, all: all.length ? { from: hhmm(med(all.map((d) => d.from))), until: hhmm(med(all.map((d) => d.until))) } : null };
 }
 
-module.exports = { learn, rate, warmupHours, preheat, learnSchedule, tbin };
+// Pure: how fast the room cools down when the heat pump is off: k in dT/h = k × (room − outside), the
+// median over the hours without heating (temperature.js does the same for a consumer's own signal).
+function learnCooling(samples, { minHours = 6 } = {}) {
+  const S = (samples || []).filter((s) => !s.heating && Number.isFinite(s.roomC) && Number.isFinite(s.outdoorC));
+  const ks = [];
+  for (let i = 0; i + 60 < S.length; i += 60) {
+    const a = S[i], b = S[i + 60];
+    if (b.ms - a.ms > 70 * MIN || S.slice(i, i + 61).some((x) => x.heating)) continue;
+    const diff = a.roomC - a.outdoorC;
+    if (diff < 3) continue;
+    const k = (a.roomC - b.roomC) / diff;
+    if (k > -0.01 && k < 0.2) ks.push(Math.max(0, k));
+  }
+  if (ks.length < minHours) return { k: 0.02, learned: false, n: ks.length };
+  return { k: Math.round(median(ks) * 10000) / 10000, learned: true, n: ks.length };
+}
+
+// Pure: the room hour by hour — heating (the learned rate at that hour's outdoor temperature) when it is
+// below its target minus the hysteresis, else cooling down towards outside. Where the heat pump is expected
+// to come on and when the room reaches its target.
+//   hours [{ ms, targetC, outdoorC }] -> { rows: [{ ms, roomC, on }], onAt, reachAt }
+function forecast(model, { startC, hours, k = 0.02, hystC = 0.3 }) {
+  let room = startC;
+  let on = false; let onAt = null; let reachAt = null;
+  const rows = [];
+  for (const h of hours) {
+    if (!Number.isFinite(room) || !Number.isFinite(h.targetC)) { rows.push({ ms: h.ms, roomC: null, on: false }); continue; }
+    const out = Number.isFinite(h.outdoorC) ? h.outdoorC : 8;
+    if (!on && room < h.targetC - hystC) { on = true; if (onAt === null) onAt = h.ms; }
+    if (on) {
+      const r = rate(model, out).rate;
+      const before = room;
+      room = Math.min(h.targetC, room + r);
+      if (room >= h.targetC - 0.05) { on = false; if (reachAt === null && onAt !== null) reachAt = h.ms + Math.min(1, (h.targetC - before) / r) * HOUR; }
+    } else {
+      room -= k * (room - out);
+    }
+    rows.push({ ms: h.ms, roomC: r2(room), on });
+  }
+  return { rows, onAt, reachAt: reachAt === null ? null : Math.round(reachAt) };
+}
+
+module.exports = { learn, rate, warmupHours, preheat, learnSchedule, learnCooling, forecast, tbin };
