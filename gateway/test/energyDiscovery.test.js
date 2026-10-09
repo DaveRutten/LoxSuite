@@ -146,3 +146,22 @@ test('the Kamstrup is found by "Temp. Impulsion"; its return and flow are its ow
   assert.equal(c.roles.heatMeterFlowRate.read.uuid, 'k-lph');
   assert.equal(c.roles.returnTemp.read.uuid, 's-ret', 'the heat pump keeps its own');
 });
+
+test('SolarEdge outputs without _RAW (I_AC_Power + I_AC_Power_SF): scaled to kW, recognised as SolarEdge', () => {
+  const io4 = (name, state) => ({ name, type: 'InfoOnlyAnalog', room: 'k', cat: 'c', states: { value: state } });
+  const s = { rooms: { k: { name: 'Kelder' } }, cats: { c: { name: 'Energie' } }, controls: {
+    '19000001-0001-0001-ffff1': io4('I_AC_Power', 'ac'), '19000001-0002-0001-ffff1': io4('I_AC_Power_SF', 'acsf'),
+    '19000001-0003-0001-ffff1': io4('I_DC_Power', 'dc'), '19000001-0004-0001-ffff1': io4('I_DC_Power_SF', 'dcsf'),
+    '19000001-0005-0001-ffff1': io4('I_Status', 'st'), '19000001-0006-0001-ffff1': io4('M_AC_Power', 'g'), '19000001-0007-0001-ffff1': io4('M_AC_Power_SF', 'gsf'),
+    '19000001-0008-0001-ffff1': io4('M_Exported_Energy', 'ex'), '19000001-0009-0001-ffff1': io4('M_Energy_SF', 'esf'),
+  } };
+  const [c] = ed.fromStructure('solar', s);
+  assert.equal(c.known && c.known.key, 'solaredge');
+  const byName = { I_AC_Power: 26373, I_AC_Power_SF: -1, I_DC_Power: 3162, I_DC_Power_SF: -1, M_AC_Power: -1200, M_AC_Power_SF: 0, M_Exported_Energy: 1234567, M_Energy_SF: 0 };
+  const raw = {}; for (const r of c.type.registers) raw[r.key] = byName[r.label];
+  const v = et.fromRaw(c.type, raw);
+  assert.equal(v.acPower, 2.637);
+  assert.equal(v.dcPower, 0.316);
+  assert.equal(v.gridPower, -1.2);
+  assert.equal(v.exportEnergy, 1234.567);
+});

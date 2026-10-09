@@ -16,7 +16,7 @@ const em = require('./energyManager');
 const et = require('./energyTypes');
 const { SUGGEST } = require('./loxoneTemplate');
 
-const norm = (s) => String(s || '').toLowerCase().replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
+const norm = (s) => String(s || '').toLowerCase().replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim().replace(/_raw$/, '');
 
 // Pure: the members of one device -> { role: { read, write } } by name.
 function rolesOf(kind, members) {
@@ -48,6 +48,15 @@ function asType(kind, device, roles, known) {
     const reg = byName.get(norm(r.read?.name)) || byName.get(norm(r.write?.name)) || {};
     return { key: role, role, label: r.read?.name || r.write?.name, rw: r.read && r.write ? 'rw' : r.write ? 'w' : 'r', state: r.read?.uuid || null, control: r.read?.control || null, action: r.write?.uuid || null, ...(reg.map ? { map: reg.map } : {}), ...(reg.min !== undefined ? { min: reg.min, max: reg.max } : {}), ...(reg.unit ? { unit: reg.unit } : {}), ...(reg.reg !== undefined ? { reg: reg.reg } : {}), ...(reg.sf ? { sf: reg.sf, div: reg.div } : {}), ...(reg.onValue !== undefined ? { onValue: reg.onValue } : {}) };
   });
+  // SunSpec values with their scale factor in another output: X with X_SF (or, for the energy counters,
+  // the meter's shared M_Energy_SF) — value = X × 10^SF, W / Wh -> kW / kWh
+  const SCALED = new Set(['acPower', 'dcPower', 'gridPower', 'batteryPower', 'exportEnergy', 'importEnergy']);
+  for (const r of regs.filter((x) => SCALED.has(x.role) && !x.sf)) {
+    const base = norm(r.label);
+    const prefix = base.split('_')[0];
+    const m = (device.members || []).find((x) => norm(x.name) === `${base}_sf`) || (/energy/.test(base) ? (device.members || []).find((x) => norm(x.name) === `${prefix}_energy_sf`) : null);
+    if (m?.state) { const k = `${r.role}_sf`; regs.push({ key: k, label: m.name, rw: 'r', state: m.state, control: m.uuid }); r.sf = k; r.div = 1000; }
+  }
   for (const r of regs.filter((x) => x.sf)) {
     if (regs.some((x) => x.key === r.sf)) continue;
     const sfReg = (known?.registers || []).find((x) => x.key === r.sf);
