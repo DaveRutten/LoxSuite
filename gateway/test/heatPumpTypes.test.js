@@ -97,3 +97,15 @@ test('on a fixed flow temperature the thermostat target is the flow: never a roo
   const room = read({ tank_water_temp_actual: 50, tank_water_temp_target: 50, dhw_temperature_drop: 5, heating_mode_zone_1: 0 });
   assert.deepEqual(hp.writesFor({ type: ecodan, plan: { mode: 'free', roomC: 20.5 }, now: room }).map((x) => x.value), [20.5]);
 });
+
+test('a temperature passed on ×100 or ×10 by the own Loxone logic is read as °C', () => {
+  assert.equal(et.plainC(3250), 32.5);
+  assert.equal(et.plainC(325), 32.5);
+  assert.equal(et.plainC(32.5), 32.5);
+  assert.equal(et.plainC(-35), -35);
+  const v = et.fromRaw({ values: 'loxone', registers: [{ key: 'ta', role: 'logicFlowC', rw: 'r' }, { key: 'tank', role: 'tankTemp', rw: 'r' }, { key: 'step', role: 'powerStep', rw: 'r' }] }, { ta: 3250, tank: 48.5, step: 75 });
+  assert.deepEqual([v.logicFlowC, v.tankTemp, v.powerStep], [32.5, 48.5, 75], 'a percentage stays a percentage');
+  // relays only for steps 0–2
+  const w = hp.writesFor({ type: { registers: [{ key: 'q1', role: 'powerLimit1', rw: 'rw', action: 'a1' }] }, plan: { mode: 'free', step: 75 }, now: {} });
+  assert.deepEqual(w, []);
+});

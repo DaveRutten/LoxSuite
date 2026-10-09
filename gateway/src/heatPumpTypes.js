@@ -90,11 +90,12 @@ function writesFor({ type, plan, now, last = {}, nowMs = Date.now(), settings = 
     const role = canWrite('flowSetpoint') ? 'flowSetpoint' : canWrite('roomSetpoint') ? 'roomSetpoint' : null;
     if (role) want.push({ role, value: plan.flowC, why: plan.flowWhy || 'tuning: flow temperature' });
   }
-  if (Number.isFinite(plan.step)) {
+  // the relays only know steps 0–2 (a step given as a percentage can't be switched by them)
+  if (Number.isFinite(plan.step) && plan.step >= 0 && plan.step <= 2) {
     if (canWrite('powerLimit1')) want.push({ role: 'powerLimit1', value: plan.step >= 1 ? 1 : 0, why: plan.tuneWhy || 'tuning: power step' });
     if (canWrite('powerLimit2')) want.push({ role: 'powerLimit2', value: plan.step >= 2 ? 1 : 0, why: plan.tuneWhy || 'tuning: power step' });
   }
-  if (Number.isFinite(plan.ntc)) {
+  if (Number.isFinite(plan.ntc) && plan.ntc >= 0 && plan.ntc <= 2) {
     if (canWrite('ntcRelay1')) want.push({ role: 'ntcRelay1', value: plan.ntc === 1 ? 1 : 0, why: plan.tuneWhy || 'tuning: outdoor sensor' });
     if (canWrite('ntcRelay2')) want.push({ role: 'ntcRelay2', value: plan.ntc === 2 ? 1 : 0, why: plan.tuneWhy || 'tuning: outdoor sensor' });
   }

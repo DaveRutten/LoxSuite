@@ -125,3 +125,11 @@ test('one heat pump whose outputs fell into two uuid groups is found once, compl
   assert.equal(found[0].check.ok, true);
   assert.equal(found[0].roles.forceDhw.write.uuid, 'fa');
 });
+
+test('a meter in the basement (imported, exported, grid power) is no solar inverter', () => {
+  const io3 = (name, state) => ({ name, type: 'InfoOnlyAnalog', room: 'k', cat: 'c', states: { value: state } });
+  const s = { rooms: { k: { name: 'Kelder' } }, cats: { c: { name: 'Energie' } }, controls: {
+    'cc000001-0001-0001-ffff1': io3('Afgenomen', 'm1'), 'cc000001-0002-0001-ffff1': io3('Teruggeleverd', 'm2'), 'cc000001-0003-0001-ffff1': io3('Netvermogen', 'm3'),
+  } };
+  assert.deepEqual(ed.fromStructure('solar', s), []);
+});

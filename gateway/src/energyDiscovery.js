@@ -75,6 +75,7 @@ function bestKnown(members, types) {
 // Roles that usually are not outputs of the Modbus device but the user's own logic in Loxone (the
 // power-limit steps and the NTC of a sequential controller, the outdoor sensors): looked for in the
 // whole structure, by name, when the device itself doesn't have them.
+const ANCHORS = { heatpump: ['tankTemp', 'dhwSetpoint', 'forceDhw', 'compressorHz', 'valveDhw'], solar: ['acPower', 'dcPower', 'powerLimitPct', 'powerControlEnable', 'status'] };
 const ELSEWHERE = { heatpump: ['outdoorTemp', 'outdoorRh', 'roomTemp', 'dhwPipeTemp', 'heatMeterPower', 'heatMeterEnergy', 'powerStep', 'powerLimit1', 'powerLimit2', 'ntcMode', 'ntcRelay1', 'ntcRelay2', 'logicFlowC'], solar: [] };
 function allObjects(structure) {
   const rooms = structure?.rooms || {};
@@ -99,7 +100,9 @@ function fromStructure(kind, structure, { types = et.loadTypes(kind) } = {}) {
   for (const d of devices) {
     const roles = rolesOf(kind, d.members);
     const score = Object.keys(roles).length;
-    if (score < 2) continue;
+    // a candidate needs something only this kind of device has — a meter (imported / exported / grid
+    // power) is no inverter, a room sensor no heat pump
+    if (score < 2 || !(ANCHORS[kind] || []).some((r) => roles[r])) continue;
     const wanted = (ELSEWHERE[kind] || []).filter((r) => !roles[r]);
     if (wanted.length) {
       const memberIds = new Set(d.members.map((m) => m.uuid));

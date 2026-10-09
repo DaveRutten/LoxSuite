@@ -136,6 +136,11 @@ function check(kind, type) {
   return { ok: !missing.length && !notWritable.length, missing, unknown, notWritable };
 }
 
+// Pure: a temperature that looks ×100 (3250) or ×10 (325) of a sensible °C value, as °C (above 1000: ×100,
+// above 100: ×10 — a heat pump's temperatures stay below 100 °C).
+function plainC(v) { if (!Number.isFinite(v)) return v; const a = Math.abs(v); return a > 1000 ? r2(v / 100) : a > 100 ? r2(v / 10) : v; }
+const kindOfType = (type) => (type?.kind || (type?.registers || []).some((x) => /^(tankTemp|dhwSetpoint|forceDhw)$/.test(x.role)) ? 'heatpump' : 'solar');
+
 // Pure: raw values by register key -> { role: number } plus { role + 'Text': label } for enumerations.
 function fromRaw(type, raw) {
   const out = {};
@@ -149,6 +154,8 @@ function fromRaw(type, raw) {
     if (r.sf && !Number.isFinite(sf)) continue;
     const base = type.values === 'loxone' ? v : v / (r.scale || 1);
     out[r.role] = r.sf ? Math.round((base * 10 ** sf) / (r.div || 1) * 1000) / 1000 : r2(base);
+    // a temperature that comes in ×100 or ×10 (own Loxone logic passing a Modbus value on): back to °C
+    if (ROLES[kindOfType(type)]?.roles?.[r.role]?.unit === '°C') out[r.role] = plainC(out[r.role]);
     if (r.map) out[`${r.role}Text`] = r.map[String(v)] ?? String(v);
   }
   return out;
@@ -199,4 +206,4 @@ function link(kind, type, links = {}) {
   return { ...type, registers: regs.filter((r) => r.rw), linked: true };
 }
 
-module.exports = { ROLES, loadTypes, customType, byRole, viName, check, fromRaw, writes, link };
+module.exports = { plainC, ROLES, loadTypes, customType, byRole, viName, check, fromRaw, writes, link };

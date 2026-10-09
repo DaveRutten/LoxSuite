@@ -156,7 +156,9 @@
   </div>
 
   <div class="mm-sub" data-tuning><h3><%= t('Fine-tuning for long, calm runs') %></h3>
-    <% const TU = hpS.tuning || {}; const TC = hpS.cfg.tuning || {}; const SN2 = hpS.cfg.step_names || {}, NN2 = hpS.cfg.ntc_names || {}; const setTxt = (x) => x ? [Number.isFinite(x.flowC) ? t('flow {c} °C', { c: x.flowC }) : null, SN2[x.step] || x.step, NN2[x.ntc] || x.ntc].filter((y) => y !== null && y !== undefined).join(' · ') : '—'; %>
+    <% const TU = hpS.tuning || {}; const TC = hpS.cfg.tuning || {}; const SN2 = hpS.cfg.step_names || {}, NN2 = hpS.cfg.ntc_names || {}; const stepTxt = (v) => (v === null || v === undefined ? null : SN2[v] || (v > 2 ? v + '%' : String(v)));
+    const ntcTxt = (v) => (v === null || v === undefined ? null : NN2[v] || (v > 2 ? 'NTC ' + nf(v, 1) + ' °C' : String(v)));
+    const setTxt = (x) => x ? [Number.isFinite(x.flowC) ? t('flow {c} °C', { c: nf(x.flowC, 1) }) : null, stepTxt(x.step), ntcTxt(x.ntc)].filter((y) => y !== null && y !== undefined).join(' · ') : '—'; %>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
       <div><label><%= t('Fine-tuning') %></label><select data-tu="mode"><option value="off" <%= TC.mode === 'off' ? 'selected' : '' %>><%= t('Off') %></option><option value="advise" <%= !TC.mode || TC.mode === 'advise' ? 'selected' : '' %>><%= t('Advise only') %></option><option value="live" <%= TC.mode === 'live' ? 'selected' : '' %>><%= t('Steer (with the module live)') %></option></select></div>
       <div><label><%= t('Flow at least (°C)') %></label><input type="text" data-tu="flow_min" value="<%= TC.flow_min %>"></div>
@@ -182,7 +184,7 @@
     <% const steps = (W.steps || []); if (steps.length) { %><h3 style="margin:0.8rem 0 0.3rem; font-size:0.95rem;"><%= t('Power steps and outdoor sensor (NTC)') %></h3>
     <p class="hint" style="margin:0 0 0.3rem;"><%= t('What running calmer brings, per outdoor temperature: learned from your own Loxone logic.') %></p>
     <div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Outside') %></th><th><%= t('Power step') %></th><th>NTC</th><th><%= t('Hours seen') %></th><th><%= t('Power') %></th><th><%= t('Heat') %></th><th>COP</th></tr></thead><tbody>
-      <% const SN = hpS.cfg.step_names || {}, NN = hpS.cfg.ntc_names || {}; steps.forEach((r) => { %><tr><td><%= r.t %> … <%= r.t + 2 %> °C</td><td><%= SN[r.step] || r.step %></td><td><%= NN[r.ntc] || r.ntc %></td><td><%= nf(r.hours, 0) %></td><td><%= nf(r.elecKw, 2) %> kW</td><td><%= nf(r.heatKw, 2) %> kW</td><td><%= nf(r.cop, 2) %></td></tr><% }) %>
+      <% const SN = hpS.cfg.step_names || {}, NN = hpS.cfg.ntc_names || {}; steps.forEach((r) => { %><tr><td><%= r.t %> … <%= r.t + 2 %> °C</td><td><%= SN[r.step] || (r.step > 2 ? r.step + '%' : r.step) %></td><td><%= NN[r.ntc] || (r.ntc > 2 ? 'NTC ' + nf(r.ntc, 1) + ' °C' : r.ntc) %></td><td><%= nf(r.hours, 0) %></td><td><%= nf(r.elecKw, 2) %> kW</td><td><%= nf(r.heatKw, 2) %> kW</td><td><%= nf(r.cop, 2) %></td></tr><% }) %>
     </tbody></table></div><% } %>
     <details style="margin-top:0.5rem;"><summary class="hint" style="cursor:pointer; margin:0;"><%= t('Names of the steps') %></summary>
       <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); margin-top:0.4rem;">
