@@ -13,6 +13,42 @@ All notable changes to this project are documented in this file.
   pull requests are tested as before, and both workflows can be run by hand (a hand-run image build on main also
   writes `:latest`).
 
+## [0.57.0-alpha.1] - 2026-10-09
+
+### Added
+- **Energy manager > Modules: the heat pump and the solar inverter** (asked: "a Wallbox module, a Heat pump module
+  and the on/off consumers"), next to the consumers and Smart charging; the existing energy-manager views stay.
+  - **Found in Loxone** like Home Connect appliances (the outputs of one Modbus device share a uuid start), the
+    own Loxone logic too (power-limit relays, NTC, outdoor sensors, a hot-water pipe sensor, a Kamstrup heat
+    meter, the room controllers). Per role: read from an own object or virtual output, send direct, through a
+    virtual input or not at all. Built in: **Mitsubishi Ecodan (MelcoBEMS MINI A1M)** and **SolarEdge**;
+    a Loxone Library template (.LxAddon / .xml) can be imported as a backup.
+  - **History from Loxone**: the statistics of the linked objects (not every object keeps them) fill the learning
+    at once; what is learned is kept in the database (60 days).
+  - **Tap water**: draws learned from the tank temperature or, exactly, a pipe sensor; the plan compares the cost
+    per kWh of heat (price ÷ the COP expected in that hour's weather), heats before or after pre-heating the room,
+    never in between; temperature limits; the legionella cycle planned on a cheap or sunny block.
+  - **Weather**: air / water, water / water or ground / water; defrosting and COP learned per outdoor temperature
+    and humidity (humidity now also comes with the solar forecast).
+  - **Room**: the Loxone room controller (actual, target, humidity); the comfort schedule learned per weekday from
+    its target; the warm-up time learned per outdoor temperature for pre-heating in time.
+  - **Fine-tuning for long, calm runs**: per weather the flow setpoint, power step and NTC setting with the longest
+    runs, the best COP and the fewest defrosts — advise or steer. On fixed flow the zone target is the flow
+    temperature: a room temperature never goes into it.
+  - **Solar**: limited when exporting costs money under the contract (net metering / fixed tariff / market price,
+    minus the new **feed-in costs** setting with Smart charging); SolarEdge enables once (AdvancedPwrControlEn 4,
+    ReactivePwrConfig 1), then only the active power limit. Grid meter sign invertible.
+  - A warning when the Loxone logic sets back an output LoxSuite drives.
+- **Local demo** (`dev/docker-compose.demo.yml`, `LOXSUITE_DEMO=1`): a simulated Miniserver with the Ecodan,
+  the SolarEdge and their own Loxone logic, to try all of this without a real Loxone.
+
+### Changed
+- **One ⓘ per tile** shows or hides that tile's explanations (instead of one per text); a status stays visible.
+- **Energy manager and Smart charging** are the first two items under Energy & charging.
+
+### Fixed
+- The built-in energy types are now part of the Docker image.
+
 ## [0.56.0-alpha.1] - 2026-10-09
 
 ### Added
