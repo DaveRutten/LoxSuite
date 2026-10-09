@@ -13,6 +13,22 @@ All notable changes to this project are documented in this file.
   pull requests are tested as before, and both workflows can be run by hand (a hand-run image build on main also
   writes `:latest`).
 
+## [0.59.0-alpha.1] - 2026-10-09
+
+### Added
+- **Heat pump: a plan chart for the next 24 hours** (asked: "a plan for heating or cooling — why isn't that a chart"),
+  in the style of the other energy charts: what it does per hour (tap water, legionella, pre-heating, comfort or
+  cooling, set back), the room target, the **expected room temperature** and the tank, the outdoor temperature with
+  expected defrosting, and the price (negative below the zero line). Point at an hour for everything at once.
+- **When it comes on and when the room is at temperature** (asked): the room forecast warms with the learned rate at
+  the forecast outdoor temperature and cools down with the rate learned from the hours the heat pump stands still;
+  shown as *▲ on* / *✓ at temperature* in the chart and as the *Expected* tile.
+- **Names per value seen** for the power step and the outdoor sensor (75, 100, 14 …), e.g. *Fake 14 graden*; without a
+  name: *75 %*, *outdoor sensor fixed at 14 °C*, *real outdoor temperature*.
+
+### Fixed
+- Flow setpoints kept from before 0.58.1 (×100, *3.250 °C*) are read as °C when learning.
+
 ## [0.58.1-alpha.1] - 2026-10-09
 
 ### Added
