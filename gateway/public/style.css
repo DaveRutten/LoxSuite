@@ -4927,6 +4927,23 @@ details.mod-status[open] > summary::before { transform: rotate(45deg); vertical-
 /* Chips: small rounded labels (kind of day, status ...). */
 .chip { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.74rem; border: 1px solid currentColor; line-height: 1.5; margin: 0 0.25rem 0.25rem 0; white-space: nowrap; }
 
+/* Chip checkboxes: a set of options that can each be on or off (e.g. what a route avoids); more
+   options just wrap onto the next line. */
+.chip-checks { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.chip-checks label { display: inline-flex; margin: 0; font-weight: 400; cursor: pointer; position: relative; }
+.chip-checks input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.chip-checks span { border: 1px solid var(--border); border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.82rem; line-height: 1.3; background: var(--surface, #fff); white-space: nowrap; }
+.chip-checks input:checked + span { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.chip-checks input:checked + span::before { content: '✓ '; }
+.chip-checks input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* A colour as a small square (a calendar's colour) instead of a full-width bar; clicking it opens the
+   browser's own colour picker. Also inside a .form-grid (whose inputs are otherwise full width). */
+input[type="color"].color-square, .form-grid input[type="color"].color-square { width: 2.1rem; height: 2.1rem; min-width: 0; padding: 0; border: 1.5px solid var(--border); border-radius: 6px; overflow: hidden; background: none; cursor: pointer; display: block; }
+input[type="color"].color-square::-webkit-color-swatch-wrapper { padding: 0; }
+input[type="color"].color-square::-webkit-color-swatch { border: none; border-radius: 4px; }
+input[type="color"].color-square::-moz-color-swatch { border: none; border-radius: 4px; }
+
 /* A wide table shows its first rows; the rest folds out (show more). */
 tr.ls-extra { display: none; }
 .ls-show-all tr.ls-extra { display: table-row; }

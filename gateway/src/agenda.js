@@ -39,7 +39,11 @@ const DEFAULTS = {
   dwell_min: 5,
   // driving on to the next appointment: only when it starts within this many hours
   chain_max_gap_h: 12,
+  // route options: what the road route avoids by default ('ferry', 'toll', 'motorway'); per address
+  // you can choose otherwise (route_prefs)
+  route_avoid: [],
 };
+const ROUTE_CLASSES = ['ferry', 'toll', 'motorway'];
 
 const TRIP_MODES = ['stay', 'both', 'drop', 'pick'];
 
@@ -163,8 +167,8 @@ function tripNeedKwh({ hint, own, distanceKm, marginKm = 20, kwhPerKm = 0.2, usa
   const km = v?.km ? v.km : (distanceKm ? n * (2 * distanceKm + marginKm) : null);
   if (!km) return { kwh: null, basis: 'unknown distance' };
   const kwh = Math.round(km * kwhPerKm * 10) / 10;
-  const one = `2 × ${Math.round(distanceKm)} km + ${marginKm} km margin`;
-  const basis = v?.km ? `${v.km} km given` : n === 2 ? `2 × (${one})` : one;
+  // drop off and pick up: twice there and back, the margin each time
+  const basis = v?.km ? `${v.km} km given` : `${2 * n} × ${Math.round(distanceKm)} km + ${n * marginKm} km margin`;
   return { kwh, km: Math.round(km), basis };
 }
 
@@ -223,6 +227,22 @@ async function listCalendars() {
 
 function hostOf(enc) {
   try { return new URL(icsUrl(decrypt(enc))).host; } catch { return ''; }
+}
+
+// Name, colour and car of a calendar, as LoxSuite shows it — stored in LoxSuite only (the calendar
+// itself isn't changed). Only the fields given change; a name can't be empty, a colour is #rrggbb, the
+// car one that exists (else none).
+async function updateCalendar(id, b = {}) {
+  const cal = await db.prepare('SELECT * FROM calendars WHERE id = ?').get(Number(id));
+  if (!cal) return null;
+  const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
+  const name = has('name') && String(b.name || '').trim() ? String(b.name).trim().replace(/\s+/g, ' ').slice(0, 80) : cal.name;
+  const color = has('color') && /^#[0-9a-f]{6}$/i.test(String(b.color || '').trim()) ? String(b.color).trim().toLowerCase() : cal.color;
+  let vehicle = has('vehicle_id') ? cleanVehicle(b.vehicle_id) : cal.vehicle_id;
+  if (vehicle && !(await db.prepare('SELECT id FROM vehicles WHERE id = ?').get(vehicle))) vehicle = null;
+  const enabled = has('enabled') ? (b.enabled && b.enabled !== '0' ? 1 : 0) : cal.enabled;
+  await db.prepare('UPDATE calendars SET name = ?, color = ?, vehicle_id = ?, enabled = ? WHERE id = ?').run(name, color, vehicle, enabled, cal.id);
+  return { id: cal.id, name, color, vehicle_id: vehicle, enabled };
 }
 
 // kind 'caldav': url = the calendar collection (from caldav.discover), username + password to sign in.
@@ -329,6 +349,65 @@ async function geoFetch(url) {
 
 let lastGeoAt = 0;
 const GEO_RETRY_MS = 6 * 3600000;
+
+// ------------------------------------------------------------------ route options
+
+// Pure: the key an address is known by (cache, route choices).
+function addrKey(address) { return String(address || '').trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 230); }
+
+// Pure: what a route between (or to) these addresses avoids. Per class: an address where you chose
+// to avoid it wins, then one where you chose to allow it, else the default (route_avoid).
+// prefs: { [addrKey]: { ferry: true|false, toll: …, motorway: … } }
+function avoidFor(addresses, defaults = [], prefs = {}) {
+  const out = [];
+  for (const c of ROUTE_CLASSES) {
+    const own = (addresses || []).map((a) => prefs?.[addrKey(a)]?.[c]).filter((v) => typeof v === 'boolean');
+    if (own.includes(true) || (!own.length && (defaults || []).includes(c))) out.push(c);
+  }
+  return out;
+}
+const avoidSuffix = (avoid) => (avoid && avoid.length ? `|x:${avoid.join(',')}` : '');
+
+// Pure: which of ferry / toll / motorway an OSRM route (with steps) uses.
+function routeFlags(r) {
+  const s = new Set();
+  for (const leg of r?.legs || []) {
+    for (const st of leg.steps || []) {
+      if (st.mode === 'ferry') s.add('ferry');
+      for (const it of st.intersections || []) for (const c of it.classes || []) if (ROUTE_CLASSES.includes(c)) s.add(c);
+    }
+  }
+  return ROUTE_CLASSES.filter((c) => s.has(c));
+}
+
+// The road route from → to (OSRM), avoiding `avoid`; when the server can't avoid them, the plain route
+// (its flags then show what it uses).
+async function osrmRoute(get, from, to, avoid = []) {
+  const base = `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false&steps=true`;
+  let route = null;
+  if (avoid.length) route = await get(`${base}&exclude=${avoid.join(',')}`).catch(() => null);
+  if (!route?.routes?.[0]) route = await get(base);
+  const r = route?.routes?.[0];
+  if (!r) throw new Error('No route found.');
+  // '' = looked at, none of them (NULL: an older lookup that didn't look)
+  return { distance_km: Math.round(r.distance / 100) / 10, duration_min: Math.round(r.duration / 60), route_flags: routeFlags(r).join(',') };
+}
+
+async function routePrefs() { return settings.get('route_prefs', {}); }
+// Per address: avoid (true), allow (false) or as the default (null) for 'ferry' / 'toll' / 'motorway'.
+async function setRoutePref(address, choice = {}) {
+  const k = addrKey(address);
+  if (!k) throw new Error('No address.');
+  const all = { ...(await routePrefs()) };
+  const cur = { ...(all[k] || {}) };
+  for (const c of ROUTE_CLASSES) {
+    if (!Object.prototype.hasOwnProperty.call(choice, c)) continue;
+    if (choice[c] === true || choice[c] === false) cur[c] = choice[c]; else delete cur[c];
+  }
+  if (Object.keys(cur).length) all[k] = cur; else delete all[k];
+  await settings.set('route_prefs', all);
+  return all[k] || {};
+}
 // Pure: what to ask the geocoder for an agenda location, best first. A calendar often puts a name in
 // front of the address ("Coöperatie VGZ Nieuwe Stationsstraat 12, 6811 KS Arnhem, Nederland"), which
 // OpenStreetMap doesn't find: then without the leading name / parts, and finally postcode + town.
@@ -358,18 +437,23 @@ function addressCandidates(address) {
 
 // Address -> { lat, lon, distance_km (one way, by road), duration_min } from home, cached. A failed
 // lookup is tried again after 6 hours.
-async function distanceFromHome(address, { get = geoFetch, force = false } = {}) {
+async function distanceFromHome(address, { get = geoFetch, force = false, avoid = null, refresh = false } = {}) {
   const q = String(address || '').trim().replace(/\s+/g, ' ');
   if (!q) return null;
   const site = await settings.get('site', { lat: null, lon: null });
   if (site.lat === null || site.lon === null) return { error: 'Home location not set.' };
-  const key = `${q.toLowerCase().slice(0, 230)}|${Number(site.lat).toFixed(4)},${Number(site.lon).toFixed(4)}`;
+  if (!avoid) avoid = avoidFor([q], (await getConfig()).route_avoid, await routePrefs());
+  const key = `${q.toLowerCase().slice(0, 230)}|${Number(site.lat).toFixed(4)},${Number(site.lon).toFixed(4)}${avoidSuffix(avoid)}`;
   const cached = await db.prepare('SELECT * FROM geo_cache WHERE query = ?').get(key);
-  if (cached && (!cached.error || (!force && Date.now() - Date.parse(cached.fetched_at) < GEO_RETRY_MS))) return cached;
+  if (cached && !refresh && (!cached.error || (!force && Date.now() - Date.parse(cached.fetched_at) < GEO_RETRY_MS))) return cached;
   let row;
   try {
     let found = null;
-    for (const cand of addressCandidates(q)) {
+    // the same address looked up before (with other route options): its coordinates, no new search
+    const base = `${q.toLowerCase().slice(0, 230)}|${Number(site.lat).toFixed(4)},${Number(site.lon).toFixed(4)}`;
+    const known = avoid.length || key !== base ? await db.prepare('SELECT lat, lon FROM geo_cache WHERE query = ? AND lat IS NOT NULL').get(base) : null;
+    if (known) found = [{ lat: known.lat, lon: known.lon }];
+    for (const cand of found ? [] : addressCandidates(q)) {
       // Nominatim's usage policy: at most one request per second.
       const wait = 1100 - (Date.now() - lastGeoAt);
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -380,12 +464,10 @@ async function distanceFromHome(address, { get = geoFetch, force = false } = {})
     if (!found?.length) throw new Error('Address not found.');
     const lat = Number(found[0].lat);
     const lon = Number(found[0].lon);
-    const route = await get(`https://router.project-osrm.org/route/v1/driving/${site.lon},${site.lat};${lon},${lat}?overview=false`);
-    const r = route?.routes?.[0];
-    if (!r) throw new Error('No route found.');
-    row = { query: key, lat, lon, distance_km: Math.round(r.distance / 100) / 10, duration_min: Math.round(r.duration / 60), error: null, fetched_at: new Date().toISOString() };
+    const r = await osrmRoute(get, { lat: site.lat, lon: site.lon }, { lat, lon }, avoid);
+    row = { query: key, lat, lon, ...r, error: null, fetched_at: new Date().toISOString() };
   } catch (err) {
-    row = { query: key, lat: null, lon: null, distance_km: null, duration_min: null, error: err.message, fetched_at: new Date().toISOString() };
+    row = { query: key, lat: null, lon: null, distance_km: null, duration_min: null, route_flags: null, error: err.message, fetched_at: new Date().toISOString() };
   }
   await db.upsert('geo_cache', row, ['query']);
   return row;
@@ -422,12 +504,17 @@ function cleanChain(v) {
 // driving on) are kept. With scope 'series', car needed / how you drive / driving on go to the whole
 // series: every appointment in that calendar with the same name (one row with start_at '*' under
 // nameKey()); the choices made per day for those, and older series choices per calendar ID, give way.
-const SERIES_FIELDS = ['needs_car', 'trip_mode', 'chain_start', 'chain_end'];
+const SERIES_FIELDS = ['needs_car', 'trip_mode', 'chain_start', 'chain_end', 'vehicle_id'];
+// Pure: '' / unknown -> null (the calendar's car, else the first), else a vehicle id.
+function cleanVehicle(v) {
+  const n = Number(v);
+  return v === null || v === undefined || v === '' || !Number.isInteger(n) || n <= 0 ? null : n;
+}
 async function setOverride(b) {
   const { calendar_id, uid } = b;
   const start_at = b.start_at;
   const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
-  const clean = (k, v, series = false) => (k === 'trip_mode' ? cleanMode(v, { series }) : k === 'chain_end' ? cleanChain(v) : cleanFlag(v));
+  const clean = (k, v, series = false) => (k === 'trip_mode' ? cleanMode(v, { series }) : k === 'chain_end' ? cleanChain(v) : k === 'vehicle_id' ? cleanVehicle(v) : cleanFlag(v));
   const ev = b.scope === 'series' && start_at
     ? await db.prepare('SELECT title FROM calendar_events WHERE calendar_id = ? AND uid = ? AND (start_at = ? OR recurrence_at = ?)').get(Number(calendar_id), String(uid), String(start_at), String(start_at))
     : null;
@@ -439,7 +526,7 @@ async function setOverride(b) {
     const row = {
       calendar_id: Number(calendar_id), uid: nameKey(nk), start_at: '*',
       needs_car: cur.needs_car ?? null, own_value: null, climate_c: null,
-      trip_mode: cur.trip_mode ?? null, chain_start: cur.chain_start ?? null, chain_end: cur.chain_end ?? null,
+      trip_mode: cur.trip_mode ?? null, chain_start: cur.chain_start ?? null, chain_end: cur.chain_end ?? null, vehicle_id: cur.vehicle_id ?? null,
     };
     for (const k of keys) row[k] = clean(k, b[k], true);
     await db.upsert('event_overrides', row, ['calendar_id', 'uid', 'start_at']);
@@ -463,7 +550,7 @@ async function setOverride(b) {
     const row = {
       calendar_id: Number(calendar_id), uid: String(uid), start_at: '*',
       needs_car: ser.needs_car ?? null, own_value: ser.own_value ?? null, climate_c: ser.climate_c ?? null,
-      trip_mode: ser.trip_mode ?? null, chain_start: ser.chain_start ?? null, chain_end: ser.chain_end ?? null,
+      trip_mode: ser.trip_mode ?? null, chain_start: ser.chain_start ?? null, chain_end: ser.chain_end ?? null, vehicle_id: ser.vehicle_id ?? null,
     };
     for (const k of SERIES_FIELDS.filter(has)) {
       row[k] = clean(k, b[k], true);
@@ -481,7 +568,7 @@ async function setOverride(b) {
     needs_car: keep('needs_car'),
     own_value: Object.prototype.hasOwnProperty.call(b, 'own_value') ? (b.own_value ? String(b.own_value).slice(0, 60) : null) : (cur.own_value ?? null),
     climate_c: Object.prototype.hasOwnProperty.call(b, 'climate_c') ? parseClimate(b.climate_c) : (cur.climate_c ?? null),
-    trip_mode: keep('trip_mode'), chain_start: keep('chain_start'), chain_end: keep('chain_end'),
+    trip_mode: keep('trip_mode'), chain_start: keep('chain_start'), chain_end: keep('chain_end'), vehicle_id: keep('vehicle_id'),
   }, ['calendar_id', 'uid', 'start_at']);
 }
 
@@ -540,6 +627,7 @@ async function build(fromIso, toIso, { withGeo = false, fetchLegs = false } = {}
     const mode = pick('trip_mode');
     const cs = pick('chain_start');
     const ce = pick('chain_end');
+    const car = pick('vehicle_id');
     const item = {
       kind: 'event', id: e.id, calendar_id: e.calendar_id, calendar: cal.name, color: cal.color, uid: e.uid,
       start: e.start_at, end: e.end_at, allDay: !!e.all_day, title: e.title, location: e.location,
@@ -549,10 +637,12 @@ async function build(fromIso, toIso, { withGeo = false, fetchLegs = false } = {}
       // calendar series than its own ID (renamed to swap two days) — which one it follows
       seriesTitle: nk ? idx.titleOf(e.calendar_id, nk) : null, linkedSeries: sr?.linked || null,
       // what is chosen for this day and for the series, as stored (null = not chosen)
-      day: { needs_car: o0?.needs_car ?? null, trip_mode: o0?.trip_mode ?? null, chain_start: o0?.chain_start ?? null, chain_end: o0?.chain_end ?? null },
-      series: { needs_car: so?.needs_car ?? null, trip_mode: so?.trip_mode ?? null, chain_start: so?.chain_start ?? null, chain_end: so?.chain_end ?? null },
+      day: { needs_car: o0?.needs_car ?? null, trip_mode: o0?.trip_mode ?? null, chain_start: o0?.chain_start ?? null, chain_end: o0?.chain_end ?? null, vehicle_id: o0?.vehicle_id ?? null },
+      series: { needs_car: so?.needs_car ?? null, trip_mode: so?.trip_mode ?? null, chain_start: so?.chain_start ?? null, chain_end: so?.chain_end ?? null, vehicle_id: so?.vehicle_id ?? null },
       movedFrom: e.recurrence_at && e.recurrence_at !== e.start_at ? e.recurrence_at : null,
-      own: o?.own_value || null, hint: e.car_hint ? JSON.parse(e.car_hint) : null, vehicle_id: o?.vehicle_id || cal.vehicle_id || null,
+      own: o?.own_value || null, hint: e.car_hint ? JSON.parse(e.car_hint) : null,
+      // which car: chosen for this day or the series, else the calendar's car (else the first one)
+      vehicle_id: (car && Number(car.v)) || cal.vehicle_id || null, vehicleSource: car ? car.src : cal.vehicle_id ? 'calendar' : null,
       askCar: !needsCar && !!e.location && !(o && Number(o.needs_car) === 0 && o.needs_car !== null),
       climateC: o?.climate_c ?? null,
       tripMode: e.all_day ? 'stay' : (TRIP_MODES.includes(mode?.v) ? mode.v : (e.trip_tag || 'stay')),
@@ -597,9 +687,14 @@ async function enrichNeed(item, cfg, withGeo) {
   const kpk = require('./driving').currentKwhPerKm(vehicle, cfg.default_kwh_per_km);
   let geo = null;
   const own = parseOwnValue(item.own);
+  // route options for this address: what it avoids (your choice for it, else the default) and what
+  // the route takes — so the agenda can offer "without the ferry" / "without toll roads" where it matters
+  const prefs = item.location ? await routePrefs() : {};
+  const avoid = item.location ? avoidFor([item.location], cfg.route_avoid, prefs) : [];
   if (!own && !item.hint?.km && !item.hint?.kwh && !item.hint?.full && item.location && cfg.geo) {
-    geo = withGeo ? await distanceFromHome(item.location) : await cachedDistance(item.location);
+    geo = withGeo ? await distanceFromHome(item.location, { avoid }) : await cachedDistance(item.location, avoid);
   }
+  item.route = item.location ? { avoid, uses: geo?.route_flags ? String(geo.route_flags).split(',').filter(Boolean) : [], choice: prefs[addrKey(item.location)] || {} } : null;
   const need = tripNeedKwh({ hint: item.hint, own, distanceKm: geo?.distance_km || null, marginKm: Number(cfg.margin_km) || 0, kwhPerKm: kpk, usableKwh: usable, rounds: item.tripMode === 'both' ? 2 : 1 });
   item.needExplicit = (own || item.hint)?.full ? 'full' : (own || item.hint)?.km || (own || item.hint)?.kwh ? 'value' : null;
   item.lat = geo?.lat ?? null;
@@ -746,10 +841,10 @@ function routeOf(route, legs, { marginKm = 20, readyMarginMin = 15 } = {}) {
   };
 }
 
-// The cached road distance between two addresses (either way), or null.
-async function cachedLeg(ia, ib) {
+// The cached road distance between two addresses (either way), or null. avoid: as avoidFor().
+async function cachedLeg(ia, ib, avoid = []) {
   if (![ia.lat, ia.lon, ib.lat, ib.lon].every(Number.isFinite)) return null;
-  const k = (a, b) => `leg|${a.lat.toFixed(4)},${a.lon.toFixed(4)}|${b.lat.toFixed(4)},${b.lon.toFixed(4)}`;
+  const k = (a, b) => `leg|${a.lat.toFixed(4)},${a.lon.toFixed(4)}|${b.lat.toFixed(4)},${b.lon.toFixed(4)}${avoidSuffix(avoid)}`;
   const there = await db.prepare('SELECT * FROM geo_cache WHERE query = ?').get(k(ia, ib));
   if (there) return there;
   return db.prepare('SELECT * FROM geo_cache WHERE query = ?').get(k(ib, ia));
@@ -757,22 +852,20 @@ async function cachedLeg(ia, ib) {
 
 // Looks up the road distance between two addresses (OSRM, like the distance from home), cached; a
 // failed lookup is tried again after 6 hours.
-async function fetchLeg(ia, ib, { get = geoFetch } = {}) {
+async function fetchLeg(ia, ib, { get = geoFetch, avoid = [] } = {}) {
   if (![ia.lat, ia.lon, ib.lat, ib.lon].every(Number.isFinite)) return null;
-  const key = `leg|${ia.lat.toFixed(4)},${ia.lon.toFixed(4)}|${ib.lat.toFixed(4)},${ib.lon.toFixed(4)}`;
-  const cur = await cachedLeg(ia, ib);
+  const key = `leg|${ia.lat.toFixed(4)},${ia.lon.toFixed(4)}|${ib.lat.toFixed(4)},${ib.lon.toFixed(4)}${avoidSuffix(avoid)}`;
+  const cur = await cachedLeg(ia, ib, avoid);
   if (cur && (!cur.error || Date.now() - Date.parse(cur.fetched_at) < GEO_RETRY_MS)) return cur;
   let row;
   try {
     const wait = 1100 - (Date.now() - lastGeoAt);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     lastGeoAt = Date.now();
-    const route = await get(`https://router.project-osrm.org/route/v1/driving/${ia.lon},${ia.lat};${ib.lon},${ib.lat}?overview=false`);
-    const r = route?.routes?.[0];
-    if (!r) throw new Error('No route found.');
-    row = { query: key, lat: ib.lat, lon: ib.lon, distance_km: Math.round(r.distance / 100) / 10, duration_min: Math.round(r.duration / 60), error: null, fetched_at: new Date().toISOString() };
+    const r = await osrmRoute(get, ia, ib, avoid);
+    row = { query: key, lat: ib.lat, lon: ib.lon, ...r, error: null, fetched_at: new Date().toISOString() };
   } catch (err) {
-    row = { query: key, lat: ib.lat, lon: ib.lon, distance_km: null, duration_min: null, error: err.message, fetched_at: new Date().toISOString() };
+    row = { query: key, lat: ib.lat, lon: ib.lon, distance_km: null, duration_min: null, route_flags: null, error: err.message, fetched_at: new Date().toISOString() };
   }
   await db.upsert('geo_cache', row, ['query']);
   return row;
@@ -783,6 +876,7 @@ async function fetchLeg(ia, ib, { get = geoFetch } = {}) {
 // item.leaveAt / readyAt (its first route's), item.nextAfterStart / nextAfterEnd (the next appointment
 // with the car after its stop, to offer driving on).
 async function routesOf(list, cfg, { fetchLegs = false } = {}) {
+  const prefs = await routePrefs();
   const dwell = Number(cfg.dwell_min ?? DEFAULTS.dwell_min);
   const maxGapH = Number(cfg.chain_max_gap_h ?? DEFAULTS.chain_max_gap_h);
   const marginKm = Number(cfg.margin_km) || 0;
@@ -815,8 +909,9 @@ async function routesOf(list, cfg, { fetchLegs = false } = {}) {
         const b = route[i].item;
         let cached = null;
         if (a !== b && normAddr(a.location) !== normAddr(b.location)) {
-          cached = await cachedLeg(a, b).catch(() => null);
-          if (fetchLegs && (!cached || cached.error)) cached = await fetchLeg(a, b).catch(() => null);
+          const avoid = avoidFor([a.location, b.location], cfg.route_avoid, prefs);
+          cached = await cachedLeg(a, b, avoid).catch(() => null);
+          if (fetchLegs && (!cached || cached.error)) cached = await fetchLeg(a, b, { avoid }).catch(() => null);
         }
         legs.push(legOf(route[i - 1], route[i], cached));
         if (route[i].role === 'via') {
@@ -849,10 +944,11 @@ async function routesOf(list, cfg, { fetchLegs = false } = {}) {
   return out.map((x) => x.r);
 }
 
-async function cachedDistance(address) {
+async function cachedDistance(address, avoid = null) {
   const site = await settings.get('site', { lat: null, lon: null });
   if (site.lat === null) return null;
-  const key = `${String(address).trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 230)}|${Number(site.lat).toFixed(4)},${Number(site.lon).toFixed(4)}`;
+  if (!avoid) avoid = avoidFor([address], (await getConfig()).route_avoid, await routePrefs());
+  const key = `${String(address).trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 230)}|${Number(site.lat).toFixed(4)},${Number(site.lon).toFixed(4)}${avoidSuffix(avoid)}`;
   return db.prepare('SELECT * FROM geo_cache WHERE query = ?').get(key);
 }
 
@@ -874,13 +970,14 @@ async function resolveUpcomingDistances(nowMs = Date.now()) {
   const list = await items(new Date(nowMs).toISOString(), new Date(nowMs + 14 * 86400000).toISOString());
   const seen = new Set();
   for (const i of list) {
-    if (!i.location || i.distanceKm !== null && i.distanceKm !== undefined) continue;
+    if (!i.location) continue;
     const k = String(i.location).trim().toLowerCase();
     if (seen.has(k)) continue;
     seen.add(k);
     const c = await cachedDistance(i.location).catch(() => null);
-    if (c && !c.error) continue;
-    await distanceFromHome(i.location).catch(() => {});
+    // looked up before route options existed: once more, to see whether it takes a ferry or toll road
+    if (c && !c.error && c.route_flags !== null && c.route_flags !== undefined) continue;
+    await distanceFromHome(i.location, { refresh: !!(c && !c.error) }).catch(() => {});
   }
   // and the road distances between appointments you drive on between (routes)
   await build(new Date(nowMs).toISOString(), new Date(nowMs + 14 * 86400000).toISOString(), { fetchLegs: true }).catch(() => {});
@@ -906,6 +1003,6 @@ function stopAgenda() {
 }
 
 module.exports = {
-  DEFAULTS, TRIP_MODES, seriesName, nameKey, seriesIndexOf, seriesRowOf, hasCarTag, parseCarHint, parseTripTag, parseOwnValue, tripNeedKwh, stopsOf, chainStops, legOf, routeNeed, routeOf, crowKm, cleanMode, cleanFlag, cleanChain, tours, fetchLeg, icsUrl, expandEvents, tripOccurrences,
-  addressCandidates, icsName, fetchIcs, getConfig, listCalendars, addCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
+  DEFAULTS, TRIP_MODES, ROUTE_CLASSES, cleanVehicle, addrKey, avoidFor, routeFlags, osrmRoute, routePrefs, setRoutePref, seriesName, nameKey, seriesIndexOf, seriesRowOf, hasCarTag, parseCarHint, parseTripTag, parseOwnValue, tripNeedKwh, stopsOf, chainStops, legOf, routeNeed, routeOf, crowKm, cleanMode, cleanFlag, cleanChain, tours, fetchLeg, icsUrl, expandEvents, tripOccurrences,
+  addressCandidates, icsName, fetchIcs, getConfig, listCalendars, addCalendar, updateCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
 };

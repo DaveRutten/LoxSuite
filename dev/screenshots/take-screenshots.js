@@ -227,9 +227,9 @@ async function main() {
     if (await care().count()) {
       await care().evaluate((e) => e.click());
       await page.waitForTimeout(800);
-      const chain = page.locator('#ag-chain-start');
-      if (await chain.count() && (await chain.inputValue()) !== '1') {
-        await chain.selectOption('1');
+      const chain = page.locator('#ag-cs button[data-v="1"]');
+      if (await chain.count() && !(await chain.getAttribute('class') || '').includes('on')) {
+        await chain.click();
         await page.waitForTimeout(3000); // the distance between the two looked up in the background
         await page.reload({ waitUntil: 'networkidle' });
         await page.waitForTimeout(1500);

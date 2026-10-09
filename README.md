@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.53.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.54.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -787,12 +787,16 @@ calendars as you like: **ICS links** (Google's private "secret address in iCal f
 several at once, one per line) or **iCloud / CalDAV** — iCloud only offers a *public* ICS link, so LoxSuite signs
 in with an **app-specific password** (appleid.apple.com), lists the account's calendars and you tick which to
 add; also Nextcloud, Fastmail and other CalDAV servers. Addresses and passwords are stored encrypted, LoxSuite
-only reads. An appointment needs the car when its title
+only reads. A calendar's name, colour and car can be changed in the settings (in LoxSuite only). An appointment needs the car when its title
 holds a marker (🚗 / #auto by default) or when you switch *Car needed* on in LoxSuite (stored in LoxSuite only).
 Hints like `🚗 120 km`, `🚗 30 kWh` or `🚗 full` are understood. For car appointments with an address LoxSuite
 looks up the driving distance and time from home (OpenStreetMap Nominatim + OSRM; only those addresses are sent,
 results cached), adds the margin (default 20 km) and turns it into kWh; the planner makes sure the car is ready
-before you have to leave. Learned departures, planned charging and past sessions are shown in the views. A
+before you have to leave. **Route options**: by default the shortest route, or avoid ferries, toll roads and/or
+motorways for every address (agenda settings); where an appointment's route takes one of them (or you avoid it),
+the appointment shows a chip like *without the ferry* to choose otherwise for that address — on or off, ↺ back to
+the default. With **more than one car** in LoxSuite an appointment has a *Which car* choice (default: the
+calendar's car, else the first) for that day or the whole series; the planner charges that car for it. Learned departures, planned charging and past sessions are shown in the views. A
 **"ready" line can be changed**: drag it up or down to move that one day, or click it to set a time or *no
 departure* — for that day only or for every week on that weekday (also under Learned). A day you corrected counts,
 once it has passed, for what LoxSuite learns (a real departure that morning goes first); change the same weekday
@@ -805,8 +809,10 @@ at the start, home in between (so it can charge), and there and back again at th
 dashed middle; *the car stays there* is one solid block. A **series is linked by name**: what you choose for the
 whole series counts for every appointment in that calendar with the same name ("&" = "en"), also when two
 appointments are swapped by renaming them or when every week is a separate appointment. For a repeating
-appointment you first pick *only this day* or *the whole series*; a choice is saved straight away, and for one day
-*as the series* or the default (whatever the series says) can be chosen. After a stop you can **drive on** to the next appointment with the car instead of going home:
+appointment you first pick *only this day* or *the whole series*. The choices are short rows of chips (*Car
+needed*, *Which car*, *Trip*: there and back / drop off / pick up / both, *After dropping off*, *Afterwards*), each
+saved straight away; a row only shows when it matters, a small note says when a choice comes from the calendar
+or the series, and ↺ goes back (to the series, or to automatic). After a stop you can **drive on** to the next appointment with the car instead of going home:
 the stops become one route (home → 1 → 2 → 3 → home) — or back home via where it started (home → 1 → 2 → 1 →
 home, e.g. to pick up) — with the road distances between them (OSRM, cached; an
 estimate until looked up), the margin once, and leave/back times for the whole route. The planner, the plug-in

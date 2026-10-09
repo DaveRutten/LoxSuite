@@ -755,13 +755,6 @@
   ]
  },
  {
-  "key": "(no)",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
-  ]
- },
- {
   "key": "(none)",
   "module": "core",
   "where": [
@@ -822,13 +815,6 @@
   "module": "monitor",
   "where": [
    "dashboard-detail"
-  ]
- },
- {
-  "key": "(yes, marker)",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
   ]
  },
  {
@@ -920,6 +906,13 @@
   "module": "energy_manager",
   "where": [
    "src/energyPatterns.js"
+  ]
+ },
+ {
+  "key": "{0} × {1} km + {2} km margin",
+  "module": "charging",
+  "where": [
+   "src/agenda.js"
   ]
  },
  {
@@ -1533,13 +1526,6 @@
   ]
  },
  {
-  "key": "{0}2 × {1} km",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
-  ]
- },
- {
   "key": "{0}today {1}{2} kWh",
   "module": "energy",
   "where": [
@@ -1765,13 +1751,6 @@
   "module": "charging",
   "where": [
    "learned (script)"
-  ]
- },
- {
-  "key": "2 × {0} km + {1} km margin",
-  "module": "charging",
-  "where": [
-   "src/agenda.js"
   ]
  },
  {
@@ -2420,6 +2399,13 @@
   ]
  },
  {
+  "key": "Also set by #brengen / #halen in the calendar text.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "An",
   "module": "ai",
   "where": [
@@ -2546,7 +2532,14 @@
   ]
  },
  {
-  "key": "as the series — {0}",
+  "key": "as the default",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "as the series",
   "module": "charging",
   "where": [
    "agenda (script)"
@@ -2696,13 +2689,6 @@
   ]
  },
  {
-  "key": "auto{0}",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
-  ]
- },
- {
   "key": "Automatic (from Loxone)",
   "module": "ocpp",
   "where": [
@@ -2763,6 +2749,13 @@
   "module": "charging",
   "where": [
    "learned (script)"
+  ]
+ },
+ {
+  "key": "back to automatic",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -3165,13 +3158,6 @@
    "src/agenda.js",
    "src/caldav.js",
    "src/routes/agenda.js"
-  ]
- },
- {
-  "key": "calendar —",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
   ]
  },
  {
@@ -4534,13 +4520,6 @@
   ]
  },
  {
-  "key": "default —",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
-  ]
- },
- {
   "key": "Default range",
   "module": "monitor",
   "where": [
@@ -4775,13 +4754,6 @@
   ]
  },
  {
-  "key": "Distance (there and back)",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
-  ]
- },
- {
   "key": "Done",
   "module": "charging",
   "where": [
@@ -4838,6 +4810,13 @@
   "module": "core",
   "where": [
    "public/miniservers-tabulator.js"
+  ]
+ },
+ {
+  "key": "drive on to {0}",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -5863,10 +5842,24 @@
   ]
  },
  {
+  "key": "For every appointment at this address.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "for the current full list and pricing.",
   "module": "ai",
   "where": [
    "admin-ai (script)"
+  ]
+ },
+ {
+  "key": "for this address",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -5921,7 +5914,14 @@
   ]
  },
  {
-  "key": "From the calendar text (#brengen / #halen).",
+  "key": "from the calendar",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "from the calendar settings",
   "module": "charging",
   "where": [
    "agenda (script)"
@@ -5932,6 +5932,13 @@
   "module": "charging",
   "where": [
    "planner (script)"
+  ]
+ },
+ {
+  "key": "from the series",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {
@@ -6460,13 +6467,6 @@
   ]
  },
  {
-  "key": "How you drive",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
-  ]
- },
- {
   "key": "HTTP {0} (does the LoxSuite user have user-management rights?)",
   "module": "ocpp",
   "where": [
@@ -6613,13 +6613,6 @@
   "module": "monitor",
   "where": [
    "public/monitor-picks.js"
-  ]
- },
- {
-  "key": "In the calendar text: #brengen, #halen or both.",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
   ]
  },
  {
@@ -7071,7 +7064,14 @@
   ]
  },
  {
-  "key": "Leave (travel {0} h {1})",
+  "key": "Leave ({0} h {1} drive)",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "Leave ({0} min drive)",
   "module": "charging",
   "where": [
    "agenda (script)"
@@ -8687,13 +8687,6 @@
   ]
  },
  {
-  "key": "Next appointment:",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
-  ]
- },
- {
   "key": "next to (OR) or instead of the \"grid < −0.6 kW\" release",
   "module": "energy_manager",
   "where": [
@@ -8730,6 +8723,14 @@
   ]
  },
  {
+  "key": "No address.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js",
+   "src/routes/agenda.js"
+  ]
+ },
+ {
   "key": "no answer",
   "module": "ocpp",
   "where": [
@@ -8757,13 +8758,6 @@
   "module": "charging",
   "where": [
    "src/agenda.js"
-  ]
- },
- {
-  "key": "No appointment with the car after it.",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
   ]
  },
  {
@@ -9527,6 +9521,13 @@
   ]
  },
  {
+  "key": "Not possible on this route: {0}.",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "not read yet",
   "module": "vehicles",
   "where": [
@@ -10057,24 +10058,10 @@
   ]
  },
  {
-  "key": "only drop off",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
-  ]
- },
- {
   "key": "Only my channel",
   "module": "core",
   "where": [
    "profile"
-  ]
- },
- {
-  "key": "only pick up",
-  "module": "charging",
-  "where": [
-   "agenda (script)"
   ]
  },
  {
@@ -13080,6 +13067,13 @@
   ]
  },
  {
+  "key": "there and back",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "There and back",
   "module": "charging",
   "where": [
@@ -13654,6 +13648,7 @@
   "key": "Trip",
   "module": "charging",
   "where": [
+   "agenda (script)",
    "learned (script)",
    "src/carClimate.js",
    "src/notifications.js",
@@ -14331,6 +14326,13 @@
   ]
  },
  {
+  "key": "via {0}, then home",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "via the first address, then home",
   "module": "charging",
   "where": [
@@ -14530,6 +14532,13 @@
   ]
  },
  {
+  "key": "Which car",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
   "key": "Which car is plugged in?",
   "module": "charging",
   "where": [
@@ -14591,6 +14600,27 @@
   "module": "charging",
   "where": [
    "src/planner.js"
+  ]
+ },
+ {
+  "key": "without motorways",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "without the ferry",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
+  ]
+ },
+ {
+  "key": "without toll roads",
+  "module": "charging",
+  "where": [
+   "agenda (script)"
   ]
  },
  {

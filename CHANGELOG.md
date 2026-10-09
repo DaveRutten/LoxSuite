@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.54.0-alpha.1] - 2026-10-09
+
+### Added
+- **Route options** (asked: "the shortest route to this appointment is over the ferry — but that must be a choice,
+  just like toll roads"): the route can avoid **ferries**, **toll roads** and **motorways**.
+  - **Default** for every address in the agenda settings (*Route: avoid*, chips; nothing = the shortest route).
+  - **Per address**: where an appointment's route takes one of them (or you avoid it), the appointment shows one
+    *Route* row with a chip per kind — *without the ferry*, *without toll roads*, *without motorways* — on or off,
+    for every appointment at that address; ↺ back to the default. Only what the route actually takes is shown, so
+    the row stays out of the way, and another kind later is just another chip. When no route without it exists the
+    appointment says so.
+  - The distance, travel time, kWh and leave time follow the chosen route; each set of options is cached on its
+    own (the address is looked up once), drives between appointments use the options of both addresses (avoiding
+    wins), and addresses looked up before are checked once more to see what their route takes.
+- **Which car** (asked: "in the agenda you must be able to choose car x or y when there are several cars in
+  LoxSuite"): with more than one car an appointment has a *Which car* row, for that day or the whole series
+  (linked by name, like the other choices). Default: the calendar's car, else the first. Smart charging plans the
+  drive for that car (its consumption and battery), and its plug-in reminders only for that car.
+- **A calendar's name, colour and car** can be changed under Settings → Calendars (asked: "the calendar colour must
+  be adjustable in the settings, and the name too"): click the name or ✏️ — stored in LoxSuite only, the calendar
+  itself isn't changed. The colour is a small square that opens the colour picker (also when adding a calendar).
+
+### Changed
+- **Shorter appointment details** (asked: "the texts on the screen more concise, no fuss — and think again about
+  those drop-down menus"): the drop-downs are now rows of chips with short labels — *Car needed* yes / no, *Trip*
+  there and back / drop off / pick up / drop off and pick up, *After dropping off* back home / drive on to …,
+  *Afterwards* back home / drive on to … / via …, then home. A row only shows when it matters (no *after* rows
+  without a next appointment), where a choice comes from (*from the calendar*, *from the series*) is a small note
+  instead of an extra option, and ↺ goes back to the series or to automatic instead of a *default* entry.
+- **Today stands out** in the agenda (asked: "today could have had a shading, now only the number is green"): a
+  light tint over the whole day in the week, day and month view, and the date in a filled dot.
+- The numbers under it: *Basis* shows the whole sum (e.g. *4 × 47 km + 40 km margin* for drop off and pick up)
+  instead of a separate distance row, and the travel time reads *Leave (41 min drive)*.
+
 ## [0.53.0-alpha.1] - 2026-10-08
 
 ### Added

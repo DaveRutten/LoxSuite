@@ -126,7 +126,7 @@ test('drop off and pick up from the calendar text: two drives, the car home in b
   const hond = items.find((i) => i.uid === 'hond@test' && i.start === at(8));
   assert.equal(hond.tripMode, 'both');
   assert.equal(hond.tripModeSource, 'tag');
-  assert.equal(hond.needKwh, 17.6, '2 × (2 × 12 km + 20 km margin) × 0.2');
+  assert.equal(hond.needKwh, 17.6, '(4 × 12 km + 40 km margin) × 0.2');
   assert.deepEqual(hond.tours.map((t) => [t.role, t.leaveAt, t.backAt, t.kwh]), [
     ['drop', at(7, 45), at(8, 20), 8.8],
     ['pick', at(16, 45), at(17, 20), 8.8],

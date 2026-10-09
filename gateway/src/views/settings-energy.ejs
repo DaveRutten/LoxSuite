@@ -108,15 +108,29 @@
       <tbody>
         <% calendars.forEach(c => { %>
           <tr>
-            <td><span style="display:inline-block; width:10px; height:10px; border-radius:3px; background:<%= c.color %>;"></span> <%= c.name %><%= c.enabled ? '' : ' (off)' %></td>
+            <td><span style="display:inline-block; width:10px; height:10px; border-radius:3px; background:<%= c.color %>;"></span> <% if (canEdit('charging')) { %><a href="#" data-cal-edit="<%= c.id %>" title="<%= t('Name, colour and car') %>"><%= c.name %></a><% } else { %><%= c.name %><% } %><%= c.enabled ? '' : ' (off)' %></td>
             <td class="hint"><%= c.kind === 'caldav' ? (/icloud\.com$/.test(c.urlHost) ? 'iCloud' : 'CalDAV') + ' · ' + (c.username || '') : c.urlHost %></td>
             <td><%= (vehicles.find(v => v.id === c.vehicle_id) || {}).name || '—' %></td>
             <td class="hint"><%= c.last_sync_at ? formatDateTime(c.last_sync_at) : '—' %><% if (c.last_error) { %> <span style="color:var(--danger);"><%= c.last_error %></span><% } %></td>
-            <td><form method="post" action="/agenda/calendars/<%= c.id %>/delete" onsubmit="return confirm(<%= JSON.stringify(t('Remove this calendar from LoxSuite?')) %>);" style="margin:0;"><button type="submit" class="danger"><%- icon('trash') %></button></form></td>
+            <td><div style="display:flex; gap:0.3rem; justify-content:flex-end;">
+              <% if (canEdit('charging')) { %><button type="button" class="btn-soft" data-cal-edit="<%= c.id %>" title="<%= t('Name, colour and car') %>" aria-label="<%= t('Name, colour and car') %>"><%- icon('edit') %></button><% } %>
+              <form method="post" action="/agenda/calendars/<%= c.id %>/delete" onsubmit="return confirm(<%= JSON.stringify(t('Remove this calendar from LoxSuite?')) %>);" style="margin:0;"><button type="submit" class="danger"><%- icon('trash') %></button></form>
+            </div></td>
           </tr>
         <% }) %>
       </tbody>
     </table>
+    <% if (canEdit('charging')) { calendars.forEach(c => { const hex = (/^#[0-9a-f]{6}/i.exec(c.color || '') || ['#3b82c4'])[0]; %>
+    <form method="post" action="/agenda/calendars/<%= c.id %>/update" data-cal-form="<%= c.id %>" hidden style="margin:0.6rem 0 0; padding:0.6rem 0.8rem; border:1px solid var(--border); border-radius:10px;">
+      <div class="form-grid">
+        <div><label><%= t('Name') %></label><input type="text" name="name" value="<%= c.name %>" maxlength="80" required></div>
+        <div><label><%= t('Colour') %></label><input type="color" name="color" value="<%= hex %>" class="color-square" title="<%= t('Colour') %>"></div>
+        <div><label><%= t('Car (optional)') %></label><select name="vehicle_id"><option value=""><%= t('— any —') %></option><% vehicles.forEach(v => { %><option value="<%= v.id %>" <%= v.id === c.vehicle_id ? 'selected' : '' %>><%= v.name %></option><% }) %></select></div>
+      </div>
+      <p class="hint" style="margin:0.4rem 0 0;"><%= t('Only in LoxSuite; your calendar itself isn\'t changed.') %></p>
+      <div class="btn-row" style="margin-top:0.5rem;"><button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button><button type="button" class="btn-soft" data-cal-cancel="<%= c.id %>"><%= t('Cancel') %></button></div>
+    </form>
+    <% }) } %>
     <div class="btn-row" style="margin-top:0.5rem;"><button type="button" class="btn-soft" id="ag-sync"><%- icon('refresh') %> <%= t('Sync now') %></button><span class="hint" id="ag-sync-msg" style="margin:0;"></span></div>
   <% } %>
   <div class="ls-fold-list" style="margin-top:0.9rem;">
@@ -133,7 +147,7 @@
         <div data-show-if="kind=caldav" style="grid-column: span 2;"><label><%= t('CalDAV server') %></label><input type="text" name="server" placeholder="https://cloud.example.nl/remote.php/dav"></div>
         <div data-show-if="kind=icloud|caldav"><label><%= t('User name (Apple ID e-mail for iCloud)') %></label><input type="text" name="username" autocomplete="off"></div>
         <div data-show-if="kind=icloud|caldav"><label><%= t('App-specific password') %></label><input type="password" name="password" autocomplete="new-password" placeholder="xxxx-xxxx-xxxx-xxxx"></div>
-        <div><label><%= t('Colour') %></label><input type="color" name="color" value="#3b82c4"></div>
+        <div><label><%= t('Colour') %></label><input type="color" name="color" value="#3b82c4" class="color-square" title="<%= t('Colour') %>"></div>
         <div><label><%= t('Car (optional)') %></label><select name="vehicle_id"><option value=""><%= t('— any —') %></option><% vehicles.forEach(v => { %><option value="<%= v.id %>"><%= v.name %></option><% }) %></select></div>
       </div>
       <div data-show-if="kind=icloud|caldav" style="margin-top:0.6rem;">
@@ -165,7 +179,11 @@
       <div><label><%= t('Margin on distance (km)') %></label><input type="text" name="margin_km" value="<%= cfg.margin_km %>"></div>
       <div><label><%= t('Ready this long before leaving (min)') %></label><input type="number" min="0" max="180" step="1" name="ready_margin_min" value="<%= cfg.ready_margin_min ?? 15 %>"></div>
       <div><label><%= t('Calculate distances (OpenStreetMap)') %></label><%- toggleSwitch('geo', !!cfg.geo) %></div>
+      <div data-show-if="geo"><label><%= t('Route: avoid') %></label><div class="chip-checks">
+        <% [['ferry', t('ferries')], ['toll', t('toll roads')], ['motorway', t('motorways')]].forEach(([c, lbl]) => { %><label><input type="checkbox" name="avoid_<%= c %>" value="1" <%= (cfg.route_avoid || []).includes(c) ? 'checked' : '' %>><span><%= lbl %></span></label><% }) %>
+      </div></div>
     </div>
+    <p class="hint" style="margin:0.5rem 0 0;" data-show-if="geo"><%= t('The default for every address. Where it matters, an appointment lets you choose otherwise for that address.') %></p>
     <h3 class="subhead"><%= t('Climate at departure') %></h3>
     <div class="form-grid">
       <div><label><%= t('Climate at departure') %></label><select name="climate_mode">
@@ -402,6 +420,20 @@
       var body = {}; body[b.dataset.recalc] = true; b.disabled = true;
       post('/planner/recalc.json', body).then(function (d) { var r = d[b.dataset.recalc]; b.textContent = r && r.ok ? 'Done' : 'Failed: ' + (r && r.message || ''); }).finally(function () { b.disabled = false; });
     });
+  });
+  // a calendar's name, colour and car: open its form under the row
+  document.querySelectorAll('[data-cal-edit]').forEach(function (b) {
+    b.onclick = function (e) {
+      e.preventDefault();
+      var f = document.querySelector('[data-cal-form="' + b.dataset.calEdit + '"]');
+      var open = f.hidden;
+      document.querySelectorAll('[data-cal-form]').forEach(function (x) { x.hidden = true; });
+      f.hidden = !open;
+      if (open) { f.scrollIntoView({ block: 'nearest' }); f.querySelector('input[name="name"]').focus(); }
+    };
+  });
+  document.querySelectorAll('[data-cal-cancel]').forEach(function (b) {
+    b.onclick = function () { document.querySelector('[data-cal-form="' + b.dataset.calCancel + '"]').hidden = true; };
   });
   var syncBtn = document.getElementById('ag-sync');
   if (syncBtn) syncBtn.onclick = function () { syncBtn.disabled = true; post('/agenda/sync.json', {}).then(function (d) { document.getElementById('ag-sync-msg').textContent = (d.results || []).map(function (r) { return r.ok ? r.events + ' events' : r.message; }).join(' · ');}).finally(function () { syncBtn.disabled = false; }); };

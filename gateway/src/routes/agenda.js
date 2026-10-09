@@ -79,7 +79,9 @@ router.get('/items.json', asyncHandler(async (req, res) => {
     it.climateOff = r?.status === 'off';
   }
   const acfg = await agenda.getConfig();
-  res.json({ items, tours, learned, plan: plan ? plan.slots : [], sessions, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
+  // the cars to choose from (when there are several)
+  const vehicleList = (await db.prepare('SELECT id, name FROM vehicles WHERE enabled = 1 ORDER BY id').all().catch(() => [])).map((v) => ({ id: v.id, name: v.name }));
+  res.json({ items, tours, learned, plan: plan ? plan.slots : [], sessions, vehicles: vehicleList, routeClasses: agenda.ROUTE_CLASSES, climate: { mode: acfg.climate_mode, leadMin: carClimate.clampLead(acfg.climate_lead_min) } });
 }));
 
 // One or more ICS links (one per line). With several, or without a name, each calendar is named
@@ -146,9 +148,13 @@ router.post('/calendars/:id/delete', requirePermission('charging', 'edit'), asyn
   res.redirect('/settings/energy#calendars');
 }));
 
+// Name, colour and car as LoxSuite shows them (the calendar itself isn't changed).
 router.post('/calendars/:id/update', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
-  await db.prepare('UPDATE calendars SET name = ?, color = ?, vehicle_id = ?, enabled = ? WHERE id = ?')
-    .run(String(req.body.name || 'Calendar').slice(0, 80), req.body.color || '#3b82c4', req.body.vehicle_id ? Number(req.body.vehicle_id) : null, req.body.enabled ? 1 : 0, req.params.id);
+  const b = req.body || {};
+  const patch = {};
+  for (const k of ['name', 'color', 'vehicle_id', 'enabled']) if (Object.prototype.hasOwnProperty.call(b, k)) patch[k] = b[k];
+  const cal = await agenda.updateCalendar(req.params.id, patch);
+  if (cal) await logSystemEvent(`Agenda: calendar "${cal.name}" changed by ${req.session?.username || 'unknown user'}`).catch(() => {});
   res.redirect('/settings/energy?saved=1#calendars');
 }));
 
@@ -166,7 +172,10 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
     climate_mode: ['off', 'log', 'on'].includes(req.body.climate_mode) ? req.body.climate_mode : 'log',
     climate_lead_min: require('../carClimate').clampLead(req.body.climate_lead_min),
     climate_on_battery: !!req.body.climate_on_battery,
+    route_avoid: agenda.ROUTE_CLASSES.filter((c) => !!req.body[`avoid_${c}`]),
   }, agenda.DEFAULTS);
+  // other route options: the distances again (in the background)
+  agenda.resolveUpcomingDistances().then(() => require('../planner').recalc()).catch(() => {});
   res.redirect('/settings/energy?saved=1#agenda-settings');
 }));
 
@@ -206,6 +215,22 @@ router.post('/departure.json', requirePermission('charging', 'edit'), asyncHandl
   }
   require('../planner').recalc().catch(() => {});
   res.json({ ok: true });
+}));
+
+// Route options for an address: { location, ferry / toll / motorway: true (avoid), false (allow) or
+// null (as the default) } — then the distance is looked up again with them.
+router.post('/route.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
+  const b = req.body || {};
+  if (!b.location) return res.json({ ok: false, message: 'No address.' });
+  const choice = {};
+  for (const c of agenda.ROUTE_CLASSES) if (Object.prototype.hasOwnProperty.call(b, c)) choice[c] = b[c] === true || b[c] === 'true' || b[c] === '1' ? true : b[c] === false || b[c] === 'false' || b[c] === '0' ? false : null;
+  const pref = await agenda.setRoutePref(b.location, choice);
+  const r = await agenda.distanceFromHome(b.location).catch(() => null);
+  // the routes between appointments and the plan follow in the background
+  const now = Date.now();
+  agenda.tours(new Date(now).toISOString(), new Date(now + 14 * 86400000).toISOString(), { fetchLegs: true })
+    .then(() => require('../planner').recalc()).catch(() => {});
+  res.json({ ok: !!r && !r.error, pref, ...(r || {}) });
 }));
 
 router.post('/distance.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
