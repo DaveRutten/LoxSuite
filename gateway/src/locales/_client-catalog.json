@@ -7622,8 +7622,9 @@
  },
  {
   "key": "LoxSuite (self-hosted home automation)",
-  "module": "core",
+  "module": "charging",
   "where": [
+   "src/agenda.js",
    "src/carEta.js"
   ]
  },
@@ -11344,6 +11345,13 @@
   "module": "charging",
   "where": [
    "agenda (script)"
+  ]
+ },
+ {
+  "key": "Route options not applied: the route service could not be reached.",
+  "module": "charging",
+  "where": [
+   "src/agenda.js"
   ]
  },
  {

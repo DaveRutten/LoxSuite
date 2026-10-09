@@ -4362,5 +4362,6 @@
   "Not possible on this route: {0}.": "Niet mogelijk op deze route: {0}.",
   "The default for every address. Where it matters, an appointment lets you choose otherwise for that address.": "De standaard voor elk adres. Waar het uitmaakt, kies je bij een afspraak iets anders voor dat adres.",
   "Name, colour and car": "Naam, kleur en auto",
-  "Only in LoxSuite; your calendar itself isn't changed.": "Alleen in LoxSuite; je agenda zelf verandert niet."
+  "Only in LoxSuite; your calendar itself isn't changed.": "Alleen in LoxSuite; je agenda zelf verandert niet.",
+  "Route options not applied: the route service could not be reached.": "Route-opties niet toegepast: de routedienst was niet bereikbaar."
 }

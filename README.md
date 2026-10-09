@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.54.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.54.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -790,8 +790,8 @@ add; also Nextcloud, Fastmail and other CalDAV servers. Addresses and passwords 
 only reads. A calendar's name, colour and car can be changed in the settings (in LoxSuite only). An appointment needs the car when its title
 holds a marker (🚗 / #auto by default) or when you switch *Car needed* on in LoxSuite (stored in LoxSuite only).
 Hints like `🚗 120 km`, `🚗 30 kWh` or `🚗 full` are understood. For car appointments with an address LoxSuite
-looks up the driving distance and time from home (OpenStreetMap Nominatim + OSRM; only those addresses are sent,
-results cached), adds the margin (default 20 km) and turns it into kWh; the planner makes sure the car is ready
+looks up the driving distance and time from home (OpenStreetMap Nominatim + OSRM, Valhalla for a route without
+ferries / toll roads / motorways; only those addresses are sent, results cached), adds the margin (default 20 km) and turns it into kWh; the planner makes sure the car is ready
 before you have to leave. **Route options**: by default the shortest route, or avoid ferries, toll roads and/or
 motorways for every address (agenda settings); where an appointment's route takes one of them (or you avoid it),
 the appointment shows a chip like *without the ferry* to choose otherwise for that address — on or off, ↺ back to

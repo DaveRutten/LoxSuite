@@ -180,7 +180,7 @@
       <div><label><%= t('Ready this long before leaving (min)') %></label><input type="number" min="0" max="180" step="1" name="ready_margin_min" value="<%= cfg.ready_margin_min ?? 15 %>"></div>
       <div><label><%= t('Calculate distances (OpenStreetMap)') %></label><%- toggleSwitch('geo', !!cfg.geo) %></div>
       <div data-show-if="geo"><label><%= t('Route: avoid') %></label><div class="chip-checks">
-        <% [['ferry', t('ferries')], ['toll', t('toll roads')], ['motorway', t('motorways')]].forEach(([c, lbl]) => { %><label><input type="checkbox" name="avoid_<%= c %>" value="1" <%= (cfg.route_avoid || []).includes(c) ? 'checked' : '' %>><span><%= lbl %></span></label><% }) %>
+        <% [['ferry', t('ferries')], ['toll', t('toll roads')], ['motorway', t('motorways')]].forEach(([c, lbl]) => { %><label><input type="checkbox" name="avoid_<%= c %>" value="1" <%= (cfg.route_avoid || []).includes(c) ? 'checked' : '' %>><span><svg class="chip-tick" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="3"/><path d="M4.6 8.3l2.3 2.3 4.5-4.9"/></svg><%= lbl %></span></label><% }) %>
       </div></div>
     </div>
     <p class="hint" style="margin:0.5rem 0 0;" data-show-if="geo"><%= t('The default for every address. Where it matters, an appointment lets you choose otherwise for that address.') %></p>

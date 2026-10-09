@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.54.1-alpha.1] - 2026-10-09
+
+### Fixed
+- **"Without the ferry" didn't change the distance, and said no route without it was possible** (asked: "the
+  distance doesn't seem to be calculated again when I choose without the ferry" — "it says a route isn't possible
+  without the ferry, but that's nonsense: Bergen (L) to Vierlingsbeek can take the ferry, but also the bridge at
+  Well"): the public OSRM servers refuse to leave out ferries, toll roads or motorways ("Exclude flag combination
+  is not supported"), so LoxSuite got the plain route back. A route that avoids something is now asked from
+  **Valhalla** (the FOSSGIS server, OpenStreetMap data too), which says per route whether it still takes a
+  ferry, toll road or motorway — Bergen (L) → Vierlingsbeek: 2.3 km with the ferry, 18.7 km over the bridge at
+  Well without. Without route options it stays OSRM, as before. Distance, travel time, kWh and leave time follow;
+  routes cached by 0.54.0 with route options are looked up again.
+  - *Not possible on this route* now only shows when there really is no other way (an island). When the route
+    service can't be reached, the appointment says so instead, keeps the plain route's distance meanwhile and
+    tries again later.
+- **Chips keep their size** (asked: "the button size still jumps when I switch it on or off, like the ferry —
+  mainly the height"): every chip has the same height and weight on or off, and an on/off chip (*without the
+  ferry*, *Route: avoid* in the settings) has its tick box there both ways — only the tick appears. The first
+  letter of each chip and the chips next to it stay where they are.
+
 ## [0.54.0-alpha.1] - 2026-10-09
 
 ### Added

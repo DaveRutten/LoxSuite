@@ -70,6 +70,8 @@ globalThis.fetch = async (input, init) => {
   if (host === 'opendata.cbs.nl') return cbs();
   if (host === 'nominatim.openstreetmap.org') return json([{ lat: '52.156', lon: '5.387' }]);
   if (host === 'router.project-osrm.org') return json({ routes: [{ distance: 46800, duration: 2460 }] });
+  // a route avoiding something (ferry / toll / motorway): a longer way round
+  if (host === 'valhalla1.openstreetmap.de') return json({ trip: { status: 0, summary: { length: 61.3, time: 3180, has_ferry: false, has_toll: false, has_highway: true } } });
   if (host === 'api.github.com' || host === 'raw.githubusercontent.com') return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
   if (/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(host)) return realFetch(input, init);
   return new Response('offline (screenshot run)', { status: 503 });

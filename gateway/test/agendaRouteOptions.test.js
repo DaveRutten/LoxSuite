@@ -47,24 +47,51 @@ test('routeFlags: a ferry step, toll and motorway from the road classes; other c
   assert.deepEqual(agenda.routeFlags(null), []);
 });
 
-test('osrmRoute: asks without what it avoids; a server that can\'t falls back to the plain route', async () => {
-  const urls = [];
-  const ferryRoute = { routes: [{ distance: 41200, duration: 3000, legs: [{ steps: [{ mode: 'ferry' }] }] }] };
-  const around = { routes: [{ distance: 128000, duration: 5400, legs: [{ steps: [{ mode: 'driving', intersections: [{ classes: ['motorway'] }] }] }] }] };
-  let r = await agenda.osrmRoute(async (u) => { urls.push(u); return /exclude=ferry/.test(u) ? around : ferryRoute; }, { lat: 52, lon: 5 }, { lat: 53, lon: 4.8 }, ['ferry']);
-  assert.deepEqual(r, { distance_km: 128, duration_min: 90, route_flags: 'motorway' });
-  assert.match(urls[0], /steps=true&exclude=ferry$/);
-  // exclude not supported (an error): the plain route, which shows it still takes the ferry
-  urls.length = 0;
-  r = await agenda.osrmRoute(async (u) => { urls.push(u); if (/exclude/.test(u)) throw new Error('InvalidValue'); return ferryRoute; }, { lat: 52, lon: 5 }, { lat: 53, lon: 4.8 }, ['ferry']);
-  assert.deepEqual(r, { distance_km: 41.2, duration_min: 50, route_flags: 'ferry' });
-  assert.equal(urls.length, 2);
-  // nothing to avoid: one request; '' = looked, none of them
-  urls.length = 0;
-  r = await agenda.osrmRoute(async (u) => { urls.push(u); return { routes: [{ distance: 5000, duration: 600, legs: [] }] }; }, { lat: 52, lon: 5 }, { lat: 52.1, lon: 5 });
+test('roadRoute: OSRM without options; avoiding something via Valhalla, else an OSRM that can, else the plain route', async () => {
+  const calls = [];
+  // Bergen (L) → Vierlingsbeek, as the servers answered (October 2026): OSRM takes the ferry over the
+  // Maas (2.3 km) and refuses "exclude=ferry" (InvalidValue); Valhalla without ferries goes over the
+  // bridge at Well (18.7 km)
+  const bergen = { lat: 51.6, lon: 6.0467 };
+  const vierlingsbeek = { lat: 51.5958, lon: 6.0144 };
+  const ferryRoute = { routes: [{ distance: 2344.5, duration: 419.3, legs: [{ steps: [{ mode: 'driving' }, { mode: 'ferry', name: 'Veerdienst Vierlingsbeek – Bergen' }, { mode: 'driving' }] }] }] };
+  const viaWell = { trip: { status: 0, summary: { length: 18.728, time: 1652.014, has_ferry: false, has_toll: false, has_highway: false } } };
+  const from = { lat: 52, lon: 5 };
+  const to = { lat: 53, lon: 4.8 };
+  // nothing to avoid: one OSRM request
+  let r = await agenda.roadRoute(async (u, o) => { calls.push([u, o]); return ferryRoute; }, bergen, vierlingsbeek);
+  assert.deepEqual(r, { distance_km: 2.3, duration_min: 7, route_flags: 'ferry' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'https://router.project-osrm.org/route/v1/driving/6.0467,51.6;6.0144,51.5958?overview=false&steps=true');
+  // without the ferry: Valhalla, "don't use ferries" — over the bridge
+  calls.length = 0;
+  r = await agenda.roadRoute(async (u, o) => { calls.push([u, o]); return /valhalla/.test(u) ? viaWell : ferryRoute; }, bergen, vierlingsbeek, ['ferry', 'toll']);
+  assert.deepEqual(r, { distance_km: 18.7, duration_min: 28, route_flags: '' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'https://valhalla1.openstreetmap.de/route');
+  assert.deepEqual(calls[0][1].body.costing_options, { auto: { use_ferry: 0, use_tolls: 0 } });
+  assert.deepEqual(calls[0][1].body.locations, [{ lat: 51.6, lon: 6.0467 }, { lat: 51.5958, lon: 6.0144 }]);
+  // nothing in between: '' = looked, none of them
+  r = await agenda.roadRoute(async () => ({ routes: [{ distance: 5000, duration: 600, legs: [] }] }), from, { lat: 52.1, lon: 5 });
   assert.equal(r.route_flags, '');
-  assert.equal(urls.length, 1);
-  assert.doesNotMatch(urls[0], /exclude/);
+  // no way round (an island): Valhalla still takes the ferry, and says so
+  r = await agenda.roadRoute(async () => ({ trip: { summary: { length: 41.2, time: 3000, has_ferry: true } } }), from, to, ['ferry']);
+  assert.equal(r.route_flags, 'ferry');
+  // Valhalla not reachable: an OSRM server that can exclude…
+  calls.length = 0;
+  const osrmEx = { routes: [{ distance: 99000, duration: 4200, legs: [] }] };
+  r = await agenda.roadRoute(async (u) => { calls.push([u]); if (/valhalla/.test(u)) throw new Error('HTTP 503'); return /exclude=ferry/.test(u) ? osrmEx : ferryRoute; }, from, to, ['ferry']);
+  assert.deepEqual([r.distance_km, calls.length], [99, 2]);
+  // …else the plain route, which shows it still takes the ferry
+  r = await agenda.roadRoute(async (u) => { if (/valhalla|exclude/.test(u)) throw new Error('InvalidValue'); return ferryRoute; }, bergen, vierlingsbeek, ['ferry']);
+  assert.deepEqual(r, { distance_km: 2.3, duration_min: 7, route_flags: 'ferry', note: 'Route options not applied: the route service could not be reached.' });
+  await assert.rejects(agenda.roadRoute(async () => ({ routes: [] }), from, to), /No route found/);
+});
+
+test('valhallaFlags: has_ferry / has_toll / has_highway', () => {
+  assert.deepEqual(agenda.valhallaFlags({ has_ferry: true, has_toll: false, has_highway: true }), ['ferry', 'motorway']);
+  assert.deepEqual(agenda.valhallaFlags({}), []);
+  assert.deepEqual(agenda.valhallaFlags(null), []);
 });
 
 test('setRoutePref: avoid, allow or back to the default — per kind, per address', async () => {
@@ -81,8 +108,8 @@ test('distanceFromHome: one cached route per set of options, the address looked 
   const get = async (u) => {
     calls.push(u);
     if (u.includes('nominatim')) return [{ lat: '53.05', lon: '4.8' }];
-    return /exclude=ferry/.test(u)
-      ? { routes: [{ distance: 128000, duration: 5400, legs: [] }] }
+    return /valhalla/.test(u)
+      ? { trip: { summary: { length: 128, time: 5400, has_ferry: false } } }
       : { routes: [{ distance: 41200, duration: 3000, legs: [{ steps: [{ mode: 'ferry' }] }] }] };
   };
   const plain = await agenda.distanceFromHome('Haven 5, Texel', { get });
@@ -91,6 +118,11 @@ test('distanceFromHome: one cached route per set of options, the address looked 
   const without = await agenda.distanceFromHome('Haven 5, Texel', { get });
   assert.deepEqual([without.distance_km, without.route_flags, without.query], [128, '', 'haven 5, texel|52.0000,5.0000|x:ferry']);
   assert.equal(calls.filter((u) => u.includes('nominatim')).length, 1, 'the coordinates from the first lookup');
+  // the route service down: the plain route with a note (tried again later), the distance used meanwhile
+  await agenda.setRoutePref('Haven 5, Texel', { toll: true });
+  const down = await agenda.distanceFromHome('Haven 5, Texel', { get: async (u) => { if (/valhalla|exclude/.test(u)) throw new Error('HTTP 503'); return get(u); } });
+  assert.deepEqual([down.distance_km, down.route_flags, down.error], [41.2, 'ferry', 'Route options not applied: the route service could not be reached.']);
+  await agenda.setRoutePref('Haven 5, Texel', { toll: null });
   // both stay cached: back to the ferry costs no request
   await agenda.setRoutePref('Haven 5, Texel', { ferry: null });
   const n = calls.length;

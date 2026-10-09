@@ -67,9 +67,11 @@
   /* the choices of an appointment: short chips, only what applies */
   .ag-row + .ag-row { margin-top:0.6rem; }
   .ag-chips { display:flex; flex-wrap:wrap; gap:0.3rem; }
-  .ag-chips button { border:1px solid var(--border); background:var(--surface, #fff); color:inherit; border-radius:999px; padding:0.28rem 0.7rem; font-size:0.82rem; line-height:1.3; cursor:pointer; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .ag-chips button.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
-  .ag-multi button.on::before { content:'✓ '; }
+  /* a chip keeps its size when switched on or off: same weight, a fixed height, and a toggle's tick
+     box is there both ways (only the tick appears) — so nothing next to it moves */
+  .ag-chips button { display:inline-flex; align-items:center; gap:0.35rem; height:1.9rem; box-sizing:border-box; border:1px solid var(--border); background:var(--surface, #fff); color:inherit; border-radius:999px; padding:0 0.75rem; font:inherit; font-size:0.82rem; font-weight:500; line-height:1; cursor:pointer; max-width:100%; white-space:nowrap; }
+  .ag-chips button > span { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .ag-chips button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
   /* today: a light accent tint over the whole day, the date as a filled dot */
   .ag-today-num { display:inline-block; min-width:1.55em; padding:0 0.35em; border-radius:999px; background:var(--accent); color:#fff; text-align:center; line-height:1.55; }
   .ag-src { font-weight:400; opacity:0.6; font-size:0.75rem; margin-left:0.3rem; }
@@ -101,6 +103,8 @@
   function startOfDay(d) { var x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
   function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
   function startOfWeek(d) { var x = startOfDay(d); var wd = (x.getDay() + 6) % 7; return addDays(x, -wd); }
+  // the box of an on/off chip; the tick shows when it is on (style.css .chip-tick)
+  var TICK = '<svg class="chip-tick" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="3"/><path d="M4.6 8.3l2.3 2.3 4.5-4.9"/></svg>';
   function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
   function weekNo(d) { var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); var day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day); var y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return Math.ceil(((t - y0) / 86400000 + 1) / 7); }
   var distTried = {};
@@ -450,7 +454,7 @@
       // what is stored for the chosen scope (null = not chosen there)
       var ownOf = function (k) { return sc === 'series' ? ser[k] : day[k]; };
       var chips = function (id, opts, cur) {
-        return '<div class="ag-chips" id="' + id + '">' + opts.filter(Boolean).map(function (o) { return '<button type="button" data-v="' + esc(o[0]) + '"' + (String(cur) === String(o[0]) ? ' class="on"' : '') + ' title="' + esc(o[1]) + '">' + esc(o[1]) + '</button>'; }).join('') + '</div>';
+        return '<div class="ag-chips" id="' + id + '">' + opts.filter(Boolean).map(function (o) { return '<button type="button" data-v="' + esc(o[0]) + '"' + (String(cur) === String(o[0]) ? ' class="on"' : '') + ' title="' + esc(o[1]) + '"><span>' + esc(o[1]) + '</span></button>'; }).join('') + '</div>';
       };
       // where the shown choice comes from, and ↺ back when you chose it here
       var srcTag = function (src) { return src === 'tag' ? '<span class="ag-src">' + esc(T('from the calendar')) + '</span>' : src === 'series' && sc === 'day' ? '<span class="ag-src">' + esc(T('from the series')) + '</span>' : ''; };
@@ -490,9 +494,10 @@
           var shown = (data.routeClasses || []).filter(function (c) { return uses.includes(c) || avNow.includes(c) || typeof rc[c] === 'boolean'; });
           if (shown.length) {
             var mine = shown.some(function (c) { return typeof rc[c] === 'boolean'; });
-            var stuck = shown.filter(function (c) { return avNow.includes(c) && uses.includes(c); });
+            // still takes it although avoided: there is no other way (unless the route service couldn't be asked — that note shows below)
+            var stuck = it.geoError ? [] : shown.filter(function (c) { return avNow.includes(c) && uses.includes(c); });
             html += '<div class="ag-row">' + lbl(T('Route'), '<span class="ag-src">' + esc(T('for this address')) + '</span>' + (mine ? '<a href="#" class="ag-reset" id="ag-route-reset" title="' + esc(T('as the default')) + '">↺</a>' : ''), T('For every appointment at this address.')) +
-              '<div class="ag-chips ag-multi" id="ag-route">' + shown.map(function (c) { var on = avNow.includes(c); return '<button type="button" data-c="' + esc(c) + '" aria-pressed="' + on + '"' + (on ? ' class="on"' : '') + '>' + esc(rLbl[c] || c) + '</button>'; }).join('') + '</div>' +
+              '<div class="ag-chips ag-multi" id="ag-route">' + shown.map(function (c) { var on = avNow.includes(c); return '<button type="button" data-c="' + esc(c) + '" aria-pressed="' + on + '"' + (on ? ' class="on"' : '') + '>' + TICK + '<span>' + esc(rLbl[c] || c) + '</span></button>'; }).join('') + '</div>' +
               (stuck.length ? '<div class="hint" style="margin:0.2rem 0 0; font-size:0.75rem;">' + esc(T('Not possible on this route: {0}.', stuck.map(function (c) { return rLbl[c] || c; }).join(', '))) + '</div>' : '') + '</div>';
           }
         }
@@ -512,7 +517,7 @@
  // more than the battery holds: per drive from home (the car can charge in between)
       var most = tours.length ? Math.max.apply(null, tours.map(function (t) { return t.kwh || 0; })) : it.needKwh;
       if (it.usableKwh && most > it.usableKwh) html += '<p class="hint" style="margin:0.4rem 0 0; color:#b8860b;">More than the battery (' + nf(it.usableKwh, 1) + ' kWh): ' + (it.vehicleType === 'phev' ? 'it leaves full, the rest is fuel.' : 'plan a charging stop.') + '</p>';
-      if (it.geoError) html += '<p class="hint" style="margin:0.4rem 0 0; color:var(--danger);">Distance: ' + esc(it.geoError) + '</p>';
+      if (it.geoError) html += '<p class="hint" style="margin:0.4rem 0 0; color:' + (it.distanceKm != null ? '#b8860b' : 'var(--danger)') + ';">' + esc(T(it.geoError)) + '</p>';
       if (it.location && it.distanceKm == null && canEdit) html += '<button type="button" class="btn-soft" id="ag-dist" style="margin-top:0.5rem;">' + (it.geoError ? 'Try again' : 'Look up distance') + '</button>';
     }
     if (it.kind === 'event' && canEdit && it.needsCar) html += '<div class="ag-field" style="margin-top:0.7rem;"><span class="ag-lbl">Own value (optional)</span><input type="text" id="ag-own" value="' + esc(it.own || '') + '" placeholder="150 km, 30 kWh or full"><button type="button" class="btn-soft" id="ag-own-save" style="margin-top:0.35rem;">Save</button></div>';

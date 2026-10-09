@@ -3,8 +3,8 @@
 // car when its title (or description) holds a car marker — 🚗 or #auto by default — or when you
 // switch "Car needed" on for it in LoxSuite (that choice is stored in LoxSuite only; the calendar
 // itself is never changed). For such appointments with an address, LoxSuite looks up the driving
-// distance from home (OpenStreetMap: Nominatim + OSRM; only the addresses of car appointments are
-// sent, results are cached), adds the margin (default 20 km), and turns it into kWh with the
+// distance from home (OpenStreetMap: Nominatim + OSRM, Valhalla for a route without ferries / toll
+// roads / motorways; only the addresses of car appointments are sent, results are cached), adds the margin (default 20 km), and turns it into kWh with the
 // car's consumption. The planner then makes sure the car is ready before you have to leave.
 //
 // How you drive: by default the car stays there (there at the start, back at the end). An
@@ -332,11 +332,13 @@ async function syncAll() {
 
 // ------------------------------------------------------------------ distance (OpenStreetMap)
 
-async function geoFetch(url) {
+// GET url (JSON back); with { body }: POST it as JSON (Valhalla).
+async function geoFetch(url, { body = null } = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 15000);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'LoxSuite (self-hosted home automation)', Accept: 'application/json' } });
+    const headers = { 'User-Agent': 'LoxSuite (self-hosted home automation)', Accept: 'application/json' };
+    const res = await fetch(url, body ? { method: 'POST', signal: ctrl.signal, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { signal: ctrl.signal, headers });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
@@ -380,17 +382,44 @@ function routeFlags(r) {
   return ROUTE_CLASSES.filter((c) => s.has(c));
 }
 
-// The road route from → to (OSRM), avoiding `avoid`; when the server can't avoid them, the plain route
-// (its flags then show what it uses).
-async function osrmRoute(get, from, to, avoid = []) {
-  const base = `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false&steps=true`;
-  let route = null;
-  if (avoid.length) route = await get(`${base}&exclude=${avoid.join(',')}`).catch(() => null);
-  if (!route?.routes?.[0]) route = await get(base);
+// Pure: which of ferry / toll / motorway a Valhalla route uses (its summary says so).
+function valhallaFlags(sum) {
+  const has = { ferry: sum?.has_ferry, toll: sum?.has_toll, motorway: sum?.has_highway };
+  return ROUTE_CLASSES.filter((c) => !!has[c]);
+}
+
+const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
+const VALHALLA_URL = 'https://valhalla1.openstreetmap.de/route';
+
+// The road route from → to: { distance_km, duration_min, route_flags }. Without anything to avoid OSRM,
+// as always. Avoiding ferries / toll roads / motorways: the public OSRM servers can't (they refuse
+// "exclude"), so Valhalla (FOSSGIS, OpenStreetMap too) with "don't use" for each of them; it still
+// takes one where there is no other way (e.g. an island) — the flags then show it. Valhalla not
+// reachable: an OSRM server that can exclude, else the plain route (its flags show what it uses).
+async function roadRoute(get, from, to, avoid = []) {
+  const base = `${OSRM_URL}/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false&steps=true`;
+  const fromOsrm = (r) => ({ distance_km: Math.round(r.distance / 100) / 10, duration_min: Math.round(r.duration / 60), route_flags: routeFlags(r).join(',') });
+  if (avoid.length) {
+    const auto = {};
+    if (avoid.includes('ferry')) auto.use_ferry = 0;
+    if (avoid.includes('toll')) auto.use_tolls = 0;
+    if (avoid.includes('motorway')) auto.use_highways = 0;
+    const body = { locations: [{ lat: Number(from.lat), lon: Number(from.lon) }, { lat: Number(to.lat), lon: Number(to.lon) }], costing: 'auto', costing_options: { auto }, directions_type: 'none', units: 'kilometers' };
+    const v = await get(VALHALLA_URL, { body }).catch(() => null);
+    const sum = v?.trip?.summary;
+    if (sum && Number.isFinite(Number(sum.length)) && Number.isFinite(Number(sum.time))) {
+      // '' = looked at, none of them (NULL: an older lookup that didn't look)
+      return { distance_km: Math.round(Number(sum.length) * 10) / 10, duration_min: Math.round(Number(sum.time) / 60), route_flags: valhallaFlags(sum).join(',') };
+    }
+    const ex = await get(`${base}&exclude=${avoid.join(',')}`).catch(() => null);
+    if (ex?.routes?.[0]) return fromOsrm(ex.routes[0]);
+  }
+  const route = await get(base);
   const r = route?.routes?.[0];
   if (!r) throw new Error('No route found.');
-  // '' = looked at, none of them (NULL: an older lookup that didn't look)
-  return { distance_km: Math.round(r.distance / 100) / 10, duration_min: Math.round(r.duration / 60), route_flags: routeFlags(r).join(',') };
+  // couldn't ask for the route without them: the plain one, with a note (stored as the lookup's error,
+  // so it is tried again after a while — the distance is used meanwhile)
+  return avoid.length ? { ...fromOsrm(r), note: 'Route options not applied: the route service could not be reached.' } : fromOsrm(r);
 }
 
 async function routePrefs() { return settings.get('route_prefs', {}); }
@@ -464,8 +493,8 @@ async function distanceFromHome(address, { get = geoFetch, force = false, avoid 
     if (!found?.length) throw new Error('Address not found.');
     const lat = Number(found[0].lat);
     const lon = Number(found[0].lon);
-    const r = await osrmRoute(get, { lat: site.lat, lon: site.lon }, { lat, lon }, avoid);
-    row = { query: key, lat, lon, ...r, error: null, fetched_at: new Date().toISOString() };
+    const { note, ...r } = await roadRoute(get, { lat: site.lat, lon: site.lon }, { lat, lon }, avoid);
+    row = { query: key, lat, lon, ...r, error: note || null, fetched_at: new Date().toISOString() };
   } catch (err) {
     row = { query: key, lat: null, lon: null, distance_km: null, duration_min: null, route_flags: null, error: err.message, fetched_at: new Date().toISOString() };
   }
@@ -778,7 +807,8 @@ function legOf(a, b, cached = null) {
   const ia = a.item;
   const ib = b.item;
   if (ia === ib || (ia.location && normAddr(ia.location) === normAddr(ib.location))) return { km: 0, min: 0 };
-  if (cached && !cached.error && Number.isFinite(cached.distance_km)) return { km: cached.distance_km, min: Number.isFinite(cached.duration_min) ? cached.duration_min : Math.round(cached.distance_km / 50 * 60) };
+  // (a lookup with a note — route options not applied — still has its distance)
+  if (cached && Number.isFinite(cached.distance_km)) return { km: cached.distance_km, min: Number.isFinite(cached.duration_min) ? cached.duration_min : Math.round(cached.distance_km / 50 * 60) };
   if ([ia.lat, ia.lon, ib.lat, ib.lon].every(Number.isFinite)) {
     const km = Math.round(crowKm(ia, ib) * 1.3 * 10) / 10;
     return { km, min: Math.round(km / 50 * 60), approx: true };
@@ -862,8 +892,8 @@ async function fetchLeg(ia, ib, { get = geoFetch, avoid = [] } = {}) {
     const wait = 1100 - (Date.now() - lastGeoAt);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     lastGeoAt = Date.now();
-    const r = await osrmRoute(get, ia, ib, avoid);
-    row = { query: key, lat: ib.lat, lon: ib.lon, ...r, error: null, fetched_at: new Date().toISOString() };
+    const { note, ...r } = await roadRoute(get, ia, ib, avoid);
+    row = { query: key, lat: ib.lat, lon: ib.lon, ...r, error: note || null, fetched_at: new Date().toISOString() };
   } catch (err) {
     row = { query: key, lat: ib.lat, lon: ib.lon, distance_km: null, duration_min: null, route_flags: null, error: err.message, fetched_at: new Date().toISOString() };
   }
@@ -1003,6 +1033,6 @@ function stopAgenda() {
 }
 
 module.exports = {
-  DEFAULTS, TRIP_MODES, ROUTE_CLASSES, cleanVehicle, addrKey, avoidFor, routeFlags, osrmRoute, routePrefs, setRoutePref, seriesName, nameKey, seriesIndexOf, seriesRowOf, hasCarTag, parseCarHint, parseTripTag, parseOwnValue, tripNeedKwh, stopsOf, chainStops, legOf, routeNeed, routeOf, crowKm, cleanMode, cleanFlag, cleanChain, tours, fetchLeg, icsUrl, expandEvents, tripOccurrences,
+  DEFAULTS, TRIP_MODES, ROUTE_CLASSES, cleanVehicle, addrKey, avoidFor, routeFlags, valhallaFlags, roadRoute, routePrefs, setRoutePref, seriesName, nameKey, seriesIndexOf, seriesRowOf, hasCarTag, parseCarHint, parseTripTag, parseOwnValue, tripNeedKwh, stopsOf, chainStops, legOf, routeNeed, routeOf, crowKm, cleanMode, cleanFlag, cleanChain, tours, fetchLeg, icsUrl, expandEvents, tripOccurrences,
   addressCandidates, icsName, fetchIcs, getConfig, listCalendars, addCalendar, updateCalendar, syncCalendar, syncAll, distanceFromHome, items, setOverride, parseClimate, nextCarTrip, startAgenda, stopAgenda, resolveUpcomingDistances,
 };

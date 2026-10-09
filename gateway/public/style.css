@@ -4928,14 +4928,20 @@ details.mod-status[open] > summary::before { transform: rotate(45deg); vertical-
 .chip { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.74rem; border: 1px solid currentColor; line-height: 1.5; margin: 0 0.25rem 0.25rem 0; white-space: nowrap; }
 
 /* Chip checkboxes: a set of options that can each be on or off (e.g. what a route avoids); more
-   options just wrap onto the next line. */
+   options just wrap onto the next line. A chip keeps its size either way (same weight, fixed height,
+   the tick box always there), so the chips next to it don't move. */
 .chip-checks { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .chip-checks label { display: inline-flex; margin: 0; font-weight: 400; cursor: pointer; position: relative; }
 .chip-checks input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
-.chip-checks span { border: 1px solid var(--border); border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.82rem; line-height: 1.3; background: var(--surface, #fff); white-space: nowrap; }
-.chip-checks input:checked + span { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.chip-checks input:checked + span::before { content: '✓ '; }
+.chip-checks span { display: inline-flex; align-items: center; gap: 0.35rem; height: 1.9rem; box-sizing: border-box; border: 1px solid var(--border); border-radius: 999px; padding: 0 0.75rem; font-size: 0.82rem; font-weight: 500; line-height: 1; background: var(--surface, #fff); white-space: nowrap; }
+.chip-checks input:checked + span { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip-checks input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* the box of an on/off chip: a rounded square, the tick only when on */
+.chip-tick { flex: 0 0 auto; width: 0.9rem; height: 0.9rem; }
+.chip-tick rect { fill: none; stroke: currentColor; stroke-width: 1.5; opacity: 0.5; }
+.chip-tick path { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.on > .chip-tick rect, input:checked + span > .chip-tick rect { opacity: 0.9; }
+.on > .chip-tick path, input:checked + span > .chip-tick path { opacity: 1; }
 
 /* A colour as a small square (a calendar's colour) instead of a full-width bar; clicking it opens the
    browser's own colour picker. Also inside a .form-grid (whose inputs are otherwise full width). */
