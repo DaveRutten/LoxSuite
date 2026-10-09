@@ -13,6 +13,13 @@ All notable changes to this project are documented in this file.
   pull requests are tested as before, and both workflows can be run by hand (a hand-run image build on main also
   writes `:latest`).
 
+## [0.57.1-alpha.1] - 2026-10-09
+
+### Fixed
+- **The Docker image of 0.57.0 was not built**: the test of the image workflow still checked the old `:latest`
+  rule (only from a push to main); it now checks the current one — `:latest` when the release's commit is where
+  main is, one build at a time in order.
+
 ## [0.57.0-alpha.1] - 2026-10-09
 
 ### Added
