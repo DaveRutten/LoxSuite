@@ -4,17 +4,21 @@ name: Build and publish Docker image
 # to set up, since it authenticates with the repo's own built-in GITHUB_TOKEN. This is also what
 # the Unraid Community Applications template (unraid/loxsuite.xml) actually pulls, so this
 # workflow existing and running is a prerequisite for that template working at all.
+#
+# One image build per release: only for a version tag (v*), not also for the push to main that comes
+# with it — that built the same commit a second time (with its own test run, plus test.yml's). The tag's
+# build also writes :latest, when that tag is where main is now (an older tag pushed later doesn't move
+# :latest back). By hand (Actions → Run workflow, on main): a build of main with :latest.
 on:
   push:
-    branches: [main]
     tags: ['v*']
   workflow_dispatch: {}
 
-# One run per branch/tag at a time. A newer push to main cancels a main run that is still going, so
-# :latest always ends up as the newest main — never as whichever run happened to finish last.
+# One image build at a time, in the order they were pushed (a newer one waits, it doesn't cancel), so
+# :latest ends up as the newest release.
 concurrency:
-  group: docker-publish-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+  group: docker-publish
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/loxsuite
@@ -52,6 +56,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # :latest only when this commit is where main is now — a release (or a run by hand on main), not
+      # an older tag pushed afterwards
+      - id: latest
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+
       # Lets the amd64 GitHub-hosted runner cross-build the arm64 image below (see the
       # build-push-action's own `platforms:`) via QEMU user-mode emulation, rather than needing a
       # real arm64 runner. Slower than a native build (better-sqlite3's native binding, and every
@@ -73,11 +84,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_NAME }}
-          # :latest only from main itself. {{is_default_branch}} is also true for a TAG push whose commit
-          # is on main (the push payload's base_ref), so every version tag pushed together with main
-          # also wrote :latest, and the run that finished last won — v0.39.0 after pushing 0.36.4–0.41.0.
+          # :latest from the release that is where main is now (see the step above) — not from
+          # {{is_default_branch}}, which is true for any tag on main: every tag pushed together used to
+          # write :latest and the run that finished last won (v0.39.0 after pushing 0.36.4–0.41.0).
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ steps.latest.outputs.ok == 'true' }}
             type=ref,event=tag
             type=sha,prefix=,format=short
 

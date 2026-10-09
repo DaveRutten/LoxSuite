@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **One image build per release** (asked: "save build minutes by not building partly the same thing three
+  times"): pushing a release (main + its tag) used to run the test suite three times (Test, and each image build
+  before it) and build the multi-arch image twice. Now only the **tag** builds the image — `:vX` and `:latest`,
+  the latter only when the tag is where main is, so an older tag pushed later doesn't move `:latest` back — and
+  the suite runs once in front of it, plus the Postgres / MariaDB smoke tests. A push to main alone runs nothing;
+  pull requests are tested as before, and both workflows can be run by hand (a hand-run image build on main also
+  writes `:latest`).
+
 ## [0.56.0-alpha.1] - 2026-10-09
 
 ### Added

@@ -8,14 +8,21 @@ name: Test
 # otherwise only ever exercised on SQLite, so a dialect bug in a shipped-and-recommended external
 # backend only surfaced on a user's live server. That smoke file skips itself unless TEST_DB_BACKEND
 # is set, so it's a no-op in the SQLite `test` job and in local dev.
+#
+# When: for a pull request, by hand (Actions → Run workflow), and for a release tag (v*). Not for every
+# push to main: a release is pushed as main + its tag, and building / testing the same commit for both
+# cost double. On a tag the SQLite `test` job is skipped — docker-publish.yml's own test job runs the
+# same suite there and gates the image — so a release runs the suite once, plus the two backend smokes.
 on:
   push:
-    branches: [main]
+    tags: ['v*']
   pull_request: {}
   workflow_dispatch: {}
 
 jobs:
   test:
+    # (on a release tag docker-publish.yml runs this suite already)
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     defaults:
       run:
