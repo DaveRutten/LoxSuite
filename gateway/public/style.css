@@ -2249,6 +2249,10 @@ input[type="datetime-local"]:focus, select:focus, textarea:focus {
    room/category disclosure). Replace it with a flat SVG chevron instead. Excludes [multiple] — a
    multi-row listbox (see the dashboard-sharing user/role pickers) has no native arrow to begin
    with, so painting one on just floats a stray chevron in the corner of a tall box. */
+/* The opened list of a <select>: some browsers (Chrome / Edge on Windows) draw it white whatever the theme;
+   the options get the theme's own colours so it is readable in dark mode too. */
+select option, select optgroup { background-color: var(--surface); color: var(--text); }
+
 select:not([multiple]) {
   appearance: none;
   -webkit-appearance: none;

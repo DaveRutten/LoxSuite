@@ -83,7 +83,18 @@ function allObjects(structure) {
 
 // The candidates in a structure file for a module kind, best first. types: from energyTypes.loadTypes.
 function fromStructure(kind, structure, { types = et.loadTypes(kind) } = {}) {
-  const devices = em.devicesFromStructure(structure).filter((d) => Array.isArray(d.members) && d.members.length >= 3);
+  const raw = em.devicesFromStructure(structure).filter((d) => Array.isArray(d.members) && d.members.length >= 3);
+  // the outputs of one Modbus device don't always share one uuid start (added later, copied): groups
+  // that match the same known type are one device
+  const devices = [];
+  const byKnown = new Map();
+  for (const d of raw) {
+    const k = bestKnown(d.members, types)?.type.key;
+    if (k && byKnown.has(k)) { const m = byKnown.get(k); m.members = [...m.members, ...d.members]; m.parts.push(d.uuid); continue; }
+    const copy = { ...d, members: [...d.members], parts: [d.uuid] };
+    if (k) byKnown.set(k, copy);
+    devices.push(copy);
+  }
   const out = [];
   for (const d of devices) {
     const roles = rolesOf(kind, d.members);
@@ -101,7 +112,7 @@ function fromStructure(kind, structure, { types = et.loadTypes(kind) } = {}) {
     const name = /\(\w+\)$/.test(d.name) && known ? known.type.label : d.name;
     // what the known type has that Loxone doesn't show yet (to make visible, or add, in Loxone)
     const missingFromLoxone = known ? known.type.registers.filter((r) => r.role && !roles[r.role]).map((r) => ({ role: r.role, label: r.label, reg: r.reg })) : [];
-    out.push({ uuid: d.uuid, name, room: d.room, score, roles, check: et.check(kind, type), type, known: known ? { key: known.type.key, label: known.type.label, share: known.share } : null, missingFromLoxone });
+    out.push({ uuid: d.uuid, parts: d.parts, name, room: d.room, score, roles, check: et.check(kind, type), type, known: known ? { key: known.type.key, label: known.type.label, share: known.share } : null, missingFromLoxone });
   }
   return out.sort((a, b) => Number(b.check.ok) - Number(a.check.ok) || b.score - a.score);
 }
@@ -127,4 +138,4 @@ function roomControllers(structure) {
   return out.sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
-module.exports = { rolesOf, asType, bestKnown, fromStructure, roomControllers };
+module.exports = { rolesOf, asType, bestKnown, fromStructure, roomControllers, allObjects, ELSEWHERE };

@@ -60,14 +60,40 @@ const miniservers = () => db.prepare('SELECT * FROM miniservers ORDER BY sort_or
 async function discover(kind, { refresh = false } = {}) {
   const hit = rt.discovered.get(kind);
   if (hit && !refresh && Date.now() - hit.at < 60000) return hit.list;
+  // Gateway first: in a Gateway/Client setup the same objects can come in through both
+  const all = (await miniservers()).sort((x, y) => Number(!!x.gateway_client_of) - Number(!!y.gateway_client_of));
+  const structures = [];
   const list = [];
-  for (const ms of await miniservers()) {
-    try {
-      const s = await require('./loxoneStructure').getStructure(ms, { forceRefresh: refresh });
-      for (const c of ed.fromStructure(kind, s)) list.push({ ...c, miniserver: { id: ms.id, name: ms.name } });
-    } catch (e) { list.push({ error: e.message, miniserver: { id: ms.id, name: ms.name } }); }
+  for (const ms of all) {
+    try { structures.push({ ms, s: await require('./loxoneStructure').getStructure(ms, { forceRefresh: refresh }) }); } catch (e) { list.push({ error: e.message, miniserver: { id: ms.id, name: ms.name } }); }
   }
-  rt.discovered.set(kind, { at: Date.now(), list });
+  const seen = new Set();
+  for (const { ms, s } of structures) {
+    for (const c of ed.fromStructure(kind, s)) {
+      const sig = (c.parts || [c.uuid]).join(',');
+      if (seen.has(sig)) continue; // already found on the Gateway
+      seen.add(sig);
+      // roles of the own Loxone logic that live on another Miniserver (Gateway / Client)
+      for (const o of structures) {
+        if (o.ms.id === ms.id) continue;
+        const wanted = (ed.ELSEWHERE[kind] || []).filter((r) => !c.roles[r]);
+        if (!wanted.length) break;
+        const extra = ed.rolesOf(kind, ed.allObjects(o.s));
+        for (const r of wanted) {
+          if (!extra[r]) continue;
+          const e = extra[r];
+          c.roles[r] = { ...(e.read ? { read: { ...e.read, ms: o.ms.id } } : {}), ...(e.write ? { write: { ...e.write, ms: o.ms.id } } : {}), elsewhere: true };
+        }
+      }
+      // the roles found elsewhere become part of its type (with their own Miniserver)
+      c.type = ed.asType(kind, { uuid: c.uuid, name: c.name, members: [] }, c.roles, et.loadTypes(kind).find((t) => t.key === c.known?.key));
+      for (const reg of c.type.registers) { const rr = c.roles[reg.role]; if (rr?.read?.ms) reg.ms = rr.read.ms; if (rr?.write?.ms) reg.writeMs = rr.write.ms; }
+      c.score = Object.keys(c.roles).length;
+      c.check = et.check(kind, c.type);
+      list.push({ ...c, miniserver: { id: ms.id, name: ms.name } });
+    }
+  }
+  rt.discovered.set(kind, { at: Date.now(), list, structures: structures.map((x) => ({ id: x.ms.id, name: x.ms.name, controls: Object.keys(x.s?.controls || {}).length })) });
   return list;
 }
 
@@ -86,12 +112,13 @@ async function resolve(kind, cfg = null) {
   // the room from Loxone's own room controller: actual, target and humidity
   let links = cfg.links;
   let roomController = null;
-  if (kind === 'heatpump' && cfg.room?.controller && msId) {
-    const ms = (await miniservers()).find((m) => m.id === msId);
-    const s = ms ? await require('./loxoneStructure').getStructure(ms).catch(() => null) : null;
-    roomController = s ? ed.roomControllers(s).find((x) => x.uuid === cfg.room.controller) || null : null;
+  if (kind === 'heatpump' && cfg.room?.controller) {
+    // "msId|uuid" (older settings: the uuid alone)
+    const [a, b] = String(cfg.room.controller).split('|');
+    const wantUuid = b || a;
+    roomController = (await roomControllerList()).find((x) => x.uuid === wantUuid) || null;
     if (roomController) {
-      const one = (state, name) => (state ? { read: { uuid: state, name, control: roomController.uuid } } : null);
+      const one = (state, name) => (state ? { read: { uuid: state, name, control: roomController.uuid, ms: roomController.ms } } : null);
       links = { ...links, ...Object.fromEntries([['roomTemp', one(roomController.tempActual, roomController.name)], ['roomTarget', one(roomController.tempTarget, roomController.name)], ['roomHumidity', one(roomController.humidity, roomController.name)]].filter(([, v]) => v)) };
     }
   }
@@ -105,7 +132,7 @@ function readRaw(type, msId) {
   const raw = {};
   for (const r of type.registers) {
     if (!r.state) continue;
-    const v = ws.getLiveValue(msId, r.state);
+    const v = ws.getLiveValue(r.ms ?? msId, r.state);
     if (v !== undefined && v !== null && v !== '' && Number.isFinite(Number(v))) raw[r.key] = Number(v);
   }
   return raw;
@@ -203,7 +230,9 @@ async function heatpumpStatus(nowMs = Date.now()) {
   const T = cfg.tuning || {};
   const onFlow = v.heatingMode === 1;
   const current = { flowC: Number.isFinite(v.logicFlowC) ? v.logicFlowC : onFlow ? (v.flowSetpoint ?? v.roomSetpoint ?? null) : (v.flowSetpoint ?? null), step: Number.isFinite(v.powerStep) ? v.powerStep : hw.stepOf(v.powerLimit1 === 1, v.powerLimit2 === 1), ntc: Number.isFinite(v.ntcMode) ? v.ntcMode : hw.stepOf(v.ntcRelay1 === 1, v.ntcRelay2 === 1) };
-  const tmodel = tu.learn(tu.runs(rt.tune.filter((x) => x.ms > nowMs - 60 * DAY)));
+  const truns = tu.runs(rt.tune.filter((x) => x.ms > nowMs - 60 * DAY));
+  const tmodel = tu.learn(truns);
+  const overshoot = tu.overshoot(truns.filter((x) => x.startMs > nowMs - 7 * DAY));
   const wNow = wx.get(Math.floor(nowMs / HOUR) * HOUR) || {};
   const outNow = Number.isFinite(state.outdoorC) ? state.outdoorC : wNow.t;
   const rhNow = Number.isFinite(v.outdoorRh) ? v.outdoorRh : wNow.rh;
@@ -229,8 +258,8 @@ async function heatpumpStatus(nowMs = Date.now()) {
     plan: plan.hours.map((h, i) => { const e = exps.get(h.ms) || {}; return { ...h, price: hours[i]?.price ?? null, surplusKwh: hours[i]?.surplusKwh ?? 0, estimated: !!hours[i]?.estimated, drop: Math.round(dropOf(h.ms) * 10) / 10, cop: e.cop ?? null, defrost: e.defrost ?? null, outdoorC: e.outdoorC, rh: e.rh, heatCost: hw.costPerHeat(hours[i]?.price ?? null, e) }; }),
     weather: { source, model: wmodel, now: exps.get(Math.floor(nowMs / HOUR) * HOUR) || null, steps: hw.learnSteps(rt.weather.filter((x) => x.ms > nowMs - 60 * DAY)) },
     room: room ? { ...room, model: rmodel, schedule: sched, controller: r.roomController ? { uuid: r.roomController.uuid, name: r.roomController.name, room: r.roomController.room } : null } : null,
-    controllers: await roomControllerList(msId),
-    tuning: { mode: T.mode, current, advice, model: Object.values(tmodel).filter((x) => advice && x.weather === advice.weather).map((x) => ({ ...x, score: tu.score(x) })).sort((a, b) => a.score - b.score), runs: rt.tune.length },
+    controllers: (await roomControllerList()).map((x) => ({ value: x.value, uuid: x.uuid, name: x.name, room: x.room, msName: x.msName })),
+    tuning: { overshoot, mode: T.mode, current, advice, model: Object.values(tmodel).filter((x) => advice && x.weather === advice.weather).map((x) => ({ ...x, score: tu.score(x) })).sort((a, b) => a.score - b.score), runs: rt.tune.length },
     legionella: leg ? { ...leg, lastDoneMs, now: legNow } : null, mode, reason: legNow ? leg.reason : hourPlan.reason, writes, sent: rt.sent.heatpump.slice(-15),
   };
 }
@@ -282,10 +311,19 @@ function rolesView(kind, type, chosen) {
   });
 }
 
-async function roomControllerList(msId) {
-  const ms = (await miniservers()).find((m) => m.id === msId);
-  const st = ms ? await require('./loxoneStructure').getStructure(ms).catch(() => null) : null;
-  return st ? ed.roomControllers(st).map((x) => ({ uuid: x.uuid, name: x.name, room: x.room, humidity: !!x.humidity })) : [];
+// The room controllers of every Miniserver (Gateway first, the same one once): { ms, uuid, name, room }.
+async function roomControllerList() {
+  const all = (await miniservers()).sort((x, y) => Number(!!x.gateway_client_of) - Number(!!y.gateway_client_of));
+  const out = []; const seen = new Set();
+  for (const ms of all) {
+    const st = await require('./loxoneStructure').getStructure(ms).catch(() => null);
+    for (const x of st ? ed.roomControllers(st) : []) {
+      if (seen.has(x.uuid)) continue;
+      seen.add(x.uuid);
+      out.push({ ...x, ms: ms.id, msName: ms.name, value: `${ms.id}|${x.uuid}` });
+    }
+  }
+  return out;
 }
 
 async function status(kind, nowMs = Date.now()) { return kind === 'solar' ? solarStatus(nowMs) : heatpumpStatus(nowMs); }
@@ -310,8 +348,10 @@ function detectConflicts(last, values, nowMs, { settleMs = 90000, withinMs = 6 *
 async function apply(kind, st) {
   const cfg = st.cfg;
   if (!cfg.enabled || !st.writes.length || !st.msId) return;
-  const ms = (await miniservers()).find((m) => m.id === st.msId);
+  const allMs = await miniservers();
+  const ms0 = allMs.find((m) => m.id === st.msId);
   for (const w of st.writes) {
+    const ms = (w.ms && allMs.find((m) => m.id === w.ms)) || ms0;
     if (w.skipped) continue;
     const target = w.action || w.vi;
     const shown = (st.roles || []).find((x) => x.role === w.role)?.write;
@@ -394,17 +434,19 @@ async function importStatistics(kind, { days = 14, callTool = null, nowMs = Date
   const r = await resolve(kind);
   const ms = (await miniservers()).find((m) => m.id === r.msId);
   if (!ms) throw new Error('No Miniserver for this module.');
-  const structure = await require('./loxoneStructure').getStructure(ms);
+  const structOf = new Map();
+  const structureFor = async (id) => { if (!structOf.has(id)) { const m = (await miniservers()).find((x) => x.id === id); structOf.set(id, m ? { m, s: await require('./loxoneStructure').getStructure(m).catch(() => null) } : null); } return structOf.get(id); };
   const call = callTool || ((m, name, input) => require('./mcpClient').callTool(m, name, input));
   const fromMs = nowMs - Math.max(1, Math.min(60, days)) * DAY;
   const series = {}; const without = [];
   for (const reg of r.type.registers) {
     if (!reg.role || !reg.state) continue;
-    const ctl = structure?.controls?.[reg.control];
+    const home = await structureFor(reg.ms ?? ms.id);
+    const ctl = home?.s?.controls?.[reg.control];
     const group = ctl?.statisticV2?.groups?.[0];
     if (!ctl) { without.push(reg.role); continue; }
     if (!group) { without.push(reg.role); continue; }
-    const res = await call(ms, 'control_statistics', { uuid: reg.control, mode: 'raw', group_id: String(group.id), from: new Date(fromMs).toISOString(), to: new Date(nowMs).toISOString(), limit: 20000 }).catch((e) => ({ isError: true, content: [{ type: 'text', text: e.message }] }));
+    const res = await call(home.m, 'control_statistics', { uuid: reg.control, mode: 'raw', group_id: String(group.id), from: new Date(fromMs).toISOString(), to: new Date(nowMs).toISOString(), limit: 20000 }).catch((e) => ({ isError: true, content: [{ type: 'text', text: e.message }] }));
     let obj = res;
     if (res && Array.isArray(res.content)) {
       if (res.isError) { without.push(reg.role); continue; }
@@ -475,4 +517,6 @@ function addTuneHistory(samples) { rt.tune = [...rt.tune, ...samples].sort((a, b
 function startEnergyModules() { if (!rt.timer) { loadPersisted().catch((e) => console.error(`[energy modules] load: ${e.message}`)); rt.timer = setInterval(() => tick().catch(() => {}), 60000); setTimeout(() => tick().catch(() => {}), 5000); } }
 function stopEnergyModules() { if (rt.timer) clearInterval(rt.timer); rt.timer = null; }
 
-module.exports = { loadPersisted, detectConflicts, KINDS, DEFAULTS, getConfig, saveConfig, discover, resolve, status, tick, importStatistics, toMinutes, addTankHistory, addWeatherHistory, addRoomHistory, addTuneHistory, startEnergyModules, stopEnergyModules, rolesView };
+function lastStructures(kind) { return rt.discovered.get(kind)?.structures || []; }
+
+module.exports = { lastStructures, loadPersisted, detectConflicts, KINDS, DEFAULTS, getConfig, saveConfig, discover, resolve, status, tick, importStatistics, toMinutes, addTankHistory, addWeatherHistory, addRoomHistory, addTuneHistory, startEnergyModules, stopEnergyModules, rolesView };

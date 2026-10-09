@@ -4684,5 +4684,16 @@
   "Also driven by Loxone: set back to {now} at {t} (LoxSuite sent {sent}). Link it through a virtual input, or take it out of the Loxone logic.": "Wordt ook door Loxone gestuurd: teruggezet naar {now} om {t} (LoxSuite stuurde {sent}). Koppel via een virtuele ingang, of haal het uit de Loxone-logica.",
   "{n} outputs also driven by Loxone": "{n} uitgangen worden ook door Loxone gestuurd",
   "Flow setpoint of your own Loxone logic (fixed-flow mode)": "Aanvoersetpoint van je eigen Loxone-logica (vaste-aanvoermodus)",
-  "Grid meter counts export as positive (invert)": "Netmeter telt teruglevering positief (omkeren)"
+  "Grid meter counts export as positive (invert)": "Netmeter telt teruglevering positief (omkeren)",
+  "Reading the Loxone structure of every Miniserver again…": "De Loxone-structuur van elke Miniserver wordt opnieuw gelezen…",
+  "{n} found; structure read from: {ms}.": "{n} gevonden; structuur gelezen van: {ms}.",
+  "Flow in the tap-water circuit (own sensor)": "Flow in het tapwatercircuit (eigen sensor)",
+  "Flow temperature of the tap-water circuit (own sensor)": "Aanvoertemperatuur tapwatercircuit (eigen sensor)",
+  "Return temperature of the tap-water circuit (own sensor)": "Retourtemperatuur tapwatercircuit (eigen sensor)",
+  "Stops": "Stoppen",
+  "run {c} °C longer": "{c} °C langer doorlopen",
+  "long enough": "lang genoeg",
+  "usually {m} min still before it starts again": "staat meestal {m} min stil voor hij weer start",
+  "too few runs to say": "te weinig runs om iets te zeggen",
+  "Not recognised because of another display name in Loxone (\"Name shown\")? LoxSuite only sees that name: choose \"Other Loxone object\" at the role and search it by that name — objects of every Miniserver (Gateway and Client) are listed.": "Niet herkend door een andere weergavenaam in Loxone (\"Naam weergeven\")? LoxSuite ziet alleen die naam: kies bij de functie \"Ander Loxone-object\" en zoek op die naam — objecten van elke Miniserver (Gateway en Client) staan erbij."
 }

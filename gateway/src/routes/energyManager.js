@@ -273,20 +273,25 @@ router.get('/modules/:kind/status.json', asyncHandler(async (req, res) => {
 router.get('/modules/:kind/discover.json', asyncHandler(async (req, res) => {
   if (!kindOk(req.params.kind)) return res.status(404).json({ error: 'Unknown module' });
   const list = await mods().discover(req.params.kind, { refresh: req.query.refresh === '1' });
-  res.json({ found: list.map((c) => (c.error ? c : { uuid: c.uuid, name: c.name, room: c.room, score: c.score, ok: c.check.ok, known: c.known, miniserver: c.miniserver, missingFromLoxone: c.missingFromLoxone })) });
+  res.json({ structures: mods().lastStructures(req.params.kind), found: list.map((c) => (c.error ? c : { uuid: c.uuid, name: c.name, room: c.room, score: c.score, ok: c.check.ok, known: c.known, miniserver: c.miniserver, missingFromLoxone: c.missingFromLoxone })) });
 }));
 
 // The states of a Miniserver to choose an own read link from (an object, a virtual output …) and the
 // controls with an action to send to directly.
 router.get('/modules/:kind/objects.json', asyncHandler(async (req, res) => {
-  const ms = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(Number(req.query.ms));
-  if (!ms) return res.status(404).json({ error: 'Miniserver not found' });
-  const s = await require('../loxoneStructure').getStructure(ms).catch(() => null);
-  const rooms = s?.rooms || {};
-  const out = [];
-  for (const [uuid, c] of Object.entries(s?.controls || {})) {
-    const state = Object.values(c.states || {}).find((x) => typeof x === 'string');
-    out.push({ uuid, name: c.name, type: c.type, room: rooms[c.room]?.name || null, state: state || null, action: c.uuidAction || null });
+  // every Miniserver (Gateway first; the same object once), or one
+  const all = (await db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all()).sort((x, y) => Number(!!x.gateway_client_of) - Number(!!y.gateway_client_of));
+  const list = req.query.ms && req.query.ms !== 'all' ? all.filter((m) => m.id === Number(req.query.ms)) : all;
+  const out = []; const seen = new Set();
+  for (const ms of list) {
+    const s = await require('../loxoneStructure').getStructure(ms).catch(() => null);
+    const rooms = s?.rooms || {};
+    for (const [uuid, c] of Object.entries(s?.controls || {})) {
+      if (seen.has(uuid)) continue;
+      seen.add(uuid);
+      const state = Object.values(c.states || {}).find((x) => typeof x === 'string');
+      out.push({ uuid, name: c.name, type: c.type, room: rooms[c.room]?.name || null, state: state || null, action: c.uuidAction || null, ms: ms.id, msName: list.length > 1 ? ms.name : null });
+    }
   }
   res.json({ objects: out.sort((a, b) => String(a.name).localeCompare(String(b.name))) });
 }));
@@ -309,8 +314,8 @@ router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), 
     for (const [role, l] of Object.entries(b.links)) {
       if (!roles[role] || !l || typeof l !== 'object') continue;
       const one = {};
-      if (l.read && l.read.uuid) one.read = { uuid: String(l.read.uuid).slice(0, 80), name: String(l.read.name || '').slice(0, 120), ...(l.read.control ? { control: String(l.read.control).slice(0, 80) } : {}) };
-      if (l.write && ['direct', 'vi', 'off'].includes(l.write.via)) one.write = { via: l.write.via, ...(l.write.vi ? { vi: String(l.write.vi).replace(/[^\w.-]/g, '_').slice(0, 60) } : {}), ...(l.write.action ? { action: String(l.write.action).slice(0, 80), name: String(l.write.name || '').slice(0, 120) } : {}) };
+      if (l.read && l.read.uuid) one.read = { uuid: String(l.read.uuid).slice(0, 80), name: String(l.read.name || '').slice(0, 120), ...(l.read.control ? { control: String(l.read.control).slice(0, 80) } : {}), ...(Number.isFinite(Number(l.read.ms)) && l.read.ms !== null ? { ms: Number(l.read.ms) } : {}) };
+      if (l.write && ['direct', 'vi', 'off'].includes(l.write.via)) one.write = { via: l.write.via, ...(l.write.vi ? { vi: String(l.write.vi).replace(/[^\w.-]/g, '_').slice(0, 60) } : {}), ...(l.write.action ? { action: String(l.write.action).slice(0, 80), name: String(l.write.name || '').slice(0, 120), ...(Number.isFinite(Number(l.write.ms)) && l.write.ms !== null ? { ms: Number(l.write.ms) } : {}) } : {}) };
       if (one.read || one.write) c.links[role] = one;
     }
   }

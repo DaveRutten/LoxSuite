@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.56.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.57.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -23,6 +23,9 @@ It provides:
     publishes the value to MQTT.
 - **Monitor**: track any MQTT topic or Loxone value over time, with charts, tables, and CSV export.
 - **Logs**: live + persisted view of the Mosquitto broker log and each Miniserver's own log.
+- **Energy manager**: hot water, the heat pump, the solar inverter and appliances planned together with the car on
+  prices, the solar forecast and what it learns — with **modules** for a heat pump and a solar inverter that are
+  found in Loxone like Home Connect appliances.
 - **OCPP bridge**: report a Loxone Wallbox to an OCPP 1.6 backend (e.g. Laadloon) as a charge point,
   plus a quarterly Excel/CSV export of all charging sessions with MID meter readings.
 - A web interface (with login) to manage all of the above — no manual JSON or config-file editing.
@@ -290,6 +293,14 @@ the web UI without restarting the broker. The entire first-boot process is autom
 
 Add new devices (e.g. a Shelly) afterwards from the **Users** page in the web UI — no CLI commands
 or restarts needed.
+
+**Try it without a Miniserver**: a local demo with a simulated Miniserver (a Mitsubishi Ecodan heat pump, a
+SolarEdge inverter and their own Loxone logic, 14 days of history) in its own container, port and data:
+```
+docker compose -f dev/docker-compose.demo.yml up --build
+```
+Then `http://localhost:5590` (the local test login is in that file). Remove it again with
+`docker compose -f dev/docker-compose.demo.yml down -v`.
 
 ### Unraid
 
@@ -939,6 +950,40 @@ planned with the base load only. While an appliance runs it shows how long and h
 it flags a consumer that uses clearly more than before or than the weather explains, finds **unknown
 consumers** in the house use (a recurring block you can name), and you can mark a learned pattern as *not
 right*.
+
+### Energy manager modules (heat pump, solar inverter)
+
+Energy manager → **Modules: heat pump and solar panels**. The existing energy-manager views stay; this is where
+the heat pump and the solar inverter are linked and tuned.
+
+- **Found in Loxone** like the Home Connect appliances: the outputs of one Modbus device share the start of their
+  uuid in the Loxone structure, and their names (those of the Modbus template) say which output is which. Your own
+  Loxone logic is found as well — power-limit relays, the outdoor sensor (NTC) and its setpoint, outdoor
+  temperature and humidity, a hot-water pipe sensor, a heat meter (Kamstrup), the room controllers. Only objects
+  that are visible in the Loxone app show up. Built in: **Mitsubishi Ecodan (MelcoBEMS MINI A1M)** and
+  **SolarEdge**; a Loxone Library template (`.LxAddon` / `.xml`) can be imported as a backup.
+- **Per role**: read from the object found or an own one (a virtual output…); send **direct** to the Loxone
+  object, through a **virtual input** (your Loxone logic has the last word) or **not at all**. A warning appears
+  when the Loxone logic sets back an output that LoxSuite drives.
+- **History from Loxone** (*Read history*): the statistics of the linked objects — not every object keeps them —
+  fill the learning at once, through the Miniserver's AI-assistant connection. What is learned is kept 60 days.
+- **Tap water**: draws learned from the tank temperature, or exactly from a pipe sensor; heated in the hour with
+  the lowest cost per kWh of **heat** (the price ÷ the COP expected in that hour's weather), before or after
+  pre-heating the room, never in between; comfort minimum, target, buffer on solar, what the heat pump reaches
+  by itself and an absolute maximum; the **legionella** cycle planned on a cheap or sunny block, the unit's own
+  program as a safety net.
+- **Weather**: air / water, water / water or ground / water; defrosting and COP learned per outdoor temperature and
+  humidity.
+- **Room**: the Loxone room controller (actual, target, humidity); the comfort schedule learned per weekday from
+  its target, the warm-up time per outdoor temperature, so pre-heating starts earlier on a cold morning.
+- **Fine-tuning for long, calm runs**: per weather the flow setpoint, power step and NTC setting with the longest
+  runs, the best COP and the fewest defrosts — advise only, or steer. On a fixed flow temperature the zone target
+  is the flow: a room temperature never goes into it.
+- **Solar panels**: limited only when exporting costs money under your contract (net metering, a fixed feed-in
+  tariff or the market price, minus the **feed-in costs** set with Smart charging); for SolarEdge the two enables
+  once (AdvancedPwrControlEn = 4, ReactivePwrConfig = 1), then only the Active Power Limit (100 % = no limit). The
+  grid meter's sign can be inverted.
+- Start with **Shadow**: it shows what it would send and why; **Live** sends it.
 
 ### OCPP (Loxone Wallbox → OCPP backend)
 

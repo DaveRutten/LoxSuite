@@ -39,7 +39,8 @@ function runs(samples, { maxGapMin = 5 } = {}) {
     if (Number.isFinite(s.rh)) { cur.rh += s.rh; cur.rhN += 1; }
   }
   if (cur) out.push(cur);
-  return out.map((r) => ({ startMs: r.startMs, minutes: r.minutes, defrosts: r.defrosts, elecKw: r2(r.elec / r.minutes), heatKw: r2(r.heat / r.minutes), outdoorC: r2(r.outdoorC / r.minutes), rh: r.rhN ? Math.round(r.rh / r.rhN) : null, setting: r.setting }));
+  // how long it stood still before each run (a quick restart: it stopped too early)
+  return out.map((r, i) => ({ offBeforeMin: i ? Math.round((r.startMs - (out[i - 1].lastMs + MIN)) / MIN) : null, startMs: r.startMs, minutes: r.minutes, defrosts: r.defrosts, elecKw: r2(r.elec / r.minutes), heatKw: r2(r.heat / r.minutes), outdoorC: r2(r.outdoorC / r.minutes), rh: r.rhN ? Math.round(r.rh / r.rhN) : null, setting: r.setting }));
 }
 
 // Pure: what each setting did in each weather.
@@ -100,4 +101,17 @@ function choose(model, { outdoorC, rh, current, bounds = {}, roomBehindC = 0, de
   return { setting: current, why: roomBehindC > 0.5 ? 'room behind: no calmer setting' : 'nothing learned yet in this weather: keep the current setting', learned: false, weather: w };
 }
 
-module.exports = { runs, learn, score, choose, keyOf };
+// Pure: does it stop too early? When runs follow each other after a short stop (the water cooled
+// back below its start point within minutes), running ½–1 °C past its stop point gives one longer run
+// instead of two short ones. -> { overshootC, shortShare, medianOffMin, why }
+function overshoot(rs, { shortMin = 15, veryShortMin = 8, minRuns = 6 } = {}) {
+  const offs = rs.map((r) => r.offBeforeMin).filter((x) => Number.isFinite(x) && x >= 0 && x < 240);
+  if (offs.length < minRuns) return { overshootC: 0, why: 'too few runs to say' };
+  const sorted = [...offs].sort((a, b) => a - b);
+  const med = sorted[Math.floor(sorted.length / 2)];
+  const shortShare = r2(offs.filter((x) => x < shortMin).length / offs.length);
+  const overshootC = med < veryShortMin ? 1 : med < shortMin || shortShare >= 0.5 ? 0.5 : 0;
+  return { overshootC, shortShare, medianOffMin: med, why: overshootC ? `restarts after ${med} min: run ${overshootC} °C past the stop point` : 'stops are long enough' };
+}
+
+module.exports = { runs, learn, score, choose, keyOf, overshoot };

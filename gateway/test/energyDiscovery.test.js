@@ -110,3 +110,18 @@ test('room controllers: actual, target and a humidity sensor in the same room', 
   s.controls['71aa0001-0001-0001-ffff1'] = { name: 'Luchtvochtigheid woonkamer', type: 'InfoOnlyAnalog', room: 'w', states: { value: 'hu' } };
   assert.deepEqual(ed.roomControllers(s), [{ uuid: '70aa0001-0001-0001-ffff1', name: 'Woonkamer', room: 'Woonkamer', tempActual: 'ta', tempTarget: 'tt', comfort: 'ct', humidity: 'hu' }]);
 });
+
+test('one heat pump whose outputs fell into two uuid groups is found once, complete', () => {
+  const io2 = (name, state, extra = {}) => ({ name, type: 'InfoOnlyAnalog', room: 'r', cat: 'c', states: { value: state }, ...extra });
+  const s = { rooms: { r: { name: 'Visualisatie' } }, cats: { c: { name: 'Verwarming' } }, controls: {
+    'aa000001-0001-0001-ffff1': io2('Tank Water Temp Actual', 't1'), 'aa000001-0002-0001-ffff1': io2('Flow Temp', 't2'),
+    'aa000001-0003-0001-ffff1': io2('Return Temp', 't3'), 'aa000001-0004-0001-ffff1': io2('DHW Temperature Drop', 't4'),
+    'bb000002-0001-0001-ffff1': io2('Force DHW', 'f1', { uuidAction: 'fa' }), 'bb000002-0002-0001-ffff1': io2('Tank Water Temp Target', 'f2'),
+    'bb000002-0003-0001-ffff1': io2('Set Tank Water Temperature', 'f3', { uuidAction: 'sa' }), 'bb000002-0004-0001-ffff1': io2('Booster Heater 1', 'f4'),
+  } };
+  const found = ed.fromStructure('heatpump', s);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].parts.length, 2);
+  assert.equal(found[0].check.ok, true);
+  assert.equal(found[0].roles.forceDhw.write.uuid, 'fa');
+});

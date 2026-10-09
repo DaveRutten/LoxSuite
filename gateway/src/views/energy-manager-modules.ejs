@@ -82,6 +82,7 @@
   <% }) %>
   </tbody></table></div>
   <p class="hint" style="margin:0.4rem 0 0;"><%= t('Direct: LoxSuite sends to the Loxone object itself. Virtual input: LoxSuite sets it and your Loxone logic has the last word. Off: only read.') %></p>
+  <p class="hint" style="margin:0.3rem 0 0;"><%= t('Not recognised because of another display name in Loxone ("Name shown")? LoxSuite only sees that name: choose "Other Loxone object" at the role and search it by that name — objects of every Miniserver (Gateway and Client) are listed.') %></p>
   </details>
 <% } %>
 
@@ -133,7 +134,7 @@
     <% const RC = hpS.cfg.room || {}; const rp = hpS.room; %>
     <div class="mm-toggle"><label class="switch"><input type="checkbox" id="mm-r-enabled" data-r="enabled" <%= RC.enabled ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-r-enabled"><%= t('Plan the room temperature (pre-heat in time for comfort)') %></label></div>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-top:0.4rem;">
-      <div><label><%= t('Room controller in Loxone') %></label><select data-r="controller"><option value=""><%= t('— none (own times below) —') %></option><% (hpS.controllers || []).forEach((c) => { %><option value="<%= c.uuid %>" <%= RC.controller === c.uuid ? 'selected' : '' %>><%= c.name %><%= c.room ? ' · ' + c.room : '' %></option><% }) %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('Its actual and target temperature (and humidity) are read; the comfort times are learned from its target.') %></p></div>
+      <div><label><%= t('Room controller in Loxone') %></label><select data-r="controller"><option value=""><%= t('— none (own times below) —') %></option><% (hpS.controllers || []).forEach((c) => { %><option value="<%= c.value %>" <%= RC.controller === c.value || RC.controller === c.uuid ? 'selected' : '' %>><%= c.name %><%= c.room ? ' · ' + c.room : '' %> (<%= c.msName %>)</option><% }) %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('Its actual and target temperature (and humidity) are read; the comfort times are learned from its target.') %></p></div>
       <div><label><%= t('Comfort times') %></label><select data-r="schedule" name="hp_room_schedule"><option value="loxone" <%= RC.schedule !== 'own' ? 'selected' : '' %>><%= t('Learned from the Loxone room controller') %></option><option value="own" <%= RC.schedule === 'own' ? 'selected' : '' %>><%= t('Own times below') %></option></select></div>
     </div>
     <% const SC = rp && rp.schedule; if (SC && SC.all) { const WD = [t('Mon'), t('Tue'), t('Wed'), t('Thu'), t('Fri'), t('Sat'), t('Sun')]; %>
@@ -162,6 +163,7 @@
     </div>
     <div class="mm-kpis">
       <div class="mm-kpi"><span><%= t('Now') %></span><b style="font-size:1rem;"><%= setTxt(TU.current) %></b><span><%= t('{n} minutes of runs to learn from', { n: TU.runs || 0 }) %></span></div>
+      <div class="mm-kpi"><span><%= t('Stops') %></span><b style="font-size:1rem;"><%= TU.overshoot && TU.overshoot.overshootC ? t('run {c} °C longer', { c: nf(TU.overshoot.overshootC, 1) }) : t('long enough') %></b><span><%= TU.overshoot && TU.overshoot.medianOffMin !== undefined ? t('usually {m} min still before it starts again', { m: TU.overshoot.medianOffMin }) : t('too few runs to say') %></span></div>
       <div class="mm-kpi"><span><%= t('Advice for this weather') %></span><b style="font-size:1rem;"><%= TU.advice ? setTxt(TU.advice.setting) : '—' %></b><span><%= TU.advice ? tr(TU.advice.why) : '' %></span></div>
     </div>
     <% if ((TU.model || []).length) { %><div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Setting') %></th><th><%= t('Runs') %></th><th><%= t('Run length') %></th><th><%= t('Defrosts / h') %></th><th>COP</th></tr></thead><tbody>
@@ -268,18 +270,18 @@
   function msOf(card) { var d = card.querySelector('[data-f="device"]'); var v = d && d.value; return v ? v.split('|')[0] : <%- JSON.stringify(String(hpS.msId || soS.msId || '')) %>; }
   function loadObjects(card) {
     if (objects) return Promise.resolve(objects);
-    return fetch('/energy-manager/modules/heatpump/objects.json?ms=' + encodeURIComponent(msOf(card))).then(function (r) { return r.json(); }).then(function (j) {
+    return fetch('/energy-manager/modules/heatpump/objects.json?ms=all').then(function (r) { return r.json(); }).then(function (j) {
       objects = j.objects || [];
       var o = document.getElementById('mm-objects'), a = document.getElementById('mm-actions');
       objects.forEach(function (x) {
-        var label = x.name + (x.room ? ' · ' + x.room : '') + ' [' + x.type + ']';
+        var label = x.name + (x.room ? ' · ' + x.room : '') + ' [' + x.type + (x.msName ? ' · ' + x.msName : '') + ']';
         if (x.state) { var op = document.createElement('option'); op.value = label; o.appendChild(op); }
         if (x.action) { var op2 = document.createElement('option'); op2.value = label; a.appendChild(op2); }
       });
       return objects;
     });
   }
-  function find(label, key) { return (objects || []).find(function (x) { return (x.name + (x.room ? ' · ' + x.room : '') + ' [' + x.type + ']') === label && x[key]; }); }
+  function find(label, key) { return (objects || []).find(function (x) { return (x.name + (x.room ? ' · ' + x.room : '') + ' [' + x.type + (x.msName ? ' · ' + x.msName : '') + ']') === label && x[key]; }); }
 
   document.querySelectorAll('select[data-read]').forEach(function (s) {
     s.addEventListener('change', function () { var i = s.parentNode.querySelector('[data-read-pick]'); i.style.display = s.value === '__pick' ? '' : 'none'; if (s.value === '__pick') loadObjects(s.closest('[data-module]')); });
@@ -300,13 +302,13 @@
     card.querySelectorAll('tr[data-role]').forEach(function (tr) {
       var role = tr.getAttribute('data-role'), one = {};
       var rs = tr.querySelector('select[data-read]');
-      if (rs.value === '__pick') { var o = find(tr.querySelector('[data-read-pick]').value, 'state'); if (o) one.read = { uuid: o.state, name: o.name, control: o.uuid }; }
+      if (rs.value === '__pick') { var o = find(tr.querySelector('[data-read-pick]').value, 'state'); if (o) one.read = { uuid: o.state, name: o.name, control: o.uuid, ms: o.ms }; }
       else if (rs.value && rs.value.split('|')[0] !== rs.getAttribute('data-default')) { var pr = rs.value.split('|'); one.read = { uuid: pr[0], name: pr.slice(1).join('|') }; }
       var ws = tr.querySelector('select[data-write]');
       if (ws) {
         if (ws.value === 'vi') one.write = { via: 'vi', vi: tr.querySelector('[data-vi]').value };
         else if (ws.value === 'off') one.write = { via: 'off' };
-        else if (ws.value === '__pick') { var c = find(tr.querySelector('[data-write-pick]').value, 'action'); if (c) one.write = { via: 'direct', action: c.action, name: c.name }; }
+        else if (ws.value === '__pick') { var c = find(tr.querySelector('[data-write-pick]').value, 'action'); if (c) one.write = { via: 'direct', action: c.action, name: c.name, ms: c.ms }; }
         else if (ws.value.indexOf('direct|') === 0 && ws.getAttribute('data-default') !== 'direct') { var pw = ws.value.split('|'); one.write = { via: 'direct', action: pw[1], name: pw.slice(2).join('|') }; }
       }
       if (one.read || one.write) links[role] = one;
@@ -331,9 +333,17 @@
     });
   });
   document.querySelectorAll('[data-rediscover]').forEach(function (btn) {
-    btn.addEventListener('click', function () { fetch('/energy-manager/modules/' + btn.getAttribute('data-rediscover') + '/discover.json?refresh=1').then(function () { location.reload(); }); });
+    btn.addEventListener('click', function () {
+      var kind = btn.getAttribute('data-rediscover'), msg = document.querySelector('[data-history-msg="' + kind + '"]');
+      btn.disabled = true; msg.hidden = false; msg.textContent = L.searching;
+      fetch('/energy-manager/modules/' + kind + '/discover.json?refresh=1').then(function (r) { return r.json(); }).then(function (j) {
+        var ok = (j.found || []).filter(function (c) { return !c.error; });
+        msg.textContent = L.found.replace('{n}', ok.length).replace('{ms}', (j.structures || []).map(function (x) { return x.name + ' (' + x.controls + ')'; }).join(', '));
+        setTimeout(function () { location.reload(); }, 1800);
+      });
+    });
   });
-  var L = <%- JSON.stringify({ busy: t('Reading the statistics of the linked objects…'), done: t('Read {n} days: {roles}. Without statistics in Loxone: {without}.'), none: t('none') }) %>;
+  var L = <%- JSON.stringify({ searching: t('Reading the Loxone structure of every Miniserver again…'), found: t('{n} found; structure read from: {ms}.'), busy: t('Reading the statistics of the linked objects…'), done: t('Read {n} days: {roles}. Without statistics in Loxone: {without}.'), none: t('none') }) %>;
   document.querySelectorAll('[data-history]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var kind = btn.getAttribute('data-history'), msg = document.querySelector('[data-history-msg="' + kind + '"]');

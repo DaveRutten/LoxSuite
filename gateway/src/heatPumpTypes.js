@@ -23,8 +23,13 @@ function interpret(v, { electricKw = null, compressorMaxKw = 3.5 } = {}) {
   const elec = electricKw ?? v.electricPower ?? null;
   const running = v.running === 1 || (v.compressorHz || 0) > 0;
   const mode = fault ? 'fault' : defrost ? 'defrost' : !running ? 'idle' : v.valveDhw === 1 ? 'dhw' : 'heating';
-  const dT = Number.isFinite(v.flowTemp) && Number.isFinite(v.returnTemp) ? v.flowTemp - v.returnTemp : null;
-  const measuredHeat = v.flowRate > 0 && v.pumpOn !== 0 && dT !== null && dT > 0 ? r2((v.flowRate * dT * WATER_KJ_PER_L_K) / 60) : null;
+  // the heat from flow × ΔT — with own sensors per circuit (CV / tap water) the ones of the circuit in use
+  const onDhw = v.valveDhw === 1;
+  const fr = onDhw && Number.isFinite(v.dhwFlowRate) ? v.dhwFlowRate : v.flowRate;
+  const ft = onDhw && Number.isFinite(v.dhwFlowTemp) ? v.dhwFlowTemp : v.flowTemp;
+  const rt = onDhw && Number.isFinite(v.dhwReturnTemp) ? v.dhwReturnTemp : v.returnTemp;
+  const dT = Number.isFinite(ft) && Number.isFinite(rt) ? ft - rt : null;
+  const measuredHeat = fr > 0 && v.pumpOn !== 0 && dT !== null && dT > 0 ? r2((fr * dT * WATER_KJ_PER_L_K) / 60) : null;
   // a heat meter in the heating pipe (Kamstrup …) measures the heat best — but only while the heat pump
   // heats the house: tap water bypasses it (3-way valve); then the unit's own figure, else flow × ΔT
   const meterCounts = Number.isFinite(v.heatMeterPower) && v.valveDhw !== 1;

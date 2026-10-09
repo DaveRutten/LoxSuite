@@ -46,3 +46,11 @@ test('defrosting a lot and nothing known about calmer: tries one step calmer —
   const cold = tu.choose(model, { outdoorC: 1, rh: 95, current: { flowC: 35, step: 0, ntc: 0 }, roomBehindC: 1 });
   assert.deepEqual(cold.setting, { flowC: 35, step: 0, ntc: 0 }, 'comfort first');
 });
+
+test('quick restarts after a stop: run ½–1 °C longer; long stops: nothing', () => {
+  const quick = tu.runs(sim({ flowC: 35, step: 0, ntc: 0 }, { n: 8, runMin: 15, offMin: 6, defrostEvery: 0, elecKw: 1.5, heatKw: 4 }));
+  assert.equal(quick[1].offBeforeMin, 6);
+  assert.deepEqual([tu.overshoot(quick).overshootC, tu.overshoot(quick).medianOffMin], [1, 6]);
+  const calm = tu.runs(sim({ flowC: 35, step: 0, ntc: 0 }, { n: 8, runMin: 60, offMin: 45, defrostEvery: 0, elecKw: 1.5, heatKw: 4 }));
+  assert.equal(tu.overshoot(calm).overshootC, 0);
+});

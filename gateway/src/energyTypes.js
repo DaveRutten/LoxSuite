@@ -34,6 +34,9 @@ const ROLES = {
       flowTemp: { label: 'Flow temperature', unit: '°C', rw: 'r' },
       returnTemp: { label: 'Return temperature', unit: '°C', rw: 'r' },
       flowRate: { label: 'Flow', unit: 'l/min', rw: 'r' },
+      dhwFlowRate: { label: 'Flow in the tap-water circuit (own sensor)', unit: 'l/min', rw: 'r' },
+      dhwFlowTemp: { label: 'Flow temperature of the tap-water circuit (own sensor)', unit: '°C', rw: 'r' },
+      dhwReturnTemp: { label: 'Return temperature of the tap-water circuit (own sensor)', unit: '°C', rw: 'r' },
       pumpOn: { label: 'Circulation pump (1/0)', rw: 'r' },
       refrigerantTemp: { label: 'Refrigerant liquid temperature', unit: '°C', rw: 'r' },
       bufferFlowTemp: { label: 'Flow after the buffer tank', unit: '°C', rw: 'r' },
@@ -169,7 +172,7 @@ function writes(kind, type, want, { now = {}, last = {}, nowMs = Date.now(), max
     // direct to the Loxone control (its uuidAction), or a virtual input — the user's choice per role
     // (link()); without a choice: direct when there is a control to send to
     const direct = r.via ? r.via === 'direct' && r.action : !!r.action;
-    out.push({ ...w, value, reg: r.reg ?? null, raw: Math.round(value * (r.scale || 1)), ...(direct ? { action: r.action } : { vi: r.vi || viName(kind, w.role) }) });
+    out.push({ ...w, value, reg: r.reg ?? null, raw: Math.round(value * (r.scale || 1)), ...(direct ? { action: r.action, ...(r.writeMs || r.ms ? { ms: r.writeMs || r.ms } : {}) } : { vi: r.vi || viName(kind, w.role) }) });
   }
   return out;
 }
@@ -185,12 +188,12 @@ function link(kind, type, links = {}) {
     if (!def[role]) continue;
     let r = regs.find((x) => x.role === role);
     if (!r) { r = { key: role, role, label: l.read?.name || l.write?.name || def[role].label, rw: 'r', added: true }; regs.push(r); }
-    if (l.read?.uuid) { r.state = l.read.uuid; r.control = l.read.control || null; r.label = l.read.name || r.label; r.linked = true; }
+    if (l.read?.uuid) { r.state = l.read.uuid; r.control = l.read.control || null; r.ms = l.read.ms ?? null; r.label = l.read.name || r.label; r.linked = true; }
     const w = l.write;
     if (w && /w/.test(def[role].rw)) {
       if (w.via === 'off') { r.via = 'off'; r.rw = r.rw.includes('r') || r.state ? 'r' : ''; }
       else if (w.via === 'vi') { r.via = 'vi'; r.vi = w.vi || viName(kind, role); r.rw = 'rw'; }
-      else if (w.via === 'direct' && (w.action || r.action)) { r.via = 'direct'; r.action = w.action || r.action; if (w.name) r.writeLabel = w.name; r.rw = 'rw'; }
+      else if (w.via === 'direct' && (w.action || r.action)) { r.via = 'direct'; r.action = w.action || r.action; if (w.ms) r.writeMs = w.ms; if (w.name) r.writeLabel = w.name; r.rw = 'rw'; }
     }
   }
   return { ...type, registers: regs.filter((r) => r.rw), linked: true };
