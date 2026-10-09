@@ -72,6 +72,9 @@ const ROLES = {
       dhwPipeTemp: { label: 'Hot-water pipe temperature (towards the taps)', unit: '°C', rw: 'r' },
       heatMeterPower: { label: 'Heat meter: power (e.g. Kamstrup in the heating pipe)', unit: 'kW', rw: 'r' },
       heatMeterEnergy: { label: 'Heat meter: energy', unit: 'kWh', rw: 'r' },
+      heatMeterFlowTemp: { label: 'Heat meter: flow temperature', unit: '°C', rw: 'r' },
+      heatMeterReturnTemp: { label: 'Heat meter: return temperature', unit: '°C', rw: 'r' },
+      heatMeterFlowRate: { label: 'Heat meter: water flow (unit per installation)', rw: 'r' },
     },
     // the module needs each group: one of its roles (a writable one where it writes)
     need: [['tankTemp'], ['forceDhw', 'dhwSetpoint']],

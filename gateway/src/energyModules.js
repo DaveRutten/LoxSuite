@@ -33,7 +33,7 @@ const KINDS = ['heatpump', 'solar'];
 
 const DEFAULTS = {
   heatpump: {
-    enabled: false, mode: 'shadow', miniserver_id: null, device: null, type_key: null, links: {}, source: 'air',
+    enabled: false, mode: 'shadow', miniserver_id: null, device: null, type_key: null, links: {}, source: 'air', heat_meter_flow_unit: 'l/h',
     room: { enabled: true, controller: null, schedule: 'loxone', comfort_c: 20.5, setback_c: 19, comfort_from: '07:00', comfort_until: '22:30' },
     // bijsturen for long, calm runs: 'off' | 'advise' (shows it) | 'live' (sends it, with the module live)
     tuning: { mode: 'advise', flow_min: 25, flow_max: 45 },
@@ -84,6 +84,7 @@ async function discover(kind, { refresh = false } = {}) {
           const e = extra[r];
           c.roles[r] = { ...(e.read ? { read: { ...e.read, ms: o.ms.id } } : {}), ...(e.write ? { write: { ...e.write, ms: o.ms.id } } : {}), elsewhere: true };
         }
+        if (c.roles.heatMeterFlowTemp?.read?.ms === o.ms.id) for (const [k, x] of Object.entries(ed.heatMeterSiblings(ed.allObjects(o.s), c.roles.heatMeterFlowTemp.read.control))) if (!c.roles[k]) c.roles[k] = { read: { ...x.read, ms: o.ms.id }, elsewhere: true };
       }
       // the roles found elsewhere become part of its type (with their own Miniserver)
       c.type = ed.asType(kind, { uuid: c.uuid, name: c.name, members: [] }, c.roles, et.loadTypes(kind).find((t) => t.key === c.known?.key));
@@ -197,7 +198,7 @@ async function heatpumpStatus(nowMs = Date.now()) {
   const r = await resolve('heatpump');
   const { cfg, type, msId } = r;
   const v = msId ? et.fromRaw(type, readRaw(type, msId)) : {};
-  const state = hp.interpret(v);
+  const state = hp.interpret(v, { meterFlowUnit: cfg.heat_meter_flow_unit || 'l/h' });
   const { localOf, clock, localHour } = localTools();
   const { limits, warnings } = lg.dhwLimits({ ...cfg.limits, hpMaxC: cfg.limits.hpMaxC });
   // draws learned from the kept tank temperature
@@ -465,7 +466,8 @@ async function importStatistics(kind, { days = 14, callTool = null, nowMs = Date
       const heatingTank = x.valveDhw === 1 || (x.valveDhw === undefined && x.forceDhw === 1);
       if (Number.isFinite(x.tankTemp)) tank.push({ ms: x.ms, temp: x.tankTemp, heating: heatingTank, ...(Number.isFinite(x.dhwPipeTemp) ? { pipe: x.dhwPipeTemp } : {}) });
       if (Number.isFinite(x.outdoorTemp)) {
-        const heatKw = Number.isFinite(x.heatMeterPower) && x.valveDhw !== 1 ? x.heatMeterPower : x.thermalPower;
+        const meterKw = Number.isFinite(x.heatMeterPower) ? x.heatMeterPower : hp.heatFromMeter(x, r.cfg.heat_meter_flow_unit || 'l/h');
+        const heatKw = Number.isFinite(meterKw) && x.valveDhw !== 1 ? meterKw : x.thermalPower;
         weather.push({ ms: x.ms, outdoorC: x.outdoorTemp, rh: x.outdoorRh ?? null, defrost: x.defrost === 2, elecKw: x.electricPower ?? null, heatKw: heatKw ?? null, step: Number.isFinite(x.powerStep) ? x.powerStep : hw.stepOf(x.powerLimit1 === 1, x.powerLimit2 === 1), ntc: Number.isFinite(x.ntcMode) ? x.ntcMode : 0 });
         if (Number.isFinite(x.roomTemp)) room.push({ ms: x.ms, roomC: x.roomTemp, outdoorC: x.outdoorTemp, heating: (x.compressorHz || 0) > 0 && x.valveDhw !== 1 && x.defrost !== 2, ...(Number.isFinite(x.roomTarget) ? { targetC: x.roomTarget } : {}) });
         tune.push({ ms: x.ms, running: (x.compressorHz || 0) > 0 && x.valveDhw !== 1, defrost: x.defrost === 2, elecKw: x.electricPower ?? null, heatKw: heatKw ?? null, outdoorC: x.outdoorTemp, rh: x.outdoorRh ?? null, flowC: Number.isFinite(x.logicFlowC) ? x.logicFlowC : x.heatingMode === 1 ? (x.flowSetpoint ?? x.roomSetpoint ?? null) : (x.flowSetpoint ?? null), step: Number.isFinite(x.powerStep) ? x.powerStep : hw.stepOf(x.powerLimit1 === 1, x.powerLimit2 === 1), ntc: Number.isFinite(x.ntcMode) ? x.ntcMode : 0 });

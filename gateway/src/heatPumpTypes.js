@@ -17,7 +17,16 @@ const WATER_KJ_PER_L_K = 4.186;
 //   boost: the booster / immersion heater. Read directly when the type has it (A1M: Booster Heater,
 //   Immersion Heater, Heat Source ≠ 0); otherwise guessed from the power: power while the compressor
 //   stands still (and it is not defrosting), or more than the compressor can draw on its own.
-function interpret(v, { electricKw = null, compressorMaxKw = 3.5 } = {}) {
+// Pure: the heat a meter without its own power output measures: water flow × (flow − return) × 4.186.
+//   unit of the flow: 'l/h' (Kamstrup), 'l/min' or 'm3/h'
+function heatFromMeter(v, unit = 'l/h') {
+  if (!Number.isFinite(v.heatMeterFlowRate) || !Number.isFinite(v.heatMeterFlowTemp) || !Number.isFinite(v.heatMeterReturnTemp)) return null;
+  const lpm = unit === 'l/min' ? v.heatMeterFlowRate : unit === 'm3/h' ? (v.heatMeterFlowRate * 1000) / 60 : v.heatMeterFlowRate / 60;
+  const dT = v.heatMeterFlowTemp - v.heatMeterReturnTemp;
+  return lpm > 0 && dT > 0 ? r2((lpm * dT * WATER_KJ_PER_L_K) / 60) : 0;
+}
+
+function interpret(v, { electricKw = null, compressorMaxKw = 3.5, meterFlowUnit = 'l/h' } = {}) {
   const fault = v.fault === 1 || (v.errorCode !== undefined && v.errorCode !== 8000 && v.errorCode !== 0 && v.fault !== undefined);
   const defrost = v.defrost === 2;
   const elec = electricKw ?? v.electricPower ?? null;
@@ -32,8 +41,9 @@ function interpret(v, { electricKw = null, compressorMaxKw = 3.5 } = {}) {
   const measuredHeat = fr > 0 && v.pumpOn !== 0 && dT !== null && dT > 0 ? r2((fr * dT * WATER_KJ_PER_L_K) / 60) : null;
   // a heat meter in the heating pipe (Kamstrup …) measures the heat best — but only while the heat pump
   // heats the house: tap water bypasses it (3-way valve); then the unit's own figure, else flow × ΔT
-  const meterCounts = Number.isFinite(v.heatMeterPower) && v.valveDhw !== 1;
-  const thermalKw = meterCounts ? v.heatMeterPower : (v.thermalPower ?? measuredHeat);
+  const meterKw = Number.isFinite(v.heatMeterPower) ? v.heatMeterPower : heatFromMeter(v, meterFlowUnit);
+  const meterCounts = Number.isFinite(meterKw) && v.valveDhw !== 1;
+  const thermalKw = meterCounts ? meterKw : (v.thermalPower ?? measuredHeat);
   const cop = thermalKw !== null && thermalKw !== undefined && elec > 0.2 ? r2(thermalKw / elec) : null;
   let boost = false; let boostWhy = null;
   if (v.boosterHeater !== undefined || v.immersionHeater !== undefined || v.heatSource !== undefined) {
@@ -115,4 +125,4 @@ function writesFor({ type, plan, now, last = {}, nowMs = Date.now(), settings = 
   return et.writes('heatpump', type, want, { now: { ...now, forceDhw: undefined }, last: lastFor, nowMs, maxWritesPerHour: s.maxWritesPerHour ?? 6 });
 }
 
-module.exports = { interpret, dhwSetpoint, writesFor };
+module.exports = { interpret, heatFromMeter, dhwSetpoint, writesFor };

@@ -58,6 +58,7 @@ const SUGGEST = {
     ['outdoorRh', /buitenluchtvochtigheid|luchtvochtigheid buiten|outdoor humidity|au(ss|ß)enfeuchte/i, 'r'],
     ['dhwPipeTemp', /leiding.*(badkamer|tapwater|warm ?water)|(tapwater|warm ?water).*leiding|hot.?water pipe|circulatieleiding/i, 'r'],
     ['heatMeterPower', /(kamstrup|warmtemeter|heat ?meter|wärmezähler).*(vermogen|power|leistung)/i, 'r'],
+    ['heatMeterFlowTemp', /impulsion|(kamstrup|warmtemeter|heat ?meter).*(aanvoer|flow ?temp)/i, 'r'],
     ['heatMeterEnergy', /(kamstrup|warmtemeter|heat ?meter|wärmezähler).*(energie|energy|kwh|zähler)/i, 'r'],
   ],
   solar: [

@@ -311,6 +311,7 @@ router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), 
   if (b.mode !== undefined) c.mode = b.mode === 'live' ? 'live' : 'shadow';
   if (b.device !== undefined) { c.device = b.device ? String(b.device).slice(0, 80) : null; c.miniserver_id = b.miniserver_id ? Number(b.miniserver_id) : null; }
   if (b.type_key !== undefined) c.type_key = b.type_key ? String(b.type_key).slice(0, 80) : null;
+  if (kind === 'heatpump' && b.heat_meter_flow_unit !== undefined) c.heat_meter_flow_unit = ['l/h', 'l/min', 'm3/h'].includes(b.heat_meter_flow_unit) ? b.heat_meter_flow_unit : 'l/h';
   if (kind === 'heatpump' && b.source !== undefined) c.source = ['air', 'water', 'ground'].includes(b.source) ? b.source : 'air';
   if (b.links && typeof b.links === 'object') {
     c.links = {};

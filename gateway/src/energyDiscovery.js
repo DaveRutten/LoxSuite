@@ -76,7 +76,7 @@ function bestKnown(members, types) {
 // power-limit steps and the NTC of a sequential controller, the outdoor sensors): looked for in the
 // whole structure, by name, when the device itself doesn't have them.
 const ANCHORS = { heatpump: ['tankTemp', 'dhwSetpoint', 'forceDhw', 'compressorHz', 'valveDhw'], solar: ['acPower', 'dcPower', 'powerLimitPct', 'powerControlEnable', 'status'] };
-const ELSEWHERE = { heatpump: ['outdoorTemp', 'outdoorRh', 'roomTemp', 'dhwPipeTemp', 'heatMeterPower', 'heatMeterEnergy', 'powerStep', 'powerLimit1', 'powerLimit2', 'ntcMode', 'ntcRelay1', 'ntcRelay2', 'logicFlowC'], solar: [] };
+const ELSEWHERE = { heatpump: ['heatMeterFlowTemp', 'outdoorTemp', 'outdoorRh', 'roomTemp', 'dhwPipeTemp', 'heatMeterPower', 'heatMeterEnergy', 'powerStep', 'powerLimit1', 'powerLimit2', 'ntcMode', 'ntcRelay1', 'ntcRelay2', 'logicFlowC'], solar: [] };
 function allObjects(structure) {
   const rooms = structure?.rooms || {};
   return Object.entries(structure?.controls || {}).map(([uuid, c]) => ({ uuid, name: c.name, room: rooms[c.room]?.name || null, state: Object.values(c.states || {}).find((x) => typeof x === 'string') || null, action: c.uuidAction || null }));
@@ -109,6 +109,7 @@ function fromStructure(kind, structure, { types = et.loadTypes(kind) } = {}) {
       const others = allObjects(structure).filter((o) => !memberIds.has(o.uuid));
       const extra = rolesOf(kind, others);
       for (const r of wanted) if (extra[r]) roles[r] = { ...extra[r], elsewhere: true };
+      if (roles.heatMeterFlowTemp?.read?.control) Object.assign(roles, Object.fromEntries(Object.entries(heatMeterSiblings(others, roles.heatMeterFlowTemp.read.control)).filter(([k]) => !roles[k])));
     }
     const known = bestKnown(d.members, types);
     const type = asType(kind, d, roles, known?.type);
@@ -141,4 +142,15 @@ function roomControllers(structure) {
   return out.sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
-module.exports = { rolesOf, asType, bestKnown, fromStructure, roomControllers, allObjects, ELSEWHERE };
+// Pure: a heat meter found by its flow temperature ("Temp. Impulsion"): its return and its water flow are the
+// objects of the same device (same uuid start) — not the heat pump's own "Return Temp".
+function heatMeterSiblings(objects, flowTempUuid) {
+  const prefix = String(flowTempUuid || '').split('-')[0];
+  const sib = objects.filter((o) => o.uuid !== flowTempUuid && String(o.uuid).split('-')[0] === prefix && o.state);
+  const ret = sib.find((o) => /return|retour|rücklauf/i.test(o.name));
+  const flow = sib.find((o) => /flow|debiet|durchfluss/i.test(o.name) && !/temp/i.test(o.name));
+  const one = (o) => (o ? { read: { uuid: o.state, name: o.name, control: o.uuid }, elsewhere: true } : null);
+  return Object.fromEntries([['heatMeterReturnTemp', one(ret)], ['heatMeterFlowRate', one(flow)]].filter(([, x]) => x));
+}
+
+module.exports = { heatMeterSiblings, rolesOf, asType, bestKnown, fromStructure, roomControllers, allObjects, ELSEWHERE };

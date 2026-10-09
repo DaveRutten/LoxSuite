@@ -133,3 +133,16 @@ test('a meter in the basement (imported, exported, grid power) is no solar inver
   } };
   assert.deepEqual(ed.fromStructure('solar', s), []);
 });
+
+test('the Kamstrup is found by "Temp. Impulsion"; its return and flow are its own, not the heat pump\'s "Return Temp"', () => {
+  const s = JSON.parse(JSON.stringify(structure));
+  s.controls['20aa0001-0009-0001-ffff1'] = { name: 'Return Temp', type: 'InfoOnlyAnalog', room: 'r', cat: 'c', states: { value: 's-ret' } };
+  s.controls['80aa0001-0001-0001-ffff1'] = { name: 'Temp. Impulsion', type: 'InfoOnlyAnalog', room: 'r', cat: 'c', states: { value: 'k-flow' } };
+  s.controls['80aa0001-0002-0001-ffff1'] = { name: 'Return Temp.', type: 'InfoOnlyAnalog', room: 'r', cat: 'c', states: { value: 'k-ret' } };
+  s.controls['80aa0001-0003-0001-ffff1'] = { name: 'Current Water Flow', type: 'InfoOnlyAnalog', room: 'r', cat: 'c', states: { value: 'k-lph' } };
+  const [c] = ed.fromStructure('heatpump', s);
+  assert.equal(c.roles.heatMeterFlowTemp.read.uuid, 'k-flow');
+  assert.equal(c.roles.heatMeterReturnTemp.read.uuid, 'k-ret');
+  assert.equal(c.roles.heatMeterFlowRate.read.uuid, 'k-lph');
+  assert.equal(c.roles.returnTemp.read.uuid, 's-ret', 'the heat pump keeps its own');
+});

@@ -109,3 +109,13 @@ test('a temperature passed on ×100 or ×10 by the own Loxone logic is read as �
   const w = hp.writesFor({ type: { registers: [{ key: 'q1', role: 'powerLimit1', rw: 'rw', action: 'a1' }] }, plan: { mode: 'free', step: 75 }, now: {} });
   assert.deepEqual(w, []);
 });
+
+test('a heat meter without power (Kamstrup: flow temp, return, flow in l/h): the heat from flow × ΔT', () => {
+  const v = { heatMeterFlowTemp: 32.4, heatMeterReturnTemp: 27.2, heatMeterFlowRate: 1140 };
+  assert.equal(hp.heatFromMeter(v, 'l/h'), 6.89); // 19 l/min × 5.2 K
+  assert.equal(hp.heatFromMeter({ ...v, heatMeterFlowRate: 19 }, 'l/min'), 6.89);
+  assert.equal(hp.heatFromMeter({ ...v, heatMeterFlowRate: 1.14 }, 'm3/h'), 6.89);
+  const st = hp.interpret({ running: 1, compressorHz: 40, valveDhw: 0, thermalPower: 9.9, electricPower: 2, ...v });
+  assert.equal(st.thermalKw, 6.89, 'the meter wins over the unit\'s own figure');
+  assert.equal(st.cop, 3.45);
+});
