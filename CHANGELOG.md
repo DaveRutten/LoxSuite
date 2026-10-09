@@ -13,6 +13,13 @@ All notable changes to this project are documented in this file.
   pull requests are tested as before, and both workflows can be run by hand (a hand-run image build on main also
   writes `:latest`).
 
+## [0.59.2-alpha.1] - 2026-10-09
+
+### Fixed
+- **Solar panels showed 26,373 kW**: SolarEdge outputs named without *_RAW* (*I_AC_Power* with *I_AC_Power_SF*, the energy
+  counters with *M_Energy_SF*) now get their scale factor and W → kW, as the Loxone formula does; such names are
+  recognised as the SolarEdge type.
+
 ## [0.59.1-alpha.1] - 2026-10-09
 
 ### Fixed
