@@ -13,6 +13,21 @@ All notable changes to this project are documented in this file.
   pull requests are tested as before, and both workflows can be run by hand (a hand-run image build on main also
   writes `:latest`).
 
+## [0.58.1-alpha.1] - 2026-10-09
+
+### Added
+- **A heat meter without a power output** (a Kamstrup with flow temperature, return and water flow): the heat from
+  flow × ΔT, used while the heat pump heats the house. Found by its flow temperature (*Temp. Impulsion*), its return
+  and flow taken from the same device (not the heat pump's own *Return Temp*). The flow unit is *automatic* (below
+  100: l/min, else l/h) or l/min, l/h, m³/h — Loxone's label can say l/h while a correction makes it l/min.
+
+### Fixed
+- Temperatures the own Loxone logic passes on ×100 or ×10 (3250) are read as °C (32.5 °C).
+- A power step given as a percentage (75) and the NTC as its temperature (14) are shown as *75 %* and *NTC 14 °C*;
+  the relays are only switched for steps 0–2.
+- Solar panels found a meter (*Kelder*: imported, exported, grid power) as an inverter: a candidate now needs a role
+  only that kind of device has.
+
 ## [0.58.0-alpha.1] - 2026-10-09
 
 ### Changed
