@@ -376,7 +376,7 @@
   <div class="ls-fold-list">
   <% emLoads.forEach(l => { %>
     <details>
-      <summary><strong><%= l.name %></strong> <span class="hint">· <%= t(emKinds[l.kind].label) %> <%= t('· priority') %> <%= l.priority %><%= l.enabled ? '' : ' · off' %></span></summary>
+      <summary><strong><%= l.name %></strong> <span class="hint">· <%= t(emKinds[l.kind].label) %><% if (l.kind !== 'meter') { %> <%= t('· priority') %> <%= l.priority %><% } %><%= l.enabled ? '' : ' · off' %></span></summary>
       <%- include('partials/energy-load-form', { l, kinds: emKinds, meters: emMeters, miniservers, seenStatuses, homeConnect }) %>
     </details>
   <% }) %>

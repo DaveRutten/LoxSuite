@@ -385,14 +385,14 @@
       (d.live && d.live.ratio != null && Math.abs(d.live.ratio - 1) > 0.15 ? ' · ' + TL('plan adjusted to the real values') : '') : '';
     if (!d.loads.length) { document.getElementById('em-now').innerHTML = '<p class="hint" style="margin:0;">No consumers yet &mdash; add one below.</p>'; }
     else document.getElementById('em-now').innerHTML = '<div style="overflow-x:auto;"><table><thead><tr><th>Consumer</th><th>State</th><th>Power now</th><th>Would send (virtual input = value)</th><th>Why</th></tr></thead><tbody>' + d.loads.map(function (l) {
-      return '<tr><td><a href="/energy-manager/loads/' + l.id + '"><strong>' + esc(l.name) + '</strong></a><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(l.kindLabel) + ' · prio ' + l.priority + '</div></td><td>' + stateHtml(l.live) + '</td><td>' + (l.live && l.live.kw != null ? nf(l.live.kw, 2) + ' kW' : (l.live && l.live.found === false ? '<span class="hint">not found</span>' : '—')) + (l.running ? ' <span class="badge">running</span>' : '') + standbyHtml(l) + progressHtml(l.progress) + '</td><td>' +
+      return '<tr><td><a href="/energy-manager/loads/' + l.id + '"><strong>' + esc(l.name) + '</strong></a><div class="hint" style="margin:0; font-size:0.75rem;">' + esc(l.kindLabel) + (l.kind === 'meter' ? '' : ' · prio ' + l.priority) + '</div></td><td>' + stateHtml(l.live) + '</td><td>' + (l.live && l.live.kw != null ? nf(l.live.kw, 2) + ' kW' : (l.live && l.live.found === false ? '<span class="hint">not found</span>' : '—')) + (l.running ? ' <span class="badge">running</span>' : '') + standbyHtml(l) + progressHtml(l.progress) + '</td><td>' +
         l.signals.map(function (s) { return '<code>' + esc(s.vi) + '</code> = ' + val(s); }).join('<br>') + '</td><td class="hint">' + esc(l.reason || '') + '</td></tr>';
     }).join('') + '</tbody></table></div>';
     planChart(d);
     unknownHtml(d);
     dayTypesHtml(d);
     document.getElementById('em-loads').innerHTML = d.loads.map(function (l) {
-      var lr = l.learned || {}, h = '<div class="card" data-card-key="load-' + l.id + '"><h2 style="margin-top:0;">' + esc(l.name) + '</h2><p class="hint" style="margin:-0.5rem 0 0.7rem;">' + esc(l.kindLabel) + ' · prio ' + l.priority + '</p>';
+      var lr = l.learned || {}, h = '<div class="card" data-card-key="load-' + l.id + '"><h2 style="margin-top:0;">' + esc(l.name) + '</h2><p class="hint" style="margin:-0.5rem 0 0.7rem;">' + esc(l.kindLabel) + (l.kind === 'meter' ? '' : ' · prio ' + l.priority) + '</p>';
       var tiles = '';
       if (l.kind === 'appliance') {
         var runs = l.runs || [], saved = runs.reduce(function (a, r) { return a + (r.cost_eur != null && r.best_cost_eur != null ? r.cost_eur - r.best_cost_eur : 0); }, 0);

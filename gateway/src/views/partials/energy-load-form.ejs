@@ -3,17 +3,18 @@
   <% if (l) { %><input type="hidden" name="id" value="<%= l.id %>"><% } %>
   <div class="form-grid">
     <div><label><%= t('Name') %></label><input type="text" name="name" value="<%= l ? l.name : '' %>" placeholder="<%= t('e.g. Tap water') %>"></div>
-    <div><label><%= t('Kind') %></label><select name="kind" data-kindsel="<%= fid %>"><% Object.keys(kinds).forEach(k => { %><option value="<%= k %>" <%= kind === k ? 'selected' : '' %>><%= kinds[k].label %></option><% }) %></select></div>
+    <div><label><%= t('Kind') %></label><select name="kind" data-kindsel="<%= fid %>"><% Object.keys(kinds).forEach(k => { %><option value="<%= k %>" <%= kind === k ? 'selected' : '' %>><%= t(kinds[k].label) %></option><% }) %></select></div>
     <div><label><%= t('Loxone meter (optional)') %></label><select name="meter"><option value=""><%= t('— choose —') %></option><% meters.forEach(m => { const v = m.miniserverId + '|' + m.uuid; %><option value="<%= v %>" <%= l && (l.miniserver_id + '|' + l.meter_uuid) === v ? 'selected' : '' %>><%= m.name %><%= meters.some(x => x.miniserverId !== m.miniserverId) ? ' (' + m.miniserverName + ')' : '' %></option><% }) %></select></div>
-    <div><label><%= t('Priority (1 = first)') %></label><input type="text" name="priority" value="<%= l ? l.priority : 5 %>"></div>
+    <div data-not-meter><label><%= t('Priority (1 = first)') %></label><input type="text" name="priority" value="<%= l ? l.priority : 5 %>"></div>
     <div style="align-self:end;"><label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" name="enabled" value="1" <%= !l || l.enabled ? 'checked' : '' %>> <%= t('Active') %></label></div>
   </div>
   <% if (l) { %><p class="hint" style="margin:0.5rem 0 0;"><a href="/energy-manager/loads/<%= l.id %>#history"><%= t('History & learned →') %></a></p><% } %>
+  <p class="mm-meter-note" data-only-meter style="margin:0.5rem 0 0;"><%= t('Only measured: pick the Loxone meter above, or its power and energy counter below. LoxSuite learns when and how much it uses and what it costs — it never switches it.') %></p>
   <details class="em-signals" style="margin-top:0.6rem;" <%= src.onoff || src.status || src.power || src.energy || src.start_in || src.ready || !l ? 'open' : '' %>>
     <summary style="cursor:pointer;"><strong><%= t('Signals from Loxone') %></strong></summary>
     <div class="form-grid" style="margin-top:0.5rem;">
       <div><label><%= t('Miniserver') %></label><select name="src_ms" data-ms-pick><% msList.forEach(m => { %><option value="<%= m.id %>" <%= String(msSel) === String(m.id) ? 'selected' : '' %>><%= m.name %></option><% }) %></select></div>
-      <div style="grid-column:span 2;"><label><%= t('Loxone device') %></label><select name="src_device" data-device-pick data-current="<%= src.device || '' %>"><option value=""><%= t('— choose —') %></option><% if (src.device) { %><option value="<%= src.device %>" selected><%= src.device %></option><% } %></select>
+      <div data-not-meter style="grid-column:span 2;"><label><%= t('Loxone device') %></label><select name="src_device" data-device-pick data-current="<%= src.device || '' %>"><option value=""><%= t('— choose —') %></option><% if (src.device) { %><option value="<%= src.device %>" selected><%= src.device %></option><% } %></select>
         <p class="hint" data-device-msg style="margin:0.2rem 0 0;"></p></div>
     </div>
     <details class="em-sig-more" style="margin-top:0.4rem;" <%= src.device ? '' : 'open' %>>
@@ -22,24 +23,24 @@
       <div style="grid-column:span 2;"><label><%= t('Search states') %></label><input type="text" data-state-filter placeholder="<%= t('room, name or state — e.g. washing machine') %>"><span class="hint" data-state-msg style="margin:0;"></span></div>
     </div>
     <div class="form-grid" style="margin-top:0.4rem;">
-      <div><label><%= t('On / off') %></label><select name="src_onoff" data-state-pick="onoff" data-current="<%= src.onoff || '' %>"><option value=""><%= t('— none —') %></option><% if (src.onoff) { %><option value="<%= src.onoff %>" selected><%= src.onoff %></option><% } %></select>
+      <div data-not-meter><label><%= t('On / off') %></label><select name="src_onoff" data-state-pick="onoff" data-current="<%= src.onoff || '' %>"><option value=""><%= t('— none —') %></option><% if (src.onoff) { %><option value="<%= src.onoff %>" selected><%= src.onoff %></option><% } %></select>
         <label style="display:flex; gap:0.3rem; font-weight:normal; margin-top:0.2rem;"><input type="checkbox" name="src_onoff_invert" value="1" <%= src.onoff_invert ? 'checked' : '' %>> <%= t('inverted (0 = on)') %></label></div>
-      <div><label><%= t('Status') %></label><select name="src_status" data-state-pick="status" data-current="<%= src.status || '' %>"><option value=""><%= t('— none —') %></option><% if (src.status) { %><option value="<%= src.status %>" selected><%= src.status %></option><% } %></select><p class="hint" data-status-hint style="margin:0.2rem 0 0;"></p></div>
+      <div data-not-meter><label><%= t('Status') %></label><select name="src_status" data-state-pick="status" data-current="<%= src.status || '' %>"><option value=""><%= t('— none —') %></option><% if (src.status) { %><option value="<%= src.status %>" selected><%= src.status %></option><% } %></select><p class="hint" data-status-hint style="margin:0.2rem 0 0;"></p></div>
       <div><label><%= t('Power') %></label><div style="display:flex; gap:0.3rem;"><select name="src_power" data-state-pick="power" data-current="<%= src.power || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.power) { %><option value="<%= src.power %>" selected><%= src.power %></option><% } %></select><select name="src_power_unit" style="width:6em;"><option value="W" <%= src.power_unit !== 'kW' ? 'selected' : '' %>>W</option><option value="kW" <%= src.power_unit === 'kW' ? 'selected' : '' %>>kW</option></select></div></div>
-      <div><label><%= t('Temperature (room or tank)') %></label><select name="src_temp" data-state-pick="temp" data-current="<%= src.temp || '' %>"><option value=""><%= t('— none —') %></option><% if (src.temp) { %><option value="<%= src.temp %>" selected><%= src.temp %></option><% } %></select></div>
-      <div><label><%= t('Ready to start') %></label><select name="src_ready" data-state-pick="ready" data-current="<%= src.ready || '' %>"><option value=""><%= t('— none —') %></option><% if (src.ready) { %><option value="<%= src.ready %>" selected><%= src.ready %></option><% } %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('Optional: Home Connect "remote start allowed". A status text like "Startklaar" works too.') %></p></div>
-      <div><label><%= t('Remaining time') %></label><select name="src_remaining" data-state-pick="remaining" data-current="<%= src.remaining || '' %>"><option value=""><%= t('— none —') %></option><% if (src.remaining) { %><option value="<%= src.remaining %>" selected><%= src.remaining %></option><% } %></select></div>
-      <div><label><%= t('Starts in') %></label><div style="display:flex; gap:0.3rem;"><select name="src_start_in" data-state-pick="startIn" data-current="<%= src.start_in || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.start_in) { %><option value="<%= src.start_in %>" selected><%= src.start_in %></option><% } %></select><select name="src_start_in_unit" style="width:6em;"><% [['h', 'h'], ['min', 'min'], ['s', 's']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= (src.start_in_unit || 'h') === v ? 'selected' : '' %>><%= lbl %></option><% }) %></select></div><p class="hint" style="margin:0.2rem 0 0;"><%= t('Optional: time until a delayed start (Home Connect). A status text like "Ingepland – start over 3 uur" works too.') %></p></div>
+      <div data-not-meter><label><%= t('Temperature (room or tank)') %></label><select name="src_temp" data-state-pick="temp" data-current="<%= src.temp || '' %>"><option value=""><%= t('— none —') %></option><% if (src.temp) { %><option value="<%= src.temp %>" selected><%= src.temp %></option><% } %></select></div>
+      <div data-not-meter><label><%= t('Ready to start') %></label><select name="src_ready" data-state-pick="ready" data-current="<%= src.ready || '' %>"><option value=""><%= t('— none —') %></option><% if (src.ready) { %><option value="<%= src.ready %>" selected><%= src.ready %></option><% } %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('Optional: Home Connect "remote start allowed". A status text like "Startklaar" works too.') %></p></div>
+      <div data-not-meter><label><%= t('Remaining time') %></label><select name="src_remaining" data-state-pick="remaining" data-current="<%= src.remaining || '' %>"><option value=""><%= t('— none —') %></option><% if (src.remaining) { %><option value="<%= src.remaining %>" selected><%= src.remaining %></option><% } %></select></div>
+      <div data-not-meter><label><%= t('Starts in') %></label><div style="display:flex; gap:0.3rem;"><select name="src_start_in" data-state-pick="startIn" data-current="<%= src.start_in || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.start_in) { %><option value="<%= src.start_in %>" selected><%= src.start_in %></option><% } %></select><select name="src_start_in_unit" style="width:6em;"><% [['h', 'h'], ['min', 'min'], ['s', 's']].forEach(([v, lbl]) => { %><option value="<%= v %>" <%= (src.start_in_unit || 'h') === v ? 'selected' : '' %>><%= lbl %></option><% }) %></select></div><p class="hint" style="margin:0.2rem 0 0;"><%= t('Optional: time until a delayed start (Home Connect). A status text like "Ingepland – start over 3 uur" works too.') %></p></div>
       <div><label><%= t('Energy counter') %></label><div style="display:flex; gap:0.3rem;"><select name="src_energy" data-state-pick="energy" data-current="<%= src.energy || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.energy) { %><option value="<%= src.energy %>" selected><%= src.energy %></option><% } %></select><select name="src_energy_unit" style="width:6.5em;"><option value="kWh" <%= src.energy_unit !== 'Wh' ? 'selected' : '' %>>kWh</option><option value="Wh" <%= src.energy_unit === 'Wh' ? 'selected' : '' %>>Wh</option></select></div></div>
     </div>
     <div class="form-grid" style="margin-top:0.4rem;">
-      <div style="grid-column:span 2;" data-status-map><label><%= t('Status values') %></label><textarea name="src_status_map" rows="3" placeholder="<%= t('0=Off, 1=Washing, 2=Spinning, 3=Done (one per line or comma)') %>"><%= src.status_map || '' %></textarea>
+      <div data-not-meter style="grid-column:span 2;" data-status-map><label><%= t('Status values') %></label><textarea name="src_status_map" rows="3" placeholder="<%= t('0=Off, 1=Washing, 2=Spinning, 3=Done (one per line or comma)') %>"><%= src.status_map || '' %></textarea>
         <div class="btn-row" style="margin:0.25rem 0 0;"><button type="button" class="btn-soft" data-status-preset="homeconnect"><%= t('Fill in: Home Connect') %></button></div></div>
-      <div><label><%= t('Values that mean running') %></label><input type="text" name="src_status_on" value="<%= src.status_on || '' %>" placeholder="1, 2"><p class="hint" style="margin:0.2rem 0 0;"><%= t('Empty: everything except off, idle, done, paused or waiting.') %></p>
+      <div data-not-meter><label><%= t('Values that mean running') %></label><input type="text" name="src_status_on" value="<%= src.status_on || '' %>" placeholder="1, 2"><p class="hint" style="margin:0.2rem 0 0;"><%= t('Empty: everything except off, idle, done, paused or waiting.') %></p>
         <% const seen = (typeof seenStatuses !== 'undefined' && l && seenStatuses[l.id]) || []; if (seen.length) { %><div class="hint" style="margin:0.3rem 0 0;"><%= t('Seen — tap what means running:') %><div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.2rem;"><% seen.forEach(x => { %><button type="button" class="chip" data-status-chip="<%= x.status %>" title="<%= x.hours %> h"><%= x.status %></button><% }) %></div></div><% } %></div>
     </div>
     </details>
-    <p class="hint" style="margin:0.4rem 0 0;"><%= t('On/off is the basis: LoxSuite learns when and how long it runs. A status tells it what it is doing (and how long each step takes); power or an energy counter gives the real kWh — without them it estimates from the kW above.') %></p>
+    <p data-not-meter class="hint" style="margin:0.4rem 0 0;"><%= t('On/off is the basis: LoxSuite learns when and how long it runs. A status tells it what it is doing (and how long each step takes); power or an energy counter gives the real kWh — without them it estimates from the kW above.') %></p>
   </details>
   <div class="form-grid" data-kind="dhw" data-for="<%= fid %>" style="margin-top:0.6rem;">
     <div><label><%= t('Power while heating (kW)') %></label><input type="text" name="s_kw" value="<%= s.kw ?? kinds.dhw.defaults.kw %>"></div>
@@ -78,11 +79,11 @@
     <p class="hint" data-em-cmd-msg style="margin:0.3rem 0 0;"></p>
   </div>
   <% } %>
-  <div class="btn-row" style="margin:0.6rem 0 0; gap:1.2rem;"><input type="hidden" name="s_use_patterns_sent" value="1">
+  <div data-not-meter class="btn-row" style="margin:0.6rem 0 0; gap:1.2rem;"><input type="hidden" name="s_use_patterns_sent" value="1">
     <label style="display:inline-flex; gap:0.3rem; font-weight:normal;" title="<%= t('(tap water hot before its usual use; an appliance\'s usual run gets a best start)') %>"><input type="checkbox" name="s_use_patterns" value="1" <%= s.use_patterns !== false ? 'checked' : '' %>> <%= t('Use learned patterns') %></label>
     <label style="display:inline-flex; gap:0.3rem; font-weight:normal;" title="<%= t('The kW is learned from the meter after a few days (tick to keep your own value):') %>"><input type="checkbox" name="s_kw_fixed" value="1" <%= s.kw_fixed ? 'checked' : '' %>> <%= t('keep my kW') %></label>
   </div>
-  <details style="margin-top:0.3rem;"><summary class="hint" style="cursor:pointer;"><%= t('Virtual input names (for later)') %></summary>
+  <details data-not-meter style="margin-top:0.3rem;"><summary class="hint" style="cursor:pointer;"><%= t('Virtual input names (for later)') %></summary>
     <div class="form-grid" style="margin-top:0.4rem;">
       <% Object.keys(kinds).forEach(k => { kinds[k].signals.forEach(sig => { %>
         <div data-kind="<%= k %>" data-for="<%= fid %>"><label><%= sig.suffix %> (<%= sig.unit %>)</label><input type="text" name="vi_<%= sig.key %>" value="<%= l && l.kind === k && s.vi && s.vi[sig.key] ? s.vi[sig.key] : '' %>" placeholder="<%= l && l.signals ? (l.signals.find(x => x.key === sig.key) || {}).vi || '' : 'LoxSuite_<name>_' + sig.suffix %>"></div>
@@ -105,7 +106,14 @@
       Array.prototype.forEach.call(el.querySelectorAll('input,select'), function (i) { i.disabled = !on; });
     });
   }
-  sel.addEventListener('change', show); show();
+  // meter only: nothing to steer, so only what it measures (the fields stay, hidden — nothing is lost)
+  function meterOnly() {
+    var m = sel.value === 'meter';
+    Array.prototype.forEach.call(form0.querySelectorAll('[data-not-meter]'), function (el) { el.style.display = m ? 'none' : ''; });
+    Array.prototype.forEach.call(form0.querySelectorAll('[data-only-meter]'), function (el) { el.style.display = m ? '' : 'none'; });
+  }
+  var form0 = sel.closest('form');
+  sel.addEventListener('change', function () { show(); meterOnly(); }); show(); meterOnly();
 
   // State pickers: the Miniserver's readable states, filtered by the search field.
   var form = sel.closest('form');

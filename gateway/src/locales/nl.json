@@ -4865,5 +4865,6 @@
   "Found by name in your project": "Op naam gevonden in je project",
   "Changes are saved right away.": "Wijzigingen worden direct opgeslagen.",
   "Saved ✓": "Opgeslagen ✓",
-  "Not saved:": "Niet opgeslagen:"
+  "Not saved:": "Niet opgeslagen:",
+  "Only measured: pick the Loxone meter above, or its power and energy counter below. LoxSuite learns when and how much it uses and what it costs — it never switches it.": "Alleen meten: kies hierboven de Loxone-meter, of hieronder het vermogen en de energieteller. LoxSuite leert wanneer en hoeveel het verbruikt en wat het kost — het schakelt nooit."
 }
