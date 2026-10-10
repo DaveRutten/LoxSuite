@@ -160,3 +160,14 @@ test('currentSignals: a solar-planned hour waits when there is no surplus right 
   assert.match(out[0].reason, /no surplus now/);
   assert.equal(out[1].values.now, 1, 'a cheapest-block plan stays');
 });
+
+test('"on" is learned above the standby power: a heat pump idling at 90 W is not on', () => {
+  const em = require('../src/energyManager');
+  const hp = [...Array(200)].map((_, i) => (i % 5 === 0 ? 1.6 : 0.09));
+  const th = em.onThreshold(hp);
+  assert.equal(th.standbyKw, 0.09);
+  assert.equal(th.onKw, 0.135);
+  assert.equal(em.onThreshold([0.1, 0.2]).onKw, 0.05, 'start value until 2 days of hours');
+  const st = em.loadState({ meter: { kw: 0.09 }, onKw: th.onKw });
+  assert.equal(st.on, false);
+});

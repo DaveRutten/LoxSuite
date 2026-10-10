@@ -13,7 +13,7 @@
 </nav>
 
 <% if (error) { %><p class="error"><%= t(error) %></p><% } %>
-<% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
+<% if (saved) { %><p class="hint" data-hint-keep style="color: var(--success);"><%= t('Saved.') %><%= saved === 'load_history' ? ' ' + t('The last 30 days are being read from Loxone\'s statistics in the background, so it learns right away.') : '' %></p><% } %>
 
 <div class="card" id="prices">
   <h2 style="margin-top:0;"><%= t('Prices, solar & fuel') %></h2>

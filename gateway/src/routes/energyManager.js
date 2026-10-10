@@ -167,15 +167,30 @@ function readLoadForm(b) {
 
 router.post('/loads', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   const v = readLoadForm(req.body);
-  if (req.body.id) {
+  // what it is measured with: when that is new (a new consumer, another meter or other signals) the last
+  // 30 days are read from Loxone's statistics right away, so learning doesn't start from zero
+  const sourceOf = (meterUuid, settings) => { let src = {}; try { src = JSON.parse(settings || '{}').src || {}; } catch { /* none */ } return JSON.stringify([meterUuid || null, src.onoff || null, src.status || null, src.power || null, src.energy || null]); };
+  let id = Number(req.body.id) || null;
+  let readHistory = false;
+  if (id) {
+    const before = await db.prepare('SELECT meter_uuid, settings FROM energy_loads WHERE id = ?').get(id);
+    readHistory = !before || sourceOf(before.meter_uuid, before.settings) !== sourceOf(v.meter_uuid, v.settings);
     await db.prepare('UPDATE energy_loads SET name = ?, kind = ?, enabled = ?, priority = ?, miniserver_id = ?, meter_uuid = ?, settings = ? WHERE id = ?')
-      .run(v.name, v.kind, v.enabled, v.priority, v.miniserver_id, v.meter_uuid, v.settings, Number(req.body.id));
+      .run(v.name, v.kind, v.enabled, v.priority, v.miniserver_id, v.meter_uuid, v.settings, id);
   } else {
-    await db.prepare("INSERT INTO energy_loads (name, kind, enabled, priority, miniserver_id, meter_uuid, settings, output, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'shadow', ?)")
-      .run(v.name, v.kind, v.enabled, v.priority, v.miniserver_id, v.meter_uuid, v.settings, new Date().toISOString());
+    id = await db.insertReturningId("INSERT INTO energy_loads (name, kind, enabled, priority, miniserver_id, meter_uuid, settings, output, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'shadow', ?)",
+      [v.name, v.kind, v.enabled, v.priority, v.miniserver_id, v.meter_uuid, v.settings, new Date().toISOString()]);
+    readHistory = true;
   }
   em.invalidate();
-  res.redirect('/settings/energy?saved=load#energy-manager');
+  readHistory = readHistory && !!v.meter_uuid; // the statistics come from a Loxone meter block
+  if (readHistory && id) {
+    // in the background: reading a month of statistics takes a while; the page shows it when done
+    em.importHistory(30, { loadId: id })
+      .then((report) => { em.invalidate(); console.log(`[energy manager] ${v.name}: 30 days read from Loxone (${JSON.stringify(report).slice(0, 200)})`); })
+      .catch((e) => console.error(`[energy manager] ${v.name}: reading history failed: ${e.message}`));
+  }
+  res.redirect(`/settings/energy?saved=${readHistory ? 'load_history' : 'load'}#energy-manager`);
 }));
 
 router.post('/loads/:id/delete', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {

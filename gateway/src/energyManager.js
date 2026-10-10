@@ -54,7 +54,6 @@ const KINDS = {
 };
 
 const r2 = (x) => Math.round(x * 100) / 100;
-const r3 = (x) => Math.round(x * 1000) / 1000;
 const HOUR = 3600000;
 
 function parseSettings(load) {
@@ -618,8 +617,36 @@ async function readLoad(load) {
       for (const k of ['onoff', 'status', 'power', 'energy', 'temp', 'startIn', 'ready', 'remaining']) if (src[k]) raw[k] = ws.getLiveValue(ms.id, src[k]);
     }
   }
-  const st = loadState({ meter, raw, src, name: load.name });
+  const th = await onThresholdOf(load).catch(() => ({ onKw: 0.05 }));
+  const st = loadState({ meter, raw, src, name: load.name, onKw: th.onKw });
+  st.onKw = th.onKw;
   return { ...st, found: !!m?.control || Object.values(raw).some((x) => x !== undefined && x !== null), name };
+}
+
+// Pure: when is it "on", from its own hours (kWh per hour = average kW). Some consumers never get below a
+// standby power (a heat pump ~90 W, a server): the quietest hours give that standby, the busy hours what it
+// draws running, and "on" lies above the standby — at least 50 W (the starting value), never above half the
+// running power. Needs 2 days of hours; before that 50 W.
+function onThreshold(hourlyKwh, { minHours = 48, startKw = 0.05 } = {}) {
+  const xs = (hourlyKwh || []).filter((k) => Number.isFinite(k) && k >= 0);
+  if (xs.length < minHours) return { onKw: startKw, standbyKw: null, runningKw: null, learned: false };
+  const standby = quantile(xs, 0.1);
+  const running = quantile(xs, 0.9);
+  let on = Math.max(startKw, standby + Math.max(0.03, standby * 0.5));
+  if (running > standby * 2) on = Math.min(on, Math.max(standby + 0.02, running * 0.5));
+  return { onKw: r3(on), standbyKw: r3(standby), runningKw: r3(running), learned: true };
+}
+const r3 = (x) => Math.round(x * 1000) / 1000;
+
+// The learned threshold per consumer, made once an hour from its last 30 days.
+const thresholds = new Map();
+async function onThresholdOf(load, nowMs = Date.now()) {
+  const hit = thresholds.get(load.id);
+  if (hit && nowMs - hit.at < HOUR) return hit.val;
+  const rows = await db.prepare('SELECT kwh FROM load_hourly WHERE load_id = ? AND hour >= ?').all(load.id, new Date(nowMs - 30 * 86400000).toISOString()).catch(() => []);
+  const val = onThreshold(rows.map((r) => r.kwh));
+  thresholds.set(load.id, { at: nowMs, val });
+  return val;
 }
 
 async function addHour(loadId, hour, kwh) {
@@ -675,7 +702,7 @@ async function sample(nowMs = Date.now(), { read = readLoad } = {}) {
       const bySignal = r.on !== null && (sourcesOf(l.settings).onoff || sourcesOf(l.settings).status);
       const step = bySignal
         ? runStep(rt.runs.get(l.id) || {}, r.on ? 1 : 0, r.total, nowMs, { onKw: 0.5, offKw: 0.5, endAfterMin: 2 })
-        : runStep(rt.runs.get(l.id) || {}, r.kw, r.total, nowMs);
+        : runStep(rt.runs.get(l.id) || {}, r.kw, r.total, nowMs, { onKw: r.onKw || 0.05, offKw: Math.max(0.02, (r.onKw || 0.05) * 0.8) });
       rt.runs.set(l.id, step.state);
       if (step.finished) await storeRun(l, step.finished).catch((e) => console.error(`[energy manager] ${l.name}: ${e.message}`));
     }
@@ -755,7 +782,8 @@ async function learned(load) {
   for (const r of rows) byDay.set(r.hour.slice(0, 10), (byDay.get(r.hour.slice(0, 10)) || 0) + r.kwh);
   const change = require('./learning').detectChange([...byDay.entries()].slice(0, -1).map(([day, kwh]) => ({ day, kwh })));
   const kwhPerDay = change.changed ? change.recent : (days ? r2(rows.reduce((a, r) => a + r.kwh, 0) / days) : null);
-  return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay, change, hours: rows.length, ...(await learnedStatus(load)), anomalies: await loadAnomalies(load).catch(() => []) };
+  const standby = await onThresholdOf(load).catch(() => null);
+  return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay, change, hours: rows.length, standby, ...(await learnedStatus(load)), anomalies: await loadAnomalies(load).catch(() => []) };
 }
 
 // The weather side of a heat pump / boiler: its kWh against heating degrees (a cold day needs more), and
@@ -1249,7 +1277,7 @@ function stopEnergyManager() {
 }
 function invalidate() { rt.planAt = 0; }
 
-module.exports = {
+module.exports = { onThreshold,
   HOME_CONNECT_STATUS, HOME_CONNECT_RUNNING, mapDeviceStates, devicesFromStructure, cleanStatusText, isOffText, bucket, seenStatuses, runsFromHourly, scheduledFromText, isReadyText, bestSteps, applianceStep, sendCommand, commandTarget,
   applyLive,
   KINDS, parseSettings, viName, toHours, effCost, planLoads, currentSignals, runStep, hourCost, quantile,

@@ -4866,5 +4866,9 @@
   "Changes are saved right away.": "Wijzigingen worden direct opgeslagen.",
   "Saved ✓": "Opgeslagen ✓",
   "Not saved:": "Niet opgeslagen:",
-  "Only measured: pick the Loxone meter above, or its power and energy counter below. LoxSuite learns when and how much it uses and what it costs — it never switches it.": "Alleen meten: kies hierboven de Loxone-meter, of hieronder het vermogen en de energieteller. LoxSuite leert wanneer en hoeveel het verbruikt en wat het kost — het schakelt nooit."
+  "Only measured: pick the Loxone meter above, or its power and energy counter below. LoxSuite learns when and how much it uses and what it costs — it never switches it.": "Alleen meten: kies hierboven de Loxone-meter, of hieronder het vermogen en de energieteller. LoxSuite leert wanneer en hoeveel het verbruikt en wat het kost — het schakelt nooit.",
+  "The last 30 days are being read from Loxone's statistics in the background, so it learns right away.": "De laatste 30 dagen worden op de achtergrond uit de Loxone-statistieken gelezen, zodat hij meteen leert.",
+  "Standby": "Sluipverbruik",
+  "on from {0} W": "aan vanaf {0} W",
+  "on from 50 W (start value, learns after 2 days)": "aan vanaf 50 W (beginwaarde, leert na 2 dagen)"
 }
