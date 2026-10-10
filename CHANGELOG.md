@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.60.2-alpha.1] - 2026-10-10
+
+### Changed
+- **Meter-only consumers** show only what they measure (the Loxone meter, or power and energy counter): no
+  priority, on/off, status, start, patterns or virtual inputs. They are still learned (patterns, use per day,
+  costs), never planned or steered. Kind names translated in the consumer lists.
+
 ## [0.60.1-alpha.1] - 2026-10-10
 
 ### Changed
