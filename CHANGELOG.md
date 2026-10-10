@@ -4,7 +4,30 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.60.0-alpha.1] - 2026-10-10
+
+### Added
+- **Heat pump setup wizard**: kind (air / water / ground), power steps and a fake outdoor sensor (NTC) — only
+  what the unit has is shown, learned and steered; *set up again* under Settings.
+- **Suggestions** (at most three, for comfort, energy and efficiency), foldable to one line.
+- **Tap water** section (tank, next heating, usual draws; *how it learns* folded) and **measured SCOP** (heat /
+  power per day, kept a year).
+- **What it brought**: per month power, heat, SCOP, costs and what planning saved against the day's average price.
+- **Safety net for live mode**: a heartbeat virtual input toggled every minute; with a 5-minute monoflop in Loxone
+  the own logic takes over when LoxSuite stops (set-up explained under Settings).
+- **The house as a battery**: the room a little warmer on solar to spare (cooler when cooling).
+- **Notifications** of type *Energy manager*: legionella overdue, tank expected too cold, a fault code,
+  defrosting that does not end, the solar limit on for hours, the heartbeat failing (migration 043).
+- Objects linked by hand are recognised by their name next time.
+- Energy icons on the dashboard tiles, the Energy manager cards, page titles and section headings; a home-battery
+  tile when a battery meter is linked; lowest / highest price with arrows.
+
 ### Changed
+- Plan and solar charts in the Energy manager style (lanes, labels above the data, humidity with the outdoor
+  temperature, usual draws in the tank lane, *on → at temperature* with real times).
+- Weather, power steps and fine-tuning compact with the details folded; settings in their own columns; a
+  switched-off section shows only its switch; durations and counts formatted.
+- Energy manager device cards: folded is a compact mode (the heat pump's mode, the solar limit or power).
 - **One image build per release** (asked: "save build minutes by not building partly the same thing three
   times"): pushing a release (main + its tag) used to run the test suite three times (Test, and each image build
   before it) and build the multi-arch image twice. Now only the **tag** builds the image — `:vX` and `:latest`,
@@ -12,6 +35,15 @@ All notable changes to this project are documented in this file.
   the suite runs once in front of it, plus the Postgres / MariaDB smoke tests. A push to main alone runs nothing;
   pull requests are tested as before, and both workflows can be run by hand (a hand-run image build on main also
   writes `:latest`).
+
+### Fixed
+- **MQTT broker only worked after *Save & restart***: the dynamic-security bootstrap gave up after 5 s on a slow
+  broker start; it now waits 20 s and retries, and refused subscriptions are retried.
+- **Slow pages** (Monitor, dashboard, heat pump): date formatters were made per row, the pipe-sensor draw search
+  went over the whole history per draw, and overviews waited for the learning — now cached, local, and served
+  from the last minute's status.
+- *On* and *at temperature* fell on the same hour (the room forecast now runs in 5-minute steps).
+- Folded sections and the legend were hidden by the help-text switch; switching Legionella off hid all settings.
 
 ## [0.59.2-alpha.1] - 2026-10-09
 
