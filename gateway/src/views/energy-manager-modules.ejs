@@ -42,7 +42,7 @@
   .mm-legend { display:flex; flex-wrap:wrap; gap:0.2rem 0.9rem; font-size:0.78rem; color:var(--text-muted); margin-top:0.35rem; } .mm-legend > span { white-space:nowrap; margin:0 !important; }
   .mm-sum { font-size:0.85rem; color:var(--text-muted); }
   .mm-log .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
-  .mm-sugs { display:grid; gap:0.4rem; }
+  .mm-sugs { display:grid; gap:0.4rem; } .mm-sug-head { cursor:pointer; } .mm-sug-head strong { font-size:1rem; }
   .mm-sug { display:flex; gap:0.6rem; align-items:baseline; padding:0.5rem 0.7rem; border-radius:8px; border-left:3px solid var(--accent); background:color-mix(in srgb, var(--accent) 6%, transparent); font-size:0.9rem; }
   .mm-sug-k { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; min-width:6.5rem; color:var(--text-muted); }
   .mm-sug-comfort { border-left-color:#e67e22; background:color-mix(in srgb, #e67e22 7%, transparent); }
@@ -157,10 +157,10 @@
      const sgSet = (x) => [Number.isFinite(x && x.flowC) ? t('flow {c} °C', { c: nf(x.flowC, 1) }) : null,
        fStep && x && Number.isFinite(x.step) ? (SGN[String(x.step)] || (x.step > 2 ? x.step + '%' : x.step === 0 ? t('full power') : t('step {n}', { n: x.step }))) : null,
        fNtc && x && Number.isFinite(x.ntc) ? (SGT[String(x.ntc)] || (x.ntc > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(x.ntc, 0) }) : x.ntc === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: x.ntc }))) : null].filter(Boolean).join(' · '); %>
-  <div class="mm-sub" data-suggestions><h3><%= t('Suggestions') %></h3>
-    <% if (SG.length) { %><div class="mm-sugs"><% SG.forEach((g) => { %><div class="mm-sug mm-sug-<%= g.kind %>"><span class="mm-sug-k"><%= { comfort: t('Comfort'), energy: t('Energy'), efficiency: t('Efficiency') }[g.kind] %></span><span><%= t(g.text, Object.fromEntries(Object.entries(g.params || {}).map(([k, v]) => [k, k === 'setting' ? sgSet(v) : v && typeof v === 'object' && 'min' in v ? dur(v.min) : typeof v === 'number' ? nf(v, Number.isInteger(v) ? 0 : (k === 'cop' || k === 's' ? 2 : 1)) : tr(String(v))]))) %></span></div><% }) %></div>
-    <% } else { %><p class="mm-sum" style="margin:0;"><%= t('Nothing to improve right now — it runs as well as it has learned.') %></p><% } %>
-  </div>
+  <details class="mm-sub" data-suggestions open><summary class="mm-sug-head"><strong><%= t('Suggestions') %></strong> <span class="mm-sum"><%= SG.length ? '· ' + SG.length + ' — ' + [...new Set(SG.map((g) => ({ comfort: t('Comfort'), energy: t('Energy'), efficiency: t('Efficiency') }[g.kind])))].join(', ').toLowerCase() : '· ' + t('nothing to improve') %></span></summary>
+    <% if (SG.length) { %><div class="mm-sugs" style="margin-top:0.4rem;"><% SG.forEach((g) => { %><div class="mm-sug mm-sug-<%= g.kind %>"><span class="mm-sug-k"><%= { comfort: t('Comfort'), energy: t('Energy'), efficiency: t('Efficiency') }[g.kind] %></span><span><%= t(g.text, Object.fromEntries(Object.entries(g.params || {}).map(([k, v]) => [k, k === 'setting' ? sgSet(v) : v && typeof v === 'object' && 'min' in v ? dur(v.min) : typeof v === 'number' ? nf(v, Number.isInteger(v) ? 0 : (k === 'cop' || k === 's' ? 2 : 1)) : tr(String(v))]))) %></span></div><% }) %></div>
+    <% } else { %><p class="mm-sum" style="margin:0.3rem 0 0;"><%= t('Nothing to improve right now — it runs as well as it has learned.') %></p><% } %>
+  </details>
 
   <div class="mm-sub"><h3><%= hpS.cooling ? t('Plan: cooling and tap water, next 24 hours') : t('Plan: heating and tap water, next 24 hours') %></h3>
     <p class="hint" style="margin:0;">
@@ -366,6 +366,15 @@
 <datalist id="mm-objects"></datalist>
 <datalist id="mm-actions"></datalist>
 
+<script>
+(function () {
+  // the suggestions: open or folded to one line, remembered per browser
+  var d = document.querySelector('details[data-suggestions]');
+  if (!d) return;
+  try { if (localStorage.getItem('ls-hp-suggestions') === 'closed') d.open = false; } catch (e) { /* no storage */ }
+  d.addEventListener('toggle', function () { try { localStorage.setItem('ls-hp-suggestions', d.open ? 'open' : 'closed'); } catch (e) { /* no storage */ } });
+})();
+</script>
 <script>
 (function () {
   // a section switched off (its "on" switch, or fine-tuning "Off") shows only that switch, not all its options

@@ -164,11 +164,14 @@ function chooseGroupMode(range) {
 function groupHistoryRows(rows, mode, tz, dateField) {
   const groups = [];
   let current = null;
+  // one formatter for all rows: making one per row made a long history take seconds
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
+  });
   for (const row of rows) {
     const date = new Date(row[dateField]);
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
-    }).formatToParts(date).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+    const parts = {};
+    for (const p of fmt.formatToParts(date)) parts[p.type] = p.value;
     // Node's ICU renders midnight as hour "24" (not "00") under hour12:false — normalize so
     // grouping/labels don't split midnight readings into their own inconsistent bucket.
     const hour = parts.hour === '24' ? '00' : parts.hour;

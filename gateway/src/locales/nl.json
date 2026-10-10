@@ -4818,5 +4818,6 @@
   "Its runs are short ({m} min): a lower flow temperature or power step makes it run longer and calmer.": "Zijn runs zijn kort ({m} min): een lagere aanvoertemperatuur of vermogensstand laat hem langer en rustiger draaien.",
   "A flow of {f} °C at {o} °C outside is high: a lower heating curve raises the COP.": "Een aanvoer van {f} °C bij {o} °C buiten is hoog: een lagere stooklijn verhoogt de COP.",
   "The measured SCOP ({s}) is low for this kind of heat pump: a lower flow temperature usually helps most.": "De gemeten SCOP ({s}) is laag voor dit type warmtepomp: een lagere aanvoertemperatuur helpt meestal het meest.",
-  "Switch to {setting}: in this weather it gave runs of {run}, {d} defrosts per hour and a COP of {cop}.": "Schakel naar {setting}: bij dit weer gaf dat runs van {run}, {d} ontdooiingen per uur en een COP van {cop}."
+  "Switch to {setting}: in this weather it gave runs of {run}, {d} defrosts per hour and a COP of {cop}.": "Schakel naar {setting}: bij dit weer gaf dat runs van {run}, {d} ontdooiingen per uur en een COP van {cop}.",
+  "nothing to improve": "niets te verbeteren"
 }

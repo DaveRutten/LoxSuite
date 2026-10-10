@@ -270,7 +270,8 @@ router.get('/modules', (req, res) => res.redirect('/energy-manager/modules/heatp
 router.get('/modules/:kind', asyncHandler(async (req, res, next) => {
   if (!kindOk(req.params.kind)) return next();
   const kind = req.params.kind;
-  const st = await mods().status(kind).catch((e) => ({ error: e.message }));
+  // the status of the last minute (made fresh after a save): the page doesn't wait for the learning
+  const st = await mods().statusCached(kind, 60000).catch((e) => ({ error: e.message }));
   const reasons = require('../reasonText');
   res.render('energy-manager-modules', { only: kind, heatpump: kind === 'heatpump' ? st : {}, solar: kind === 'solar' ? st : {}, saved: req.query.saved || null, roles: require('../energyTypes').ROLES, tr: (r) => reasons.tr(res.locals.t, r) });
 }));

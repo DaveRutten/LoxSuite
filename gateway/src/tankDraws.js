@@ -102,9 +102,16 @@ function pipeDraws(samples, { riseC = 3, windowMin = 3, endBelowPeakC = 4, maxMi
       k++;
     }
     const startMs = s.ms - windowMin * MIN;
-    const before = samples.filter((x) => x.ms < startMs && Number.isFinite(x.temp)).pop();
-    const after = samples.filter((x) => x.ms >= startMs && x.ms <= samples[k].ms + 15 * MIN && Number.isFinite(x.temp) && !x.heating);
-    const dropC = before && after.length ? r2(before.temp - Math.min(...after.map((x) => x.temp))) : 0;
+    // only around the draw (searching the whole series per draw made weeks of samples slow)
+    let b = i; while (b >= 0 && samples[b].ms >= startMs) b--;
+    while (b >= 0 && !Number.isFinite(samples[b].temp)) b--;
+    const before = b >= 0 ? samples[b] : null;
+    let lowest = Infinity;
+    for (let a = b + 1; a < samples.length && samples[a].ms <= samples[k].ms + 15 * MIN; a++) {
+      const x = samples[a];
+      if (x.ms >= startMs && Number.isFinite(x.temp) && !x.heating) lowest = Math.min(lowest, x.temp);
+    }
+    const dropC = before && lowest < Infinity ? r2(before.temp - lowest) : 0;
     if (dropC >= minDropC) out.push({ startMs: s.ms, endMs: samples[k].ms, dropC, fromPipe: true });
     i = k + 1;
   }

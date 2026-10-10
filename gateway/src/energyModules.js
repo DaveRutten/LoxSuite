@@ -63,7 +63,9 @@ async function saveConfig(kind, c) {
     ed.setLearned(kind, names);
     rt.discovered.delete(kind);
   }
-  return settings.set(`energy_module_${kind}`, { ...(await getConfig(kind)), ...c });
+  const saved = await settings.set(`energy_module_${kind}`, { ...(await getConfig(kind)), ...c });
+  statusMemo.delete(kind); // the next page shows the new settings
+  return saved;
 }
 
 // Heat and electricity per day, kept a year (the minute samples only 60 days): stored days, with the days
@@ -393,12 +395,19 @@ async function roomControllerList() {
 
 // For overviews that refresh often (the home dashboard every 5 s): the status at most maxAgeMs old.
 const statusMemo = new Map();
+// For overviews (dashboard, Energy manager cards): an older status (up to 10 min) is shown right away
+// while a fresh one is made in the background, so a page never waits for the learning.
+const refreshing = new Map();
+function refreshStatus(kind) {
+  if (!refreshing.has(kind)) refreshing.set(kind, status(kind).then((val) => { statusMemo.set(kind, { at: Date.now(), val }); return val; }).finally(() => refreshing.delete(kind)));
+  return refreshing.get(kind);
+}
 async function statusCached(kind, maxAgeMs = 30000) {
   const hit = statusMemo.get(kind);
-  if (hit && Date.now() - hit.at < maxAgeMs) return hit.val;
-  const val = await status(kind);
-  statusMemo.set(kind, { at: Date.now(), val });
-  return val;
+  const age = hit ? Date.now() - hit.at : Infinity;
+  if (age < maxAgeMs) return hit.val;
+  if (age < 10 * 60000) { refreshStatus(kind).catch(() => {}); return hit.val; }
+  return refreshStatus(kind);
 }
 
 async function status(kind, nowMs = Date.now()) { return kind === 'solar' ? solarStatus(nowMs) : heatpumpStatus(nowMs); }
@@ -446,6 +455,7 @@ async function tick(nowMs = Date.now()) {
     const cfg = await getConfig(kind);
     if (!cfg.enabled) continue;
     const st = await status(kind, nowMs).catch((e) => { console.error(`[energy modules] ${kind}: ${e.message}`); return null; });
+    if (st) statusMemo.set(kind, { at: Date.now(), val: st }); // the overviews use the minute's status
     if (!st) continue;
     // only what was really sent (live) can be overruled by Loxone
     if (cfg.mode === 'live') {

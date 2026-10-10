@@ -54,8 +54,10 @@
   // Extracts the DISPLAY_TZ calendar-day key ("2026-07-31") for a timestamp — used to tell
   // whether a chart's plotted range ever crosses a day boundary, since that's the only time the
   // date actually needs to be part of an axis tick label at all (see dayKey usage below).
+  var dayKeyFmt = null;
   function dayKey(ms) {
-    return new Date(ms).toLocaleDateString('en-CA', { timeZone: DISPLAY_TZ });
+    if (!dayKeyFmt) dayKeyFmt = new Intl.DateTimeFormat('en-CA', { timeZone: DISPLAY_TZ });
+    return dayKeyFmt.format(new Date(ms));
   }
 
   // Chart.js's own default y-axis formatting already rounds sensibly — it's only replaced (and
@@ -831,11 +833,13 @@
     function groupRows(rows) {
       var groups = [];
       var current = null;
+      // one formatter for all rows (one per row made a long history slow)
+      var fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: DISPLAY_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
+      });
       rows.forEach(function (r) {
         var parts = {};
-        new Intl.DateTimeFormat('en-GB', {
-          timeZone: DISPLAY_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
-        }).formatToParts(new Date(r.t)).forEach(function (p) { parts[p.type] = p.value; });
+        fmt.formatToParts(new Date(r.t)).forEach(function (p) { parts[p.type] = p.value; });
         var hour = parts.hour === '24' ? '00' : parts.hour;
         var key = groupMode === 'hour' ? (parts.year + '-' + parts.month + '-' + parts.day + '-' + hour) : (parts.year + '-' + parts.month + '-' + parts.day);
         if (!current || current.key !== key) {
@@ -862,10 +866,12 @@
       groupsEl.querySelectorAll('details.history-group[open]').forEach(function (d) { openKeys[d.dataset.groupKey] = true; });
       var hadAnyGroupsBefore = groupsEl.querySelector('details.history-group') !== null;
 
+      // same text as toLocaleString('en-GB', { timeZone }) but one formatter for all rows
+      var rowFmt = new Intl.DateTimeFormat('en-GB', { timeZone: DISPLAY_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
       groupsEl.innerHTML = groupRows(rows).map(function (g, gi) {
         var isOpen = hadAnyGroupsBefore ? !!openKeys[g.key] : gi === 0;
         var rowsHtml = g.rows.map(function (r) {
-          return '<tr><td>' + new Date(r.t).toLocaleString('en-GB', { timeZone: DISPLAY_TZ }) + '</td><td>' + escapeHtml(r.value) + '</td></tr>';
+          return '<tr><td>' + rowFmt.format(new Date(r.t)) + '</td><td>' + escapeHtml(r.value) + '</td></tr>';
         }).join('');
         return '<details class="history-group" data-group-key="' + g.key + '"' + (isOpen ? ' open' : '') + '>' +
           '<summary>' + escapeHtml(g.label) + ' <span class="hint">(' + g.rows.length + ' reading' + (g.rows.length === 1 ? '' : 's') + ')</span></summary>' +

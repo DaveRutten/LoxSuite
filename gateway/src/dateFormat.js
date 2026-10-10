@@ -35,24 +35,31 @@ async function invalidateTimezoneCache() {
 
 // Matches the DD/MM/YYYY, HH:MM:SS shape every view already used via toLocaleString('en-GB'),
 // just computed in the configured timezone instead of the ambient one.
+// One formatter per time zone: creating an Intl.DateTimeFormat is slow, and pages format a date per
+// history row (thousands on the Monitor page).
+const dtFormatters = new Map();
+function dateTimeFormatter(tz) {
+  let f = dtFormatters.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    });
+    dtFormatters.set(tz, f);
+  }
+  return f;
+}
 function formatDateTime(isoString) {
   if (!isoString) return '';
   const date = new Date(isoString);
   if (Number.isNaN(date.getTime())) return '';
   try {
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: getDisplayTimezone(),
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-    }).format(date).replace(',', ',');
+    return dateTimeFormatter(getDisplayTimezone()).format(date);
   } catch (err) {
     // An invalid IANA name saved somehow (hand-edited DB, typo survived validation) — fall back to
     // UTC rather than 500ing every page that renders a date.
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'UTC',
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-    }).format(date);
+    return dateTimeFormatter('UTC').format(date);
   }
 }
 
