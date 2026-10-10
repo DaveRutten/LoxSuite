@@ -342,7 +342,8 @@ router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), 
     for (const [role, l] of Object.entries(b.links)) {
       if (!roles[role] || !l || typeof l !== 'object') continue;
       const one = {};
-      if (l.read && l.read.uuid) one.read = { uuid: String(l.read.uuid).slice(0, 80), name: String(l.read.name || '').slice(0, 120), ...(l.read.control ? { control: String(l.read.control).slice(0, 80) } : {}), ...(Number.isFinite(Number(l.read.ms)) && l.read.ms !== null ? { ms: Number(l.read.ms) } : {}) };
+      if (l.read && l.read.none) one.read = { none: true };
+      else if (l.read && l.read.uuid) one.read = { uuid: String(l.read.uuid).slice(0, 80), name: String(l.read.name || '').slice(0, 120), ...(l.read.control ? { control: String(l.read.control).slice(0, 80) } : {}), ...(Number.isFinite(Number(l.read.ms)) && l.read.ms !== null ? { ms: Number(l.read.ms) } : {}) };
       if (l.write && ['direct', 'vi', 'off'].includes(l.write.via)) one.write = { via: l.write.via, ...(l.write.vi ? { vi: String(l.write.vi).replace(/[^\w.-]/g, '_').slice(0, 60) } : {}), ...(l.write.action ? { action: String(l.write.action).slice(0, 80), name: String(l.write.name || '').slice(0, 120), ...(Number.isFinite(Number(l.write.ms)) && l.write.ms !== null ? { ms: Number(l.write.ms) } : {}) } : {}) };
       if (one.read || one.write) c.links[role] = one;
     }

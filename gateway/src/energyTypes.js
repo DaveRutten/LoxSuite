@@ -198,7 +198,9 @@ function link(kind, type, links = {}) {
     if (!def[role]) continue;
     let r = regs.find((x) => x.role === role);
     if (!r) { r = { key: role, role, label: l.read?.name || l.write?.name || def[role].label, rw: 'r', added: true }; regs.push(r); }
-    if (l.read?.uuid) { r.state = l.read.uuid; r.control = l.read.control || null; r.ms = l.read.ms ?? null; r.label = l.read.name || r.label; r.linked = true; }
+    // "do not read" chosen: also not what was found by name
+    if (l.read?.none) { if (r.state) r.found = { uuid: r.state, name: r.label }; r.state = null; r.control = null; r.unread = true; r.linked = true; if (!/w/.test(r.rw)) r.rw = r.action ? 'w' : ''; }
+    else if (l.read?.uuid) { r.state = l.read.uuid; r.control = l.read.control || null; r.ms = l.read.ms ?? null; r.label = l.read.name || r.label; r.linked = true; }
     const w = l.write;
     if (w && /w/.test(def[role].rw)) {
       if (w.via === 'off') { r.via = 'off'; r.rw = r.rw.includes('r') || r.state ? 'r' : ''; }

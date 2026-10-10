@@ -99,9 +99,10 @@
     <tr data-role="<%= r.role %>">
       <td><strong><%= t(r.label) %></strong><% if (r.need) { %> <span class="badge badge-purple"><%= t('needed') %></span><% } %><% if (r.unit) { %> <span class="hint" style="margin:0;"><%= r.unit %></span><% } %>
         <% const val = st.values ? st.values[r.role] : undefined; if (val !== undefined) { %><div class="hint" style="margin:0.1rem 0 0;"><%= t('now:') %> <%= (st.values[r.role + 'Text'] || val) %></div><% } %></td>
-      <td><select data-read data-default="<%= r.read && !r.read.own ? r.read.uuid : '' %>">
+      <td><select data-read data-default="<%= r.read && !r.read.own ? r.read.uuid : '' %>" data-had="<%= r.read || r.readOff ? '1' : '' %>">
           <% if (r.read) { %><option value="<%= r.read.uuid %>|<%= r.read.name %>" selected><%= r.read.name %></option><% } %>
-          <option value="" <%= !r.read ? 'selected' : '' %>><%= r.read ? t('— do not read —') : (r.suggest || []).length ? t('— choose: {n} found by name —', { n: r.suggest.length }) : t('— not found —') %></option>
+          <% if (r.readOff && r.readFound) { %><option value="<%= r.readFound.uuid %>|<%= r.readFound.name %>"><%= r.readFound.name %></option><% } %>
+          <% if (r.read || r.readOff) { %><option value="__none" <%= r.readOff ? 'selected' : '' %>><%= t('— do not read —') %></option><% } else { %><option value="" selected><%= (r.suggest || []).length ? t('— choose: {n} found by name —', { n: r.suggest.length }) : t('— not found —') %></option><% } %>
           <% if ((r.suggest || []).length) { %><optgroup label="<%= t('Found by name in your project') %>"><% r.suggest.forEach((o) => { %><option value="sg|<%= o.uuid %>|<%= o.control %>|<%= o.ms === undefined || o.ms === null ? '' : o.ms %>|<%= o.name %>"><%= o.name %><%= o.room ? ' · ' + o.room : '' %><%= o.msName ? ' (' + o.msName + ')' : '' %></option><% }) %></optgroup><% } %>
           <option value="__pick"><%= t('Other Loxone object / virtual output…') %></option>
         </select>
@@ -374,7 +375,7 @@
   <% if (soS.error) { %><p class="error"><%= soS.error %></p><% } else { %>
   <% moduleStatus('solar', soS) %>
   <div class="mm-kpis">
-    <div class="mm-kpi"><span class="en-kl"><%- enIcon('sun', 'var(--en-solar)', { plain: true, size: 13 }) %><%= t('Solar now') %></span><b><%= nf(soS.pvKw, 2) %> kW</b><span><%= t('house') %> <%= nf(soS.houseKw, 2) %> kW</span></div>
+    <div class="mm-kpi"><span class="en-kl"><%- enIcon('sun', 'var(--en-solar)', { plain: true, size: 13 }) %><%= t('Solar now') %></span><b><%= nf(soS.pvKw, 2) %> kW</b><span><%= { meter: t('from the PV meter'), ac: t('inverter AC output'), dc: t('inverter DC output') }[soS.pvSource] || t('not linked') %> · <%= t('house') %> <%= nf(soS.houseKw, 2) %> kW</span></div>
     <div class="mm-kpi"><span class="en-kl"><%- enIcon('euro', 'var(--en-export)', { plain: true, size: 13 }) %><%= t('Exporting yields now') %></span><b><%= soS.value === null || soS.value === undefined ? '—' : (soS.value < 0 ? '−€ ' : '€ ') + nf(Math.abs(soS.value), 3) %></b><span><%= t('worth') %> € <%= nf(soS.worth, 3) %> − <%= t('feed-in costs') %> € <%= nf(soS.contract && soS.contract.costEur, 3) %></span></div>
     <div class="mm-kpi"><span class="en-kl"><%- enIcon('panel', 'var(--en-solar)', { plain: true, size: 13 }) %><%= t('Limit') %></span><b><%= soS.limit ? soS.limit.pct : '—' %> %</b><span><%= soS.limit ? tr(soS.limit.why) : '' %></span></div>
   </div>
@@ -443,7 +444,7 @@
   var fin = function (v) { return v !== null && v !== undefined && isFinite(v); };
   var nf = function (v, k) { return fin(v) ? Number(v).toLocaleString('nl-NL', { minimumFractionDigits: k == null ? 1 : k, maximumFractionDigits: k == null ? 1 : k }) : '—'; };
   var hh = function (ms) { return new Date(ms).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }); };
-  var COL = { solar: 'var(--en-solar)', dhw: '#3b82f6', legionella: 'var(--en-import)', preheat: '#e67e22', comfort: d.cooling ? '#06b6d4' : 'var(--accent)', cool: '#06b6d4', setback: 'var(--en-house)' };
+  var COL = { solar: 'var(--en-solar)', dhw: '#3b82f6', legionella: 'var(--en-import)', preheat: '#e67e22', comfort: d && d.cooling ? '#06b6d4' : 'var(--accent)', cool: '#06b6d4', setback: 'var(--en-house)' };
   function draw() {
     if (!el || !d) return;
     var hrs = d.plan;
@@ -606,6 +607,8 @@
   drawSolar();
   lsOnResize(drawSolar);
 })();
+</script>
+<script>
 (function () {
   var CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
   var objects = null;
@@ -645,6 +648,7 @@
       var role = tr.getAttribute('data-role'), one = {};
       var rs = tr.querySelector('select[data-read]');
       if (rs.value === '__pick') { var o = find(tr.querySelector('[data-read-pick]').value, 'state'); if (o) one.read = { uuid: o.state, name: o.name, control: o.uuid, ms: o.ms }; }
+      else if (rs.value === '__none') one.read = { none: true };
       else if (rs.value.indexOf('sg|') === 0) { var sg = rs.value.split('|'); one.read = { uuid: sg[1], control: sg[2], name: sg.slice(4).join('|') }; if (sg[3] !== '') one.read.ms = Number(sg[3]); }
       else if (rs.value && rs.value.split('|')[0] !== rs.getAttribute('data-default')) { var pr = rs.value.split('|'); one.read = { uuid: pr[0], name: pr.slice(1).join('|') }; }
       var ws = tr.querySelector('select[data-write]');

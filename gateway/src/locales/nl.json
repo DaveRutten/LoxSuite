@@ -4874,5 +4874,9 @@
   "typically {0} min, {1} kWh per run": "meestal {0} min, {1} kWh per keer",
   "no runs seen yet (it runs when above its standby power)": "nog geen runs gezien (hij draait boven zijn sluipverbruik)",
   "optional, only read": "optioneel, alleen lezen",
-  "Only measured: pick the Loxone meter above, or its power and energy counter below (an on/off signal is optional). LoxSuite learns when, how long and how much it uses and what it costs — it never switches it.": "Alleen meten: kies hierboven de Loxone-meter, of hieronder het vermogen en de energieteller (een aan/uit-signaal is optioneel). LoxSuite leert wanneer, hoe lang en hoeveel het verbruikt en wat het kost — het schakelt nooit."
+  "Only measured: pick the Loxone meter above, or its power and energy counter below (an on/off signal is optional). LoxSuite learns when, how long and how much it uses and what it costs — it never switches it.": "Alleen meten: kies hierboven de Loxone-meter, of hieronder het vermogen en de energieteller (een aan/uit-signaal is optioneel). LoxSuite leert wanneer, hoe lang en hoeveel het verbruikt en wat het kost — het schakelt nooit.",
+  "from the PV meter": "van de PV-meter",
+  "inverter AC output": "AC-uitgang omvormer",
+  "inverter DC output": "DC-uitgang omvormer",
+  "not linked": "niet gekoppeld"
 }

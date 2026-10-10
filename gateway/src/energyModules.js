@@ -61,7 +61,8 @@ async function getConfig(kind) {
 async function saveConfig(kind, c) {
   if (c.links) {
     // what the user linked by hand is recognised by its name from now on (also after a rescan)
-    const names = { ...(await settings.get(`energy_names_${kind}`, {})), ...ed.namesOf(c.links) };
+    // only what is linked now: a corrected link replaces the old name instead of keeping both
+    const names = ed.namesOf(c.links);
     await settings.set(`energy_names_${kind}`, names);
     ed.setLearned(kind, names);
     rt.discovered.delete(kind);
@@ -394,11 +395,17 @@ async function solarStatus(nowMs = Date.now()) {
   const contract = { rule: now0.rule, feedInEur: pcfg.feed_in_eur_kwh ?? null, costEur: now0.cost, dynamic: priceCfg.source !== 'fixed', priceSource: priceCfg.source || null, estimated: !!hours[0]?.estimated };
   // the hours ahead: where limiting is expected (exporting costs money and there is sun to export)
   const ahead = hours.map((h) => { const n = netAt(h); return { ms: h.ms, value: n.value, surplusKwh: h.surplusKwh || 0, limit: n.value !== null && n.value < 0 && (h.surplusKwh || 0) > 0.2 }; });
-  const pvKw = v.acPower ?? v.dcPower ?? null;
-  const houseKw = pvKw !== null && v.gridPower !== undefined ? Math.max(0, pvKw + v.gridPower) : null;
+  // the solar power: the PV meter set under Meters when there is one (what Loxone's own energy flow shows),
+  // else the inverter's AC (or DC) output; the grid likewise
+  const meters = await require('./energyMeters').live().catch(() => null);
+  const mPv = meters?.roles?.pv?.power_kw, mGrid = meters?.roles?.grid?.power_kw;
+  const pvSource = Number.isFinite(mPv) ? 'meter' : Number.isFinite(v.acPower) ? 'ac' : Number.isFinite(v.dcPower) ? 'dc' : null;
+  const pvKw = pvSource === 'meter' ? mPv : v.acPower ?? v.dcPower ?? null;
+  const gridKw = v.gridPower !== undefined && Number.isFinite(v.gridPower) ? v.gridPower : Number.isFinite(mGrid) ? mGrid : null;
+  const houseKw = pvKw !== null && gridKw !== null ? Math.max(0, pvKw + gridKw) : null;
   const limit = sl.limitPct({ value, houseKw, inverterKw: Number(cfg.inverter_kw) || 8, stepPct: Number(cfg.step_pct) || 5, marginKw: Number(cfg.margin_kw) || 0.2 });
   const writes = sl.writesFor({ type, value, houseKw, now: v, last: rt.last.solar, nowMs, settings: { inverterKw: Number(cfg.inverter_kw) || 8, stepPct: Number(cfg.step_pct) || 5, marginKw: Number(cfg.margin_kw) || 0.2 } });
-  return { kind: 'solar', heartbeat: { ...rt.hb.solar }, cfg, check: r.check, found: summary(r.found), chosen: r.chosen ? summaryOne(r.chosen) : null, msId, roles: rolesView('solar', type, r.chosen), values: v, worth, value, contract, ahead, pvKw, houseKw, limit, writes, sent: rt.sent.solar.slice(-15) };
+  return { kind: 'solar', pvSource, heartbeat: { ...rt.hb.solar }, cfg, check: r.check, found: summary(r.found), chosen: r.chosen ? summaryOne(r.chosen) : null, msId, roles: rolesView('solar', type, r.chosen), values: v, worth, value, contract, ahead, pvKw, houseKw, limit, writes, sent: rt.sent.solar.slice(-15) };
 }
 
 const summaryOne = (c) => ({ uuid: c.uuid, name: c.name, room: c.room, score: c.score, ok: c.check.ok, known: c.known, miniserver: c.miniserver, missingFromLoxone: c.missingFromLoxone });
@@ -414,7 +421,7 @@ function rolesView(kind, type, chosen) {
     const known = chosen?.missingFromLoxone?.find((m) => m.role === role) || null;
     return {
       role, label: d.label, unit: d.unit || null, need: need.has(role), canWrite: /w/.test(d.rw),
-      read: r?.state ? { uuid: r.state, name: r.label, own: !!r.linked } : null,
+      read: r?.state ? { uuid: r.state, name: r.label, own: !!r.linked } : null, readOff: !!r?.unread, readFound: r?.found || null,
       write: !r || !/w/.test(r.rw) ? (r?.via === 'off' ? { via: 'off' } : null) : r.via === 'vi' || !r.action ? { via: 'vi', vi: r.vi || et.viName(kind, role) } : { via: 'direct', name: r.writeLabel || r.label, uuid: r.action },
       vi: et.viName(kind, role), suggest: !r?.state ? (sug[role] || []).map((o) => ({ uuid: o.state, control: o.uuid, name: o.name, room: o.room, ms: o.ms, msName: o.msName })) : [], known: known ? { label: known.label, reg: known.reg } : null, conflict: rt.conflicts[kind]?.[role] || null,
     };
