@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.60.1-alpha.1] - 2026-10-10
+
+### Changed
+- **Values found in the whole project**: every role the heat pump or inverter itself doesn't have is looked for by
+  name on all Miniservers (e.g. *3WegKlep* under Visualisatie) — one match is linked, more are offered at the top
+  of the read list (*found by name in your project*); more names recognised (Dutch spellings, fault, refrigerant,
+  buffer, operating hours, own tap-water circuit sensors).
+- **Saved right away**: every change on the heat pump and solar pages is saved at once (text fields when you leave
+  them), with a short *Saved ✓*; the Save button is gone.
+
 ## [0.60.0-alpha.1] - 2026-10-10
 
 ### Added
