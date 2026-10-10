@@ -4859,5 +4859,6 @@
   "import": "afname",
   "lowest today": "laagste vandaag",
   "to the grid": "teruglevering",
-  "limit": "limiet"
+  "limit": "limiet",
+  "limited to {p} %": "begrensd op {p} %"
 }

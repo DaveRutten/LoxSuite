@@ -9,7 +9,7 @@
 <% if (typeof priceDay !== 'undefined' && priceDay && priceDay.min !== null) { const hm2 = (iso) => (iso ? new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }) : ''); %><p class="em-price-day"><%- enIcon('euro', 'var(--en-price)', { plain: true, size: 15 }) %><span><%= t('Price today') %>: <%= t('now') %> <strong>€ <%= nfx(priceDay.now, 3) %></strong></span><span class="en-lo" title="<%= t('lowest today') %>"><svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M5 9L0.5 2h9z" fill="currentColor"/></svg> € <%= nfx(priceDay.min, 3) %> <small><%= hm2(priceDay.minAt) %></small></span><span class="en-hi" title="<%= t('highest today') %>"><svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M5 1l4.5 7h-9z" fill="currentColor"/></svg> € <%= nfx(priceDay.max, 3) %> <small><%= hm2(priceDay.maxAt) %></small></span><span><%= t('average') %> € <%= nfx(priceDay.avg, 3) %></span><% if (priceDay.source === 'loxone') { %><span class="em-src"><%= t('from the Spot Price Optimizer') %></span><% } %></p><% } %>
 <div class="em-devices">
   <a class="card em-device" href="/energy-manager/modules/heatpump">
-    <div class="em-dev-head"><h2 class="en-h" style="margin:0;"><%- enIcon('heat', '#e67e22') %><%= t('Heat pump') %></h2><% if (HP.state) { %><span class="em-dev-sum"><%= { dhw: t('Tap water'), heating: t('Heating'), idle: t('Idle'), defrost: t('Defrosting'), fault: t('Fault') }[HP.state.mode] || HP.state.mode %> · <%= t('tank') %> <%= nfx(HP.state.tankC) %> °C · <%= t('room') %> <%= nfx(HP.state.roomC) %> °C<%= HP.state.cop ? ' · COP ' + nfx(HP.state.cop, 1) : '' %></span><% } %><% if (!(HP.cfg && HP.cfg.enabled)) { %><span class="badge badge-off"><%= t('off') %></span><% } %></div>
+    <div class="em-dev-head"><h2 class="en-h" style="margin:0;"><%- enIcon('heat', '#e67e22') %><%= t('Heat pump') %></h2><% if (HP.state) { %><span class="em-dev-sum"><%= { dhw: t('Tap water'), heating: t('Heating'), idle: t('Idle'), defrost: t('Defrosting'), fault: t('Fault') }[HP.state.mode] || HP.state.mode %></span><% } %><% if (!(HP.cfg && HP.cfg.enabled)) { %><span class="badge badge-off"><%= t('off') %></span><% } %></div>
     <% if (HP.state) { const sv = HP.state; %><div class="em-dev-kpis">
       <div><span><%= t('Tank') %></span><b><%= nfx(sv.tankC) %> °C</b></div>
       <div><span><%= t('Room') %></span><b><%= nfx(sv.roomC) %> °C</b></div>
@@ -19,7 +19,7 @@
     <p class="hint" style="margin:0.3rem 0 0;" data-hint-keep><%= HP.roomForecast && HP.roomForecast.onAt ? t('on at {t}', { t: new Date(HP.roomForecast.onAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }) }) : '' %><%= HP.legionella && HP.legionella.block ? ' · ' + t('legionella') + ' ' + new Date(HP.legionella.block.startMs).toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }) : '' %></p><% } else { %><p class="hint" style="margin:0.3rem 0 0;" data-hint-keep><%= t('Switch it on in its settings to plan tap water, the room and fine-tuning.') %></p><% } %>
   </a>
   <a class="card em-device" href="/energy-manager/modules/solar">
-    <div class="em-dev-head"><h2 class="en-h" style="margin:0;"><%- enIcon('panel', 'var(--en-solar)') %><%= t('Solar panels') %></h2><% if (SO.limit) { %><span class="em-dev-sum"><%= nfx(SO.pvKw, 2) %> kW · <%= t('limit') %> <%= SO.limit.pct %> %</span><% } %><% if (!(SO.cfg && SO.cfg.enabled)) { %><span class="badge badge-off"><%= t('off') %></span><% } %></div>
+    <div class="em-dev-head"><h2 class="en-h" style="margin:0;"><%- enIcon('panel', 'var(--en-solar)') %><%= t('Solar panels') %></h2><% if (SO.limit) { %><span class="em-dev-sum"><%= SO.limit.pct < 100 ? t('limited to {p} %', { p: SO.limit.pct }) : nfx(SO.pvKw, 2) + ' kW' %></span><% } %><% if (!(SO.cfg && SO.cfg.enabled)) { %><span class="badge badge-off"><%= t('off') %></span><% } %></div>
     <% if (SO.limit) { %><div class="em-dev-kpis">
       <div><span><%= t('Solar now') %></span><b><%= nfx(SO.pvKw, 2) %> kW</b></div>
       <div><span><%= t('house') %></span><b><%= nfx(SO.houseKw, 2) %> kW</b></div>
@@ -33,9 +33,9 @@
   .em-devices { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:1rem; margin-bottom:1rem; }
   .em-device { display:block; color:inherit; text-decoration:none; margin:0; transition:box-shadow .15s; }
   .em-device:hover { box-shadow:var(--shadow-md); }
-  .em-dev-head { display:flex; align-items:center; gap:0.5rem 0.9rem; flex-wrap:wrap; } .em-dev-head .card-collapse-btn { margin-left:auto; }
+  .em-dev-head { display:flex; align-items:center; gap:0.9rem; min-height:2.6rem; } .em-dev-head .card-collapse-btn { margin-left:auto; flex:none; }
   /* folded = compact: one line with the essentials next to the title */
-  .em-dev-sum { display:none; font-size:0.9rem; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+  .em-dev-sum { display:none; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.95rem; font-weight:600; color:var(--text-muted); font-variant-numeric:tabular-nums; }
   .card-collapsed .em-dev-sum { display:inline; }
   .em-dev-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:0.5rem; margin-top:0.6rem; }
   .em-dev-kpis span { display:block; font-size:0.75rem; color:var(--text-muted); } .em-dev-kpis b { font-size:1.05rem; }
