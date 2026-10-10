@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.60.3-alpha.1] - 2026-10-10
+
+### Added
+- **History right away**: adding a consumer with a Loxone meter (or giving it another meter) reads the last 30 days
+  from Loxone's statistics in the background, so learning doesn't start from zero.
+- **Standby power learned per consumer**: "on" lies above its own standby (the quietest hours) instead of a fixed
+  50 W — a heat pump idling at 90 W is no longer "on". 50 W is the start value for the first 2 days; the same
+  threshold ends an appliance's run. A *Standby* tile shows the standby and from when it counts as on.
+- **Meter-only consumers**: an optional on/off signal (only read) and runs — how often a day, how long and how much
+  per run.
+
 ## [0.60.2-alpha.1] - 2026-10-10
 
 ### Changed
