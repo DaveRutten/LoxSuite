@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.60.4-alpha.1] - 2026-10-10
+
+### Fixed
+- **Solar panels page: nothing could be changed** — an error in the heat pump chart code stopped the whole page
+  script there (no saving, no object search, no solar chart). The charts now run in a script of their own.
+- **"Do not read"** is a real choice that is saved (it fell back to what was found); the found object stays
+  selectable.
+- Remembered names follow the current links: a corrected link replaces the old name (a wrong *ReactivePwrConfig*
+  as power limit no longer sticks).
+
+### Changed
+- Solar power from the **PV meter** set under Meters when there is one, else the inverter's AC/DC output; the
+  page shows where it comes from.
+
 ## [0.60.3-alpha.1] - 2026-10-10
 
 ### Added
