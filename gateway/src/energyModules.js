@@ -143,6 +143,14 @@ async function discover(kind, { refresh = false } = {}) {
         }
         if (c.roles.heatMeterFlowTemp?.read?.ms === o.ms.id) for (const [k, x] of Object.entries(ed.heatMeterSiblings(ed.allObjects(o.s), c.roles.heatMeterFlowTemp.read.control))) if (!c.roles[k]) c.roles[k] = { read: { ...x.read, ms: o.ms.id }, elsewhere: true };
       }
+      // every role still missing: by name anywhere in the project (all Miniservers); one match is linked,
+      // more are offered in the link table
+      const memberIds = new Set((c.members || []).map((m) => m.uuid));
+      const everywhere = structures.flatMap((o) => ed.allObjects(o.s).filter((x) => !memberIds.has(x.uuid)).map((x) => ({ ...x, ms: o.ms.id, msName: structures.length > 1 ? o.ms.name : null })));
+      const missing = Object.keys(et.ROLES[kind].roles).filter((r) => !c.roles[r]);
+      const across = ed.acrossProject(kind, missing, everywhere);
+      for (const [r, x] of Object.entries(across.found)) c.roles[r] = { ...x, elsewhere: true };
+      c.suggest = across.suggest;
       // the roles found elsewhere become part of its type (with their own Miniserver)
       // rebuilt with the device's own objects, so the scale factors and siblings found from them stay
       c.type = ed.asType(kind, { uuid: c.uuid, name: c.name, members: c.members || [] }, c.roles, et.loadTypes(kind).find((t) => t.key === c.known?.key));
@@ -398,6 +406,7 @@ const summary = (list) => list.map((c) => (c.error ? c : summaryOne(c)));
 
 // Per role of the kind: where it is read, how it is sent, as the page shows it.
 function rolesView(kind, type, chosen) {
+  const sug = chosen?.suggest || {};
   const def = et.ROLES[kind].roles;
   const need = new Set((et.ROLES[kind].need || []).flat());
   return Object.entries(def).map(([role, d]) => {
@@ -407,7 +416,7 @@ function rolesView(kind, type, chosen) {
       role, label: d.label, unit: d.unit || null, need: need.has(role), canWrite: /w/.test(d.rw),
       read: r?.state ? { uuid: r.state, name: r.label, own: !!r.linked } : null,
       write: !r || !/w/.test(r.rw) ? (r?.via === 'off' ? { via: 'off' } : null) : r.via === 'vi' || !r.action ? { via: 'vi', vi: r.vi || et.viName(kind, role) } : { via: 'direct', name: r.writeLabel || r.label, uuid: r.action },
-      vi: et.viName(kind, role), known: known ? { label: known.label, reg: known.reg } : null, conflict: rt.conflicts[kind]?.[role] || null,
+      vi: et.viName(kind, role), suggest: !r?.state ? (sug[role] || []).map((o) => ({ uuid: o.state, control: o.uuid, name: o.name, room: o.room, ms: o.ms, msName: o.msName })) : [], known: known ? { label: known.label, reg: known.reg } : null, conflict: rt.conflicts[kind]?.[role] || null,
     };
   });
 }

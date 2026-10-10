@@ -4860,5 +4860,10 @@
   "lowest today": "laagste vandaag",
   "to the grid": "teruglevering",
   "limit": "limiet",
-  "limited to {p} %": "begrensd op {p} %"
+  "limited to {p} %": "begrensd op {p} %",
+  "— choose: {n} found by name —": "— kies: {n} gevonden op naam —",
+  "Found by name in your project": "Op naam gevonden in je project",
+  "Changes are saved right away.": "Wijzigingen worden direct opgeslagen.",
+  "Saved ✓": "Opgeslagen ✓",
+  "Not saved:": "Niet opgeslagen:"
 }

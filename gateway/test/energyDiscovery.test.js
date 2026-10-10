@@ -186,3 +186,17 @@ test('a name the user linked by hand is recognised next time, before the built-i
     assert.equal(ed.rolesOf('heatpump', members).tankTemp.read.name, 'Boiler boven');
   } finally { ed.setLearned('heatpump', {}); }
 });
+
+test('roles the device lacks: one match anywhere in the project is linked, more are offered', () => {
+  const objects = [
+    { uuid: 'v', name: '3WegKlep', room: 'Visualisatie', state: 's-v', ms: 1 },
+    { uuid: 'f1', name: 'Compressor frequentie', state: 's-f1', ms: 1 },
+    { uuid: 'f2', name: 'Ventilatie frequentie', state: 's-f2', ms: 2 },
+    { uuid: 'x', name: 'Iets anders', state: 's-x', ms: 1 },
+  ];
+  const r = ed.acrossProject('heatpump', ['valveDhw', 'compressorHz', 'tankTemp'], objects);
+  assert.deepEqual(r.found.valveDhw.read, { uuid: 's-v', name: '3WegKlep', control: 'v', ms: 1 });
+  assert.equal(r.found.compressorHz, undefined);
+  assert.deepEqual(r.suggest.compressorHz.map((o) => o.name), ['Compressor frequentie', 'Ventilatie frequentie']);
+  assert.equal(r.found.tankTemp, undefined);
+});

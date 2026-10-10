@@ -48,6 +48,9 @@
   .mm-sug-comfort { border-left-color:#e67e22; background:color-mix(in srgb, #e67e22 7%, transparent); }
   .mm-sug-energy { border-left-color:var(--en-solar); background:color-mix(in srgb, var(--en-solar) 7%, transparent); }
   .mm-steps { margin:0.4rem 0 0.2rem 1.2rem; padding:0; font-size:0.88rem; } .mm-steps li { margin:0.15rem 0; }
+  .mm-autosave { margin:0.8rem 0 0; }
+  .mm-toast { position:fixed; right:1.2rem; bottom:1.2rem; z-index:1000; padding:0.55rem 0.9rem; border-radius:10px; background:var(--card-bg, #fff); border:1px solid var(--border); box-shadow:0 6px 24px rgba(0,0,0,0.15); font-size:0.9rem; }
+  .mm-toast-bad { border-color:var(--danger); color:var(--danger); }
 </style>
 
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
@@ -98,7 +101,8 @@
         <% const val = st.values ? st.values[r.role] : undefined; if (val !== undefined) { %><div class="hint" style="margin:0.1rem 0 0;"><%= t('now:') %> <%= (st.values[r.role + 'Text'] || val) %></div><% } %></td>
       <td><select data-read data-default="<%= r.read && !r.read.own ? r.read.uuid : '' %>">
           <% if (r.read) { %><option value="<%= r.read.uuid %>|<%= r.read.name %>" selected><%= r.read.name %></option><% } %>
-          <option value="" <%= !r.read ? 'selected' : '' %>><%= r.read ? t('— do not read —') : t('— not found —') %></option>
+          <option value="" <%= !r.read ? 'selected' : '' %>><%= r.read ? t('— do not read —') : (r.suggest || []).length ? t('— choose: {n} found by name —', { n: r.suggest.length }) : t('— not found —') %></option>
+          <% if ((r.suggest || []).length) { %><optgroup label="<%= t('Found by name in your project') %>"><% r.suggest.forEach((o) => { %><option value="sg|<%= o.uuid %>|<%= o.control %>|<%= o.ms === undefined || o.ms === null ? '' : o.ms %>|<%= o.name %>"><%= o.name %><%= o.room ? ' · ' + o.room : '' %><%= o.msName ? ' (' + o.msName + ')' : '' %></option><% }) %></optgroup><% } %>
           <option value="__pick"><%= t('Other Loxone object / virtual output…') %></option>
         </select>
         <input type="text" data-read-pick list="mm-objects" placeholder="<%= t('search a Loxone object…') %>" style="display:none; margin-top:0.25rem;">
@@ -358,7 +362,7 @@
   <% rolesTable('heatpump', hpS) %>
   <% sentLog(hpS) %>
   <% importBox('heatpump') %>
-  <div class="btn-row" style="margin-top:0.8rem;"><button type="button" class="primary" data-save="heatpump"><%= t('Save') %></button><span class="hint" data-save-msg="heatpump" style="margin:0;"></span></div>
+  <p class="mm-sum mm-autosave" data-save-msg="heatpump"><%= t('Changes are saved right away.') %></p>
   </details>
   <% } %>
 </div>
@@ -394,7 +398,7 @@
   <% rolesTable('solar', soS) %>
   <% sentLog(soS) %>
   <% importBox('solar') %>
-  <div class="btn-row" style="margin-top:0.8rem;"><button type="button" class="primary" data-save="solar"><%= t('Save') %></button><span class="hint" data-save-msg="solar" style="margin:0;"></span></div>
+  <p class="mm-sum mm-autosave" data-save-msg="solar"><%= t('Changes are saved right away.') %></p>
   </details>
   <% } %>
 </div>
@@ -641,6 +645,7 @@
       var role = tr.getAttribute('data-role'), one = {};
       var rs = tr.querySelector('select[data-read]');
       if (rs.value === '__pick') { var o = find(tr.querySelector('[data-read-pick]').value, 'state'); if (o) one.read = { uuid: o.state, name: o.name, control: o.uuid, ms: o.ms }; }
+      else if (rs.value.indexOf('sg|') === 0) { var sg = rs.value.split('|'); one.read = { uuid: sg[1], control: sg[2], name: sg.slice(4).join('|') }; if (sg[3] !== '') one.read.ms = Number(sg[3]); }
       else if (rs.value && rs.value.split('|')[0] !== rs.getAttribute('data-default')) { var pr = rs.value.split('|'); one.read = { uuid: pr[0], name: pr.slice(1).join('|') }; }
       var ws = tr.querySelector('select[data-write]');
       if (ws) {
@@ -675,6 +680,38 @@
   });
   var again = document.querySelector('[data-wizard-again]');
   if (again) again.addEventListener('click', function (e) { e.preventDefault(); wizardPost({ setup_done: false }).then(function () { location.href = '/energy-manager/modules/heatpump'; }); });
+  // every change is saved right away (text fields when you leave them); a different device reloads the page
+  var toast = document.createElement('div'); toast.className = 'mm-toast'; toast.hidden = true; document.body.appendChild(toast);
+  var toastTimer = null;
+  function showToast(text, bad) { toast.textContent = text; toast.classList.toggle('mm-toast-bad', !!bad); toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.hidden = true; }, bad ? 6000 : 1800); }
+  var LS = <%- JSON.stringify({ saving: t('Saving…'), saved: t('Saved ✓'), failed: t('Not saved:') }) %>;
+  document.querySelectorAll('[data-module]').forEach(function (card) {
+    var kind = card.getAttribute('data-module'), timer = null, reload = false;
+    var msg = card.querySelector('[data-save-msg]');
+    function save() {
+      showToast(LS.saving);
+      fetch('/energy-manager/modules/' + kind + '.json', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, body: JSON.stringify(collect(card, kind)) })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j.ok) { showToast(LS.failed + ' ' + (j.message || ''), true); return; }
+          showToast(LS.saved + ((j.warnings || []).length ? ' — ' + j.warnings.join(' ') : ''), (j.warnings || []).length > 0);
+          if (msg) msg.textContent = LS.saved + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          if (reload) location.href = '/energy-manager/modules/' + kind + '?saved=1';
+        })
+        .catch(function (e) { showToast(LS.failed + ' ' + e.message, true); });
+    }
+    card.addEventListener('change', function (e) {
+      var el = e.target;
+      if (!el.matches || el.type === 'file' || el.closest('[data-wizard]') || el.closest('[data-no-autosave]')) return;
+      // "other object…" chosen: wait until one is picked, else the link would be dropped
+      if (el.matches('select[data-read], select[data-write]') && el.value === '__pick') return;
+      // a half-typed search is no object yet
+      if (el.matches('[data-read-pick]') && !find(el.value, 'state')) return;
+      if (el.matches('[data-write-pick]') && !find(el.value, 'action')) return;
+      if (el.matches('[data-f="device"]')) reload = true;
+      clearTimeout(timer); timer = setTimeout(save, 400);
+    });
+  });
   document.querySelectorAll('[data-save]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var kind = btn.getAttribute('data-save'), card = btn.closest('[data-module]');

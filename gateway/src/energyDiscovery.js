@@ -174,4 +174,23 @@ function heatMeterSiblings(objects, flowTempUuid) {
   return Object.fromEntries([['heatMeterReturnTemp', one(ret)], ['heatMeterFlowRate', one(flow)]].filter(([, x]) => x));
 }
 
-module.exports = { heatMeterSiblings, setLearned, namesOf, rolesOf, asType, bestKnown, fromStructure, roomControllers, allObjects, ELSEWHERE };
+// Pure: objects anywhere in the project for the roles a device didn't have, by the same names (built-in
+// and learned). One match is taken; more are offered as suggestions. objects [{ uuid, name, room, state,
+// ms, msName }] -> { found: { role: { read } }, suggest: { role: [object…] } }
+function acrossProject(kind, roles, objects, { max = 6 } = {}) {
+  const def = et.ROLES[kind]?.roles || {};
+  const tests = {};
+  for (const [name, role] of Object.entries(learned[kind] || {})) (tests[role] = tests[role] || []).push((n) => norm(n) === name);
+  for (const [role, re, only] of SUGGEST[kind] || []) if (only !== 'w') (tests[role] = tests[role] || []).push((n) => re.test(n));
+  const found = {}; const suggest = {};
+  const used = new Set();
+  for (const role of roles) {
+    if (!def[role] || !tests[role]) continue;
+    const hits = objects.filter((o) => o.state && !used.has(o.uuid) && tests[role].some((f) => f(o.name)));
+    if (hits.length === 1) { const o = hits[0]; used.add(o.uuid); found[role] = { read: { uuid: o.state, name: o.name, control: o.uuid, ...(o.ms !== undefined ? { ms: o.ms } : {}) } }; }
+    else if (hits.length > 1) suggest[role] = hits.slice(0, max);
+  }
+  return { found, suggest };
+}
+
+module.exports = { acrossProject, heatMeterSiblings, setLearned, namesOf, rolesOf, asType, bestKnown, fromStructure, roomControllers, allObjects, ELSEWHERE };
