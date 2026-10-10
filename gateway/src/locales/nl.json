@@ -4858,5 +4858,6 @@
   "idle": "rust",
   "import": "afname",
   "lowest today": "laagste vandaag",
-  "to the grid": "teruglevering"
+  "to the grid": "teruglevering",
+  "limit": "limiet"
 }

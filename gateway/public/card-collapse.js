@@ -45,7 +45,9 @@
       btn.title = folded ? (window.lsT ? window.lsT('Unfold') : 'Unfold') : (window.lsT ? window.lsT('Fold') : 'Fold');
     };
     btn.addEventListener('click', function (e) {
+      // also on a card that is a link as a whole: folding never opens the link
       e.preventDefault();
+      e.stopPropagation();
       var folded = !card.classList.contains('card-collapsed');
       apply(folded);
       store(key, folded);
