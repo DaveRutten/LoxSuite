@@ -133,3 +133,27 @@ test('SCOP as measured: all heat over all power, per day kept, days with too lit
   assert.equal(r.scop, 3.5);
   assert.equal(r.days, 2);
 });
+
+test('monthly report: what shifting to cheap hours saved against the day average', () => {
+  const H0 = Date.parse('2026-01-10T00:00:00Z') / 3600000;
+  const price = (h) => ((h - H0) % 24 < 6 ? 0.1 : 0.3); // night cheap
+  const days = { '2026-01-10': { heat: 40, elec: 10, min: 1440, eh: { [H0 + 2]: 8, [H0 + 14]: 2 } } };
+  const hoursOfDay = () => Array.from({ length: 24 }, (_, i) => H0 + i);
+  const [m] = hw.monthly(days, price, hoursOfDay);
+  assert.equal(m.month, '2026-01');
+  assert.equal(m.costEur, 1.4); // 8 × 0.1 + 2 × 0.3
+  const avg = (6 * 0.1 + 18 * 0.3) / 24; // 0.25
+  assert.equal(m.flatEur, Math.round(10 * avg * 100) / 100);
+  assert.equal(m.savedEur, Math.round((10 * avg - 1.4) * 100) / 100);
+  assert.equal(m.scop, 4);
+});
+
+test('the house as a battery: a little warmer on solar (cooler when cooling), more with more sun', () => {
+  const rw = require('../src/roomWarmup');
+  const hours = [{ ms: 1, targetC: 20, room: 'comfort', surplusKwh: 0.5 }, { ms: 2, targetC: 20, room: 'comfort', surplusKwh: 1.5 }, { ms: 3, targetC: 20, room: 'comfort', surplusKwh: 4 }];
+  const h = rw.solarShift(hours, { boostC: 0.6, minSurplusKwh: 1 });
+  assert.deepEqual(h.map((x) => x.targetC), [20, 20.5, 20.6]);
+  assert.equal(h[2].room, 'solar');
+  assert.equal(rw.solarShift(hours, { cooling: true, boostC: 0.6 })[2].targetC, 19.4);
+  assert.deepEqual(rw.solarShift(hours, { boostC: 0 }), hours);
+});

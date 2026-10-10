@@ -316,6 +316,7 @@ router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), 
   const c = {};
   if (b.enabled !== undefined) c.enabled = !!b.enabled;
   if (kind === 'solar' && b.grid_invert !== undefined) c.grid_invert = !!b.grid_invert;
+  if (b.heartbeat_vi !== undefined) c.heartbeat_vi = String(b.heartbeat_vi || '').replace(/[^\w.-]/g, '_').slice(0, 60);
   if (b.mode !== undefined) c.mode = b.mode === 'live' ? 'live' : 'shadow';
   if (b.device !== undefined) { c.device = b.device ? String(b.device).slice(0, 80) : null; c.miniserver_id = b.miniserver_id ? Number(b.miniserver_id) : null; }
   if (b.type_key !== undefined) c.type_key = b.type_key ? String(b.type_key).slice(0, 80) : null;
@@ -344,7 +345,7 @@ router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), 
   }
   if (kind === 'heatpump' && b.room) {
     const R = b.room; const hhmmOk = (x, d) => (/^\d{1,2}:\d{2}$/.test(String(x || '')) ? String(x) : d);
-    c.room = { enabled: !!R.enabled, controller: R.controller ? String(R.controller).slice(0, 80) : null, schedule: R.schedule === 'own' ? 'own' : 'loxone', comfort_c: Math.max(15, Math.min(25, num(R.comfort_c, 20.5))), setback_c: Math.max(10, Math.min(23, num(R.setback_c, 19))), comfort_from: hhmmOk(R.comfort_from, '07:00'), comfort_until: hhmmOk(R.comfort_until, '22:30') };
+    c.room = { enabled: !!R.enabled, controller: R.controller ? String(R.controller).slice(0, 80) : null, schedule: R.schedule === 'own' ? 'own' : 'loxone', comfort_c: Math.max(15, Math.min(25, num(R.comfort_c, 20.5))), setback_c: Math.max(10, Math.min(23, num(R.setback_c, 19))), comfort_from: hhmmOk(R.comfort_from, '07:00'), comfort_until: hhmmOk(R.comfort_until, '22:30'), solar_boost_c: Math.max(0, Math.min(2, num(R.solar_boost_c, 0.5))), solar_min_kwh: Math.max(0.2, Math.min(5, num(R.solar_min_kwh, 1))) };
   }
   if (kind === 'heatpump' && b.features && typeof b.features === 'object') {
     const tri = (x) => (x === true || x === 'yes' ? true : x === false || x === 'no' ? false : null);

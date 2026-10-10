@@ -93,11 +93,12 @@ function dailyEnergy(samples, dayOf) {
     const e = Number(s.elecKw);
     if (!Number.isFinite(e) || e < 0) continue;
     const d = dayOf(s.ms);
-    const g = out[d] || (out[d] = { heat: 0, elec: 0, min: 0, tSum: 0, tN: 0 });
+    const g = out[d] || (out[d] = { heat: 0, elec: 0, min: 0, tSum: 0, tN: 0, eh: {} });
     g.elec += e / 60; g.heat += Math.max(0, Number(s.heatKw) || 0) / 60; g.min += 1;
+    const h = Math.floor(s.ms / 3600000); g.eh[h] = (g.eh[h] || 0) + e / 60; // power per hour, for the costs
     if (Number.isFinite(s.outdoorC)) { g.tSum += s.outdoorC; g.tN += 1; }
   }
-  return Object.fromEntries(Object.entries(out).map(([d, g]) => [d, { heat: r2(g.heat), elec: r2(g.elec), min: g.min, t: g.tN ? r2(g.tSum / g.tN) : null }]));
+  return Object.fromEntries(Object.entries(out).map(([d, g]) => [d, { heat: r2(g.heat), elec: r2(g.elec), min: g.min, t: g.tN ? r2(g.tSum / g.tN) : null, eh: Object.fromEntries(Object.entries(g.eh).map(([h, v]) => [h, Math.round(v * 1000) / 1000])) }]));
 }
 
 // Pure: the seasonal COP as measured — all heat delivered divided by all electricity used, over the
@@ -108,4 +109,30 @@ function scop(days, { fromDay = null } = {}) {
   return { scop: elec > 1 ? r2(heat / elec) : null, heatKwh: Math.round(heat), elecKwh: Math.round(elec), days: list.length, from: list[0]?.[0] || null, to: list[list.length - 1]?.[0] || null };
 }
 
-module.exports = { dailyEnergy, scop, SOURCES, band, tbin, defaults, learn, expect, costPerHeat, stepOf, learnSteps };
+// Pure: per month what the heat pump used and cost, against the same kWh at the day's average price
+// (what running "blind" around the clock would have cost) — the difference is what planning brought.
+//   days { 'YYYY-MM-DD': { heat, elec, min, eh: { hourIndex: kWh } } }, priceAt(hourIndex) -> €/kWh | null,
+//   hoursOfDay('YYYY-MM-DD') -> the hour indexes (ms / 3600000) of that local day
+function monthly(days, priceAt, hoursOfDay) {
+  const by = {};
+  for (const [d, g] of Object.entries(days || {})) {
+    if (!(g.min >= 60)) continue;
+    const m = by[d.slice(0, 7)] || (by[d.slice(0, 7)] = { month: d.slice(0, 7), days: 0, heat: 0, elec: 0, cost: 0, flat: 0, priced: 0 });
+    m.days += 1; m.heat += g.heat; m.elec += g.elec;
+    const hs = Object.entries(g.eh || {}).map(([h, kwh]) => ({ kwh, p: priceAt(Number(h)) })).filter((x) => Number.isFinite(x.p));
+    if (!hs.length) continue;
+    // the day's average price over all its hours (not weighted by use)
+    const dayPrices = hoursOfDay(d).map(priceAt).filter(Number.isFinite);
+    const avg = dayPrices.length ? dayPrices.reduce((a, b) => a + b, 0) / dayPrices.length : null;
+    const kwh = hs.reduce((a, x) => a + x.kwh, 0);
+    m.cost += hs.reduce((a, x) => a + x.kwh * x.p, 0);
+    if (avg !== null) m.flat += kwh * avg;
+    m.priced += kwh;
+  }
+  return Object.values(by).sort((a, b) => a.month.localeCompare(b.month)).map((m) => ({
+    month: m.month, days: m.days, heatKwh: Math.round(m.heat), elecKwh: Math.round(m.elec), scop: m.elec > 1 ? r2(m.heat / m.elec) : null,
+    costEur: r2(m.cost), flatEur: r2(m.flat), savedEur: r2(m.flat - m.cost), pricedShare: m.elec > 0 ? r2(m.priced / m.elec) : 0,
+  }));
+}
+
+module.exports = { monthly, dailyEnergy, scop, SOURCES, band, tbin, defaults, learn, expect, costPerHeat, stepOf, learnSteps };

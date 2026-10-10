@@ -172,4 +172,19 @@ function forecast(model, { startC, hours, k = 0.02, hystC = 0.3, stepMin = 5 }) 
   return { rows, runs, onAt: main ? Math.round(main.onAt) : null, reachAt: main && main.reachAt !== null ? main.reachAt : null };
 }
 
-module.exports = { learn, rate, warmupHours, preheat, learnSchedule, learnCooling, forecast, tbin };
+// Pure: the house as a battery. In hours with solar to spare the room may be a little warmer (heating)
+// or cooler (cooling) than its target, so the free power is stored in the house instead of exported.
+//   hours [{ ms, targetC, room, surplusKwh }] -> the same, shifted ones with room 'solar' and fromC
+function solarShift(hours, { cooling = false, boostC = 0.5, minSurplusKwh = 1 } = {}) {
+  if (!(boostC > 0)) return hours;
+  return hours.map((h) => {
+    if (!Number.isFinite(h.targetC) || !(h.surplusKwh >= minSurplusKwh)) return h;
+    // the more sun to spare, the more it stores, up to boostC
+    const k = Math.min(1, h.surplusKwh / (minSurplusKwh * 2));
+    const d = Math.round(boostC * k * 10) / 10;
+    if (!(d > 0)) return h;
+    return { ...h, fromC: h.targetC, targetC: Math.round((h.targetC + (cooling ? -d : d)) * 10) / 10, room: 'solar' };
+  });
+}
+
+module.exports = { solarShift, learn, rate, warmupHours, preheat, learnSchedule, learnCooling, forecast, tbin };

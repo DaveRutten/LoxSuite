@@ -34,7 +34,7 @@ const KINDS = ['heatpump', 'solar'];
 const DEFAULTS = {
   heatpump: {
     enabled: false, mode: 'shadow', miniserver_id: null, device: null, type_key: null, links: {}, source: 'air', heat_meter_flow_unit: 'auto',
-    room: { enabled: true, controller: null, schedule: 'loxone', comfort_c: 20.5, setback_c: 19, comfort_from: '07:00', comfort_until: '22:30' },
+    room: { enabled: true, controller: null, schedule: 'loxone', comfort_c: 20.5, setback_c: 19, comfort_from: '07:00', comfort_until: '22:30', solar_boost_c: 0.5, solar_min_kwh: 1 },
     // bijsturen for long, calm runs: 'off' | 'advise' (shows it) | 'live' (sends it, with the module live)
     tuning: { mode: 'advise', flow_min: 25, flow_max: 45 },
     // the user's own names for the power steps and the outdoor-sensor (NTC) settings of their Loxone logic
@@ -42,13 +42,16 @@ const DEFAULTS = {
     // what this heat pump has (the setup wizard): power steps (relays / %) and an outdoor sensor (NTC) the
     // own Loxone logic can fake; null = not asked yet (shown when linked)
     features: { power_steps: null, ntc: null }, setup_done: false,
+    // live: a virtual input in Loxone that LoxSuite toggles every minute; without it for 5 min the own
+    // Loxone logic takes over again (the safety net)
+    heartbeat_vi: 'LoxSuite_Heartbeat_WP',
     limits: { ...lg.DEFAULT_LIMITS }, heat_c_per_h: 10, loss_c_per_h: 0.6, hold_h: 2,
     legionella: { enabled: true, interval_days: 7, temp_c: 60, hold_min: 30, from_hour: 10, to_hour: 17, duration_h: 2, unit_backup: true },
   },
-  solar: { enabled: false, mode: 'shadow', miniserver_id: null, device: null, type_key: null, links: {}, grid_invert: false, inverter_kw: 8, step_pct: 5, margin_kw: 0.2 },
+  solar: { enabled: false, mode: 'shadow', miniserver_id: null, device: null, type_key: null, links: {}, grid_invert: false, heartbeat_vi: 'LoxSuite_Heartbeat_PV', inverter_kw: 8, step_pct: 5, margin_kw: 0.2 },
 };
 
-const rt = { days: null, daysSavedAt: 0, conflicts: { heatpump: {}, solar: {} }, tank: [], weather: [], room: [], tune: [], last: { heatpump: {}, solar: {} }, sent: { heatpump: [], solar: [] }, timer: null, discovered: new Map() };
+const rt = { hb: { heatpump: {}, solar: {} }, alertMem: { heatpump: {}, solar: {} }, days: null, daysSavedAt: 0, conflicts: { heatpump: {}, solar: {} }, tank: [], weather: [], room: [], tune: [], last: { heatpump: {}, solar: {} }, sent: { heatpump: [], solar: [] }, timer: null, discovered: new Map() };
 
 async function getConfig(kind) {
   const d = DEFAULTS[kind];
@@ -81,6 +84,30 @@ async function energyDays(localOf, nowMs = Date.now()) {
   const out = Object.fromEntries(keys.map((k) => [k, merged[k]]));
   if (nowMs - rt.daysSavedAt > HOUR) { rt.daysSavedAt = nowMs; rt.days = out; settings.set('energy_hp_days', out).catch(() => {}); }
   return out;
+}
+
+// Per month: power, heat, SCOP, costs and what planning saved (heatPumpWeather.monthly). Prices from
+// the price table; made at most once an hour.
+async function monthlyReport(days, nowMs = Date.now()) {
+  if (rt.report && nowMs - rt.report.at < HOUR) return rt.report.val;
+  const keys = Object.keys(days).sort();
+  if (!keys.length) return [];
+  const { localMidnight, displayTz } = require('./localTime');
+  const tz = displayTz();
+  const fromMs = localMidnight(Date.parse(`${keys[0]}T12:00:00Z`), tz);
+  const toMs = localMidnight(Date.parse(`${keys[keys.length - 1]}T12:00:00Z`), tz, 1);
+  const rows = await require('./prices').getPrices(new Date(fromMs).toISOString(), new Date(toMs).toISOString()).catch(() => []);
+  const sum = new Map();
+  for (const r of rows) {
+    if (!Number.isFinite(r.allin_eur_kwh)) continue;
+    const h = Math.floor(Date.parse(r.start_at) / HOUR);
+    const x = sum.get(h) || { s: 0, n: 0 }; x.s += r.allin_eur_kwh; x.n += 1; sum.set(h, x);
+  }
+  const priceAt = (h) => { const x = sum.get(h); return x ? x.s / x.n : null; };
+  const hoursOfDay = (d) => { const a = localMidnight(Date.parse(`${d}T12:00:00Z`), tz) / HOUR; const b = localMidnight(Date.parse(`${d}T12:00:00Z`), tz, 1) / HOUR; return Array.from({ length: Math.round(b - a) }, (_, i) => a + i); };
+  const val = hw.monthly(days, priceAt, hoursOfDay);
+  rt.report = { at: nowMs, val };
+  return val;
 }
 
 const miniservers = () => db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all().catch(() => []);
@@ -299,7 +326,12 @@ async function heatpumpStatus(nowMs = Date.now()) {
   const leg = L.enabled ? lg.planLegionella({ hours, nowMs, lastDoneMs, intervalDays: Number(L.interval_days) || 7, fromHour: Number(L.from_hour), toHour: Number(L.to_hour), durationH: Number(L.duration_h) || 2, localHour }) : null;
   const legNow = leg?.block && nowMs >= leg.block.startMs && nowMs < leg.block.endMs;
   const cooling = v.heatingMode === 3 || v.heatingMode === 4;
-  const roomHours = new Map(room ? room.hourly(plan.hours.map((h) => h.ms)).map((x) => [x.ms, x]) : []);
+  // the house as a battery: a little warmer (or cooler) in hours with solar to spare
+  const surplusOf = new Map(hours.map((h) => [h.ms, h.surplusKwh || 0]));
+  const roomList = room ? rwu.solarShift(room.hourly(plan.hours.map((h) => h.ms)).map((x) => ({ ...x, surplusKwh: surplusOf.get(x.ms) || 0 })), { cooling, boostC: Number(R.solar_boost_c ?? 0.5), minSurplusKwh: Number(R.solar_min_kwh ?? 1) }) : [];
+  const roomHours = new Map(roomList.map((x) => [x.ms, x]));
+  const solarNow = roomHours.get(Math.floor(nowMs / HOUR) * HOUR);
+  if (room && solarNow?.room === 'solar' && !room.preheating) { room.setpointNow = solarNow.targetC; room.why = cooling ? 'solar to spare: cooling a little more (the house stores it)' : 'solar to spare: a little warmer (the house stores it)'; }
   // the room ahead: when the heat pump is expected to come on, and when the room is at its target
   const cool = rwu.learnCooling(rt.room.filter((x) => x.ms > nowMs - 30 * DAY));
   const rf = room && Number.isFinite(state.roomC) ? rwu.forecast(rmodel, { startC: state.roomC, k: cool.k, hours: plan.hours.map((h) => ({ ms: h.ms, targetC: roomHours.get(h.ms)?.targetC ?? null, outdoorC: wx.get(h.ms)?.t ?? state.outdoorC ?? null })) }) : null;
@@ -309,7 +341,9 @@ async function heatpumpStatus(nowMs = Date.now()) {
   const tuneLive = T.mode === 'live' && advice && tu.keyOf(advice.setting) !== tu.keyOf(current);
   const tunePlan = tuneLive ? { ...(Number.isFinite(advice.setting.flowC) ? { flowC: advice.setting.flowC, flowWhy: advice.why } : {}), ...(F.power_steps === false ? {} : { step: advice.setting.step }), ...(F.ntc === false ? {} : { ntc: advice.setting.ntc }), tuneWhy: advice.why } : {};
   const writes = hp.writesFor({ type, plan: { mode, ...(room ? { roomC: room.setpointNow, roomWhy: room.why } : {}), ...tunePlan }, now: v, last: rt.last.heatpump, nowMs, settings: { ...type.defaults, ...limits, legionellaC: Number(L.temp_c) || 60 } });
-  const scopNow = hw.scop(await energyDays(localOf, nowMs));
+  const hpDays = await energyDays(localOf, nowMs);
+  const scopNow = hw.scop(hpDays);
+  const report = await monthlyReport(hpDays, nowMs).catch(() => []);
   const tankLow = (plan.hours || []).reduce((m, h) => (Number.isFinite(h.predC) && (!m || h.predC < m.c) ? { c: h.predC, ms: h.ms } : m), null);
   const curKey = current ? tu.keyOf(current) : null;
   const suggestions = require('./heatPumpAdvice').suggestions({
@@ -319,10 +353,10 @@ async function heatpumpStatus(nowMs = Date.now()) {
     differs: !!(advice && curKey && tu.keyOf(advice.setting) !== curKey),
   });
   return {
-    kind: 'heatpump', suggestions, cfg, check: r.check, found: summary(r.found), chosen: r.chosen ? summaryOne(r.chosen) : null, msId,
+    kind: 'heatpump', report, suggestions, heartbeat: { ...rt.hb.heatpump }, cfg, check: r.check, found: summary(r.found), chosen: r.chosen ? summaryOne(r.chosen) : null, msId,
     roles: rolesView('heatpump', type, r.chosen), values: v, state, limits, warnings,
     learned: { threshold: th, fromPipe: withPipe, draws: draws.slice(-20), patterns, samples: samples.length, days: prof?.days || 0 },
-    plan: plan.hours.map((h, i) => { const e = exps.get(h.ms) || {}; const rh2 = roomHours.get(h.ms) || {}; const legH = leg?.block && h.ms >= leg.block.startMs && h.ms < leg.block.endMs; return { ...h, roomC: roomAhead.get(h.ms)?.roomC ?? null, heatOn: !!roomAhead.get(h.ms)?.on, room: rh2.room || null, roomTargetC: rh2.targetC ?? null, does: legH ? 'legionella' : h.mode === 'dhw' ? 'dhw' : rh2.room === 'preheat' ? 'preheat' : rh2.room === 'comfort' ? (cooling ? 'cool' : 'comfort') : rh2.room === 'setback' ? 'setback' : 'free', price: hours[i]?.price ?? null, surplusKwh: hours[i]?.surplusKwh ?? 0, estimated: !!hours[i]?.estimated, drop: Math.round(dropOf(h.ms) * 10) / 10, cop: e.cop ?? null, defrost: e.defrost ?? null, outdoorC: e.outdoorC, rh: e.rh, heatCost: hw.costPerHeat(hours[i]?.price ?? null, e) }; }),
+    plan: plan.hours.map((h, i) => { const e = exps.get(h.ms) || {}; const rh2 = roomHours.get(h.ms) || {}; const legH = leg?.block && h.ms >= leg.block.startMs && h.ms < leg.block.endMs; return { ...h, roomC: roomAhead.get(h.ms)?.roomC ?? null, heatOn: !!roomAhead.get(h.ms)?.on, room: rh2.room || null, roomTargetC: rh2.targetC ?? null, does: legH ? 'legionella' : h.mode === 'dhw' ? 'dhw' : rh2.room === 'solar' ? 'solar' : rh2.room === 'preheat' ? 'preheat' : rh2.room === 'comfort' ? (cooling ? 'cool' : 'comfort') : rh2.room === 'setback' ? 'setback' : 'free', price: hours[i]?.price ?? null, surplusKwh: hours[i]?.surplusKwh ?? 0, estimated: !!hours[i]?.estimated, drop: Math.round(dropOf(h.ms) * 10) / 10, cop: e.cop ?? null, defrost: e.defrost ?? null, outdoorC: e.outdoorC, rh: e.rh, heatCost: hw.costPerHeat(hours[i]?.price ?? null, e) }; }),
     weather: { source, scop: scopNow, model: wmodel, now: exps.get(Math.floor(nowMs / HOUR) * HOUR) || null, steps: hw.learnSteps(rt.weather.filter((x) => x.ms > nowMs - 60 * DAY)) },
     cooling, roomForecast: rf ? { onAt: rf.onAt, reachAt: rf.reachAt, runs: rf.runs.slice(0, 24).map((x) => ({ onAt: Math.round(x.onAt), offAt: x.offAt, fromC: x.fromC, toC: x.toC })), cooling: cool } : null, room: room ? { ...room, hourly: undefined, model: rmodel, schedule: sched, controller: r.roomController ? { uuid: r.roomController.uuid, name: r.roomController.name, room: r.roomController.room } : null } : null,
     controllers: (await roomControllerList()).map((x) => ({ value: x.value, uuid: x.uuid, name: x.name, room: x.room, msName: x.msName })),
@@ -356,7 +390,7 @@ async function solarStatus(nowMs = Date.now()) {
   const houseKw = pvKw !== null && v.gridPower !== undefined ? Math.max(0, pvKw + v.gridPower) : null;
   const limit = sl.limitPct({ value, houseKw, inverterKw: Number(cfg.inverter_kw) || 8, stepPct: Number(cfg.step_pct) || 5, marginKw: Number(cfg.margin_kw) || 0.2 });
   const writes = sl.writesFor({ type, value, houseKw, now: v, last: rt.last.solar, nowMs, settings: { inverterKw: Number(cfg.inverter_kw) || 8, stepPct: Number(cfg.step_pct) || 5, marginKw: Number(cfg.margin_kw) || 0.2 } });
-  return { kind: 'solar', cfg, check: r.check, found: summary(r.found), chosen: r.chosen ? summaryOne(r.chosen) : null, msId, roles: rolesView('solar', type, r.chosen), values: v, worth, value, contract, ahead, pvKw, houseKw, limit, writes, sent: rt.sent.solar.slice(-15) };
+  return { kind: 'solar', heartbeat: { ...rt.hb.solar }, cfg, check: r.check, found: summary(r.found), chosen: r.chosen ? summaryOne(r.chosen) : null, msId, roles: rolesView('solar', type, r.chosen), values: v, worth, value, contract, ahead, pvKw, houseKw, limit, writes, sent: rt.sent.solar.slice(-15) };
 }
 
 const summaryOne = (c) => ({ uuid: c.uuid, name: c.name, room: c.room, score: c.score, ok: c.check.ok, known: c.known, miniserver: c.miniserver, missingFromLoxone: c.missingFromLoxone });
@@ -428,6 +462,33 @@ function detectConflicts(last, values, nowMs, { settleMs = 90000, withinMs = 6 *
   return out;
 }
 
+// The safety net for live mode: a virtual input toggled 0/1 every minute. In Loxone a retriggerable
+// monoflop of 5 minutes on it says "LoxSuite is alive"; when it falls off, the own logic takes over.
+async function heartbeat(kind, cfg, st, nowMs) {
+  const vi = String(cfg.heartbeat_vi || '').trim();
+  const hb = rt.hb[kind];
+  if (!vi || !st.msId) { rt.hb[kind] = {}; return; }
+  const ms = (await miniservers()).find((m) => m.id === st.msId);
+  hb.value = hb.value ? 0 : 1;
+  hb.vi = vi;
+  try {
+    if (!ms) throw new Error('Miniserver not found');
+    await require('./loxone').sendHttpVirtualInput(ms, vi, hb.value);
+    hb.okAt = nowMs; hb.error = null; hb.failingSince = null;
+  } catch (e) {
+    hb.error = e.message; if (!hb.failingSince) hb.failingSince = nowMs;
+  }
+}
+
+// Alerts of this minute to the notification rules of type 'energy_device' (each key once).
+async function alert(kind, st, nowMs) {
+  const ea = require('./energyAlerts');
+  const list = [...(kind === 'solar' ? ea.solarAlerts(st, rt.alertMem.solar, nowMs) : ea.heatpumpAlerts(st, rt.alertMem.heatpump, nowMs, { localParts: (ms) => require('./localTime').localParts(ms) })), ...ea.heartbeatAlert(kind, rt.hb[kind], nowMs)];
+  if (!list.length) return;
+  const n = require('./notifications');
+  for (const a of list) await n.fireCarEvent('energy_device', `${kind}|${a.key}`, { title: a.title, message: a.message, severity: a.severity, fields: [{ label: 'Device', value: kind === 'solar' ? 'Solar panels' : 'Heat pump' }] }).catch((e) => console.error(`[energy modules] notify: ${e.message}`));
+}
+
 // Send (live) or log (shadow) the writes of this minute.
 async function apply(kind, st) {
   const cfg = st.cfg;
@@ -481,6 +542,9 @@ async function tick(nowMs = Date.now()) {
       while (rt.tank.length && rt.tank[0].ms < nowMs - KEEP_MS) rt.tank.shift();
     }
     await apply(kind, st);
+    if (cfg.mode === 'live') await heartbeat(kind, cfg, st, nowMs);
+    else rt.hb[kind] = {};
+    await alert(kind, st, nowMs);
     if (kind === 'heatpump') for (const sr of SERIES) await persist(sr, [hourOf(nowMs)]);
   }
 }

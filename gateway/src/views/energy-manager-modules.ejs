@@ -47,6 +47,7 @@
   .mm-sug-k { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; min-width:6.5rem; color:var(--text-muted); }
   .mm-sug-comfort { border-left-color:#e67e22; background:color-mix(in srgb, #e67e22 7%, transparent); }
   .mm-sug-energy { border-left-color:var(--en-solar); background:color-mix(in srgb, var(--en-solar) 7%, transparent); }
+  .mm-steps { margin:0.4rem 0 0.2rem 1.2rem; padding:0; font-size:0.88rem; } .mm-steps li { margin:0.15rem 0; }
 </style>
 
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
@@ -64,10 +65,27 @@
   </div>
   <p class="mm-status" data-history-msg="<%= kind %>" hidden></p>
 <% } %>
+<% function heartbeatBox(kind, st) { const cfgH = st.cfg || {}; %>
+  <div class="mm-sub" data-heartbeat><h3><%= t('Safety net (heartbeat)') %></h3>
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+      <div><label><%= t('Virtual input in Loxone') %></label><input type="text" data-f="heartbeat_vi" value="<%= cfgH.heartbeat_vi || '' %>" placeholder="<%= kind === 'solar' ? 'LoxSuite_Heartbeat_PV' : 'LoxSuite_Heartbeat_WP' %>"></div>
+    </div>
+    <details class="mm-detail"><summary class="mm-sum"><%= t('How to set it up in Loxone') %></summary>
+      <ol class="mm-steps">
+        <li><%= t('Create a virtual input with this name (digital).') %></li>
+        <li><%= t('Connect it to a Monoflop of 300 s with "retrigger" on: its output is "LoxSuite alive".') %></li>
+        <li><%= t('Only let LoxSuite\'s values through while that output is on; otherwise your own logic and setpoints apply.') %></li>
+      </ol>
+      <p class="mm-sum" style="margin:0.2rem 0 0;"><%= t('In live mode LoxSuite switches it on and off every minute. If LoxSuite stops, hangs or loses the network, the monoflop drops after 5 minutes and Loxone takes over by itself. Empty: no heartbeat.') %></p>
+    </details>
+    <p class="mm-sum" style="margin:0.5rem 0 0;"><%= t('Messages (legionella overdue, tank too cold, a fault, defrosting that does not end, a long limit, the heartbeat failing):') %> <a href="/admin/notifications?trigger_type=energy_device"><%= t('notification rule "Energy manager"') %></a></p>
+  </div>
+<% } %>
 <% function moduleStatus(kind, st) { %>
   <p class="mm-status" data-hint-keep>
     <% if (st.check && st.check.ok) { %><span class="badge badge-ok"><%= t('complete') %></span><% } else { %><span class="badge badge-off"><%= t('incomplete') %></span> <%= t('missing:') %> <%= ((st.check && st.check.missing) || []).concat((st.check && st.check.notWritable) || []).join(', ') %><% } %>
     <% const nConf = (st.roles || []).filter((x) => x.conflict).length; if (nConf) { %> <span class="badge badge-warning"><%= t('{n} outputs also driven by Loxone', { n: nConf }) %></span><% } %>  <% if (st.chosen) { %> <%= t('Found in the Loxone structure: {n} roles recognised.', { n: st.chosen.score }) %><% if (st.chosen.known) { %> <%= t('Recognised as {name} ({p}% of the names).', { name: st.chosen.known.label, p: Math.round(st.chosen.known.share * 100) }) %><% } %><% } else { %> <%= t('Nothing found in Loxone yet: an output only shows up when it is visible in the Loxone app. Or import the template below.') %><% } %>
+    <% const HB = st.heartbeat || {}; if (st.cfg && st.cfg.mode === 'live' && st.cfg.heartbeat_vi) { %> <span class="badge <%= HB.error ? 'badge-warning' : HB.okAt ? 'badge-ok' : 'badge-off' %>" title="<%= HB.error ? HB.error : '' %>">♥ <%= HB.error ? t('heartbeat fails') : HB.okAt ? t('heartbeat') + ' ' + hhmm(HB.okAt) : t('heartbeat: not sent yet') %></span><% } %>
   </p>
 <% } %>
 
@@ -172,12 +190,25 @@
       const chData = { plan: (hpS.plan || []).slice(0, 24).map((h) => ({ ms: h.ms, does: h.does, roomTargetC: h.roomTargetC, roomC: h.roomC, predC: h.predC, outdoorC: h.outdoorC, rh: h.rh, price: h.price, estimated: !!h.estimated, cop: h.cop, defrost: h.defrost, drop: h.drop, reason: tr(h.reason || '') })),
         onAt: (hpS.roomForecast || {}).onAt || null, reachAt: (hpS.roomForecast || {}).reachAt || null, runs: (hpS.roomForecast || {}).runs || [], cooling: !!hpS.cooling,
         L: { does: t('What it does'), room: t('Room (°C)'), tank: t('Tank (°C)'), out: t('Outside (°C)'), outRh: t('Outside (°C) and humidity (%)'), rh: t('humidity'), price: t('Price (€/kWh)'), now: t('now'), on: t('on'), reach: t('at temperature'), target: t('room target'), roomF: t('room expected'), heating: hpS.cooling ? t('cooling') : t('heating'), cop: 'COP', defrost: t('expected defrosting'), drop: t('usual draw'),
-          dhw: t('Tap water'), legionella: t('Legionella'), preheat: t('Pre-heating'), comfort: t('Comfort'), cool: t('Cooling'), setback: t('Set back'), free: t('Heating / Loxone itself') } };
+          solar: hpS.cooling ? t('Cooling on solar') : t('Storing solar in the house'), dhw: t('Tap water'), legionella: t('Legionella'), preheat: t('Pre-heating'), comfort: t('Comfort'), cool: t('Cooling'), setback: t('Set back'), free: t('Heating / Loxone itself') } };
     %>
     <div id="mm-hp-plan" style="margin-top:0.4rem;"></div>
     <script type="application/json" id="mm-hp-plan-data"><%- JSON.stringify(chData).replace(/</g, '\\u003c') %></script>
-    <div class="mm-legend"><% [['#3b82f6', t('tap water')], ['var(--en-import)', t('legionella')], ['#e67e22', t('pre-heating')], [hpS.cooling ? '#06b6d4' : 'var(--accent)', hpS.cooling ? t('cooling') : t('comfort')], ['var(--en-house)', t('set back')]].forEach(([c, l]) => { %><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-col" style="background:<%= c %>;"></i> <%= l %></span><% }) %><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-dash" style="border-top-color:var(--accent);"></i> <%= t('room target') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key" style="background:#e67e22;"></i> <%= t('room expected') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-col" style="background:#e67e22;"></i> <%= hpS.cooling ? t('cooling') : t('heating') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key" style="background:#3b82f6;"></i> <%= t('tank') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-dash" style="border-top-color:#06b6d4;"></i> <%= t('humidity') %></span><span><i class="ls-key ls-key-band" style="background:var(--danger); opacity:0.35;"></i> <%= t('usual draw') %></span><span style="white-space:nowrap; color:#3b82f6;">❄ <%= t('expected defrosting') %></span></div>
+    <div class="mm-legend"><% [['var(--en-solar)', hpS.cooling ? t('cooling on solar') : t('warmer on solar')], ['#3b82f6', t('tap water')], ['var(--en-import)', t('legionella')], ['#e67e22', t('pre-heating')], [hpS.cooling ? '#06b6d4' : 'var(--accent)', hpS.cooling ? t('cooling') : t('comfort')], ['var(--en-house)', t('set back')]].forEach(([c, l]) => { %><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-col" style="background:<%= c %>;"></i> <%= l %></span><% }) %><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-dash" style="border-top-color:var(--accent);"></i> <%= t('room target') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key" style="background:#e67e22;"></i> <%= t('room expected') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-col" style="background:#e67e22;"></i> <%= hpS.cooling ? t('cooling') : t('heating') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key" style="background:#3b82f6;"></i> <%= t('tank') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-dash" style="border-top-color:#06b6d4;"></i> <%= t('humidity') %></span><span><i class="ls-key ls-key-band" style="background:var(--danger); opacity:0.35;"></i> <%= t('usual draw') %></span><span style="white-space:nowrap; color:#3b82f6;">❄ <%= t('expected defrosting') %></span></div>
     <p class="hint" style="margin:0.3rem 0 0;"><%= t('The plan compares the cost per kWh of heat: the price divided by the COP expected in that hour\'s weather.') %></p>
+  </div>
+
+  <% const RP = hpS.report || []; const RN = RP[RP.length - 1]; const RY = RP.slice(-12); const sumY = (k) => RY.reduce((a, m) => a + (m[k] || 0), 0); %>
+  <div class="mm-sub" data-report><h3><%= t('What it brought') %></h3>
+    <% if (RN) { %><div class="mm-kpis">
+      <div class="mm-kpi"><span><%= t('Saved this month') %></span><b><%= RN.pricedShare > 0 ? '€ ' + nf(RN.savedEur, 2) : '—' %></b><span><%= t('against the same kWh at the day\'s average price') %></span></div>
+      <div class="mm-kpi"><span><%= t('Heat pump this month') %></span><b><%= nf(RN.elecKwh, 0) %> kWh</b><span><%= RN.pricedShare > 0 ? '€ ' + nf(RN.costEur, 2) + ' · ' : '' %>SCOP <%= nf(RN.scop, 2) %></span></div>
+      <div class="mm-kpi"><span><%= t('Last 12 months') %></span><b><%= sumY('pricedShare') > 0 ? '€ ' + nf(sumY('savedEur'), 2) : '—' %></b><span><%= nf(sumY('elecKwh'), 0) %> kWh · <%= t('{n} months', { n: RY.length }) %></span></div>
+    </div>
+    <details class="mm-detail"><summary class="mm-sum"><%= t('Per month') %></summary><div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Month') %></th><th class="num"><%= t('Power') %></th><th class="num"><%= t('Heat') %></th><th class="num">SCOP</th><th class="num"><%= t('Costs') %></th><th class="num"><%= t('At day average') %></th><th class="num"><%= t('Saved') %></th></tr></thead><tbody>
+      <% RP.slice().reverse().forEach((m) => { %><tr><td><%= new Date(m.month + '-15').toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' }) %></td><td class="num"><%= nf(m.elecKwh, 0) %> kWh</td><td class="num"><%= nf(m.heatKwh, 0) %> kWh</td><td class="num"><%= nf(m.scop, 2) %></td><td class="num"><%= m.pricedShare > 0 ? '€ ' + nf(m.costEur, 2) : '—' %></td><td class="num"><%= m.pricedShare > 0 ? '€ ' + nf(m.flatEur, 2) : '—' %></td><td class="num"><%= m.pricedShare > 0 ? '€ ' + nf(m.savedEur, 2) : '—' %></td></tr><% }) %>
+    </tbody></table></div><p class="mm-sum" style="margin:0.3rem 0 0;"><%= t('Saved: what the same power would have cost at the average price of each day, minus what it cost at the hours it really ran. Builds up from now on.') %></p></details>
+    <% } else { %><p class="mm-sum" style="margin:0;"><%= t('Builds up from now on: power, heat, SCOP and costs per month.') %></p><% } %>
   </div>
 
   <div class="mm-sub" data-tapwater><h3><%= t('Tap water') %></h3>
@@ -211,6 +242,10 @@
       <div><label><%= t('Comfort from') %></label><input type="text" data-r="comfort_from" value="<%= RC.comfort_from %>"></div>
       <div><label><%= t('Comfort until') %></label><input type="text" data-r="comfort_until" value="<%= RC.comfort_until %>"></div>
       <div><label><%= t('Set back to (°C)') %></label><input type="text" data-r="setback_c" value="<%= RC.setback_c %>"></div>
+    </div>
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-top:0.4rem;">
+      <div><label><%= hpS.cooling ? t('Cool extra on solar (°C)') : t('Warmer on solar (°C)') %></label><input type="text" data-r="solar_boost_c" value="<%= RC.solar_boost_c ?? 0.5 %>"><p class="mm-sum" style="margin:0.2rem 0 0;"><%= t('the house as a battery; 0 = off') %></p></div>
+      <div><label><%= t('From a solar surplus of (kWh per hour)') %></label><input type="text" data-r="solar_min_kwh" value="<%= RC.solar_min_kwh ?? 1 %>"></div>
     </div>
     <% if (rp) { %><div class="mm-kpis">
       <div class="mm-kpi"><span><%= t('Room now') %></span><b><%= nf(st.roomC) %> °C</b><span><%= t('setpoint now') %> <%= nf(rp.setpointNow) %> °C · <%= tr(rp.why) %></span></div>
@@ -287,6 +322,7 @@
     <div><label><%= t('Kind of heat pump') %></label><select data-f="source"><% [['air', 'Air / water'], ['water', 'Water / water'], ['ground', 'Ground / water']].forEach(([k, lbl]) => { %><option value="<%= k %>" <%= (hpS.cfg.source || 'air') === k ? 'selected' : '' %>><%= t(lbl) %></option><% }) %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('Air / water: the outdoor air matters — colder means a lower COP, and around freezing in humid air it has to defrost.') %></p></div>
   </div>
   <% if ((hpS.roles || []).some((r) => r.role === 'heatMeterFlowRate' && r.read)) { %><div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:0.4rem;"><div><label><%= t('Heat meter flow in') %></label><select data-f="heat_meter_flow_unit"><% ['auto', 'l/min', 'l/h', 'm3/h'].forEach((u) => { %><option value="<%= u %>" <%= (hpS.cfg.heat_meter_flow_unit || 'auto') === u ? 'selected' : '' %>><%= u === 'auto' ? t('automatic (below 100: l/min)') : u === 'm3/h' ? 'm³/h' : u %></option><% }) %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('What the value really is — Loxone\'s label can say l/h while a correction (3600 → 60) makes it l/min.') %></p></div></div><% } %>
+  <% heartbeatBox('heatpump', hpS) %>
   <div class="mm-sub" data-limits><h3><%= t('Tap-water limits') %></h3>
     <% const L = hpS.cfg.limits || {}; %>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
@@ -354,6 +390,7 @@
     <div><label><%= t('Step (%)') %></label><input type="text" data-f="step_pct" value="<%= soS.cfg.step_pct %>"></div>
   </div>
   <div class="mm-toggle"><label class="switch"><input type="checkbox" id="mm-f-grid_invert" data-f="grid_invert" <%= soS.cfg.grid_invert ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-f-grid_invert"><%= t('Grid meter counts export as positive (invert)') %></label></div>
+  <% heartbeatBox('solar', soS) %>
   <% rolesTable('solar', soS) %>
   <% sentLog(soS) %>
   <% importBox('solar') %>
@@ -402,7 +439,7 @@
   var fin = function (v) { return v !== null && v !== undefined && isFinite(v); };
   var nf = function (v, k) { return fin(v) ? Number(v).toLocaleString('nl-NL', { minimumFractionDigits: k == null ? 1 : k, maximumFractionDigits: k == null ? 1 : k }) : '—'; };
   var hh = function (ms) { return new Date(ms).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }); };
-  var COL = { dhw: '#3b82f6', legionella: 'var(--en-import)', preheat: '#e67e22', comfort: d.cooling ? '#06b6d4' : 'var(--accent)', cool: '#06b6d4', setback: 'var(--en-house)' };
+  var COL = { solar: 'var(--en-solar)', dhw: '#3b82f6', legionella: 'var(--en-import)', preheat: '#e67e22', comfort: d.cooling ? '#06b6d4' : 'var(--accent)', cool: '#06b6d4', setback: 'var(--en-house)' };
   function draw() {
     if (!el || !d) return;
     var hrs = d.plan;

@@ -24,6 +24,7 @@ const TRIGGER_TYPES = [
   { key: 'car_reminder', label: 'Car: plug in / swap reminders', module: 'charging' },
   { key: 'charging_plan', label: 'Car: charging plan warnings (won\'t be ready, trip longer than the battery)', module: 'charging' },
   { key: 'car_climate', label: 'Car: climate at departure (started, failed)', module: 'charging' },
+  { key: 'energy_device', label: 'Energy manager: heat pump and solar panels (legionella, tank, fault, defrosting, limit, heartbeat)', module: 'energy_manager' },
 ];
 
 // Sending goes through Apprise (https://github.com/caronc/apprise, installed as a CLI in the
@@ -121,6 +122,12 @@ const TEMPLATE_PREVIEW_SAMPLES = {
     message: 'Saturday 08:55 birthday, Utrecht needs about 38.8 kWh; the battery holds 26 kWh. It will be full before you leave; the rest is driven on fuel.',
     severity: 'warning',
     fields: [{ label: 'Vehicle', value: 'Skoda' }, { label: 'Trip', value: 'Utrecht' }],
+  },
+  energy_device: {
+    title: 'Heat pump: legionella overdue',
+    message: 'The tank was last held at 60 °C 9 days ago (every 7 days). Planned: Saturday 11:00–13:00 on solar.',
+    severity: 'warning',
+    fields: [{ label: 'Device', value: 'Heat pump' }],
   },
   car_climate: {
     title: 'Skoda: Climate started',
