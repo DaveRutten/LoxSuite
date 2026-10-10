@@ -87,7 +87,8 @@ async function discover(kind, { refresh = false } = {}) {
         if (c.roles.heatMeterFlowTemp?.read?.ms === o.ms.id) for (const [k, x] of Object.entries(ed.heatMeterSiblings(ed.allObjects(o.s), c.roles.heatMeterFlowTemp.read.control))) if (!c.roles[k]) c.roles[k] = { read: { ...x.read, ms: o.ms.id }, elsewhere: true };
       }
       // the roles found elsewhere become part of its type (with their own Miniserver)
-      c.type = ed.asType(kind, { uuid: c.uuid, name: c.name, members: [] }, c.roles, et.loadTypes(kind).find((t) => t.key === c.known?.key));
+      // rebuilt with the device's own objects, so the scale factors and siblings found from them stay
+      c.type = ed.asType(kind, { uuid: c.uuid, name: c.name, members: c.members || [] }, c.roles, et.loadTypes(kind).find((t) => t.key === c.known?.key));
       for (const reg of c.type.registers) { const rr = c.roles[reg.role]; if (rr?.read?.ms) reg.ms = rr.read.ms; if (rr?.write?.ms) reg.writeMs = rr.write.ms; }
       c.score = Object.keys(c.roles).length;
       c.check = et.check(kind, c.type);
@@ -103,7 +104,12 @@ async function discover(kind, { refresh = false } = {}) {
 async function resolve(kind, cfg = null) {
   cfg = cfg || await getConfig(kind);
   const found = (await discover(kind)).filter((c) => !c.error);
-  const chosen = (cfg.device && found.find((c) => c.uuid === cfg.device && c.miniserver.id === cfg.miniserver_id)) || (!cfg.device ? found[0] : null) || null;
+  // the saved device; when its id changed (merged groups, Gateway / Client) the same device by one of its
+  // parts, then the same known type, then the best candidate — never silently nothing
+  const chosen = (cfg.device && (found.find((c) => c.uuid === cfg.device && c.miniserver.id === cfg.miniserver_id)
+      || found.find((c) => c.uuid === cfg.device || (c.parts || []).includes(cfg.device))))
+    || (cfg.type_key && found.find((c) => c.known?.key === cfg.type_key))
+    || found[0] || null;
   let base = chosen?.type || null;
   if (!base) {
     const types = et.loadTypes(kind);
@@ -344,6 +350,16 @@ async function roomControllerList() {
   return out;
 }
 
+// For overviews that refresh often (the home dashboard every 5 s): the status at most maxAgeMs old.
+const statusMemo = new Map();
+async function statusCached(kind, maxAgeMs = 30000) {
+  const hit = statusMemo.get(kind);
+  if (hit && Date.now() - hit.at < maxAgeMs) return hit.val;
+  const val = await status(kind);
+  statusMemo.set(kind, { at: Date.now(), val });
+  return val;
+}
+
 async function status(kind, nowMs = Date.now()) { return kind === 'solar' ? solarStatus(nowMs) : heatpumpStatus(nowMs); }
 
 // Pure: outputs that something else in Loxone drives too. LoxSuite knows what it last sent per role;
@@ -538,4 +554,4 @@ function stopEnergyModules() { if (rt.timer) clearInterval(rt.timer); rt.timer =
 
 function lastStructures(kind) { return rt.discovered.get(kind)?.structures || []; }
 
-module.exports = { lastStructures, loadPersisted, detectConflicts, KINDS, DEFAULTS, getConfig, saveConfig, discover, resolve, status, tick, importStatistics, toMinutes, addTankHistory, addWeatherHistory, addRoomHistory, addTuneHistory, startEnergyModules, stopEnergyModules, rolesView };
+module.exports = { statusCached, lastStructures, loadPersisted, detectConflicts, KINDS, DEFAULTS, getConfig, saveConfig, discover, resolve, status, tick, importStatistics, toMinutes, addTankHistory, addWeatherHistory, addRoomHistory, addTuneHistory, startEnergyModules, stopEnergyModules, rolesView };

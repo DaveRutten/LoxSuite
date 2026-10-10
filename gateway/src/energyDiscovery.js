@@ -125,7 +125,7 @@ function fromStructure(kind, structure, { types = et.loadTypes(kind) } = {}) {
     const name = /\(\w+\)$/.test(d.name) && known ? known.type.label : d.name;
     // what the known type has that Loxone doesn't show yet (to make visible, or add, in Loxone)
     const missingFromLoxone = known ? known.type.registers.filter((r) => r.role && !roles[r.role]).map((r) => ({ role: r.role, label: r.label, reg: r.reg })) : [];
-    out.push({ uuid: d.uuid, parts: d.parts, name, room: d.room, score, roles, check: et.check(kind, type), type, known: known ? { key: known.type.key, label: known.type.label, share: known.share } : null, missingFromLoxone });
+    out.push({ uuid: d.uuid, parts: d.parts, members: d.members, name, room: d.room, score, roles, check: et.check(kind, type), type, known: known ? { key: known.type.key, label: known.type.label, share: known.share } : null, missingFromLoxone });
   }
   return out.sort((a, b) => Number(b.check.ok) - Number(a.check.ok) || b.score - a.score);
 }

@@ -292,7 +292,17 @@ async function main() {
     const dashboardMonitors = await db.prepare('SELECT id, label, source_type FROM monitors ORDER BY label').all();
     const panels = await dashboardsRoutes.loadPanelsWithMonitors(sharedDashboard.id, req.query.range);
   
+    // Energy at a glance on the home page (when the Energy module is on): the meters now, today's prices,
+    // the heat pump and the solar panels — each with a link to its own page
+    let energy = null;
+    if (modules.isOn('energy')) {
+      const meters = await require('./energyMeters').live().catch(() => null);
+      const em = modules.isOn('energy_manager') ? require('./energyModules') : null;
+      const dev = async (kind) => { if (!em) return null; const c = await em.getConfig(kind).catch(() => ({})); return c.enabled ? em.statusCached(kind).catch(() => null) : null; };
+      energy = { meters, price: await require('./prices').priceSummary().catch(() => null), heatpump: await dev('heatpump'), solar: await dev('solar') };
+    }
     res.render('dashboard', {
+      energy,
       username: req.session.username,
       mqttConnected: mqttClient.state.connected,
       miniservers,

@@ -301,6 +301,32 @@ async function fetchMarket(cfg, fromMs, toMs, fetchImpl = fetchText) {
 
 // ------------------------------------------------------------------ Loxone Spot Price Optimizer
 
+// Today's prices at a glance: now, lowest, highest, average (all-in €/kWh). From the Spot Price
+// Optimizer in Loxone when it shows them (its states by name: min / max / average), else from the
+// prices LoxSuite keeps itself.
+async function priceSummary(nowMs = Date.now()) {
+  const { localMidnight } = require('./localTime');
+  const from = localMidnight(nowMs); const to = localMidnight(nowMs, undefined, 1);
+  const rows = await getPrices(new Date(from).toISOString(), new Date(to).toISOString()).catch(() => []);
+  const vals = rows.map((r) => Number(r.allin_eur_kwh)).filter(Number.isFinite);
+  const cur = rows.find((r) => Date.parse(r.start_at) <= nowMs && Date.parse(r.end_at) > nowMs);
+  const minR = rows.reduce((a, r) => (!a || r.allin_eur_kwh < a.allin_eur_kwh ? r : a), null);
+  const maxR = rows.reduce((a, r) => (!a || r.allin_eur_kwh > a.allin_eur_kwh ? r : a), null);
+  const out = { source: 'loxsuite', now: cur ? round4(cur.allin_eur_kwh) : null, min: vals.length ? round4(Math.min(...vals)) : null, max: vals.length ? round4(Math.max(...vals)) : null, avg: vals.length ? round4(vals.reduce((a, b) => a + b, 0) / vals.length) : null, minAt: minR?.start_at || null, maxAt: maxR?.start_at || null };
+  try {
+    const spo = await findSpotOptimizer();
+    if (spo) {
+      const s = await require('./loxoneStructure').getStructure(spo.miniserver);
+      const st = s?.controls?.[spo.uuid]?.states || {};
+      const ws = require('./loxoneWebSocket');
+      const val = (re) => { const k = Object.keys(st).find((n) => re.test(n)); const v = k ? Number(ws.getLiveValue(spo.miniserver.id, st[k])) : NaN; return Number.isFinite(v) ? round4(v) : null; };
+      const sMin = val(/^(min|minimum|pricemin|lowest)/i); const sMax = val(/^(max|maximum|pricemax|highest)/i); const sAvg = val(/^(avg|average|mean)/i); const sNow = val(/^current$/i);
+      if (sMin !== null || sMax !== null) Object.assign(out, { source: 'loxone', min: sMin ?? out.min, max: sMax ?? out.max, avg: sAvg ?? out.avg, now: sNow ?? out.now, name: spo.name });
+    }
+  } catch { /* the own prices stay */ }
+  return out;
+}
+
 async function findSpotOptimizer() {
   const cfg = await getConfig();
   const loxoneStructure = require('./loxoneStructure');
@@ -490,6 +516,7 @@ function stopPrices() {
 }
 
 module.exports = {
+  priceSummary,
   DEFAULTS, allinPrice, fitLinear, parseEnergyZero, parseEnergyZeroPublic, ezDate, parseEntsoe, entsoeTime, hourOfDayProfile, fillProfile, loxoneHistory, toIntervals, toHourly, fixedPrice,
   getConfig, saveConfig, fetchMarket, fetchEnergyZero, fetchMarketFilled, pricesBehind, refreshPrices, getPrices, chartQuarters, quartersBetween, currentPrice, calibration, sampleCalibration,
   loxoneCurrentPrice, findSpotOptimizer, startPrices, stopPrices,

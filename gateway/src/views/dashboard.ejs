@@ -6,6 +6,25 @@
 
 <% const isCollapsed = (key) => collapsedSections.includes(key); %>
 
+<% if (typeof energy !== 'undefined' && energy) {
+     const nfd = (v, d = 1) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }));
+     const R = (energy.meters && energy.meters.roles) || {}, P = energy.price || {}, H = energy.heatpump, S = energy.solar;
+     const hm = (iso) => (iso ? new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }) : ''); %>
+<button type="button" class="section-toggle" data-nav-section="home-energy" aria-expanded="<%= isCollapsed('home-energy') ? 'false' : 'true' %>">
+  <h2><%= t('Energy') %></h2><%- icon('chevron') %>
+</button>
+<div class="section-body" <%= isCollapsed('home-energy') ? 'hidden' : '' %> style="margin-bottom:1.5rem;">
+  <div class="stat-grid compact">
+    <% if (R.grid) { %><a class="stat-card" href="/energy"><div class="label"><%= t('Grid now') %></div><div class="value" data-live-id="en-grid"><%= nfd(R.grid.power_kw, 2) %> kW</div></a><% } %>
+    <% if (R.pv) { %><a class="stat-card" href="/energy"><div class="label"><%= t('Solar now') %></div><div class="value" data-live-id="en-pv"><%= nfd(R.pv.power_kw, 2) %> kW</div></a><% } %>
+    <% if (energy.meters && energy.meters.house_kw !== null && energy.meters.house_kw !== undefined) { %><a class="stat-card" href="/energy"><div class="label"><%= t('House now') %></div><div class="value" data-live-id="en-house"><%= nfd(energy.meters.house_kw, 2) %> kW</div></a><% } %>
+    <% if (P.now !== null && P.now !== undefined) { %><a class="stat-card" href="/planner"><div class="label"><%= t('Price now') %></div><div class="value" data-live-id="en-price">€ <%= nfd(P.now, 3) %></div><div class="hint" style="margin:0.2rem 0 0;" data-hint-keep data-live-id="en-price-range"><%= t('today') %> € <%= nfd(P.min, 3) %> (<%= hm(P.minAt) %>) – € <%= nfd(P.max, 3) %> (<%= hm(P.maxAt) %>)</div></a><% } %>
+    <% if (H && H.state) { %><a class="stat-card" href="/energy-manager/modules/heatpump"><div class="label"><%= t('Heat pump') %></div><div class="value" data-live-id="en-hp"><%= { dhw: t('Tap water'), heating: t('Heating'), idle: t('Idle'), defrost: t('Defrosting'), fault: t('Fault') }[H.state.mode] || H.state.mode %></div><div class="hint" style="margin:0.2rem 0 0;" data-hint-keep data-live-id="en-hp-sub"><%= t('tank') %> <%= nfd(H.state.tankC) %> °C · <%= t('room') %> <%= nfd(H.state.roomC) %> °C<%= H.state.cop ? ' · COP ' + nfd(H.state.cop, 1) : '' %></div></a><% } %>
+    <% if (S && S.limit) { %><a class="stat-card" href="/energy-manager/modules/solar"><div class="label"><%= t('Solar panels') %></div><div class="value" data-live-id="en-limit"><%= S.limit.pct %> %</div><div class="hint" style="margin:0.2rem 0 0;" data-hint-keep data-live-id="en-limit-sub"><%= S.limit.limit ? t('limited: exporting costs money') : t('no limit') %></div></a><% } %>
+  </div>
+</div>
+<% } %>
+
 <button type="button" class="section-toggle" data-nav-section="home-status" aria-expanded="<%= isCollapsed('home-status') ? 'false' : 'true' %>">
   <h2><%= t('Status') %></h2><%- icon('chevron') %>
 </button>

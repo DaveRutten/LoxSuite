@@ -165,3 +165,13 @@ test('SolarEdge outputs without _RAW (I_AC_Power + I_AC_Power_SF): scaled to kW,
   assert.equal(v.gridPower, -1.2);
   assert.equal(v.exportEnergy, 1234.567);
 });
+
+test('rebuilding a found device keeps its own objects (scale factors stay linked)', () => {
+  const io5 = (name, state) => ({ name, type: 'InfoOnlyAnalog', room: 'k', cat: 'c', states: { value: state } });
+  const s = { rooms: { k: { name: 'Kelder' } }, cats: { c: { name: 'Energie' } }, controls: {
+    '19000001-0001-0001-ffff1': io5('I_DC_Power', 'dc'), '19000001-0002-0001-ffff1': io5('I_DC_Power_SF', 'dcsf'), '19000001-0003-0001-ffff1': io5('I_Status', 'st'), '19000001-0004-0001-ffff1': io5('M_AC_Power', 'g'),
+  } };
+  const [c] = ed.fromStructure('solar', s);
+  const again = ed.asType('solar', { uuid: c.uuid, name: c.name, members: c.members }, c.roles, et.loadTypes('solar').find((t) => t.key === 'solaredge'));
+  assert.ok(et.byRole(again, 'dcPower').sf, 'scale factor kept');
+});

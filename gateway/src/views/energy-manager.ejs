@@ -4,7 +4,38 @@
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 
 <p class="hint"><%= t('The other big consumers, planned together with the car from the prices, the solar forecast and your house load.') %></p>
-<p class="hint" style="margin-top:-0.8rem;" data-hint-keep><a href="/energy-manager/modules/heatpump"><%= t('Heat pump →') %></a> · <a href="/energy-manager/modules/solar"><%= t('Solar panels →') %></a></p>
+<% const nfx = (v, d = 1) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }));
+   const HP = (devices && devices.heatpump) || {}, SO = (devices && devices.solar) || {}; %>
+<% if (typeof priceDay !== 'undefined' && priceDay && priceDay.min !== null) { const hm2 = (iso) => (iso ? new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }) : ''); %><p class="hint" data-hint-keep style="margin:0 0 0.6rem;"><%= t('Price today') %>: <%= t('now') %> <strong>€ <%= nfx(priceDay.now, 3) %></strong> · <%= t('lowest') %> € <%= nfx(priceDay.min, 3) %> (<%= hm2(priceDay.minAt) %>) · <%= t('highest') %> € <%= nfx(priceDay.max, 3) %> (<%= hm2(priceDay.maxAt) %>) · <%= t('average') %> € <%= nfx(priceDay.avg, 3) %><%= priceDay.source === 'loxone' ? ' · ' + t('from the Spot Price Optimizer') : '' %></p><% } %>
+<div class="em-devices">
+  <a class="card em-device" href="/energy-manager/modules/heatpump">
+    <div class="em-dev-head"><h2 style="margin:0;"><%= t('Heat pump') %></h2><% if (!(HP.cfg && HP.cfg.enabled)) { %><span class="badge badge-off"><%= t('off') %></span><% } %></div>
+    <% if (HP.state) { const sv = HP.state; %><div class="em-dev-kpis">
+      <div><span><%= t('Tank') %></span><b><%= nfx(sv.tankC) %> °C</b></div>
+      <div><span><%= t('Room') %></span><b><%= nfx(sv.roomC) %> °C</b></div>
+      <div><span><%= t('Doing now') %></span><b><%= { dhw: t('Tap water'), heating: t('Heating'), idle: t('Idle'), defrost: t('Defrosting'), fault: t('Fault') }[sv.mode] || sv.mode %></b></div>
+      <div><span>COP</span><b><%= nfx(sv.cop, 2) %></b></div>
+    </div>
+    <p class="hint" style="margin:0.3rem 0 0;" data-hint-keep><%= HP.roomForecast && HP.roomForecast.onAt ? t('on at {t}', { t: new Date(HP.roomForecast.onAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }) }) : '' %><%= HP.legionella && HP.legionella.block ? ' · ' + t('legionella') + ' ' + new Date(HP.legionella.block.startMs).toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }) : '' %></p><% } else { %><p class="hint" style="margin:0.3rem 0 0;" data-hint-keep><%= t('Switch it on in its settings to plan tap water, the room and fine-tuning.') %></p><% } %>
+  </a>
+  <a class="card em-device" href="/energy-manager/modules/solar">
+    <div class="em-dev-head"><h2 style="margin:0;"><%= t('Solar panels') %></h2><% if (!(SO.cfg && SO.cfg.enabled)) { %><span class="badge badge-off"><%= t('off') %></span><% } %></div>
+    <% if (SO.limit) { %><div class="em-dev-kpis">
+      <div><span><%= t('Solar now') %></span><b><%= nfx(SO.pvKw, 2) %> kW</b></div>
+      <div><span><%= t('house') %></span><b><%= nfx(SO.houseKw, 2) %> kW</b></div>
+      <div><span><%= t('Exporting yields now') %></span><b><%= SO.value === null || SO.value === undefined ? '—' : (SO.value < 0 ? '−€ ' : '€ ') + nfx(Math.abs(SO.value), 3) %></b></div>
+      <div><span><%= t('Limit') %></span><b><%= SO.limit.pct %> %</b></div>
+    </div><% } else { %><p class="hint" style="margin:0.3rem 0 0;" data-hint-keep><%= t('Switch it on in its settings to limit the inverter when exporting costs money.') %></p><% } %>
+  </a>
+</div>
+<style>
+  .em-devices { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:1rem; margin-bottom:1rem; }
+  .em-device { display:block; color:inherit; text-decoration:none; margin:0; transition:box-shadow .15s; }
+  .em-device:hover { box-shadow:var(--shadow-md); }
+  .em-dev-head { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; }
+  .em-dev-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:0.5rem; margin-top:0.6rem; }
+  .em-dev-kpis span { display:block; font-size:0.75rem; color:var(--text-muted); } .em-dev-kpis b { font-size:1.05rem; }
+</style>
 
 <div class="card" data-card-key="now">
   <div>

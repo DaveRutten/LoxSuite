@@ -4738,5 +4738,18 @@
   "outdoor sensor fixed ({n})": "buitenvoeler vast ({n})",
   "Power: value {v}": "Vermogen: waarde {v}",
   "Outdoor sensor: value {v}": "Buitenvoeler: waarde {v}",
-  "Every value your Loxone logic has shown (a step, a percentage, an outdoor temperature the heat pump is shown) — give it a name, e.g. \"Fake 14 graden\". Empty: the description shown greyed.": "Elke waarde die je Loxone-logica heeft laten zien (een stand, een percentage, een buitentemperatuur voor de warmtepomp) — geef hem een naam, bijv. \"Fake 14 graden\". Leeg: de omschrijving die grijs staat."
+  "Every value your Loxone logic has shown (a step, a percentage, an outdoor temperature the heat pump is shown) — give it a name, e.g. \"Fake 14 graden\". Empty: the description shown greyed.": "Elke waarde die je Loxone-logica heeft laten zien (een stand, een percentage, een buitentemperatuur voor de warmtepomp) — geef hem een naam, bijv. \"Fake 14 graden\". Leeg: de omschrijving die grijs staat.",
+  "device, link with Loxone, limits, legionella": "apparaat, koppeling met Loxone, grenzen, legionella",
+  "device, link with Loxone, inverter": "apparaat, koppeling met Loxone, omvormer",
+  "Switch it on in its settings to plan tap water, the room and fine-tuning.": "Zet hem aan in zijn instellingen om tapwater, de kamer en het bijsturen te plannen.",
+  "Switch it on in its settings to limit the inverter when exporting costs money.": "Zet hem aan in zijn instellingen om de omvormer te begrenzen als teruglevering geld kost.",
+  "Meter only (insight, not switchable)": "Alleen meten (inzicht, niet schakelbaar)",
+  "Grid now": "Net nu",
+  "House now": "Huis nu",
+  "Price now": "Prijs nu",
+  "no limit": "geen begrenzing",
+  "Price today": "Prijs vandaag",
+  "lowest": "laagst",
+  "highest": "hoogst",
+  "from the Spot Price Optimizer": "uit de Spot Price Optimizer"
 }

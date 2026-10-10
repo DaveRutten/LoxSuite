@@ -13,6 +13,7 @@
 //   heatpump   space heating/cooling, the living room leads: release (1/0) in the cheapest hours and
 //              whenever there is surplus, never blocked longer than max_block_h, plus a setpoint
 //              correction (°C): pre-heat (or pre-cool) in cheap/solar hours, ease off in expensive ones.
+//   meter      only measured (not switchable): patterns, cost per day, what it uses — no plan, nothing sent
 //   appliance  washing machine, dryer...: measured runs (kWh, duration, cost, the best start in
 //              hindsight); "ready by" requests get a planned start -> <name>_Start / <name>_Pauze.
 // The surplus is shared in priority order, with the car (Smart charging) at its own place in that order.
@@ -34,6 +35,12 @@ const KINDS = {
       { key: 'release', suffix: 'Vrijgave', unit: '1/0', hint: 'next to (OR) or instead of the "grid < −0.6 kW" release' },
       { key: 'correction', suffix: 'Correctie', unit: '°C', hint: 'added to the living-room setpoint' },
     ],
+  },
+  meter: {
+    // not switchable: only measured, for insight (patterns, cost per day, unknown use) — never planned or sent
+    label: 'Meter only (insight, not switchable)',
+    defaults: { kw: 0.5 },
+    signals: [],
   },
   appliance: {
     label: 'Appliance (washer, dryer…)',

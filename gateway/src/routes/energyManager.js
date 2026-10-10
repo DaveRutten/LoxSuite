@@ -11,11 +11,18 @@ const num = (v, def = null) => { if (v === undefined || v === null || String(v).
 
 router.get('/', asyncHandler(async (req, res) => {
   const loads = await em.listLoads();
+  // the heat pump and the solar panels as devices on the overview (details behind a click)
+  const m = require('../energyModules');
+  const devices = {};
+  for (const kind of ['heatpump', 'solar']) {
+    const cfg = await m.getConfig(kind).catch(() => ({}));
+    devices[kind] = cfg.enabled ? await m.statusCached(kind).catch((e) => ({ error: e.message, cfg })) : { cfg };
+  }
   let meters = [];
   try { meters = (await require('../energyMeters').candidateMeters()).filter((m) => m.type === 'Meter'); } catch { meters = []; }
   res.render('energy-manager', {
     loads: loads.map((l) => ({ ...l, signals: (em.KINDS[l.kind]?.signals || []).map((s) => ({ ...s, vi: em.viName(l, s) })) })),
-    kinds: em.KINDS, meters, miniservers: await db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all().catch(() => []), cfg: await em.getConfig(), saved: req.query.saved || null, error: req.query.error || null,
+    devices, priceDay: await require('../prices').priceSummary().catch(() => null), kinds: em.KINDS, meters, miniservers: await db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all().catch(() => []), cfg: await em.getConfig(), saved: req.query.saved || null, error: req.query.error || null,
   });
 }));
 
