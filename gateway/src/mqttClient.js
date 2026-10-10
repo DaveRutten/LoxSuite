@@ -219,6 +219,28 @@ function publishOffline(callback) {
   client.publish(LWT_TOPIC, 'offline', { qos: 1, retain: true }, () => callback());
 }
 
+// At boot the gateway can connect before dynsecBootstrap.js has given its account the "admin" role; the
+// broker then refuses the subscriptions (granted qos 128, no error) and they stay refused until a
+// reconnect — no messages at all until "Save & restart". So: refused ones are tried again, and the
+// bootstrap subscribes again once it is done (resubscribe below).
+const SUBSCRIBE_TOPICS = ['#', '$CONTROL/dynamic-security/v1/response', '$SYS/broker/#'];
+let subscribeRetry = null;
+function subscribeAll(c, attempt = 0) {
+  clearTimeout(subscribeRetry);
+  c.subscribe(SUBSCRIBE_TOPICS, (err, granted) => {
+    if (c !== client) return;
+    const refused = (granted || []).filter((g) => g.qos === 128).map((g) => g.topic);
+    if (err || refused.length) {
+      console.error(`MQTT subscribe ${err ? `error: ${err.message}` : `refused for ${refused.join(', ')}`} - trying again in 10 s.`);
+      if (attempt < 30) subscribeRetry = setTimeout(() => { if (c === client && c.connected) subscribeAll(c, attempt + 1); }, 10000);
+      return;
+    }
+    console.log('Connected to MQTT broker, subscribed to all topics.');
+    requestDeviceAnnounceWithRetries();
+  });
+}
+function resubscribe() { if (client && client.connected) subscribeAll(client); }
+
 function attachHandlers(c) {
   c.on('connect', () => {
     state.connected = true;
@@ -235,13 +257,7 @@ function attachHandlers(c) {
     // "admin" (not just "client") dynamic-security role by dynsecBootstrap.js, and that built-in
     // "admin" role's ACLs (confirmed on a real broker) already include subscribePattern $SYS/#, so
     // this needs no ACL change of its own.
-    c.subscribe(['#', '$CONTROL/dynamic-security/v1/response', '$SYS/broker/#'], (err) => {
-      if (err) console.error('MQTT subscribe error:', err.message);
-      else {
-        console.log('Connected to MQTT broker, subscribed to all topics.');
-        requestDeviceAnnounceWithRetries();
-      }
-    });
+    subscribeAll(c);
   });
 
   c.on('reconnect', () => console.log('Reconnecting to MQTT broker...'));
@@ -407,6 +423,7 @@ module.exports = {
   startMqttClient,
   stopMqttClient,
   reconnect,
+  resubscribe,
   reloadMappings,
   buildMappingIndex,
   selectMappings,

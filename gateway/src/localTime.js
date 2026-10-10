@@ -8,13 +8,26 @@ function displayTz() {
 }
 
 // { y, m, d, hour, minute, weekday (0 = Monday … 6 = Sunday) } of an instant in a time zone.
+// The formatter is made once per time zone and the answer kept per minute: creating an
+// Intl.DateTimeFormat per call made learning over weeks of minute samples take tens of seconds.
+const formatters = new Map();
+const partsCache = new Map();
+const WD = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
 function localParts(ms, tz = displayTz()) {
-  const p = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', weekday: 'short',
-  }).formatToParts(new Date(ms)).reduce((o, x) => ({ ...o, [x.type]: x.value }), {});
-  const wd = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }[p.weekday];
-  return { y: +p.year, m: +p.month, d: +p.day, hour: +p.hour, minute: +p.minute, weekday: wd };
+  const key = `${tz}|${Math.floor(ms / 60000)}`;
+  const hit = partsCache.get(key);
+  if (hit) return { ...hit };
+  let f = formatters.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'short' });
+    formatters.set(tz, f);
+  }
+  const p = {};
+  for (const x of f.formatToParts(new Date(ms))) p[x.type] = x.value;
+  const out = { y: +p.year, m: +p.month, d: +p.day, hour: +p.hour, minute: +p.minute, weekday: WD[p.weekday] };
+  if (partsCache.size > 200000) partsCache.clear();
+  partsCache.set(key, out);
+  return { ...out };
 }
 
 // Epoch ms of local midnight of the day `ms` falls in (plus `addDays`).

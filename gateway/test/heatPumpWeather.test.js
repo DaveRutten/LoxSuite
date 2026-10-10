@@ -108,3 +108,28 @@ test('room forecast: when the heat pump comes on and when the room is at its tar
   assert.ok(f.reachAt > T + 7 * HOUR && f.reachAt < T + 10 * HOUR, new Date(f.reachAt).toISOString());
   assert.ok(f.rows[4].roomC < 19.2, 'cools down before');
 });
+
+test('room forecast: a small dip is made up within the hour, with its own on and at-temperature time', () => {
+  const m = rw.learn(roomSamples(8));
+  const T = Date.parse('2026-10-10T00:00:00Z');
+  const hours = Array.from({ length: 6 }, (_, i) => ({ ms: T + i * HOUR, targetC: 20, outdoorC: 0.5 }));
+  const f = rw.forecast(m, { startC: 19.6, hours, k: 0.005 });
+  assert.ok(f.runs.length >= 1);
+  const r = f.runs[0];
+  assert.ok(r.offAt > r.onAt, 'warm after it came on');
+  assert.ok(r.onAt > T && r.onAt % HOUR !== 0 || r.onAt === T, 'on at the moment it drops below, not rounded to the hour');
+});
+
+test('SCOP as measured: all heat over all power, per day kept, days with too little data left out', () => {
+  const T = Date.parse('2026-01-10T00:00:00Z');
+  const s = [];
+  for (let i = 0; i < 24 * 60; i++) s.push({ ms: T + i * 60000, elecKw: 1, heatKw: 4, outdoorC: 2 });
+  for (let i = 0; i < 24 * 60; i++) s.push({ ms: T + 86400000 + i * 60000, elecKw: 1, heatKw: 3, outdoorC: -3 });
+  s.push({ ms: T + 2 * 86400000, elecKw: 5, heatKw: 0 });
+  const days = hw.dailyEnergy(s, (ms) => new Date(ms).toISOString().slice(0, 10));
+  assert.equal(days['2026-01-10'].heat, 96);
+  assert.equal(days['2026-01-10'].elec, 24);
+  const r = hw.scop(days);
+  assert.equal(r.scop, 3.5);
+  assert.equal(r.days, 2);
+});

@@ -137,25 +137,39 @@ function learnCooling(samples, { minHours = 6 } = {}) {
 // below its target minus the hysteresis, else cooling down towards outside. Where the heat pump is expected
 // to come on and when the room reaches its target.
 //   hours [{ ms, targetC, outdoorC }] -> { rows: [{ ms, roomC, on }], onAt, reachAt }
-function forecast(model, { startC, hours, k = 0.02, hystC = 0.3 }) {
+function forecast(model, { startC, hours, k = 0.02, hystC = 0.3, stepMin = 5 }) {
+  // in steps of a few minutes, not whole hours: with a warm-up of ~0.5 °C/h a dip of 0.3 °C is made up
+  // within the same hour, and "on" and "at temperature" then fell on the same hour mark
+  const n = Math.max(1, Math.round(60 / stepMin));
   let room = startC;
-  let on = false; let onAt = null; let reachAt = null;
+  let on = false;
+  const runs = [];
   const rows = [];
   for (const h of hours) {
-    if (!Number.isFinite(room) || !Number.isFinite(h.targetC)) { rows.push({ ms: h.ms, roomC: null, on: false }); continue; }
+    if (!Number.isFinite(room) || !Number.isFinite(h.targetC)) { if (on) { runs[runs.length - 1].offAt = h.ms; on = false; } rows.push({ ms: h.ms, roomC: null, on: false }); continue; }
     const out = Number.isFinite(h.outdoorC) ? h.outdoorC : 8;
-    if (!on && room < h.targetC - hystC) { on = true; if (onAt === null) onAt = h.ms; }
-    if (on) {
-      const r = rate(model, out).rate;
-      const before = room;
-      room = Math.min(h.targetC, room + r);
-      if (room >= h.targetC - 0.05) { on = false; if (reachAt === null && onAt !== null) reachAt = h.ms + Math.min(1, (h.targetC - before) / r) * HOUR; }
-    } else {
-      room -= k * (room - out);
+    let onMin = 0;
+    for (let i = 0; i < n; i++) {
+      const t = h.ms + (i * HOUR) / n;
+      if (!on && room < h.targetC - hystC) { on = true; runs.push({ onAt: t, reachAt: null, offAt: null, fromC: r2(room), toC: h.targetC }); }
+      if (on) {
+        const r = rate(model, out).rate / n;
+        const before = room;
+        room = Math.min(h.targetC, room + r);
+        onMin += 60 / n;
+        if (room >= h.targetC - 0.05) {
+          on = false;
+          const run = runs[runs.length - 1];
+          run.reachAt = Math.round(t + Math.min(1, (h.targetC - before) / Math.max(1e-6, r)) * (HOUR / n));
+          run.offAt = run.reachAt;
+        }
+      } else room -= (k / n) * (room - out);
     }
-    rows.push({ ms: h.ms, roomC: r2(room), on });
+    rows.push({ ms: h.ms, roomC: r2(room), on: on || onMin > 0, onMin: Math.round(onMin) });
   }
-  return { rows, onAt, reachAt: reachAt === null ? null : Math.round(reachAt) };
+  // the warm-up worth showing: the first run that lifts the room noticeably (a comfort step), else the first
+  const main = runs.find((x) => x.toC - x.fromC > hystC + 0.2) || runs[0] || null;
+  return { rows, runs, onAt: main ? Math.round(main.onAt) : null, reachAt: main && main.reachAt !== null ? main.reachAt : null };
 }
 
 module.exports = { learn, rate, warmupHours, preheat, learnSchedule, learnCooling, forecast, tbin };

@@ -345,6 +345,11 @@ router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), 
     const R = b.room; const hhmmOk = (x, d) => (/^\d{1,2}:\d{2}$/.test(String(x || '')) ? String(x) : d);
     c.room = { enabled: !!R.enabled, controller: R.controller ? String(R.controller).slice(0, 80) : null, schedule: R.schedule === 'own' ? 'own' : 'loxone', comfort_c: Math.max(15, Math.min(25, num(R.comfort_c, 20.5))), setback_c: Math.max(10, Math.min(23, num(R.setback_c, 19))), comfort_from: hhmmOk(R.comfort_from, '07:00'), comfort_until: hhmmOk(R.comfort_until, '22:30') };
   }
+  if (kind === 'heatpump' && b.features && typeof b.features === 'object') {
+    const tri = (x) => (x === true || x === 'yes' ? true : x === false || x === 'no' ? false : null);
+    c.features = { power_steps: tri(b.features.power_steps), ntc: tri(b.features.ntc) };
+  }
+  if (kind === 'heatpump' && b.setup_done !== undefined) c.setup_done = !!b.setup_done;
   if (kind === 'heatpump' && b.tuning) {
     const T = b.tuning;
     c.tuning = { mode: ['off', 'advise', 'live'].includes(T.mode) ? T.mode : 'advise', flow_min: Math.max(20, Math.min(45, num(T.flow_min, 25))), flow_max: Math.max(25, Math.min(60, num(T.flow_max, 45))) };

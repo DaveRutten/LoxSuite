@@ -18,12 +18,24 @@ const { SUGGEST } = require('./loxoneTemplate');
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim().replace(/_raw$/, '');
 
+// Names the user linked by hand once, per kind: { normName: role }. They win from the built-in names, so
+// an object called "Boiler boven" is found as the tank temperature again after a rescan or on a new install.
+const learned = {};
+function setLearned(kind, names) { learned[kind] = names && typeof names === 'object' ? { ...names } : {}; }
+// Pure: the user's links -> the names to remember.
+function namesOf(links) {
+  const out = {};
+  for (const [role, l] of Object.entries(links || {})) for (const n of [l?.read?.name, l?.write?.name]) if (n && norm(n)) out[norm(n)] = role;
+  return out;
+}
+
 // Pure: the members of one device -> { role: { read, write } } by name.
 function rolesOf(kind, members) {
   const def = et.ROLES[kind]?.roles || {};
   const out = {};
   const used = new Set();
-  for (const [role, re, only] of SUGGEST[kind] || []) {
+  const own = Object.entries(learned[kind] || {}).filter(([, role]) => def[role]).map(([name, role]) => [role, { test: (n) => norm(n) === name }]);
+  for (const [role, re, only] of [...own, ...(SUGGEST[kind] || [])]) {
     if (out[role]) continue;
     const hits = members.filter((m) => !used.has(m.uuid) && re.test(m.name));
     if (!hits.length) continue;
@@ -162,4 +174,4 @@ function heatMeterSiblings(objects, flowTempUuid) {
   return Object.fromEntries([['heatMeterReturnTemp', one(ret)], ['heatMeterFlowRate', one(flow)]].filter(([, x]) => x));
 }
 
-module.exports = { heatMeterSiblings, rolesOf, asType, bestKnown, fromStructure, roomControllers, allObjects, ELSEWHERE };
+module.exports = { heatMeterSiblings, setLearned, namesOf, rolesOf, asType, bestKnown, fromStructure, roomControllers, allObjects, ELSEWHERE };

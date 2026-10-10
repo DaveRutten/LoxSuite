@@ -85,4 +85,27 @@ function learnSteps(samples, { minMinutes = 60 } = {}) {
 // Pure: € per kWh of heat in this hour.
 function costPerHeat(price, exp) { return Number.isFinite(price) && exp?.cop > 0 ? r2(price / exp.cop * 100) / 100 : price; }
 
-module.exports = { SOURCES, band, tbin, defaults, learn, expect, costPerHeat, stepOf, learnSteps };
+// Pure: per day the heat delivered and the electricity used (kWh), from samples of one minute (kW).
+// dayOf(ms) -> 'YYYY-MM-DD' in local time.
+function dailyEnergy(samples, dayOf) {
+  const out = {};
+  for (const s of samples || []) {
+    const e = Number(s.elecKw);
+    if (!Number.isFinite(e) || e < 0) continue;
+    const d = dayOf(s.ms);
+    const g = out[d] || (out[d] = { heat: 0, elec: 0, min: 0, tSum: 0, tN: 0 });
+    g.elec += e / 60; g.heat += Math.max(0, Number(s.heatKw) || 0) / 60; g.min += 1;
+    if (Number.isFinite(s.outdoorC)) { g.tSum += s.outdoorC; g.tN += 1; }
+  }
+  return Object.fromEntries(Object.entries(out).map(([d, g]) => [d, { heat: r2(g.heat), elec: r2(g.elec), min: g.min, t: g.tN ? r2(g.tSum / g.tN) : null }]));
+}
+
+// Pure: the seasonal COP as measured — all heat delivered divided by all electricity used, over the
+// days given (at most the last 365). Days with less than an hour of data don't count.
+function scop(days, { fromDay = null } = {}) {
+  const list = Object.entries(days || {}).filter(([d, g]) => (!fromDay || d >= fromDay) && g.min >= 60).sort(([a], [b]) => a.localeCompare(b)).slice(-365);
+  const heat = list.reduce((a, [, g]) => a + g.heat, 0), elec = list.reduce((a, [, g]) => a + g.elec, 0);
+  return { scop: elec > 1 ? r2(heat / elec) : null, heatKwh: Math.round(heat), elecKwh: Math.round(elec), days: list.length, from: list[0]?.[0] || null, to: list[list.length - 1]?.[0] || null };
+}
+
+module.exports = { dailyEnergy, scop, SOURCES, band, tbin, defaults, learn, expect, costPerHeat, stepOf, learnSteps };

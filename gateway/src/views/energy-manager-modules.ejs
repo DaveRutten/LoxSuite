@@ -2,6 +2,8 @@
 <%
   const hpS = heatpump || {}; const soS = solar || {};
   const nf = (v, d = 1) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  // a duration in minutes, readable: 45 min · 3,5 uur · 189 dagen
+  const dur = (min) => { const m = Number(min) || 0; return m < 120 ? nf(m, 0) + ' min' : m < 2880 ? nf(m / 60, m < 600 ? 1 : 0) + ' ' + t('hours') : nf(m / 1440, 0) + ' ' + t('days'); };
   const hhmm = (ms) => { const d = new Date(ms); return d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }); };
   const day = (ms) => new Date(ms).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' });
   const modeText = { dhw: t('Tap water'), heating: t('Heating'), idle: t('Idle'), defrost: t('Defrosting'), fault: t('Fault'), legionella: t('Legionella'), free: t('Heating / Loxone itself') };
@@ -15,21 +17,7 @@
   .mm-hr .bar { border-radius:3px 3px 0 0; background:var(--border); min-height:2px; } .mm-hr.dhw .bar { background:#3b82f6; } .mm-hr.sun .bar { background:#f2b632; }
   .mm-hr .ice { position:absolute; top:12px; left:0; right:0; text-align:center; color:#3b82f6; font-size:0.7rem; }
   .mm-hr .lbl { font-size:0.65rem; color:var(--text-muted); text-align:center; margin-top:2px; } .mm-hr .drop { position:absolute; top:0; left:0; right:0; text-align:center; color:var(--danger); font-size:0.7rem; }
-  .mm-chart { width:100%; height:330px; display:block; margin-top:0.4rem; }
-  .mm-chart path, .mm-chart line { vector-effect:non-scaling-stroke; }
-  .mm-chart .mm-cl { font-size:11px; fill:var(--text-muted); }
-  .mm-chart .mm-cx { font-size:10px; fill:var(--text-muted); }
-  .mm-chart .mm-ct { font-size:11px; fill:var(--danger); }
-  .mm-chart .mm-ice { font-size:11px; fill:#3b82f6; }
-  .mm-chart .mm-room { fill:none; stroke:var(--accent); stroke-width:2.5; }
-  .mm-chart .mm-roomf { fill:none; stroke:#f59e0b; stroke-width:2; stroke-dasharray:5 3; }
-  .mm-chart .mm-on { font-size:11px; font-weight:600; fill:#f59e0b; } .mm-chart .mm-ok { font-size:11px; font-weight:600; fill:var(--success); }
-  .mm-chart .mm-tank { fill:none; stroke:#3b82f6; stroke-width:1.5; stroke-dasharray:4 3; }
-  .mm-chart .mm-out { fill:none; stroke:var(--text-muted); stroke-width:1.8; }
-  .mm-chart .mm-price { fill:var(--text-muted); opacity:0.45; } .mm-chart .mm-neg { fill:var(--success); }
-  .mm-chart .mm-zero { stroke:var(--text-muted); stroke-width:1; stroke-dasharray:2 2; }
   .mm-k-room { background:var(--accent); height:3px !important; } .mm-k-roomf { border-top:2px dashed #f59e0b; background:none !important; height:0 !important; } .mm-k-tank { border-top:2px dashed #3b82f6; background:none !important; height:0 !important; }
-  .mm-legend { display:flex; gap:0.9rem; flex-wrap:wrap; font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem; } .mm-legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:0.3rem; vertical-align:-1px; }
   .mm-sub { border-top:1px solid var(--border); margin-top:1rem; padding-top:0.8rem; } .mm-sub h3 { margin:0 0 0.3rem; font-size:1rem; }
   .mm-table td, .mm-table th { white-space:normal; vertical-align:top; } .mm-table select, .mm-table input { width:100%; font-size:0.85rem; }
   .mm-warn { background:var(--warning-soft); color:var(--warning); border-radius:8px; padding:0.4rem 0.6rem; font-size:0.83rem; margin-top:0.5rem; }
@@ -46,6 +34,19 @@
   .mm-toggle .switch { flex:none; }
   .mm-settings > summary { font-size:1rem; }
   .mm-status { margin:0.5rem 0 0; font-size:0.85rem; color:var(--text-muted); }
+  .mm-sub.mm-off .mm-ifon { display:none; }
+  .mm-sub.mm-off > :not(h3):not(.mm-master):not([data-keep]) { display:none; }
+  .mm-detail { margin-top:0.5rem; } .mm-detail > summary { cursor:pointer; margin:0; }
+  .mm-wizard { background:color-mix(in srgb, var(--accent) 7%, transparent); border:1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius:10px; padding:0.8rem 1rem; }
+  .mm-wq { margin-top:0.6rem; } .mm-seg { display:flex; gap:1rem; flex-wrap:wrap; margin-top:0.25rem; } .mm-seg label { display:flex; gap:0.35rem; align-items:center; cursor:pointer; }
+  .mm-legend { display:flex; flex-wrap:wrap; gap:0.2rem 0.9rem; font-size:0.78rem; color:var(--text-muted); margin-top:0.35rem; } .mm-legend > span { white-space:nowrap; margin:0 !important; }
+  .mm-sum { font-size:0.85rem; color:var(--text-muted); }
+  .mm-log .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .mm-sugs { display:grid; gap:0.4rem; }
+  .mm-sug { display:flex; gap:0.6rem; align-items:baseline; padding:0.5rem 0.7rem; border-radius:8px; border-left:3px solid var(--accent); background:color-mix(in srgb, var(--accent) 6%, transparent); font-size:0.9rem; }
+  .mm-sug-k { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; min-width:6.5rem; color:var(--text-muted); }
+  .mm-sug-comfort { border-left-color:#e67e22; background:color-mix(in srgb, #e67e22 7%, transparent); }
+  .mm-sug-energy { border-left-color:var(--en-solar); background:color-mix(in srgb, var(--en-solar) 7%, transparent); }
 </style>
 
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
@@ -124,6 +125,25 @@
   <h2 style="margin-top:0;"><%= t('Heat pump') %></h2>
   <% if (hpS.error) { %><p class="error"><%= hpS.error %></p><% } else { %>
   <% moduleStatus('heatpump', hpS) %>
+  <% const FE = hpS.cfg.features || {}; const hasRole = (re) => (hpS.roles || []).some((r) => re.test(r.role) && (r.read || r.write));
+     const fStep = FE.power_steps !== null && FE.power_steps !== undefined ? FE.power_steps : hasRole(/^powerStep$|^powerLimit/);
+     const fNtc = FE.ntc !== null && FE.ntc !== undefined ? FE.ntc : hasRole(/^ntc/); %>
+  <% if (!hpS.cfg.setup_done) { %>
+  <div class="mm-sub mm-wizard" data-wizard>
+    <h3><%= t('Set up your heat pump') %></h3>
+    <p class="hint" style="margin:0 0 0.5rem;"><%= t('Not every heat pump can do the same. Three questions, so LoxSuite only shows and steers what yours has. You can change it later under Settings.') %></p>
+    <div class="mm-wq"><b>1. <%= t('What kind of heat pump?') %></b>
+      <div class="mm-seg"><% [['air', t('Air / water')], ['water', t('Water / water')], ['ground', t('Ground / water')]].forEach(([k, lbl]) => { %><label><input type="radio" name="wz_source" value="<%= k %>" <%= (hpS.cfg.source || 'air') === k ? 'checked' : '' %>> <%= lbl %></label><% }) %></div>
+      <p class="hint" style="margin:0.2rem 0 0;"><%= t('Air / water: defrosting and the weather (temperature and humidity) matter a lot; water / ground: hardly.') %></p></div>
+    <div class="mm-wq"><b>2. <%= t('Can Loxone limit its power (power steps via relays, or a percentage)?') %></b>
+      <div class="mm-seg"><label><input type="radio" name="wz_steps" value="yes" <%= fStep ? 'checked' : '' %>> <%= t('Yes') %></label><label><input type="radio" name="wz_steps" value="no" <%= fStep ? '' : 'checked' %>> <%= t('No') %></label></div>
+      <p class="hint" style="margin:0.2rem 0 0;"><%= t('For example two relays on the power-limit inputs of the unit. LoxSuite then learns which step gives the longest, calmest runs.') %></p></div>
+    <div class="mm-wq"><b>3. <%= t('Does your Loxone logic show it a fake outdoor temperature (NTC)?') %></b>
+      <div class="mm-seg"><label><input type="radio" name="wz_ntc" value="yes" <%= fNtc ? 'checked' : '' %>> <%= t('Yes') %></label><label><input type="radio" name="wz_ntc" value="no" <%= fNtc ? '' : 'checked' %>> <%= t('No') %></label></div>
+      <p class="hint" style="margin:0.2rem 0 0;"><%= t('A resistor instead of the outdoor sensor, e.g. "Fake 14 graden": the heat pump then runs calmer with a lower flow temperature and a higher COP.') %></p></div>
+    <div class="btn-row" style="margin-top:0.6rem;"><button type="button" class="primary" data-wizard-done><%= t('Done') %></button></div>
+  </div>
+  <% } %>
   <% const st = hpS.state || {}; const v = hpS.values || {}; %>
   <div class="mm-kpis">
     <div class="mm-kpi"><span><%= t('Tank') %></span><b><%= nf(st.tankC) %> °C</b><span><%= t('target') %> <%= nf(v.dhwSetpoint, 0) %> °C<%= v.dhwDrop !== undefined ? ' · ' + t('hysteresis') + ' ' + nf(v.dhwDrop, 0) + ' °C' : '' %></span></div>
@@ -133,46 +153,52 @@
     <div class="mm-kpi"><span><%= t('Plan this hour') %></span><b><%= modeText[hpS.mode] || hpS.mode %></b><span><%= tr(hpS.reason || '') %></span></div>
   </div>
 
+  <% const SG = hpS.suggestions || []; const SGN = hpS.cfg.step_names || {}, SGT = hpS.cfg.ntc_names || {};
+     const sgSet = (x) => [Number.isFinite(x && x.flowC) ? t('flow {c} °C', { c: nf(x.flowC, 1) }) : null,
+       fStep && x && Number.isFinite(x.step) ? (SGN[String(x.step)] || (x.step > 2 ? x.step + '%' : x.step === 0 ? t('full power') : t('step {n}', { n: x.step }))) : null,
+       fNtc && x && Number.isFinite(x.ntc) ? (SGT[String(x.ntc)] || (x.ntc > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(x.ntc, 0) }) : x.ntc === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: x.ntc }))) : null].filter(Boolean).join(' · '); %>
+  <div class="mm-sub" data-suggestions><h3><%= t('Suggestions') %></h3>
+    <% if (SG.length) { %><div class="mm-sugs"><% SG.forEach((g) => { %><div class="mm-sug mm-sug-<%= g.kind %>"><span class="mm-sug-k"><%= { comfort: t('Comfort'), energy: t('Energy'), efficiency: t('Efficiency') }[g.kind] %></span><span><%= t(g.text, Object.fromEntries(Object.entries(g.params || {}).map(([k, v]) => [k, k === 'setting' ? sgSet(v) : v && typeof v === 'object' && 'min' in v ? dur(v.min) : typeof v === 'number' ? nf(v, Number.isInteger(v) ? 0 : (k === 'cop' || k === 's' ? 2 : 1)) : tr(String(v))]))) %></span></div><% }) %></div>
+    <% } else { %><p class="mm-sum" style="margin:0;"><%= t('Nothing to improve right now — it runs as well as it has learned.') %></p><% } %>
+  </div>
+
   <div class="mm-sub"><h3><%= hpS.cooling ? t('Plan: cooling and tap water, next 24 hours') : t('Plan: heating and tap water, next 24 hours') %></h3>
     <p class="hint" style="margin:0;">
-      <% if (hpS.learned && hpS.learned.patterns.length) { %><%= hpS.learned.fromPipe ? t('Learned from the hot-water pipe:') : t('Learned from the tank temperature:') %> <% hpS.learned.patterns.forEach((p, i) => { %><%= i ? ', ' : '' %>~<%= String(p.from).padStart(2, '0') %>:00 (−<%= nf(p.kwh, 1) %> °C)<% }) %>.<% } else { %><%= t('Still learning the usual draws from the tank temperature ({n} samples).', { n: (hpS.learned && hpS.learned.samples) || 0 }) %><% } %>
       <% if ((hpS.plan || []).some((h) => h.estimated)) { %> <%= t('No prices yet: estimated.') %><% } %>
     </p>
     <%
-      const chP = (hpS.plan || []).slice(0, 24); const chW = 960, chCw = chW / Math.max(1, chP.length), chX = (i) => i * chCw;
-      const chCOL = { dhw: '#3b82f6', legionella: '#d64545', preheat: '#f59e0b', comfort: 'var(--accent)', cool: '#06b6d4', setback: 'var(--border)', free: 'var(--border)' };
-      const chLane = (top, h) => ({ top, h });
-      const chL1 = chLane(18, 22), chL2 = chLane(64, 70), chL3 = chLane(158, 60), chL4 = chLane(242, 60);
-      const chYs = (vals, ln, pad = 0.5) => { const f = vals.filter(Number.isFinite); if (!f.length) return () => ln.top + ln.h / 2; let lo = Math.min(...f) - pad, hi = Math.max(...f) + pad; if (hi - lo < 1) { hi += 0.5; lo -= 0.5; } return (v) => ln.top + ln.h - ((v - lo) / (hi - lo)) * ln.h; };
-      const chPath = (vals, y) => vals.map((v, i) => Number.isFinite(v) ? `${i && Number.isFinite(vals[i - 1]) ? 'L' : 'M'}${(chX(i) + chCw / 2).toFixed(1)},${y(v).toFixed(1)}` : '').join(' ');
-      const chStep = (vals, y) => vals.map((v, i) => Number.isFinite(v) ? `${i && Number.isFinite(vals[i - 1]) ? 'L' : 'M'}${chX(i).toFixed(1)},${y(v).toFixed(1)} L${(chX(i) + chCw).toFixed(1)},${y(v).toFixed(1)}` : '').join(' ');
-      const chRoom = chP.map((h) => h.roomTargetC), chRoomF = chP.map((h) => h.roomC), chTank = chP.map((h) => h.predC), chOut = chP.map((h) => h.outdoorC), chPrice = chP.map((h) => h.price);
-      const chYR = chYs([...chRoom, ...chRoomF], chL2), chYT = chYs(chTank, chL2, 1), chYO = chYs(chOut, chL3);
-      const chPf = chPrice.filter(Number.isFinite), chPMax = Math.max(0.01, ...chPf, 0), chPMin = Math.min(0, ...chPf), chYP = (v) => chL4.top + chL4.h - ((v - chPMin) / (chPMax - chPMin)) * chL4.h;
-      const chTip = (h) => [hhmm(h.ms), { dhw: t('Tap water'), legionella: t('Legionella'), preheat: t('Pre-heating'), comfort: t('Comfort'), cool: t('Cooling'), setback: t('Set back'), free: t('Heating / Loxone itself') }[h.does] || '', h.roomTargetC !== null ? t('room') + ' ' + nf(h.roomTargetC) + ' °C' : '', t('tank') + ' ' + nf(h.predC) + ' °C', h.outdoorC !== null && h.outdoorC !== undefined ? t('outside') + ' ' + nf(h.outdoorC) + ' °C' : '', h.cop ? 'COP ' + nf(h.cop, 1) : '', h.defrost > 0.02 ? t('defrosting ~{p}% of the time', { p: Math.round(h.defrost * 100) }) : '', '€ ' + nf(h.price, 3), tr(h.reason)].filter(Boolean).join(' · ');
+      // drawn in the browser, in the same style as the Energy manager plan (LsChart: lanes, labels above
+      // the data, point at it for that hour)
+      const chData = { plan: (hpS.plan || []).slice(0, 24).map((h) => ({ ms: h.ms, does: h.does, roomTargetC: h.roomTargetC, roomC: h.roomC, predC: h.predC, outdoorC: h.outdoorC, rh: h.rh, price: h.price, estimated: !!h.estimated, cop: h.cop, defrost: h.defrost, drop: h.drop, reason: tr(h.reason || '') })),
+        onAt: (hpS.roomForecast || {}).onAt || null, reachAt: (hpS.roomForecast || {}).reachAt || null, runs: (hpS.roomForecast || {}).runs || [], cooling: !!hpS.cooling,
+        L: { does: t('What it does'), room: t('Room (°C)'), tank: t('Tank (°C)'), out: t('Outside (°C)'), outRh: t('Outside (°C) and humidity (%)'), rh: t('humidity'), price: t('Price (€/kWh)'), now: t('now'), on: t('on'), reach: t('at temperature'), target: t('room target'), roomF: t('room expected'), heating: hpS.cooling ? t('cooling') : t('heating'), cop: 'COP', defrost: t('expected defrosting'), drop: t('usual draw'),
+          dhw: t('Tap water'), legionella: t('Legionella'), preheat: t('Pre-heating'), comfort: t('Comfort'), cool: t('Cooling'), setback: t('Set back'), free: t('Heating / Loxone itself') } };
     %>
-    <svg class="mm-chart" viewBox="0 0 <%= chW %> 330" data-w="<%= chW %>" preserveAspectRatio="xMinYMin meet" role="img" aria-label="<%= t('Plan, next 24 hours') %>"><g class="mm-g">
-      <text x="0" y="12" class="mm-cl"><%= t('What it does') %></text>
-      <% chP.forEach((h, i) => { %><rect x="<%= chX(i) + 1 %>" y="<%= chL1.top %>" width="<%= chCw - 2 %>" height="<%= chL1.h %>" rx="3" fill="<%= chCOL[h.does] || chCOL.free %>"><title><%= chTip(h) %></title></rect><% if (h.drop > 0.5) { %><text x="<%= chX(i) + chCw / 2 %>" y="<%= chL1.top + chL1.h - 6 %>" class="mm-ct" text-anchor="middle">▼</text><% } %><% }) %>
-      <text x="0" y="<%= chL2.top - 6 %>" class="mm-cl"><%= t('Room target and tank (°C)') %></text>
-      <path d="<%= chStep(chRoom, chYR) %>" class="mm-room"/><path d="<%= chPath(chRoomF, chYR) %>" class="mm-roomf"/>
-      <% const RF = hpS.roomForecast || {}; chP.forEach((h, i) => { const nx = chP[i + 1]; if (RF.onAt && RF.onAt >= h.ms && RF.onAt < h.ms + 3600000) { %><text x="<%= chX(i) + 2 %>" y="<%= chL2.top + 10 %>" class="mm-on">▲ <%= t('on') %></text><% } if (RF.reachAt && RF.reachAt >= h.ms && RF.reachAt < h.ms + 3600000) { %><text x="<%= chX(i) + 2 %>" y="<%= chL2.top + chL2.h - 2 %>" class="mm-ok">✓ <%= t('at temperature') %></text><% } }) %><path d="<%= chPath(chTank, chYT) %>" class="mm-tank"/>
-      <text x="0" y="<%= chL3.top - 6 %>" class="mm-cl"><%= t('Outside (°C)') %></text>
-      <path d="<%= chPath(chOut, chYO) %>" class="mm-out"/>
-      <% chP.forEach((h, i) => { if (h.defrost > 0.05) { %><text x="<%= chX(i) + chCw / 2 %>" y="<%= chL3.top + 10 %>" class="mm-ice" text-anchor="middle">❄</text><% } }) %>
-      <text x="0" y="<%= chL4.top - 6 %>" class="mm-cl"><%= t('Price (€/kWh)') %></text>
-      <% chP.forEach((h, i) => { if (!Number.isFinite(h.price)) return; const y0 = chYP(0), y1 = chYP(h.price); %><rect x="<%= chX(i) + 3 %>" y="<%= Math.min(y0, y1) %>" width="<%= chCw - 6 %>" height="<%= Math.max(1, Math.abs(y1 - y0)) %>" class="<%= h.price < 0 ? 'mm-neg' : 'mm-price' %>"><title><%= chTip(h) %></title></rect><% }) %>
-      <% if (chPMin < 0) { %><line x1="0" x2="<%= chW %>" y1="<%= chYP(0) %>" y2="<%= chYP(0) %>" class="mm-zero"/><% } %>
-      <% chP.forEach((h, i) => { if (i % 2) return; %><text x="<%= chX(i) + chCw / 2 %>" y="324" class="mm-cx" text-anchor="middle"><%= hhmm(h.ms).slice(0, 2) %></text><% }) %>
-      <% chP.forEach((h, i) => { %><rect x="<%= chX(i) %>" y="0" width="<%= chCw %>" height="310" fill="transparent"><title><%= chTip(h) %></title></rect><% }) %>
-    </g></svg>
-    <div class="mm-legend"><span><i style="background:#3b82f6"></i><%= t('tap water') %></span><span><i style="background:#d64545"></i><%= t('legionella') %></span><span><i style="background:#f59e0b"></i><%= t('pre-heating') %></span><span><i style="background:var(--accent)"></i><%= hpS.cooling ? t('cooling') : t('comfort') %></span><span><i style="background:var(--border)"></i><%= t('set back') %></span><span><i class="mm-k-room"></i><%= t('room target') %></span><span><i class="mm-k-tank"></i><%= t('tank') %></span><span style="color:var(--danger)">▼ <%= t('usual draw') %></span><span style="color:#3b82f6">❄ <%= t('expected defrosting') %></span></div>
+    <div id="mm-hp-plan" style="margin-top:0.4rem;"></div>
+    <script type="application/json" id="mm-hp-plan-data"><%- JSON.stringify(chData).replace(/</g, '\\u003c') %></script>
+    <div class="mm-legend"><% [['#3b82f6', t('tap water')], ['var(--en-import)', t('legionella')], ['#e67e22', t('pre-heating')], [hpS.cooling ? '#06b6d4' : 'var(--accent)', hpS.cooling ? t('cooling') : t('comfort')], ['var(--en-house)', t('set back')]].forEach(([c, l]) => { %><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-col" style="background:<%= c %>;"></i> <%= l %></span><% }) %><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-dash" style="border-top-color:var(--accent);"></i> <%= t('room target') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key" style="background:#e67e22;"></i> <%= t('room expected') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-col" style="background:#e67e22;"></i> <%= hpS.cooling ? t('cooling') : t('heating') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key" style="background:#3b82f6;"></i> <%= t('tank') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-dash" style="border-top-color:#06b6d4;"></i> <%= t('humidity') %></span><span><i class="ls-key ls-key-band" style="background:var(--danger); opacity:0.35;"></i> <%= t('usual draw') %></span><span style="white-space:nowrap; color:#3b82f6;">❄ <%= t('expected defrosting') %></span></div>
     <p class="hint" style="margin:0.3rem 0 0;"><%= t('The plan compares the cost per kWh of heat: the price divided by the COP expected in that hour\'s weather.') %></p>
+  </div>
+
+  <div class="mm-sub" data-tapwater><h3><%= t('Tap water') %></h3>
+    <% const LR = hpS.learned || {}; const nextDhw = (hpS.plan || []).find((h) => h.does === 'dhw' || h.does === 'legionella'); const LMT = hpS.cfg.limits || {}; %>
+    <div class="mm-kpis">
+      <div class="mm-kpi"><span><%= t('Tank now') %></span><b><%= nf(st.tankC) %> °C</b><span><%= t('target') %> <%= nf(LMT.targetC, 0) %> °C · <%= t('never below') %> <%= nf(LMT.comfortMinC, 0) %> °C</span></div>
+      <div class="mm-kpi"><span><%= t('Next heating of the tank') %></span><b><%= nextDhw ? hhmm(nextDhw.ms) : '—' %></b><span><%= nextDhw ? tr(nextDhw.reason || '') : t('not needed in the coming 24 hours') %></span></div>
+      <div class="mm-kpi"><span><%= t('Usual draws') %></span><b style="font-size:1rem;"><%= (LR.patterns || []).length ? LR.patterns.map((p) => String(p.from).padStart(2, '0') + ':00').join(' · ') : '—' %></b><span><%= LR.fromPipe ? t('learned from the hot-water pipe') : t('learned from the tank temperature') %> · <%= t('{n} days', { n: nf(LR.days || 0, 0) }) %></span></div>
+    </div>
+    <details class="mm-detail"><summary class="mm-sum"><%= t('How it learns') %></summary>
+      <p class="hint" style="margin:0.3rem 0;"><%= LR.fromPipe ? t('Every jump of the hot-water pipe temperature is a draw.') : t('A tank that cools faster than it does on its own means hot water was drawn.') %>
+        <% if (LR.threshold && LR.threshold.learned) { %><%= t('Standby loss of your tank: {c} °C/h; a draw is faster than {d} °C/h.', { c: nf(LR.threshold.baselineCph, 2), d: nf(LR.threshold.cph, 1) }) %><% } %>
+        <%= t('{n} samples', { n: nf(LR.samples || 0, 0) }) %>.</p>
+      <% if ((LR.patterns || []).length) { %><table class="mm-log"><thead><tr><th><%= t('Usually at') %></th><th><%= t('Tank drops') %></th></tr></thead><tbody><% LR.patterns.forEach((p) => { %><tr><td><%= String(p.from).padStart(2, '0') %>:00</td><td>−<%= nf(p.kwh, 1) %> °C</td></tr><% }) %></tbody></table><% } %>
+      <% if ((LR.draws || []).length) { %><table class="mm-log" style="margin-top:0.4rem;"><thead><tr><th><%= t('Last draws') %></th><th><%= t('Duration') %></th><th><%= t('Tank drops') %></th></tr></thead><tbody><% LR.draws.slice().reverse().slice(0, 10).forEach((d) => { %><tr><td><%= day(d.startMs) %></td><td><%= dur(Math.max(1, Math.round((d.endMs - d.startMs) / 60000))) %></td><td>−<%= nf(d.dropC, 1) %> °C</td></tr><% }) %></tbody></table><% } %>
+    </details>
   </div>
 
   <div class="mm-sub" data-room><h3><%= t('Room temperature') %></h3>
     <% const RC = hpS.cfg.room || {}; const rp = hpS.room; %>
-    <div class="mm-toggle"><label class="switch"><input type="checkbox" id="mm-r-enabled" data-r="enabled" <%= RC.enabled ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-r-enabled"><%= t('Plan the room temperature (pre-heat in time for comfort)') %></label></div>
+    <div class="mm-toggle mm-master"><label class="switch"><input type="checkbox" id="mm-r-enabled" data-r="enabled" <%= RC.enabled ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-r-enabled"><%= t('Plan the room temperature (pre-heat in time for comfort)') %></label></div>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-top:0.4rem;">
       <div><label><%= t('Room controller in Loxone') %></label><select data-r="controller"><option value=""><%= t('— none (own times below) —') %></option><% (hpS.controllers || []).forEach((c) => { %><option value="<%= c.value %>" <%= RC.controller === c.value || RC.controller === c.uuid ? 'selected' : '' %>><%= c.name %><%= c.room ? ' · ' + c.room : '' %> (<%= c.msName %>)</option><% }) %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('Its actual and target temperature (and humidity) are read; the comfort times are learned from its target.') %></p></div>
       <div><label><%= t('Comfort times') %></label><select data-r="schedule" name="hp_room_schedule"><option value="loxone" <%= RC.schedule !== 'own' ? 'selected' : '' %>><%= t('Learned from the Loxone room controller') %></option><option value="own" <%= RC.schedule === 'own' ? 'selected' : '' %>><%= t('Own times below') %></option></select></div>
@@ -198,48 +224,66 @@
   <div class="mm-sub" data-tuning><h3><%= t('Fine-tuning for long, calm runs') %></h3>
     <% const TU = hpS.tuning || {}; const TC = hpS.cfg.tuning || {}; const SN2 = hpS.cfg.step_names || {}, NN2 = hpS.cfg.ntc_names || {}; const stepTxt = (v) => (v === null || v === undefined ? null : SN2[String(v)] || (v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v })));
     const ntcTxt = (v) => (v === null || v === undefined ? null : NN2[String(v)] || (v > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(v, 0) }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v })));
-    const setTxt = (x) => x ? [Number.isFinite(x.flowC) ? t('flow {c} °C', { c: nf(x.flowC, 1) }) : null, stepTxt(x.step), ntcTxt(x.ntc)].filter((y) => y !== null && y !== undefined).join(' · ') : '—'; %>
-    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
-      <div><label><%= t('Fine-tuning') %></label><select data-tu="mode"><option value="off" <%= TC.mode === 'off' ? 'selected' : '' %>><%= t('Off') %></option><option value="advise" <%= !TC.mode || TC.mode === 'advise' ? 'selected' : '' %>><%= t('Advise only') %></option><option value="live" <%= TC.mode === 'live' ? 'selected' : '' %>><%= t('Steer (with the module live)') %></option></select></div>
-      <div><label><%= t('Flow at least (°C)') %></label><input type="text" data-tu="flow_min" value="<%= TC.flow_min %>"></div>
-      <div><label><%= t('Flow at most (°C)') %></label><input type="text" data-tu="flow_max" value="<%= TC.flow_max %>"></div>
+    const setTxt = (x) => x ? [Number.isFinite(x.flowC) ? t('flow {c} °C', { c: nf(x.flowC, 1) }) : null, fStep ? stepTxt(x.step) : null, fNtc ? ntcTxt(x.ntc) : null].filter((y) => y !== null && y !== undefined).join(' · ') : '—'; %>
+    <div class="form-grid mm-master" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
+      <div><label><%= t('Fine-tuning') %></label><select data-tu="mode" data-master><option value="off" <%= TC.mode === 'off' ? 'selected' : '' %>><%= t('Off') %></option><option value="advise" <%= !TC.mode || TC.mode === 'advise' ? 'selected' : '' %>><%= t('Advise only') %></option><option value="live" <%= TC.mode === 'live' ? 'selected' : '' %>><%= t('Steer (with the module live)') %></option></select></div>
+      <div class="mm-ifon"><label><%= t('Flow at least (°C)') %></label><input type="text" data-tu="flow_min" value="<%= TC.flow_min %>"></div>
+      <div class="mm-ifon"><label><%= t('Flow at most (°C)') %></label><input type="text" data-tu="flow_max" value="<%= TC.flow_max %>"></div>
     </div>
     <div class="mm-kpis">
-      <div class="mm-kpi"><span><%= t('Now') %></span><b style="font-size:1rem;"><%= setTxt(TU.current) %></b><span><%= t('{n} minutes of runs to learn from', { n: TU.runs || 0 }) %></span></div>
+      <div class="mm-kpi"><span><%= t('Now') %></span><b style="font-size:1rem;"><%= setTxt(TU.current) %></b><span><%= t('{d} of runs to learn from', { d: dur(TU.runs || 0) }) %></span></div>
       <div class="mm-kpi"><span><%= t('Stops') %></span><b style="font-size:1rem;"><%= TU.overshoot && TU.overshoot.overshootC ? t('run {c} °C longer', { c: nf(TU.overshoot.overshootC, 1) }) : t('long enough') %></b><span><%= TU.overshoot && TU.overshoot.medianOffMin !== undefined ? t('usually {m} min still before it starts again', { m: TU.overshoot.medianOffMin }) : t('too few runs to say') %></span></div>
       <div class="mm-kpi"><span><%= t('Advice for this weather') %></span><b style="font-size:1rem;"><%= TU.advice ? setTxt(TU.advice.setting) : '—' %></b><span><%= TU.advice ? tr(TU.advice.why) : '' %></span></div>
     </div>
-    <% if ((TU.model || []).length) { %><div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Setting') %></th><th><%= t('Runs') %></th><th><%= t('Run length') %></th><th><%= t('Defrosts / h') %></th><th>COP</th></tr></thead><tbody>
-      <% TU.model.forEach((r) => { %><tr><td><%= setTxt(r.setting) %></td><td><%= r.runs %></td><td><%= r.runMin %> min</td><td><%= nf(r.defrostPerH, 1) %></td><td><%= nf(r.cop, 2) %></td></tr><% }) %>
-    </tbody></table></div><% } %>
+    <% if ((TU.model || []).length) { %><details class="mm-detail"><summary class="mm-sum"><%= t('Per setting: runs, defrosts and COP') %></summary><div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Flow') %></th><% if (fStep) { %><th><%= t('Power step') %></th><% } %><% if (fNtc) { %><th><%= t('Outdoor sensor') %></th><% } %><th class="num"><%= t('Runs') %></th><th class="num"><%= t('Run length') %></th><th class="num"><%= t('Defrosts / h') %></th><th class="num">COP</th></tr></thead><tbody>
+      <% TU.model.forEach((r) => { const x = r.setting || {}; %><tr><td class="num"><%= Number.isFinite(x.flowC) ? nf(x.flowC, 1) + ' °C' : '—' %></td><% if (fStep) { %><td><%= stepTxt(x.step) || '—' %></td><% } %><% if (fNtc) { %><td><%= ntcTxt(x.ntc) || '—' %></td><% } %><td class="num"><%= nf(r.runs, 0) %></td><td class="num"><%= dur(r.runMin) %></td><td class="num"><%= nf(r.defrostPerH, 1) %></td><td class="num"><%= nf(r.cop, 2) %></td></tr><% }) %>
+    </tbody></table></div></details><% } %>
     <p class="hint" style="margin:0.3rem 0 0;"><%= t('Per weather it learns which flow temperature, power step and outdoor-sensor setting give the longest runs with the least power per kWh of heat and the fewest defrosts. With a lot of defrosting it tries a calmer setting — never while the room is behind.') %></p>
   </div>
 
   <div class="mm-sub"><h3><%= t('Weather and defrosting') %></h3>
-    <% const W = hpS.weather || {}; const bins = Object.values((W.model && W.model.bins) || {}).sort((a, b) => a.t - b.t || a.band.localeCompare(b.band)); %>
-    <% if (W.now) { %><p class="hint" style="margin:0 0 0.3rem;"><%= t('This hour:') %> <%= W.now.outdoorC !== null && W.now.outdoorC !== undefined ? nf(W.now.outdoorC) + ' °C' : '' %><%= W.now.rh ? ' · ' + nf(W.now.rh, 0) + '% ' + t('humidity') : '' %> → COP ~<%= nf(W.now.cop, 1) %><%= W.now.defrost > 0.02 ? ', ' + t('defrosting ~{p}% of the time', { p: Math.round(W.now.defrost * 100) }) : '' %> (<%= W.now.learned ? t('learned') + ': ' + W.now.bin : t('start curve, still learning') %>)</p><% } %>
-    <% if (bins.length) { %><div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Outside') %></th><th><%= t('Humidity') %></th><th><%= t('Hours seen') %></th><th><%= t('Defrosting') %></th><th>COP</th></tr></thead><tbody>
+    <% const W = hpS.weather || {}; const bins = Object.values((W.model && W.model.bins) || {}).sort((a, b) => a.t - b.t || a.band.localeCompare(b.band)); const SC2 = W.scop || {}; const seenH = bins.reduce((a, b) => a + (b.hours || 0), 0); %>
+    <div class="mm-kpis">
+      <div class="mm-kpi"><span><%= t('This hour') %></span><b>COP ~<%= W.now ? nf(W.now.cop, 1) : '—' %></b><span><%= W.now && W.now.outdoorC !== null && W.now.outdoorC !== undefined ? nf(W.now.outdoorC) + ' °C' : '' %><%= W.now && W.now.rh ? ' · ' + nf(W.now.rh, 0) + '% ' + t('humidity') : '' %><%= W.now && W.now.defrost > 0.02 ? ' · ' + t('defrosting ~{p}% of the time', { p: Math.round(W.now.defrost * 100) }) : '' %></span></div>
+      <div class="mm-kpi"><span>SCOP <%= t('(measured)') %></span><b><%= SC2.scop ? nf(SC2.scop, 2) : '—' %></b><span><%= SC2.days ? t('{h} kWh heat / {e} kWh power over {n} days', { h: nf(SC2.heatKwh, 0), e: nf(SC2.elecKwh, 0), n: SC2.days }) : t('builds up from today, a full year for a real SCOP') %></span></div>
+      <div class="mm-kpi"><span><%= t('Learned') %></span><b><%= nf(seenH, 0) %> <%= t('hours') %></b><span><%= W.now && W.now.learned ? t('this weather: learned') : t('this weather: start curve, still learning') %></span></div>
+    </div>
+    <% if (bins.length) { %><details class="mm-detail"><summary class="mm-sum"><%= t('Per weather: defrosting and COP') %></summary><div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Outside') %></th><th><%= t('Humidity') %></th><th><%= t('Hours seen') %></th><th><%= t('Defrosting') %></th><th>COP</th></tr></thead><tbody>
       <% bins.forEach((b) => { %><tr><td><%= b.t %> … <%= b.t + 2 %> °C</td><td><%= { dry: t('below 80%'), humid: t('80–90%'), wet: t('90% and more') }[b.band] %></td><td><%= nf(b.hours, 0) %></td><td><%= Math.round(b.defrost * 100) %>%</td><td><%= nf(b.cop, 1) %></td></tr><% }) %>
-    </tbody></table></div><% } else { %><p class="hint" style="margin:0;"><%= t('Nothing learned yet: needs the outdoor temperature, and for defrosting the defrost state of the unit.') %></p><% } %>
-    <% const steps = (W.steps || []); if (steps.length) { %><h3 style="margin:0.8rem 0 0.3rem; font-size:0.95rem;"><%= t('Power steps and outdoor sensor (NTC)') %></h3>
-    <p class="hint" style="margin:0 0 0.3rem;"><%= t('What running calmer brings, per outdoor temperature: learned from your own Loxone logic.') %></p>
-    <div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Outside') %></th><th><%= t('Power step') %></th><th>NTC</th><th><%= t('Hours seen') %></th><th><%= t('Power') %></th><th><%= t('Heat') %></th><th>COP</th></tr></thead><tbody>
-      <% const SN = hpS.cfg.step_names || {}, NN = hpS.cfg.ntc_names || {}; steps.forEach((r) => { %><tr><td><%= r.t %> … <%= r.t + 2 %> °C</td><td><%= SN[String(r.step)] || (r.step > 2 ? r.step + '%' : r.step === 0 ? t('full power') : t('step {n}', { n: r.step })) %></td><td><%= NN[String(r.ntc)] || (r.ntc > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(r.ntc, 0) }) : r.ntc === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: r.ntc })) %></td><td><%= nf(r.hours, 0) %></td><td><%= nf(r.elecKw, 2) %> kW</td><td><%= nf(r.heatKw, 2) %> kW</td><td><%= nf(r.cop, 2) %></td></tr><% }) %>
-    </tbody></table></div><% } %>
+    </tbody></table></div></details><% } else { %><p class="hint" style="margin:0;"><%= t('Nothing learned yet: needs the outdoor temperature, and for defrosting the defrost state of the unit.') %></p><% } %>
+  </div>
+
+  <% if (fStep || fNtc) { %>
+  <div class="mm-sub"><h3><%= fStep && fNtc ? t('Power steps and outdoor sensor (NTC)') : fStep ? t('Power steps') : t('Outdoor sensor (NTC)') %></h3>
+    <% const steps = (W.steps || []); const SN = hpS.cfg.step_names || {}, NN = hpS.cfg.ntc_names || {};
+       const stTxt = (v) => SN[String(v)] || (v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v }));
+       const ntTxt = (v) => NN[String(v)] || (v > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(v, 0) }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v }));
+       const tNow = W.now && Number.isFinite(W.now.outdoorC) ? Math.floor(W.now.outdoorC / 2) * 2 : null;
+       const here = steps.filter((r) => r.t === tNow && r.cop).sort((a, b) => b.cop - a.cop); const best = here[0]; %>
+    <div class="mm-kpis">
+      <div class="mm-kpi"><span><%= t('Best at this outdoor temperature') %></span><b style="font-size:1rem;"><%= best ? [fStep ? stTxt(best.step) : null, fNtc ? ntTxt(best.ntc) : null].filter(Boolean).join(' · ') : '—' %></b><span><%= best ? 'COP ' + nf(best.cop, 2) + ' · ' + nf(best.hours, 0) + ' ' + t('hours seen') : t('not seen at this temperature yet') %></span></div>
+      <div class="mm-kpi"><span><%= t('Settings seen') %></span><b><%= nf(new Set(steps.map((r) => r.step + '|' + r.ntc)).size, 0) %></b><span><%= t('over {n} outdoor temperatures', { n: new Set(steps.map((r) => r.t)).size }) %></span></div>
+    </div>
+    <% if (steps.length) { %><details class="mm-detail"><summary class="mm-sum"><%= t('Per outdoor temperature: power, heat and COP') %></summary>
+    <div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Outside') %></th><% if (fStep) { %><th><%= t('Power step') %></th><% } %><% if (fNtc) { %><th>NTC</th><% } %><th><%= t('Hours seen') %></th><th><%= t('Power') %></th><th><%= t('Heat') %></th><th>COP</th></tr></thead><tbody>
+      <% steps.forEach((r) => { %><tr><td><%= r.t %> … <%= r.t + 2 %> °C</td><% if (fStep) { %><td><%= stTxt(r.step) %></td><% } %><% if (fNtc) { %><td><%= ntTxt(r.ntc) %></td><% } %><td><%= nf(r.hours, 0) %></td><td><%= nf(r.elecKw, 2) %> kW</td><td><%= nf(r.heatKw, 2) %> kW</td><td><%= nf(r.cop, 2) %></td></tr><% }) %>
+    </tbody></table></div></details><% } %>
     <% const seenStep = [...new Set([...(W.steps || []).map((r) => r.step), ...((hpS.tuning || {}).model || []).map((r) => r.setting.step), (hpS.tuning || {}).current ? hpS.tuning.current.step : null, ...Object.keys(hpS.cfg.step_names || {}).map(Number)].filter(Number.isFinite))].sort((a, b) => a - b);
        const seenNtc = [...new Set([...(W.steps || []).map((r) => r.ntc), ...((hpS.tuning || {}).model || []).map((r) => r.setting.ntc), (hpS.tuning || {}).current ? hpS.tuning.current.ntc : null, ...Object.keys(hpS.cfg.ntc_names || {}).map(Number)].filter(Number.isFinite))].sort((a, b) => a - b); %>
-    <details style="margin-top:0.5rem;"><summary class="hint" style="cursor:pointer; margin:0;"><%= t('Names of the steps') %></summary>
+    <details class="mm-detail"><summary class="mm-sum"><%= t('Names of the steps') %></summary>
       <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:0.4rem;">
-        <% seenStep.forEach((v) => { %><div><label><%= t('Power: value {v}', { v }) %></label><input type="text" data-sn="<%= v %>" value="<%= (hpS.cfg.step_names || {})[String(v)] || '' %>" placeholder="<%= v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v }) %>"></div><% }) %>
-        <% seenNtc.forEach((v) => { %><div><label><%= t('Outdoor sensor: value {v}', { v }) %></label><input type="text" data-nn="<%= v %>" value="<%= (hpS.cfg.ntc_names || {})[String(v)] || '' %>" placeholder="<%= v > 2 ? t('outdoor sensor fixed at {c} °C', { c: v }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v }) %>"></div><% }) %>
+        <% (fStep ? seenStep : []).forEach((v) => { %><div><label><%= t('Power: value {v}', { v }) %></label><input type="text" data-sn="<%= v %>" value="<%= (hpS.cfg.step_names || {})[String(v)] || '' %>" placeholder="<%= v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v }) %>"></div><% }) %>
+        <% (fNtc ? seenNtc : []).forEach((v) => { %><div><label><%= t('Outdoor sensor: value {v}', { v }) %></label><input type="text" data-nn="<%= v %>" value="<%= (hpS.cfg.ntc_names || {})[String(v)] || '' %>" placeholder="<%= v > 2 ? t('outdoor sensor fixed at {c} °C', { c: v }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v }) %>"></div><% }) %>
       </div>
       <p class="hint" style="margin:0.3rem 0 0;"><%= t('Every value your Loxone logic has shown (a step, a percentage, an outdoor temperature the heat pump is shown) — give it a name, e.g. "Fake 14 graden". Empty: the description shown greyed.') %></p>
     </details>
   </div>
+  <% } %>
 
   <details class="mm-sub mm-settings"><summary style="cursor:pointer;"><strong><%= t('Settings') %></strong> <span class="hint" style="margin:0;">— <%= t('device, link with Loxone, limits, legionella') %></span></summary>
   <% moduleHead('heatpump', hpS) %>
   <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:0.5rem;">
+    <div><label><%= t('What it has') %></label><p class="hint" style="margin:0.2rem 0 0;"><%= [fStep ? t('power steps') : null, fNtc ? t('fake outdoor sensor (NTC)') : null].filter(Boolean).join(' · ') || t('no power steps, no NTC') %> — <a href="#" data-wizard-again><%= t('set up again') %></a></p></div>
     <div><label><%= t('Kind of heat pump') %></label><select data-f="source"><% [['air', 'Air / water'], ['water', 'Water / water'], ['ground', 'Ground / water']].forEach(([k, lbl]) => { %><option value="<%= k %>" <%= (hpS.cfg.source || 'air') === k ? 'selected' : '' %>><%= t(lbl) %></option><% }) %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('Air / water: the outdoor air matters — colder means a lower COP, and around freezing in humid air it has to defrost.') %></p></div>
   </div>
   <% if ((hpS.roles || []).some((r) => r.role === 'heatMeterFlowRate' && r.read)) { %><div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:0.4rem;"><div><label><%= t('Heat meter flow in') %></label><select data-f="heat_meter_flow_unit"><% ['auto', 'l/min', 'l/h', 'm3/h'].forEach((u) => { %><option value="<%= u %>" <%= (hpS.cfg.heat_meter_flow_unit || 'auto') === u ? 'selected' : '' %>><%= u === 'auto' ? t('automatic (below 100: l/min)') : u === 'm3/h' ? 'm³/h' : u %></option><% }) %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('What the value really is — Loxone\'s label can say l/h while a correction (3600 → 60) makes it l/min.') %></p></div></div><% } %>
@@ -258,7 +302,7 @@
 
   <div class="mm-sub" data-legionella><h3><%= t('Legionella') %></h3>
     <% const G = hpS.cfg.legionella || {}; const lp = hpS.legionella; %>
-    <div class="mm-toggle"><label class="switch"><input type="checkbox" id="mm-g-enabled" data-g="enabled" <%= G.enabled ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-g-enabled"><%= t('Plan the legionella cycle') %></label></div>
+    <div class="mm-toggle mm-master"><label class="switch"><input type="checkbox" id="mm-g-enabled" data-g="enabled" <%= G.enabled ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-g-enabled"><%= t('Plan the legionella cycle') %></label></div>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); margin-top:0.4rem;">
       <div><label><%= t('Every (days)') %></label><input type="text" data-g="interval_days" value="<%= G.interval_days %>"></div>
       <div><label><%= t('Temperature (°C)') %></label><input type="text" data-g="temp_c" value="<%= G.temp_c %>"></div>
@@ -298,8 +342,9 @@
   <p class="hint" style="margin:0.2rem 0 0;"><%= t('Your contract:') %> <strong><%= C.rule === 'saldering' ? t('net metering (until the end of 2026): exporting is worth the price of that moment') : C.rule === 'fixed' ? t('fixed feed-in tariff € {v}/kWh', { v: nf(C.feedInEur, 3) }) : t('market price of that moment') %></strong><%= C.dynamic ? ' · ' + t('dynamic prices') : ' · ' + t('fixed prices') %> · <%= t('feed-in costs') %> € <%= nf(C.costEur, 3) %>/kWh<%= C.estimated ? ' · ' + t('No prices yet: estimated.') : '' %> — <a href="/settings/energy#charging"><%= t('change in the Smart charging settings') %></a></p>
   <% const A = soS.ahead || []; if (A.length) { %>
   <div class="mm-sub"><h3><%= t('Limiting in the coming hours') %></h3>
-    <div class="mm-strip" style="height:46px;"><% A.slice(0, 24).forEach((h) => { %><div class="mm-hr <%= h.limit ? 'dhw' : '' %>" title="<%= hhmm(h.ms) %> · <%= t('exporting yields') %> <%= h.value === null ? '—' : '€ ' + nf(h.value, 3) %><%= h.surplusKwh > 0.2 ? ' · ' + t('sun to export') : '' %>"><div class="bar" style="height:<%= h.limit ? 30 : (h.surplusKwh > 0.2 ? 14 : 4) %>px;<%= h.limit ? 'background:var(--danger)' : (h.surplusKwh > 0.2 ? 'background:#f2b632' : '') %>"></div><div class="lbl"><%= hhmm(h.ms).slice(0, 2) %></div></div><% }) %></div>
-    <div class="mm-legend"><span><i style="background:var(--danger)"></i><%= t('limited: exporting costs money') %></span><span><i style="background:#f2b632"></i><%= t('exporting (worth something)') %></span></div>
+    <div id="mm-so-plan" style="margin-top:0.4rem;"></div>
+    <script type="application/json" id="mm-so-plan-data"><%- JSON.stringify({ hours: A.slice(0, 24).map((h) => ({ ms: h.ms, value: h.value, surplusKwh: h.surplusKwh, limit: !!h.limit, pct: h.pct !== undefined ? h.pct : (h.limit && h.limit.pct !== undefined ? h.limit.pct : null) })), L: { sun: t('Solar surplus (forecast)'), value: t('Exporting yields (€/kWh)'), limit: t('Limited'), now: t('now'), yes: t('yes'), no: t('no') } }).replace(/</g, '\\u003c') %></script>
+    <div class="mm-legend"><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key" style="background:var(--en-solar);"></i> <%= t('Solar surplus (forecast)') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-col" style="background:var(--en-export);"></i> <%= t('exporting (worth something)') %></span><span style="white-space:nowrap;"><i class="ls-key ls-key-col" style="background:var(--en-import);"></i> <%= t('limited: exporting costs money') %></span></div>
     <% if (!A.some((h) => h.limit)) { %><p class="hint" style="margin:0.3rem 0 0;"><%= C.rule === 'saldering' ? t('With net metering and these prices everything is exported: no limit expected.') : t('No limit expected in the coming hours.') %></p><% } %>
   </div><% } %>
   <details class="mm-sub mm-settings"><summary style="cursor:pointer;"><strong><%= t('Settings') %></strong> <span class="hint" style="margin:0;">— <%= t('device, link with Loxone, inverter') %></span></summary>
@@ -323,18 +368,193 @@
 
 <script>
 (function () {
-  // the plan chart: drawn on 960 wide; the shapes stretch with the card, the texts keep their size
-  function fitChart(svg) {
-    var g = svg.querySelector('.mm-g'), w0 = Number(svg.getAttribute('data-w')) || 960, w = svg.clientWidth || w0, sx = w / w0;
-    svg.setAttribute('viewBox', '0 0 ' + w + ' 330');
-    g.setAttribute('transform', 'scale(' + sx + ',1)');
-    Array.prototype.forEach.call(svg.querySelectorAll('text'), function (tx) {
-      if (!tx.hasAttribute('data-x')) { tx.setAttribute('data-x', tx.getAttribute('x') || '0'); svg.appendChild(tx); }
-      tx.setAttribute('x', String(Number(tx.getAttribute('data-x')) * sx));
+  // a section switched off (its "on" switch, or fine-tuning "Off") shows only that switch, not all its options
+  // only its own switch: the Settings tile holds sections with switches of their own
+  var own = function (sec, sel) { return Array.prototype.filter.call(sec.querySelectorAll(sel), function (e) { return e.closest('.mm-sub') === sec; })[0] || null; };
+  function sync(sec) {
+    var m = own(sec, '.mm-master input[type="checkbox"]'), sel = own(sec, 'select[data-master]');
+    var off = m ? !m.checked : sel ? sel.value === 'off' : false;
+    sec.classList.toggle('mm-off', off);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.mm-sub'), function (sec) {
+    if (!own(sec, '.mm-master, select[data-master]')) return;
+    sync(sec);
+    sec.addEventListener('change', function (e) { if (e.target.closest('.mm-sub') === sec) sync(sec); });
+  });
+})();
+</script>
+<script>
+(function () {
+  // the heat pump plan, as lanes over one time axis like the Energy manager plan
+  var dataEl = document.getElementById('mm-hp-plan-data'), el = document.getElementById('mm-hp-plan');
+  if (!window.LsChart) return;
+  var d = dataEl ? JSON.parse(dataEl.textContent) : null, L = d ? d.L : {}, H1 = 3600000;
+  var esc = function (x) { return String(x == null ? '' : x).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var fin = function (v) { return v !== null && v !== undefined && isFinite(v); };
+  var nf = function (v, k) { return fin(v) ? Number(v).toLocaleString('nl-NL', { minimumFractionDigits: k == null ? 1 : k, maximumFractionDigits: k == null ? 1 : k }) : '—'; };
+  var hh = function (ms) { return new Date(ms).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }); };
+  var COL = { dhw: '#3b82f6', legionella: 'var(--en-import)', preheat: '#e67e22', comfort: d.cooling ? '#06b6d4' : 'var(--accent)', cool: '#06b6d4', setback: 'var(--en-house)' };
+  function draw() {
+    if (!el || !d) return;
+    var hrs = d.plan;
+    if (!hrs.length) { el.innerHTML = ''; return; }
+    var C = window.LsChart, f1 = function (v) { return (Math.round(v * 10) / 10).toString(); };
+    var W = lsChartW(el, 900), left = 42, right = 30, PW = W - left - right;
+    var t0 = hrs[0].ms, t1 = hrs[hrs.length - 1].ms + H1;
+    var X = function (ms) { return left + (Math.min(t1, Math.max(t0, ms)) - t0) / (t1 - t0) * PW; };
+    var mid = function (h) { return X(h.ms + H1 / 2); };
+    var heatMin = function (h) { var m = 0; (d.runs || []).forEach(function (r) { var a = Math.max(h.ms, r.onAt), b = Math.min(h.ms + H1, r.offAt || t1); if (b > a) m += (b - a) / 60000; }); return Math.round(m); };
+    var lanes = [{ k: 'does', label: L.does, h: 16 }, { k: 'room', label: L.room, h: 44 }, { k: 'tank', label: L.tank, h: 34 }, { k: 'out', label: hrs.some(function (h) { return fin(h.rh); }) ? L.outRh : L.out, h: 36 }, { k: 'price', label: L.price, h: 40 }];
+    if (!hrs.some(function (h) { return fin(h.roomTargetC) || fin(h.roomC); })) lanes.splice(1, 1);
+    var cy = 24, by = {};
+    lanes.forEach(function (ln) { ln.labelY = cy + 10; ln.y = cy + 14; cy = ln.y + ln.h + 9; by[ln.k] = ln; });
+    var bottom = cy - 9, H = bottom + 24;
+    var tick = function (y, txt) { return '<text x="' + (left - 5) + '" y="' + f1(y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + txt + '</text>'; };
+    var scale = function (ln, vals, pad) { var f = vals.filter(fin); var lo = Math.min.apply(null, f) - pad, hi = Math.max.apply(null, f) + pad; if (!f.length) { lo = 0; hi = 1; } if (hi - lo < 1) { hi += 0.5; lo -= 0.5; } return { lo: lo, hi: hi, y: function (v) { return ln.y + ln.h - 2 - (v - lo) / (hi - lo) * (ln.h - 4); } }; };
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block; overflow:visible;">';
+    lanes.forEach(function (ln, i) {
+      if (i) svg += '<line x1="' + left + '" y1="' + f1(ln.labelY - 13.5) + '" x2="' + (W - right) + '" y2="' + f1(ln.labelY - 13.5) + '" stroke="currentColor" opacity="0.08"/>';
+      svg += '<text x="' + left + '" y="' + ln.labelY + '" font-size="10.5" font-weight="600" fill="currentColor" opacity="0.8">' + esc(ln.label) + '</text>';
+      svg += '<rect x="' + left + '" y="' + ln.y + '" width="' + PW + '" height="' + ln.h + '" rx="4" fill="currentColor" opacity="0.03"/>';
+    });
+    // ---- what it does: a run of hours with the same mode as one bar; ▼ at a usual draw
+    var dl = by.does, run = null, runs = [];
+    hrs.forEach(function (h) { if (run && run.does === h.does && run.b === h.ms) { run.b += H1; return; } run = { does: h.does, a: h.ms, b: h.ms + H1 }; runs.push(run); });
+    runs.forEach(function (r) {
+      if (!COL[r.does]) return;
+      var x = X(r.a) + 1, w = X(r.b) - X(r.a) - 2;
+      svg += '<rect x="' + f1(x) + '" y="' + (dl.y + 1) + '" width="' + f1(Math.max(1.5, w)) + '" height="' + (dl.h - 2) + '" rx="' + Math.min(5, (dl.h - 2) / 2) + '" style="fill:' + COL[r.does] + ';" opacity="' + (r.does === 'setback' ? 0.35 : 0.85) + '"/>';
+    });
+    // ---- room: the target as a dashed step, the expected temperature as a line; when it goes on / is warm
+    var rl = by.room;
+    if (rl) {
+      var rs = scale(rl, hrs.map(function (h) { return h.roomTargetC; }).concat(hrs.map(function (h) { return h.roomC; })), 0.3), st = '';
+      hrs.forEach(function (h, i) { if (!fin(h.roomTargetC)) return; var y = f1(rs.y(h.roomTargetC)); st += (i && fin(hrs[i - 1].roomTargetC) ? 'L' : 'M') + f1(X(h.ms)) + ',' + y + 'L' + f1(X(h.ms + H1)) + ',' + y; });
+      svg += tick(rs.y(rs.hi - 0.3), nf(rs.hi - 0.3)) + tick(rs.y(rs.lo + 0.3), nf(rs.lo + 0.3));
+      if (st) svg += '<path d="' + st + '" fill="none" style="stroke:var(--accent);" stroke-width="2" stroke-dasharray="5 3"/>';
+      svg += C.line(hrs.filter(function (h) { return fin(h.roomC); }).map(function (h) { return [mid(h), rs.y(h.roomC)]; }), '#e67e22');
+      // when it heats (expected): thin bars at the bottom of the lane; the main warm-up labelled with its times
+      (d.runs || []).forEach(function (r) {
+        var a = Math.max(t0, r.onAt), b = Math.min(t1, r.offAt || t1);
+        if (b > a) svg += '<rect x="' + f1(X(a)) + '" y="' + (rl.y + rl.h - 5) + '" width="' + f1(Math.max(2, X(b) - X(a))) + '" height="4" rx="2" style="fill:#e67e22;" opacity="0.85"/>';
+      });
+      if (d.onAt && d.onAt >= t0 && d.onAt < t1) {
+        // in the label row, right-aligned: never on top of the lines
+        svg += '<text x="' + (W - right) + '" y="' + rl.labelY + '" text-anchor="end" font-size="10.5" font-weight="600"><tspan style="fill:#e67e22;">▲ ' + esc(L.on + ' ' + hh(d.onAt)) + '</tspan>' + (d.reachAt ? '<tspan fill="currentColor" opacity="0.5">  →  </tspan><tspan style="fill:var(--success);">✓ ' + esc(L.reach + ' ' + hh(d.reachAt)) + '</tspan>' : '') + '</text>';
+        // and a small tick on the time axis of the lane where it comes on
+        svg += '<line x1="' + f1(X(d.onAt)) + '" y1="' + rl.y + '" x2="' + f1(X(d.onAt)) + '" y2="' + (rl.y + rl.h) + '" style="stroke:#e67e22;" stroke-width="1" stroke-dasharray="2 3" opacity="0.6"/>';
+      }
+    }
+    // ---- tank
+    var tl = by.tank, ts = scale(tl, hrs.map(function (h) { return h.predC; }), 1);
+    var tp = hrs.filter(function (h) { return fin(h.predC); }).map(function (h) { return [mid(h), ts.y(h.predC)]; });
+    svg += tick(ts.y(ts.hi - 1), nf(ts.hi - 1, 0)) + tick(ts.y(ts.lo + 1), nf(ts.lo + 1, 0)) + C.wash(tp, tl.y + tl.h, '#3b82f6', 0.2) + C.line(tp, '#3b82f6');
+    // the usual draws, subtle: a faint band over that hour and a small drop at the top of the lane
+    hrs.forEach(function (h) {
+      if (!(h.drop > 0.5)) return;
+      var x = X(h.ms) + 1, w = X(h.ms + H1) - X(h.ms) - 2, cx = mid(h);
+      svg += '<rect x="' + f1(x) + '" y="' + tl.y + '" width="' + f1(Math.max(1, w)) + '" height="' + tl.h + '" style="fill:var(--danger);" opacity="' + Math.min(0.14, 0.04 + h.drop * 0.02).toFixed(2) + '"/>' +
+        '<path d="M' + f1(cx) + ',' + (tl.y + 3) + ' q3,4.5 0,6.5 q-3,-2 0,-6.5z" style="fill:var(--danger);" opacity="0.7"/>';
+    });
+    // ---- outside, ❄ where defrosting is expected
+    var ol = by.out, os = scale(ol, hrs.map(function (h) { return h.outdoorC; }), 0.5);
+    svg += tick(os.y(os.hi - 0.5), nf(os.hi - 0.5, 0)) + C.line(hrs.filter(function (h) { return fin(h.outdoorC); }).map(function (h) { return [mid(h), os.y(h.outdoorC)]; }), 'var(--en-house)');
+    // humidity on its own 0–100 % scale: with high humidity around 0–7 °C the heat pump defrosts most
+    var RY = function (v) { return ol.y + ol.h - 2 - v / 100 * (ol.h - 4); };
+    var rhp = hrs.filter(function (h) { return fin(h.rh); }).map(function (h) { return [mid(h), RY(h.rh)]; });
+    if (rhp.length) svg += C.line(rhp, '#06b6d4', { dash: '4 3', w: 1.5 }) + '<text x="' + (W - right + 3) + '" y="' + f1(RY(100) + 3) + '" font-size="9" fill="#06b6d4" opacity="0.8">100%</text>';
+    hrs.forEach(function (h) { if (h.defrost > 0.05) svg += '<text x="' + f1(mid(h)) + '" y="' + (ol.y + 10) + '" text-anchor="middle" font-size="10" style="fill:#3b82f6;">❄</text>'; });
+    // ---- price: columns, a negative price below the zero line in green
+    var pl = by.price, pv = hrs.filter(function (h) { return fin(h.price); }).map(function (h) { return h.price; });
+    var maxP = Math.max(0.1, Math.max.apply(null, pv.concat([0]))), minP = Math.min(0, Math.min.apply(null, pv.concat([0])));
+    var PY = function (v) { return pl.y + pl.h - (v - minP) / (maxP - minP) * pl.h * 0.92; }, y0 = PY(0);
+    var tickEur = function (v) { return (v < 0 ? '−€' : '€') + nf(Math.abs(v), 2); };
+    svg += C.hline(left, W - right, PY(maxP)) + tick(PY(maxP), tickEur(maxP)) + (minP < 0 ? '<line x1="' + left + '" y1="' + f1(y0) + '" x2="' + (W - right) + '" y2="' + f1(y0) + '" stroke="currentColor" opacity="0.28"/>' + tick(y0, '€0') : '');
+    hrs.forEach(function (h) {
+      if (!fin(h.price)) return;
+      var x = X(h.ms), w = X(h.ms + H1) - x, cw = Math.max(0.6, Math.min(26, w - Math.min(1.5, w * 0.25))); x += (w - cw) / 2;
+      var op = h.estimated ? 0.25 : null;
+      if (h.price < 0) svg += C.col(x, y0, cw, Math.max(1.5, PY(h.price) - y0), { down: true, color: 'var(--en-export)', opacity: op != null ? op : (0.45 + 0.45 * h.price / minP).toFixed(2), r: 3 });
+      else svg += C.col(x, y0 - Math.max(1.5, y0 - PY(h.price)), cw, Math.max(1.5, y0 - PY(h.price)), { color: 'var(--en-price)', opacity: op != null ? op : (0.3 + 0.5 * h.price / maxP).toFixed(2), r: 3 });
+    });
+    // ---- now, the time axis
+    var nowMs = Date.now();
+    if (nowMs >= t0 && nowMs <= t1) { var nx = X(nowMs); lanes.forEach(function (ln) { svg += '<line x1="' + f1(nx) + '" y1="' + ln.y + '" x2="' + f1(nx) + '" y2="' + (ln.y + ln.h) + '" stroke="currentColor" opacity="0.4" stroke-width="1.2"/>'; }); svg += '<circle cx="' + f1(nx) + '" cy="10" r="2.5" fill="currentColor"/><text x="' + f1(nx + 5) + '" y="13" font-size="10" fill="currentColor" opacity="0.85">' + esc(L.now) + '</text>'; }
+    var pxH = PW / Math.max(1, hrs.length), every = pxH >= 26 ? 1 : pxH >= 13 ? 2 : 3;
+    hrs.concat([{ ms: t1 }]).forEach(function (h) {
+      var hx = X(h.ms), hr = new Date(h.ms).getHours();
+      svg += '<line x1="' + f1(hx) + '" y1="' + bottom + '" x2="' + f1(hx) + '" y2="' + (bottom + (hr % every === 0 ? 5 : 3)) + '" stroke="currentColor" opacity="0.3"/>';
+      if (hr % every === 0 && hx > left + 6 && hx < W - right - 6) svg += '<text x="' + f1(hx) + '" y="' + (bottom + 16) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + String(hr).padStart(2, '0') + '</text>';
+    });
+    el.innerHTML = svg + '</svg>';
+    C.hover(el, {
+      W: W, top: lanes[0].y, bottom: bottom, n: hrs.length, x: function (i) { return mid(hrs[i]); },
+      title: function (i) { var h = hrs[i]; return new Date(h.ms).toLocaleDateString('nl-NL', { weekday: 'short' }) + ' ' + hh(h.ms) + '–' + hh(h.ms + H1); },
+      rows: function (i) {
+        var h = hrs[i];
+        return [[L[h.does] || h.does, h.reason || '', COL[h.does] || 'var(--en-house)', 'col'],
+          fin(h.roomTargetC) ? [L.target, nf(h.roomTargetC) + ' °C', 'var(--accent)', 'dash'] : null,
+          fin(h.roomC) ? [L.roomF, nf(h.roomC) + ' °C', '#e67e22'] : null,
+          heatMin(h) ? [L.heating, heatMin(h) + ' min', '#e67e22', 'col'] : null,
+          fin(h.predC) ? [L.tank, nf(h.predC) + ' °C', '#3b82f6'] : null,
+          fin(h.outdoorC) ? [L.out, nf(h.outdoorC) + ' °C', 'var(--en-house)'] : null,
+          fin(h.rh) ? [L.rh, Math.round(h.rh) + '%', '#06b6d4', 'dash'] : null,
+          h.cop ? [L.cop, nf(h.cop, 1)] : null,
+          h.defrost > 0.02 ? [L.defrost, Math.round(h.defrost * 100) + '%'] : null,
+          h.drop > 0.5 ? [L.drop, '−' + nf(h.drop) + ' °C', 'var(--danger)'] : null,
+          fin(h.price) ? [L.price, (h.estimated ? '≈ ' : '') + '€ ' + nf(h.price, 3), h.price < 0 ? 'var(--en-export)' : 'var(--en-price)', 'col'] : null];
+      },
     });
   }
-  function fitAll() { Array.prototype.forEach.call(document.querySelectorAll('svg.mm-chart'), fitChart); }
-  fitAll(); window.addEventListener('resize', fitAll);
+  draw();
+  lsOnResize(draw);
+  // the solar limit in the coming hours: surplus, what exporting yields, when it is limited
+  var sEl = document.getElementById('mm-so-plan'), sData = document.getElementById('mm-so-plan-data');
+  function drawSolar() {
+    if (!sEl || !sData) return;
+    var sd = JSON.parse(sData.textContent), hrs = sd.hours, SL = sd.L;
+    if (!hrs.length) return;
+    var C = window.LsChart, f1 = function (v) { return (Math.round(v * 10) / 10).toString(); };
+    var W = lsChartW(sEl, 900), left = 42, right = 8, PW = W - left - right, t0 = hrs[0].ms, t1 = hrs[hrs.length - 1].ms + H1;
+    var X = function (ms) { return left + (Math.min(t1, Math.max(t0, ms)) - t0) / (t1 - t0) * PW; }, mid = function (h) { return X(h.ms + H1 / 2); };
+    var lanes = [{ label: SL.sun, h: 30 }, { label: SL.value, h: 40 }, { label: SL.limit, h: 14 }], cy = 10;
+    lanes.forEach(function (ln) { ln.labelY = cy + 10; ln.y = cy + 14; cy = ln.y + ln.h + 9; });
+    var bottom = cy - 9, svg = '<svg viewBox="0 0 ' + W + ' ' + (bottom + 24) + '" width="100%" style="display:block; overflow:visible;">';
+    var tick = function (y, txt) { return '<text x="' + (left - 5) + '" y="' + f1(y + 3) + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.55">' + txt + '</text>'; };
+    lanes.forEach(function (ln, i) {
+      if (i) svg += '<line x1="' + left + '" y1="' + f1(ln.labelY - 13.5) + '" x2="' + (W - right) + '" y2="' + f1(ln.labelY - 13.5) + '" stroke="currentColor" opacity="0.08"/>';
+      svg += '<text x="' + left + '" y="' + ln.labelY + '" font-size="10.5" font-weight="600" fill="currentColor" opacity="0.8">' + esc(ln.label) + '</text><rect x="' + left + '" y="' + ln.y + '" width="' + PW + '" height="' + ln.h + '" rx="4" fill="currentColor" opacity="0.03"/>';
+    });
+    var sl = lanes[0], maxS = Math.max(0.5, Math.max.apply(null, hrs.map(function (h) { return h.surplusKwh || 0; })));
+    var SY = function (v) { return sl.y + sl.h - (v / maxS) * (sl.h - 3); };
+    var sp = hrs.map(function (h) { return [mid(h), SY(h.surplusKwh || 0)]; });
+    svg += tick(SY(maxS), nf(maxS, 1)) + C.wash(sp, sl.y + sl.h, 'var(--en-solar)', 0.26) + C.line(sp, 'var(--en-solar)');
+    var vl = lanes[1], vv = hrs.filter(function (h) { return fin(h.value); }).map(function (h) { return h.value; });
+    var maxV = Math.max(0.05, Math.max.apply(null, vv.concat([0]))), minV = Math.min(0, Math.min.apply(null, vv.concat([0])));
+    var VY = function (v) { return vl.y + vl.h - (v - minV) / (maxV - minV) * vl.h * 0.92; }, y0 = VY(0);
+    svg += C.hline(left, W - right, VY(maxV)) + tick(VY(maxV), '€' + nf(maxV, 2)) + (minV < 0 ? '<line x1="' + left + '" y1="' + f1(y0) + '" x2="' + (W - right) + '" y2="' + f1(y0) + '" stroke="currentColor" opacity="0.28"/>' + tick(y0, '€0') : '');
+    hrs.forEach(function (h) {
+      if (!fin(h.value)) return;
+      var x = X(h.ms), w = X(h.ms + H1) - x, cw = Math.max(0.6, Math.min(26, w - Math.min(1.5, w * 0.25))); x += (w - cw) / 2;
+      if (h.value < 0) svg += C.col(x, y0, cw, Math.max(1.5, VY(h.value) - y0), { down: true, color: 'var(--en-import)', opacity: 0.75, r: 3 });
+      else svg += C.col(x, y0 - Math.max(1.5, y0 - VY(h.value)), cw, Math.max(1.5, y0 - VY(h.value)), { color: 'var(--en-export)', opacity: 0.65, r: 3 });
+    });
+    var ll = lanes[2];
+    // runs of limited hours as one bar
+    var bars = [], cur = null;
+    hrs.forEach(function (h) { if (h.limit && cur && cur.b === h.ms) cur.b += H1; else if (h.limit) { cur = { a: h.ms, b: h.ms + H1 }; bars.push(cur); } else cur = null; });
+    bars.forEach(function (r) { svg += '<rect x="' + f1(X(r.a) + 1) + '" y="' + (ll.y + 1) + '" width="' + f1(Math.max(1.5, X(r.b) - X(r.a) - 2)) + '" height="' + (ll.h - 2) + '" rx="5" style="fill:var(--en-import);" opacity="0.8"/>'; });
+    var nowMs = Date.now();
+    if (nowMs >= t0 && nowMs <= t1) { var nx = X(nowMs); lanes.forEach(function (ln) { svg += '<line x1="' + f1(nx) + '" y1="' + ln.y + '" x2="' + f1(nx) + '" y2="' + (ln.y + ln.h) + '" stroke="currentColor" opacity="0.4" stroke-width="1.2"/>'; }); }
+    var every = PW / hrs.length >= 26 ? 1 : PW / hrs.length >= 13 ? 2 : 3;
+    hrs.concat([{ ms: t1 }]).forEach(function (h) { var hx = X(h.ms), hr = new Date(h.ms).getHours(); svg += '<line x1="' + f1(hx) + '" y1="' + bottom + '" x2="' + f1(hx) + '" y2="' + (bottom + 4) + '" stroke="currentColor" opacity="0.3"/>'; if (hr % every === 0 && hx > left + 6 && hx < W - right - 6) svg += '<text x="' + f1(hx) + '" y="' + (bottom + 16) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + String(hr).padStart(2, '0') + '</text>'; });
+    sEl.innerHTML = svg + '</svg>';
+    C.hover(sEl, { W: W, top: lanes[0].y, bottom: bottom, n: hrs.length, x: function (i) { return mid(hrs[i]); },
+      title: function (i) { return hh(hrs[i].ms) + '–' + hh(hrs[i].ms + H1); },
+      rows: function (i) { var h = hrs[i]; return [[SL.sun, nf(h.surplusKwh || 0, 1) + ' kWh', 'var(--en-solar)'], [SL.value, fin(h.value) ? (h.value < 0 ? '−€ ' : '€ ') + nf(Math.abs(h.value), 3) : '—', fin(h.value) && h.value < 0 ? 'var(--en-import)' : 'var(--en-export)', 'col'], [SL.limit, h.limit ? (fin(h.pct) ? h.pct + '%' : SL.yes) : SL.no, h.limit ? 'var(--en-import)' : null, 'col']]; } });
+  }
+  drawSolar();
+  lsOnResize(drawSolar);
 })();
 (function () {
   var CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
@@ -397,6 +617,18 @@
     return b;
   }
 
+  // the setup wizard: what this heat pump has
+  var wz = document.querySelector('[data-wizard-done]');
+  function wizardPost(body) {
+    return fetch('/energy-manager/modules/heatpump.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+  }
+  if (wz) wz.addEventListener('click', function () {
+    var val = function (n) { var e = document.querySelector('input[name="' + n + '"]:checked'); return e ? e.value : null; };
+    wz.disabled = true;
+    wizardPost({ source: val('wz_source'), features: { power_steps: val('wz_steps'), ntc: val('wz_ntc') }, setup_done: true }).then(function () { location.reload(); });
+  });
+  var again = document.querySelector('[data-wizard-again]');
+  if (again) again.addEventListener('click', function (e) { e.preventDefault(); wizardPost({ setup_done: false }).then(function () { location.href = '/energy-manager/modules/heatpump'; }); });
   document.querySelectorAll('[data-save]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var kind = btn.getAttribute('data-save'), card = btn.closest('[data-module]');

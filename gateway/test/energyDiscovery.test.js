@@ -175,3 +175,14 @@ test('rebuilding a found device keeps its own objects (scale factors stay linked
   const again = ed.asType('solar', { uuid: c.uuid, name: c.name, members: c.members }, c.roles, et.loadTypes('solar').find((t) => t.key === 'solaredge'));
   assert.ok(et.byRole(again, 'dcPower').sf, 'scale factor kept');
 });
+
+test('a name the user linked by hand is recognised next time, before the built-in names', () => {
+  const members = [{ uuid: 'a', name: 'Boiler boven', state: 's-a' }, { uuid: 'b', name: 'Tank Water Temp Actual', state: 's-b' }];
+  assert.equal(ed.rolesOf('heatpump', members).tankTemp.read.name, 'Tank Water Temp Actual');
+  const names = ed.namesOf({ tankTemp: { read: { uuid: 's-a', name: 'Boiler  boven' } }, nope: {} });
+  assert.deepEqual(names, { 'boiler boven': 'tankTemp' });
+  ed.setLearned('heatpump', { ...names, 'x': 'notARole' });
+  try {
+    assert.equal(ed.rolesOf('heatpump', members).tankTemp.read.name, 'Boiler boven');
+  } finally { ed.setLearned('heatpump', {}); }
+});

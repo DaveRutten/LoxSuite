@@ -5,7 +5,8 @@ const { decrypt } = require('./secretCrypto');
 
 const REQUEST_TOPIC = '$CONTROL/dynamic-security/v1';
 const RESPONSE_TOPIC = '$CONTROL/dynamic-security/v1/response';
-const TIMEOUT_MS = 5000;
+// generous: right after a container start Mosquitto can take well over 10 s to answer
+const TIMEOUT_MS = 20000;
 
 function sendCommand(client, command) {
   return new Promise((resolve, reject) => {
@@ -69,7 +70,7 @@ async function ensureGatewayAccount(client, username, password) {
 // Idempotent: safe to run on every startup. Lets the gateway's own MQTT account
 // (which mqttClient.js is already retrying to connect as) become valid without
 // any manual mosquitto_ctrl steps, once the broker is reachable.
-async function runBootstrap() {
+async function runBootstrap(attempt = 1) {
   if (!require('./modules').isOn('mqtt')) return; // MQTT bridge module off: broker isn't running
   const adminUsername = process.env.MQTT_ADMIN_USERNAME || 'admin';
   const adminPassword = process.env.MQTT_ADMIN_PASSWORD;
@@ -98,8 +99,14 @@ async function runBootstrap() {
         await ensureClientRole(client);
         await ensureGatewayAccount(client, settings.username, decrypt(settings.password));
         console.log('Dynamic security bootstrap complete.');
+        // the gateway's own client may have subscribed before its account had its role
+        require('./mqttClient').resubscribe();
       } catch (bootstrapErr) {
-        console.error('Dynamic security bootstrap failed:', bootstrapErr.message);
+        // not giving up: without it the gateway's account may lack its role and see no messages
+        // until a manual "Save & restart"
+        const retry = attempt < 10;
+        console.error(`Dynamic security bootstrap failed: ${bootstrapErr.message}${retry ? ' - trying again in 30 s.' : ''}`);
+        if (retry) setTimeout(() => runBootstrap(attempt + 1).catch((e) => console.error('Dynamic security bootstrap failed:', e.message)), 30000).unref?.();
       } finally {
         client.end(true);
       }
