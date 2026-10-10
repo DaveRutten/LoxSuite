@@ -9,7 +9,7 @@
     <div style="align-self:end;"><label style="display:flex; gap:0.4rem; align-items:center; font-weight:normal;"><input type="checkbox" name="enabled" value="1" <%= !l || l.enabled ? 'checked' : '' %>> <%= t('Active') %></label></div>
   </div>
   <% if (l) { %><p class="hint" style="margin:0.5rem 0 0;"><a href="/energy-manager/loads/<%= l.id %>#history"><%= t('History & learned →') %></a></p><% } %>
-  <p class="mm-meter-note" data-only-meter style="margin:0.5rem 0 0;"><%= t('Only measured: pick the Loxone meter above, or its power and energy counter below. LoxSuite learns when and how much it uses and what it costs — it never switches it.') %></p>
+  <p class="mm-meter-note" data-only-meter style="margin:0.5rem 0 0;"><%= t('Only measured: pick the Loxone meter above, or its power and energy counter below (an on/off signal is optional). LoxSuite learns when, how long and how much it uses and what it costs — it never switches it.') %></p>
   <details class="em-signals" style="margin-top:0.6rem;" <%= src.onoff || src.status || src.power || src.energy || src.start_in || src.ready || !l ? 'open' : '' %>>
     <summary style="cursor:pointer;"><strong><%= t('Signals from Loxone') %></strong></summary>
     <div class="form-grid" style="margin-top:0.5rem;">
@@ -23,7 +23,7 @@
       <div style="grid-column:span 2;"><label><%= t('Search states') %></label><input type="text" data-state-filter placeholder="<%= t('room, name or state — e.g. washing machine') %>"><span class="hint" data-state-msg style="margin:0;"></span></div>
     </div>
     <div class="form-grid" style="margin-top:0.4rem;">
-      <div data-not-meter><label><%= t('On / off') %></label><select name="src_onoff" data-state-pick="onoff" data-current="<%= src.onoff || '' %>"><option value=""><%= t('— none —') %></option><% if (src.onoff) { %><option value="<%= src.onoff %>" selected><%= src.onoff %></option><% } %></select>
+      <div><label><%= t('On / off') %><span data-only-meter class="mm-sum" style="font-weight:normal;"> — <%= t('optional, only read') %></span></label><select name="src_onoff" data-state-pick="onoff" data-current="<%= src.onoff || '' %>"><option value=""><%= t('— none —') %></option><% if (src.onoff) { %><option value="<%= src.onoff %>" selected><%= src.onoff %></option><% } %></select>
         <label style="display:flex; gap:0.3rem; font-weight:normal; margin-top:0.2rem;"><input type="checkbox" name="src_onoff_invert" value="1" <%= src.onoff_invert ? 'checked' : '' %>> <%= t('inverted (0 = on)') %></label></div>
       <div data-not-meter><label><%= t('Status') %></label><select name="src_status" data-state-pick="status" data-current="<%= src.status || '' %>"><option value=""><%= t('— none —') %></option><% if (src.status) { %><option value="<%= src.status %>" selected><%= src.status %></option><% } %></select><p class="hint" data-status-hint style="margin:0.2rem 0 0;"></p></div>
       <div><label><%= t('Power') %></label><div style="display:flex; gap:0.3rem;"><select name="src_power" data-state-pick="power" data-current="<%= src.power || '' %>" style="flex:1;"><option value=""><%= t('— none —') %></option><% if (src.power) { %><option value="<%= src.power %>" selected><%= src.power %></option><% } %></select><select name="src_power_unit" style="width:6em;"><option value="W" <%= src.power_unit !== 'kW' ? 'selected' : '' %>>W</option><option value="kW" <%= src.power_unit === 'kW' ? 'selected' : '' %>>kW</option></select></div></div>

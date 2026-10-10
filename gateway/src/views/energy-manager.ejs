@@ -404,6 +404,10 @@
         var wk = (l.daily || []).slice(0, 7), kwh7 = sum(wk, 'kwh'), cost7 = sum(wk, 'cost'), pot = sum(l.daily || [], 'potential');
         var solar7 = kwh7 > 0 ? Math.round(wk.reduce(function (a, x) { return a + (x.solarShare == null ? 0 : x.solarShare * x.kwh); }, 0) / kwh7) : null;
         tiles += tile('Learned', lr.kwhPerDay != null ? nf(lr.kwhPerDay, 1) + ' <small>' + esc(TLx('kWh per day')) + '</small>' : '—', lr.kwPeak != null ? TLx('about {0} kW while running').replace('{0}', nf(lr.kwPeak, 1)) : TLx('no measurements yet'));
+        if (l.kind === 'meter') {
+          var rs = lr.runStats || {};
+          tiles += tile('Runs', rs.runs ? nf(rs.perDay, 1) + '× <small>' + esc(TLx('per day')) + '</small>' : '—', rs.runs ? TLx('typically {0} min, {1} kWh per run').replace('{0}', rs.minutes).replace('{1}', nf(rs.kwh, 2)) : TLx('no runs seen yet (it runs when above its standby power)'));
+        }
         // standby power learned from its own quiet hours, and from what it counts as "on"
         var sb = lr.standby || {};
         tiles += tile('Standby', sb.learned ? nf(sb.standbyKw * 1000, 0) + ' <small>W</small>' : '—', sb.learned ? TLx('on from {0} W').replace('{0}', nf(sb.onKw * 1000, 0)) : TLx('on from 50 W (start value, learns after 2 days)'));

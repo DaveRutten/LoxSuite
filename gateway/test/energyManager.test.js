@@ -171,3 +171,17 @@ test('"on" is learned above the standby power: a heat pump idling at 90 W is not
   const st = em.loadState({ meter: { kw: 0.09 }, onKw: th.onKw });
   assert.equal(st.on, false);
 });
+
+test('a meter-only consumer gets runs too, from its power above the learned standby', () => {
+  const em = require('../src/energyManager');
+  const T = Date.parse('2026-10-10T08:00:00Z');
+  let st = {};
+  const on = 0.135;
+  const step = (kw, min) => em.runStep(st, kw, null, T + min * 60000, { onKw: on, offKw: on * 0.8 });
+  let r = step(0.09, 0); st = r.state; assert.ok(!st.running, 'standby is not a run');
+  r = step(1.5, 1); st = r.state; assert.equal(st.running, true);
+  for (let m = 2; m < 40; m++) { r = step(1.5, m); st = r.state; }
+  let done = null;
+  for (let m = 40; m < 60 && !done; m++) { r = step(0.09, m); st = r.state; done = r.finished || null; }
+  assert.ok(done, 'the run ends when it falls back to standby');
+});

@@ -696,7 +696,7 @@ async function sample(nowMs = Date.now(), { read = readLoad } = {}) {
       await db.prepare('INSERT INTO load_events (load_id, ts, on_state, status, label, kw) VALUES (?, ?, ?, ?, ?, ?)')
         .run(l.id, new Date(nowMs).toISOString(), r.on === null ? null : (r.on ? 1 : 0), r.status, r.label, r.kw).catch(() => {});
     }
-    if (l.kind === 'appliance') {
+    if (l.kind === 'appliance' || l.kind === 'meter') {
       // with an on/off or status signal the run follows that (ends 2 minutes after it goes off);
       // otherwise the power decides
       const bySignal = r.on !== null && (sourcesOf(l.settings).onoff || sourcesOf(l.settings).status);
@@ -739,8 +739,9 @@ async function storeRun(load, run) {
     if (c === null) known = false; else cost += c;
   }
   let best = null;
-  const flex = Number(load.settings.flex_h) || 8;
-  for (let s = Math.floor(run.start / HOUR) * HOUR; s <= run.start + flex * HOUR; s += HOUR) {
+  // only measured: never shifted, so no "best start in hindsight"
+  const flex = load.kind === 'meter' ? -1 : Number(load.settings.flex_h) || 8;
+  for (let s = Math.floor(run.start / HOUR) * HOUR; flex >= 0 && s <= run.start + flex * HOUR; s += HOUR) {
     let c = 0;
     let ok = true;
     for (let i = 0; i < durH; i++) {
@@ -783,7 +784,14 @@ async function learned(load) {
   const change = require('./learning').detectChange([...byDay.entries()].slice(0, -1).map(([day, kwh]) => ({ day, kwh })));
   const kwhPerDay = change.changed ? change.recent : (days ? r2(rows.reduce((a, r) => a + r.kwh, 0) / days) : null);
   const standby = await onThresholdOf(load).catch(() => null);
-  return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay, change, hours: rows.length, standby, ...(await learnedStatus(load)), anomalies: await loadAnomalies(load).catch(() => []) };
+  // only measured: how often, how long and how much it runs (last 14 days)
+  let runStats = null;
+  if (load.kind === 'meter') {
+    const rr = await db.prepare("SELECT start_at, end_at, kwh FROM load_runs WHERE load_id = ? AND kind = 'run' AND start_at >= ? ORDER BY start_at DESC").all(load.id, new Date(Date.now() - 14 * 86400000).toISOString()).catch(() => []);
+    const rdays = new Set(rr.map((r) => r.start_at.slice(0, 10))).size;
+    runStats = rr.length ? { runs: rr.length, perDay: r2(rr.length / Math.max(1, rdays)), minutes: Math.round(quantile(rr.map((r) => (Date.parse(r.end_at) - Date.parse(r.start_at)) / 60000), 0.5)), kwh: r2(quantile(rr.map((r) => r.kwh || 0), 0.5)), last: rr[0].start_at } : { runs: 0 };
+  }
+  return { kwPeak: active.length ? r2(quantile(active, 0.8)) : null, kwhPerDay, change, hours: rows.length, standby, runStats, ...(await learnedStatus(load)), anomalies: await loadAnomalies(load).catch(() => []) };
 }
 
 // The weather side of a heat pump / boiler: its kWh against heating degrees (a cold day needs more), and

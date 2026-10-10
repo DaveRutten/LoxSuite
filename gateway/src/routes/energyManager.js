@@ -94,7 +94,7 @@ router.get('/data.json', asyncHandler(async (req, res) => {
     // expected use, corrected with how far off the expectation was for this consumer (forecastLog.js)
     const lf = (await require('../forecastLog').corrections().catch(() => ({ loadFactors: {} }))).loadFactors?.[l.id] || 1;
     const expected = lp.profile && rt.localOf ? (rt.plan?.hours || []).slice(0, 24).map((h) => { const k = ep.expectedKwh(lp.profile, h.ms, rt.localOf); return { ms: h.ms, kwh: k === null || k === undefined ? k : Math.round(k * lf * 1000) / 1000 }; }) : [];
-    const runs = l.kind === 'appliance' ? await db.prepare("SELECT * FROM load_runs WHERE load_id = ? ORDER BY start_at DESC").all(l.id) : [];
+    const runs = l.kind === 'appliance' || l.kind === 'meter' ? await db.prepare("SELECT * FROM load_runs WHERE load_id = ? ORDER BY start_at DESC").all(l.id) : [];
     out.push({
       id: l.id, name: l.name, kind: l.kind, kindLabel: (res.locals.t || ((x) => x))(em.KINDS[l.kind]?.label || l.kind), priority: l.priority, enabled: !!l.enabled, output: l.output,
       settings: l.settings, live: rt.samples[l.id] || null, running: rt.runs[l.id]?.running || false,
