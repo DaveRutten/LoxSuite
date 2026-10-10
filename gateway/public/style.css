@@ -5033,3 +5033,8 @@ tr.ls-extra { display: none; }
 .en-range { display:flex; flex-wrap:wrap; gap:0.15rem 0.7rem; font-variant-numeric:tabular-nums; }
 .en-range .en-lo { color:var(--en-export); } .en-range .en-hi { color:var(--en-import); }
 .en-range small { color:var(--text-muted); font-size:0.75rem; }
+/* the same icons, subtle, in front of headings and labels */
+.en-h { display:flex; align-items:center; gap:0.6rem; }
+.en-h3 { display:inline-flex; align-items:center; gap:0.45rem; }
+.en-ic-plain { display:inline-flex; flex:none; opacity:0.85; }
+.en-kl { display:inline-flex !important; align-items:center; gap:0.3rem; }

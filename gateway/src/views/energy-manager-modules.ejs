@@ -66,7 +66,7 @@
   <p class="mm-status" data-history-msg="<%= kind %>" hidden></p>
 <% } %>
 <% function heartbeatBox(kind, st) { const cfgH = st.cfg || {}; %>
-  <div class="mm-sub" data-heartbeat><h3><%= t('Safety net (heartbeat)') %></h3>
+  <div class="mm-sub" data-heartbeat><h3 class="en-h3"><%- enIcon('shield', 'var(--success)', { plain: true }) %><%= t('Safety net (heartbeat)') %></h3>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
       <div><label><%= t('Virtual input in Loxone') %></label><input type="text" data-f="heartbeat_vi" value="<%= cfgH.heartbeat_vi || '' %>" placeholder="<%= kind === 'solar' ? 'LoxSuite_Heartbeat_PV' : 'LoxSuite_Heartbeat_WP' %>"></div>
     </div>
@@ -90,7 +90,7 @@
 <% } %>
 
 <% function rolesTable(kind, st) { %>
-  <details class="mm-sub" <%= st.check && st.check.ok ? '' : 'open' %>><summary style="cursor:pointer;"><strong><%= t('Link with Loxone') %></strong> <span class="hint" style="margin:0;">— <%= t('per role: where it is read, how it is sent') %></span></summary>
+  <details class="mm-sub" <%= st.check && st.check.ok ? '' : 'open' %>><summary style="cursor:pointer;"><strong class="en-h3"><%- enIcon('link', 'var(--text-muted)', { plain: true }) %><%= t('Link with Loxone') %></strong> <span class="hint" style="margin:0;">— <%= t('per role: where it is read, how it is sent') %></span></summary>
   <div style="overflow-x:auto;"><table class="mm-table" data-roles="<%= kind %>"><thead><tr><th><%= t('Role') %></th><th><%= t('Read from') %></th><th><%= t('Send via') %></th></tr></thead><tbody>
   <% (st.roles || []).forEach((r) => { const cur = (st.cfg.links || {})[r.role] || {}; %>
     <tr data-role="<%= r.role %>">
@@ -140,7 +140,7 @@
 
 <% if (only === 'heatpump') { %>
 <div class="card" data-module="heatpump">
-  <h2 style="margin-top:0;"><%= t('Heat pump') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('heat', '#e67e22') %><%= t('Heat pump') %></h2>
   <% if (hpS.error) { %><p class="error"><%= hpS.error %></p><% } else { %>
   <% moduleStatus('heatpump', hpS) %>
   <% const FE = hpS.cfg.features || {}; const hasRole = (re) => (hpS.roles || []).some((r) => re.test(r.role) && (r.read || r.write));
@@ -148,7 +148,7 @@
      const fNtc = FE.ntc !== null && FE.ntc !== undefined ? FE.ntc : hasRole(/^ntc/); %>
   <% if (!hpS.cfg.setup_done) { %>
   <div class="mm-sub mm-wizard" data-wizard>
-    <h3><%= t('Set up your heat pump') %></h3>
+    <h3 class="en-h3"><%- enIcon('gear', 'var(--accent)', { plain: true }) %><%= t('Set up your heat pump') %></h3>
     <p class="hint" style="margin:0 0 0.5rem;"><%= t('Not every heat pump can do the same. Three questions, so LoxSuite only shows and steers what yours has. You can change it later under Settings.') %></p>
     <div class="mm-wq"><b>1. <%= t('What kind of heat pump?') %></b>
       <div class="mm-seg"><% [['air', t('Air / water')], ['water', t('Water / water')], ['ground', t('Ground / water')]].forEach(([k, lbl]) => { %><label><input type="radio" name="wz_source" value="<%= k %>" <%= (hpS.cfg.source || 'air') === k ? 'checked' : '' %>> <%= lbl %></label><% }) %></div>
@@ -164,23 +164,23 @@
   <% } %>
   <% const st = hpS.state || {}; const v = hpS.values || {}; %>
   <div class="mm-kpis">
-    <div class="mm-kpi"><span><%= t('Tank') %></span><b><%= nf(st.tankC) %> °C</b><span><%= t('target') %> <%= nf(v.dhwSetpoint, 0) %> °C<%= v.dhwDrop !== undefined ? ' · ' + t('hysteresis') + ' ' + nf(v.dhwDrop, 0) + ' °C' : '' %></span></div>
-    <div class="mm-kpi"><span><%= t('Doing now') %></span><b><%= modeText[st.mode] || st.mode || '—' %></b><span><%= v.compressorHz !== undefined ? nf(v.compressorHz, 0) + ' Hz' : '' %><%= st.outdoorC !== null && st.outdoorC !== undefined ? ' · ' + t('outside') + ' ' + nf(st.outdoorC) + ' °C' : '' %></span></div>
-    <div class="mm-kpi"><span><%= t('COP now') %></span><b><%= nf(st.cop, 2) %></b><span><%= nf(st.thermalKw) %> kW <%= t('heat') %> / <%= nf(v.electricPower) %> kW</span></div>
-    <div class="mm-kpi"><span><%= t('Booster') %></span><b><%= st.boost ? t('on') : t('off') %></b><span><%= tr(st.boostWhy || '') %></span></div>
-    <div class="mm-kpi"><span><%= t('Plan this hour') %></span><b><%= modeText[hpS.mode] || hpS.mode %></b><span><%= tr(hpS.reason || '') %></span></div>
+    <div class="mm-kpi"><span class="en-kl"><%- enIcon('tank', '#3b82f6', { plain: true, size: 13 }) %><%= t('Tank') %></span><b><%= nf(st.tankC) %> °C</b><span><%= t('target') %> <%= nf(v.dhwSetpoint, 0) %> °C<%= v.dhwDrop !== undefined ? ' · ' + t('hysteresis') + ' ' + nf(v.dhwDrop, 0) + ' °C' : '' %></span></div>
+    <div class="mm-kpi"><span class="en-kl"><%- enIcon('heat', '#e67e22', { plain: true, size: 13 }) %><%= t('Doing now') %></span><b><%= modeText[st.mode] || st.mode || '—' %></b><span><%= v.compressorHz !== undefined ? nf(v.compressorHz, 0) + ' Hz' : '' %><%= st.outdoorC !== null && st.outdoorC !== undefined ? ' · ' + t('outside') + ' ' + nf(st.outdoorC) + ' °C' : '' %></span></div>
+    <div class="mm-kpi"><span class="en-kl"><%- enIcon('gauge', 'var(--en-export)', { plain: true, size: 13 }) %><%= t('COP now') %></span><b><%= nf(st.cop, 2) %></b><span><%= nf(st.thermalKw) %> kW <%= t('heat') %> / <%= nf(v.electricPower) %> kW</span></div>
+    <div class="mm-kpi"><span class="en-kl"><%- enIcon('bolt', 'var(--en-import)', { plain: true, size: 13 }) %><%= t('Booster') %></span><b><%= st.boost ? t('on') : t('off') %></b><span><%= tr(st.boostWhy || '') %></span></div>
+    <div class="mm-kpi"><span class="en-kl"><%- enIcon('chart', 'var(--en-price)', { plain: true, size: 13 }) %><%= t('Plan this hour') %></span><b><%= modeText[hpS.mode] || hpS.mode %></b><span><%= tr(hpS.reason || '') %></span></div>
   </div>
 
   <% const SG = hpS.suggestions || []; const SGN = hpS.cfg.step_names || {}, SGT = hpS.cfg.ntc_names || {};
      const sgSet = (x) => [Number.isFinite(x && x.flowC) ? t('flow {c} °C', { c: nf(x.flowC, 1) }) : null,
        fStep && x && Number.isFinite(x.step) ? (SGN[String(x.step)] || (x.step > 2 ? x.step + '%' : x.step === 0 ? t('full power') : t('step {n}', { n: x.step }))) : null,
        fNtc && x && Number.isFinite(x.ntc) ? (SGT[String(x.ntc)] || (x.ntc > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(x.ntc, 0) }) : x.ntc === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: x.ntc }))) : null].filter(Boolean).join(' · '); %>
-  <details class="mm-sub" data-suggestions open><summary class="mm-sug-head"><strong><%= t('Suggestions') %></strong> <span class="mm-sum"><%= SG.length ? '· ' + SG.length + ' — ' + [...new Set(SG.map((g) => ({ comfort: t('Comfort'), energy: t('Energy'), efficiency: t('Efficiency') }[g.kind])))].join(', ').toLowerCase() : '· ' + t('nothing to improve') %></span></summary>
+  <details class="mm-sub" data-suggestions open><summary class="mm-sug-head"><strong class="en-h3"><%- enIcon('bulb', 'var(--accent)', { plain: true }) %><%= t('Suggestions') %></strong> <span class="mm-sum"><%= SG.length ? '· ' + SG.length + ' — ' + [...new Set(SG.map((g) => ({ comfort: t('Comfort'), energy: t('Energy'), efficiency: t('Efficiency') }[g.kind])))].join(', ').toLowerCase() : '· ' + t('nothing to improve') %></span></summary>
     <% if (SG.length) { %><div class="mm-sugs" style="margin-top:0.4rem;"><% SG.forEach((g) => { %><div class="mm-sug mm-sug-<%= g.kind %>"><span class="mm-sug-k"><%= { comfort: t('Comfort'), energy: t('Energy'), efficiency: t('Efficiency') }[g.kind] %></span><span><%= t(g.text, Object.fromEntries(Object.entries(g.params || {}).map(([k, v]) => [k, k === 'setting' ? sgSet(v) : v && typeof v === 'object' && 'min' in v ? dur(v.min) : typeof v === 'number' ? nf(v, Number.isInteger(v) ? 0 : (k === 'cop' || k === 's' ? 2 : 1)) : tr(String(v))]))) %></span></div><% }) %></div>
     <% } else { %><p class="mm-sum" style="margin:0.3rem 0 0;"><%= t('Nothing to improve right now — it runs as well as it has learned.') %></p><% } %>
   </details>
 
-  <div class="mm-sub"><h3><%= hpS.cooling ? t('Plan: cooling and tap water, next 24 hours') : t('Plan: heating and tap water, next 24 hours') %></h3>
+  <div class="mm-sub"><h3 class="en-h3"><%- enIcon('chart', 'var(--en-price)', { plain: true }) %><%= hpS.cooling ? t('Plan: cooling and tap water, next 24 hours') : t('Plan: heating and tap water, next 24 hours') %></h3>
     <p class="hint" style="margin:0;">
       <% if ((hpS.plan || []).some((h) => h.estimated)) { %> <%= t('No prices yet: estimated.') %><% } %>
     </p>
@@ -199,7 +199,7 @@
   </div>
 
   <% const RP = hpS.report || []; const RN = RP[RP.length - 1]; const RY = RP.slice(-12); const sumY = (k) => RY.reduce((a, m) => a + (m[k] || 0), 0); %>
-  <div class="mm-sub" data-report><h3><%= t('What it brought') %></h3>
+  <div class="mm-sub" data-report><h3 class="en-h3"><%- enIcon('euro', 'var(--en-export)', { plain: true }) %><%= t('What it brought') %></h3>
     <% if (RN) { %><div class="mm-kpis">
       <div class="mm-kpi"><span><%= t('Saved this month') %></span><b><%= RN.pricedShare > 0 ? '€ ' + nf(RN.savedEur, 2) : '—' %></b><span><%= t('against the same kWh at the day\'s average price') %></span></div>
       <div class="mm-kpi"><span><%= t('Heat pump this month') %></span><b><%= nf(RN.elecKwh, 0) %> kWh</b><span><%= RN.pricedShare > 0 ? '€ ' + nf(RN.costEur, 2) + ' · ' : '' %>SCOP <%= nf(RN.scop, 2) %></span></div>
@@ -211,7 +211,7 @@
     <% } else { %><p class="mm-sum" style="margin:0;"><%= t('Builds up from now on: power, heat, SCOP and costs per month.') %></p><% } %>
   </div>
 
-  <div class="mm-sub" data-tapwater><h3><%= t('Tap water') %></h3>
+  <div class="mm-sub" data-tapwater><h3 class="en-h3"><%- enIcon('drop', '#3b82f6', { plain: true }) %><%= t('Tap water') %></h3>
     <% const LR = hpS.learned || {}; const nextDhw = (hpS.plan || []).find((h) => h.does === 'dhw' || h.does === 'legionella'); const LMT = hpS.cfg.limits || {}; %>
     <div class="mm-kpis">
       <div class="mm-kpi"><span><%= t('Tank now') %></span><b><%= nf(st.tankC) %> °C</b><span><%= t('target') %> <%= nf(LMT.targetC, 0) %> °C · <%= t('never below') %> <%= nf(LMT.comfortMinC, 0) %> °C</span></div>
@@ -219,7 +219,7 @@
       <div class="mm-kpi"><span><%= t('Usual draws') %></span><b style="font-size:1rem;"><%= (LR.patterns || []).length ? LR.patterns.map((p) => String(p.from).padStart(2, '0') + ':00').join(' · ') : '—' %></b><span><%= LR.fromPipe ? t('learned from the hot-water pipe') : t('learned from the tank temperature') %> · <%= t('{n} days', { n: nf(LR.days || 0, 0) }) %></span></div>
     </div>
     <details class="mm-detail"><summary class="mm-sum"><%= t('How it learns') %></summary>
-      <p class="hint" style="margin:0.3rem 0;"><%= LR.fromPipe ? t('Every jump of the hot-water pipe temperature is a draw.') : t('A tank that cools faster than it does on its own means hot water was drawn.') %>
+      <p class="mm-sum" style="margin:0.3rem 0;"><%= LR.fromPipe ? t('Every jump of the hot-water pipe temperature is a draw.') : t('A tank that cools faster than it does on its own means hot water was drawn.') %>
         <% if (LR.threshold && LR.threshold.learned) { %><%= t('Standby loss of your tank: {c} °C/h; a draw is faster than {d} °C/h.', { c: nf(LR.threshold.baselineCph, 2), d: nf(LR.threshold.cph, 1) }) %><% } %>
         <%= t('{n} samples', { n: nf(LR.samples || 0, 0) }) %>.</p>
       <% if ((LR.patterns || []).length) { %><table class="mm-log"><thead><tr><th><%= t('Usually at') %></th><th><%= t('Tank drops') %></th></tr></thead><tbody><% LR.patterns.forEach((p) => { %><tr><td><%= String(p.from).padStart(2, '0') %>:00</td><td>−<%= nf(p.kwh, 1) %> °C</td></tr><% }) %></tbody></table><% } %>
@@ -227,7 +227,7 @@
     </details>
   </div>
 
-  <div class="mm-sub" data-room><h3><%= t('Room temperature') %></h3>
+  <div class="mm-sub" data-room><h3 class="en-h3"><%- enIcon('thermo', '#e67e22', { plain: true }) %><%= t('Room temperature') %></h3>
     <% const RC = hpS.cfg.room || {}; const rp = hpS.room; %>
     <div class="mm-toggle mm-master"><label class="switch"><input type="checkbox" id="mm-r-enabled" data-r="enabled" <%= RC.enabled ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-r-enabled"><%= t('Plan the room temperature (pre-heat in time for comfort)') %></label></div>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-top:0.4rem;">
@@ -256,7 +256,7 @@
     <p class="hint" style="margin:0.3rem 0 0;"><%= t('Tap water is planned right before or after pre-heating the room, never in between.') %></p>
   </div>
 
-  <div class="mm-sub" data-tuning><h3><%= t('Fine-tuning for long, calm runs') %></h3>
+  <div class="mm-sub" data-tuning><h3 class="en-h3"><%- enIcon('tune', 'var(--accent)', { plain: true }) %><%= t('Fine-tuning for long, calm runs') %></h3>
     <% const TU = hpS.tuning || {}; const TC = hpS.cfg.tuning || {}; const SN2 = hpS.cfg.step_names || {}, NN2 = hpS.cfg.ntc_names || {}; const stepTxt = (v) => (v === null || v === undefined ? null : SN2[String(v)] || (v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v })));
     const ntcTxt = (v) => (v === null || v === undefined ? null : NN2[String(v)] || (v > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(v, 0) }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v })));
     const setTxt = (x) => x ? [Number.isFinite(x.flowC) ? t('flow {c} °C', { c: nf(x.flowC, 1) }) : null, fStep ? stepTxt(x.step) : null, fNtc ? ntcTxt(x.ntc) : null].filter((y) => y !== null && y !== undefined).join(' · ') : '—'; %>
@@ -276,7 +276,7 @@
     <p class="hint" style="margin:0.3rem 0 0;"><%= t('Per weather it learns which flow temperature, power step and outdoor-sensor setting give the longest runs with the least power per kWh of heat and the fewest defrosts. With a lot of defrosting it tries a calmer setting — never while the room is behind.') %></p>
   </div>
 
-  <div class="mm-sub"><h3><%= t('Weather and defrosting') %></h3>
+  <div class="mm-sub"><h3 class="en-h3"><%- enIcon('snow', '#06b6d4', { plain: true }) %><%= t('Weather and defrosting') %></h3>
     <% const W = hpS.weather || {}; const bins = Object.values((W.model && W.model.bins) || {}).sort((a, b) => a.t - b.t || a.band.localeCompare(b.band)); const SC2 = W.scop || {}; const seenH = bins.reduce((a, b) => a + (b.hours || 0), 0); %>
     <div class="mm-kpis">
       <div class="mm-kpi"><span><%= t('This hour') %></span><b>COP ~<%= W.now ? nf(W.now.cop, 1) : '—' %></b><span><%= W.now && W.now.outdoorC !== null && W.now.outdoorC !== undefined ? nf(W.now.outdoorC) + ' °C' : '' %><%= W.now && W.now.rh ? ' · ' + nf(W.now.rh, 0) + '% ' + t('humidity') : '' %><%= W.now && W.now.defrost > 0.02 ? ' · ' + t('defrosting ~{p}% of the time', { p: Math.round(W.now.defrost * 100) }) : '' %></span></div>
@@ -289,7 +289,7 @@
   </div>
 
   <% if (fStep || fNtc) { %>
-  <div class="mm-sub"><h3><%= fStep && fNtc ? t('Power steps and outdoor sensor (NTC)') : fStep ? t('Power steps') : t('Outdoor sensor (NTC)') %></h3>
+  <div class="mm-sub"><h3 class="en-h3"><%- enIcon('bolt', 'var(--en-solar)', { plain: true }) %><%= fStep && fNtc ? t('Power steps and outdoor sensor (NTC)') : fStep ? t('Power steps') : t('Outdoor sensor (NTC)') %></h3>
     <% const steps = (W.steps || []); const SN = hpS.cfg.step_names || {}, NN = hpS.cfg.ntc_names || {};
        const stTxt = (v) => SN[String(v)] || (v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v }));
        const ntTxt = (v) => NN[String(v)] || (v > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(v, 0) }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v }));
@@ -310,12 +310,12 @@
         <% (fStep ? seenStep : []).forEach((v) => { %><div><label><%= t('Power: value {v}', { v }) %></label><input type="text" data-sn="<%= v %>" value="<%= (hpS.cfg.step_names || {})[String(v)] || '' %>" placeholder="<%= v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v }) %>"></div><% }) %>
         <% (fNtc ? seenNtc : []).forEach((v) => { %><div><label><%= t('Outdoor sensor: value {v}', { v }) %></label><input type="text" data-nn="<%= v %>" value="<%= (hpS.cfg.ntc_names || {})[String(v)] || '' %>" placeholder="<%= v > 2 ? t('outdoor sensor fixed at {c} °C', { c: v }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v }) %>"></div><% }) %>
       </div>
-      <p class="hint" style="margin:0.3rem 0 0;"><%= t('Every value your Loxone logic has shown (a step, a percentage, an outdoor temperature the heat pump is shown) — give it a name, e.g. "Fake 14 graden". Empty: the description shown greyed.') %></p>
+      <p class="mm-sum" style="margin:0.3rem 0 0;"><%= t('Every value your Loxone logic has shown (a step, a percentage, an outdoor temperature the heat pump is shown) — give it a name, e.g. "Fake 14 graden". Empty: the description shown greyed.') %></p>
     </details>
   </div>
   <% } %>
 
-  <details class="mm-sub mm-settings"><summary style="cursor:pointer;"><strong><%= t('Settings') %></strong> <span class="hint" style="margin:0;">— <%= t('device, link with Loxone, limits, legionella') %></span></summary>
+  <details class="mm-sub mm-settings"><summary style="cursor:pointer;"><strong class="en-h3"><%- enIcon('gear', 'var(--text-muted)', { plain: true }) %><%= t('Settings') %></strong> <span class="hint" style="margin:0;">— <%= t('device, link with Loxone, limits, legionella') %></span></summary>
   <% moduleHead('heatpump', hpS) %>
   <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:0.5rem;">
     <div><label><%= t('What it has') %></label><p class="hint" style="margin:0.2rem 0 0;"><%= [fStep ? t('power steps') : null, fNtc ? t('fake outdoor sensor (NTC)') : null].filter(Boolean).join(' · ') || t('no power steps, no NTC') %> — <a href="#" data-wizard-again><%= t('set up again') %></a></p></div>
@@ -323,7 +323,7 @@
   </div>
   <% if ((hpS.roles || []).some((r) => r.role === 'heatMeterFlowRate' && r.read)) { %><div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:0.4rem;"><div><label><%= t('Heat meter flow in') %></label><select data-f="heat_meter_flow_unit"><% ['auto', 'l/min', 'l/h', 'm3/h'].forEach((u) => { %><option value="<%= u %>" <%= (hpS.cfg.heat_meter_flow_unit || 'auto') === u ? 'selected' : '' %>><%= u === 'auto' ? t('automatic (below 100: l/min)') : u === 'm3/h' ? 'm³/h' : u %></option><% }) %></select><p class="hint" style="margin:0.2rem 0 0;"><%= t('What the value really is — Loxone\'s label can say l/h while a correction (3600 → 60) makes it l/min.') %></p></div></div><% } %>
   <% heartbeatBox('heatpump', hpS) %>
-  <div class="mm-sub" data-limits><h3><%= t('Tap-water limits') %></h3>
+  <div class="mm-sub" data-limits><h3 class="en-h3"><%- enIcon('tank', '#3b82f6', { plain: true }) %><%= t('Tap-water limits') %></h3>
     <% const L = hpS.cfg.limits || {}; %>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
       <div><label><%= t('Comfort minimum (°C)') %></label><input type="text" data-l="comfortMinC" value="<%= L.comfortMinC %>"><p class="hint" style="margin:0.2rem 0 0;"><%= t('never colder at the tap') %></p></div>
@@ -336,7 +336,7 @@
     <% (hpS.warnings || []).forEach((w) => { %><div class="mm-warn"><%= tr(w) %></div><% }) %>
   </div>
 
-  <div class="mm-sub" data-legionella><h3><%= t('Legionella') %></h3>
+  <div class="mm-sub" data-legionella><h3 class="en-h3"><%- enIcon('bug', 'var(--en-import)', { plain: true }) %><%= t('Legionella') %></h3>
     <% const G = hpS.cfg.legionella || {}; const lp = hpS.legionella; %>
     <div class="mm-toggle mm-master"><label class="switch"><input type="checkbox" id="mm-g-enabled" data-g="enabled" <%= G.enabled ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-g-enabled"><%= t('Plan the legionella cycle') %></label></div>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); margin-top:0.4rem;">
@@ -366,24 +366,24 @@
 
 <% if (only === 'solar') { %>
 <div class="card" data-module="solar">
-  <h2 style="margin-top:0;"><%= t('Solar panels') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('panel', 'var(--en-solar)') %><%= t('Solar panels') %></h2>
   <% if (soS.error) { %><p class="error"><%= soS.error %></p><% } else { %>
   <% moduleStatus('solar', soS) %>
   <div class="mm-kpis">
-    <div class="mm-kpi"><span><%= t('Solar now') %></span><b><%= nf(soS.pvKw, 2) %> kW</b><span><%= t('house') %> <%= nf(soS.houseKw, 2) %> kW</span></div>
-    <div class="mm-kpi"><span><%= t('Exporting yields now') %></span><b><%= soS.value === null || soS.value === undefined ? '—' : (soS.value < 0 ? '−€ ' : '€ ') + nf(Math.abs(soS.value), 3) %></b><span><%= t('worth') %> € <%= nf(soS.worth, 3) %> − <%= t('feed-in costs') %> € <%= nf(soS.contract && soS.contract.costEur, 3) %></span></div>
-    <div class="mm-kpi"><span><%= t('Limit') %></span><b><%= soS.limit ? soS.limit.pct : '—' %> %</b><span><%= soS.limit ? tr(soS.limit.why) : '' %></span></div>
+    <div class="mm-kpi"><span class="en-kl"><%- enIcon('sun', 'var(--en-solar)', { plain: true, size: 13 }) %><%= t('Solar now') %></span><b><%= nf(soS.pvKw, 2) %> kW</b><span><%= t('house') %> <%= nf(soS.houseKw, 2) %> kW</span></div>
+    <div class="mm-kpi"><span class="en-kl"><%- enIcon('euro', 'var(--en-export)', { plain: true, size: 13 }) %><%= t('Exporting yields now') %></span><b><%= soS.value === null || soS.value === undefined ? '—' : (soS.value < 0 ? '−€ ' : '€ ') + nf(Math.abs(soS.value), 3) %></b><span><%= t('worth') %> € <%= nf(soS.worth, 3) %> − <%= t('feed-in costs') %> € <%= nf(soS.contract && soS.contract.costEur, 3) %></span></div>
+    <div class="mm-kpi"><span class="en-kl"><%- enIcon('panel', 'var(--en-solar)', { plain: true, size: 13 }) %><%= t('Limit') %></span><b><%= soS.limit ? soS.limit.pct : '—' %> %</b><span><%= soS.limit ? tr(soS.limit.why) : '' %></span></div>
   </div>
   <% const C = soS.contract || {}; %>
   <p class="hint" style="margin:0.2rem 0 0;"><%= t('Your contract:') %> <strong><%= C.rule === 'saldering' ? t('net metering (until the end of 2026): exporting is worth the price of that moment') : C.rule === 'fixed' ? t('fixed feed-in tariff € {v}/kWh', { v: nf(C.feedInEur, 3) }) : t('market price of that moment') %></strong><%= C.dynamic ? ' · ' + t('dynamic prices') : ' · ' + t('fixed prices') %> · <%= t('feed-in costs') %> € <%= nf(C.costEur, 3) %>/kWh<%= C.estimated ? ' · ' + t('No prices yet: estimated.') : '' %> — <a href="/settings/energy#charging"><%= t('change in the Smart charging settings') %></a></p>
   <% const A = soS.ahead || []; if (A.length) { %>
-  <div class="mm-sub"><h3><%= t('Limiting in the coming hours') %></h3>
+  <div class="mm-sub"><h3 class="en-h3"><%- enIcon('panel', 'var(--en-solar)', { plain: true }) %><%= t('Limiting in the coming hours') %></h3>
     <div id="mm-so-plan" style="margin-top:0.4rem;"></div>
     <script type="application/json" id="mm-so-plan-data"><%- JSON.stringify({ hours: A.slice(0, 24).map((h) => ({ ms: h.ms, value: h.value, surplusKwh: h.surplusKwh, limit: !!h.limit, pct: h.pct !== undefined ? h.pct : (h.limit && h.limit.pct !== undefined ? h.limit.pct : null) })), L: { sun: t('Solar surplus (forecast)'), value: t('Exporting yields (€/kWh)'), limit: t('Limited'), now: t('now'), yes: t('yes'), no: t('no') } }).replace(/</g, '\\u003c') %></script>
     <div class="mm-legend"><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key" style="background:var(--en-solar);"></i> <%= t('Solar surplus (forecast)') %></span><span style="white-space:nowrap; margin-right:0.8rem;"><i class="ls-key ls-key-col" style="background:var(--en-export);"></i> <%= t('exporting (worth something)') %></span><span style="white-space:nowrap;"><i class="ls-key ls-key-col" style="background:var(--en-import);"></i> <%= t('limited: exporting costs money') %></span></div>
     <% if (!A.some((h) => h.limit)) { %><p class="hint" style="margin:0.3rem 0 0;"><%= C.rule === 'saldering' ? t('With net metering and these prices everything is exported: no limit expected.') : t('No limit expected in the coming hours.') %></p><% } %>
   </div><% } %>
-  <details class="mm-sub mm-settings"><summary style="cursor:pointer;"><strong><%= t('Settings') %></strong> <span class="hint" style="margin:0;">— <%= t('device, link with Loxone, inverter') %></span></summary>
+  <details class="mm-sub mm-settings"><summary style="cursor:pointer;"><strong class="en-h3"><%- enIcon('gear', 'var(--text-muted)', { plain: true }) %><%= t('Settings') %></strong> <span class="hint" style="margin:0;">— <%= t('device, link with Loxone, inverter') %></span></summary>
   <% moduleHead('solar', soS) %>
   <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); margin-top:0.5rem;">
     <div><label><%= t('Inverter power (kW)') %></label><input type="text" data-f="inverter_kw" value="<%= soS.cfg.inverter_kw %>"></div>

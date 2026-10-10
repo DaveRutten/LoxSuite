@@ -14,18 +14,7 @@
   <h2><%= t('Energy') %></h2><%- icon('chevron') %>
 </button>
 <div class="section-body" <%= isCollapsed('home-energy') ? 'hidden' : '' %> style="margin-bottom:1.5rem;">
-  <% // icons in the energy colours (24×24, stroke)
-     const EI = {
-       grid: '<path d="M8 3v5M16 3v5M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/>',
-       sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-       house: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
-       euro: '<path d="M17 6.5A7 7 0 1 0 17 17.5"/><path d="M4 10h9M4 14h9"/>',
-       heat: '<path d="M12 3c2 3 5 5 5 9a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5 1-7.5z"/>',
-       panel: '<path d="M4 15l2-9h12l2 9z"/><path d="M5 10.5h14M10 6l-1 9M14 6l1 9M12 15v5M8 20h8"/>',
-       battery: '<rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 11v2"/>',
-     };
-     const enIcon = (k, color) => `<span class="en-ic" style="color:${color};"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EI[k]}</svg></span>`;
-     const sign = (v) => (v > 0.005 ? 'in' : v < -0.005 ? 'out' : 'zero'); %>
+  <% const sign = (v) => (v > 0.005 ? 'in' : v < -0.005 ? 'out' : 'zero'); %>
   <div class="en-tiles">
     <% if (R.grid) { const g = R.grid.power_kw; %><a class="en-tile" href="/energy"><%- enIcon('grid', g > 0 ? 'var(--en-import)' : 'var(--en-export)') %><div class="en-tx"><div class="en-l"><%= t('Grid now') %></div><div class="en-v" data-live-id="en-grid"><%= nfd(Math.abs(g || 0), 2) %> kW</div><div class="en-s" data-live-id="en-grid-sub"><span class="en-<%= sign(g) %>"><%= g > 0.005 ? t('from the grid') : g < -0.005 ? t('to the grid') : t('balanced') %></span></div></div></a><% } %>
     <% if (R.pv) { %><a class="en-tile" href="/energy"><%- enIcon('sun', 'var(--en-solar)') %><div class="en-tx"><div class="en-l"><%= t('Solar now') %></div><div class="en-v" data-live-id="en-pv"><%= nfd(R.pv.power_kw, 2) %> kW</div></div></a><% } %>

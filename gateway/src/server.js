@@ -183,6 +183,7 @@ async function main() {
   app.locals.uiLocale = 'en-GB';
   app.locals.clock12 = false;
   app.locals.icon = icon;
+  app.locals.enIcon = require('./energyIcons').enIcon;
   app.locals.toggleSwitch = toggleSwitch;
   app.locals.formatDateTime = formatDateTime;
   app.locals.formatCount = formatCount;
