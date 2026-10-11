@@ -26,7 +26,7 @@
         <div><label><%= t('Password') %></label><input type="password" name="password" required></div>
       </div>
 
-      <h2 style="margin-top:1.5rem;"><%= t('Features') %></h2>
+      <h2 class="en-h" style="margin-top:1.5rem;"><%- enIcon('gear', 'var(--text-muted)') %><%= t('Features') %></h2>
       <div class="form-grid">
         <div><label><%= t('UDP port (optional)') %></label><input type="number" name="udp_port"></div>
         <div>
@@ -40,7 +40,7 @@
         <strong><%= t('External URL') %></strong> <%= t('is used as a fallback whenever the local Host/IP can\'t be reached (e.g. from outside the home network) — Monitor polling, Common commands, log fetching and "Test" all try it automatically if the local address fails.') %>
       </p>
 
-      <h2 style="margin-top:1.5rem;"><%= t('Gateway Client setup (optional)') %></h2>
+      <h2 class="en-h" style="margin-top:1.5rem;"><%- enIcon('server', 'var(--accent)') %><%= t('Gateway Client setup (optional)') %></h2>
       <div class="form-grid">
         <div>
           <label><%= t('This Miniserver is a Gateway') %></label>
@@ -93,7 +93,7 @@
 </div>
 
 <dialog id="ms-diag-dialog" class="update-changelog-dialog ms-diag-dialog-wide">
-  <h2 id="ms-diag-dialog-title"><%= t('Diagnostics') %></h2>
+  <h2 class="en-h" id="ms-diag-dialog-title"><%- enIcon('activity', 'var(--en-import)') %><%= t('Diagnostics') %></h2>
   <div class="ms-diagnostics-card" style="border-width:1px;">
     <div class="ms-diagnostics" id="ms-diag-dialog-stats"></div>
   </div>

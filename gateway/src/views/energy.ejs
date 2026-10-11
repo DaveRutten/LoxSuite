@@ -8,13 +8,13 @@
 </p>
 
 <div class="card">
-  <h2 style="margin-top:0;"><%= t('Now') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('bolt', 'var(--accent)') %><%= t('Now') %></h2>
   <div id="en-live" class="ls-tiles"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
 </div>
 
 <div class="card">
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
-    <h2 style="margin:0;"><%= t('Per hour') %></h2>
+    <h2 class="en-h" style="margin:0;"><%- enIcon('chart', 'var(--en-price)') %><%= t('Per hour') %></h2>
     <div class="btn-row" style="margin:0;">
       <button type="button" class="btn-soft" id="en-prev">&lsaquo;</button>
       <strong id="en-day" style="min-width:8rem; text-align:center;"></strong>
@@ -27,7 +27,7 @@
 
 <% if (canEdit('energy')) { %>
 <div class="card">
-  <h2 style="margin-top:0;"><%= t('Meters') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('gauge', 'var(--en-house)') %><%= t('Meters') %></h2>
   <form method="post" action="/energy/meters">
     <table>
       <thead><tr><th><%= t('Role') %></th><th><%= t('Loxone control') %></th><th><%= t('Counts the other way') %></th><th><%= t('Stored') %></th></tr></thead>
@@ -59,7 +59,7 @@
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0;"><%= t('History from Loxone') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('log', 'var(--text-muted)') %><%= t('History from Loxone') %></h2>
   <p class="hint">
     <%= t('Reads the hourly kWh of the chosen meters from the Miniserver\'s own statistics, so the house profile and the solar correction don\'t start from zero. Hours LoxSuite measured itself are kept. Uses the Miniserver\'s MCP server: authorize it once under Miniservers → edit → AI Assistant.') %>
   </p>

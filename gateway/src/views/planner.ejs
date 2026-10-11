@@ -6,7 +6,7 @@
 
 <div class="card" data-card-key="now">
   <div>
-    <h2 style="margin:0;"><%= t('Now') %></h2>
+    <h2 class="en-h" style="margin:0;"><%- enIcon('bolt', 'var(--en-car)') %><%= t('Now') %></h2>
     <span class="card-head-sub" id="pl-updated"></span>
   </div>
   <div class="toolbar" style="margin-top:0.8rem;">
@@ -30,7 +30,7 @@
 </div>
 
 <div class="card" data-card-key="plan">
-  <h2 style="margin-top:0;"><%= t('Plan') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('chart', 'var(--en-price)') %><%= t('Plan') %></h2>
   <div id="pl-target" class="ls-tiles"></div>
   <% if (canEdit('charging')) { %>
   <details class="ls-more" id="pl-ready-box">

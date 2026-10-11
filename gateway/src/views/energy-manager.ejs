@@ -43,7 +43,7 @@
 
 <div class="card" data-card-key="now">
   <div>
-    <h2 style="margin:0;"><%= t('Now') %></h2>
+    <h2 class="en-h" style="margin:0;"><%- enIcon('bolt', 'var(--accent)') %><%= t('Now') %></h2>
     <% if (canEdit('energy_manager')) { %><div class="btn-row" style="margin:0;"><button type="button" class="btn-soft" id="em-recalc"><%- icon('refresh') %> <%= t('Recalculate') %></button><button type="button" class="btn-soft" id="em-import"><%= t('Import 30 days from Loxone') %></button></div><% } %>
   </div>
   <p class="hint" id="em-status" style="margin:0.3rem 0 0;"></p>
@@ -51,13 +51,13 @@
 </div>
 
 <div class="card" data-card-key="plan">
-  <h2 style="margin-top:0;"><%= t('Plan') %> <span class="hint" id="em-plan-range" style="font-weight:400;"></span></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('chart', 'var(--en-price)') %><%= t('Plan') %> <span class="hint" id="em-plan-range" style="font-weight:400;"></span></h2>
   <div id="em-daytypes" style="margin:-0.3rem 0 0.5rem;"></div>
   <div id="em-plan"></div>
 </div>
 
 <div class="card" data-card-key="unknown">
-  <h2 style="margin-top:0;"><%= t('Unknown consumers') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('gauge', 'var(--en-house)') %><%= t('Unknown consumers') %></h2>
   <p class="hint"><%= t('What the house uses beyond the known consumers, above its base load, coming back at about the same time. Give it a name so you know what it is — or add it as a consumer.') %></p>
   <div id="em-unknown"></div>
 </div>

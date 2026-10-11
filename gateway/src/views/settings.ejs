@@ -58,7 +58,7 @@
       </div>
     </div>
 
-    <h2 style="margin-top:1.5rem;"><%= t('Features') %></h2>
+    <h2 class="en-h" style="margin-top:1.5rem;"><%- enIcon('gear', 'var(--text-muted)') %><%= t('Features') %></h2>
     <div class="settings-field">
       <label><%= t('Loxone → MQTT auto-create') %></label>
       <%- toggleSwitch('auto_create_enabled', gatewaySettings.auto_create_loxone_mappings) %>

@@ -31,7 +31,7 @@
 <% if (canEdit('charging')) { %>
 
 <div class="card">
-  <h2 style="margin-top:0;"><%= t('Trips planned in LoxSuite') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('car', 'var(--en-car)') %><%= t('Trips planned in LoxSuite') %></h2>
   <% if (trips.length) { %>
     <table><thead><tr><th><%= t('Trip') %></th><th><%= t('Leaves') %></th><th><%= t('Back') %></th><th><%= t('Where / how much') %></th><th></th></tr></thead><tbody>
       <% trips.forEach(tt => { %><tr><td><%= tt.title %><%= tt.weekly ? ' (' + t('weekly') + ')' : '' %></td><td><%= formatDateTime(tt.depart_at) %></td><td><%= tt.return_at ? formatDateTime(tt.return_at) : '—' %></td><td><%= tt.location || '' %> <%= tt.own_value || '' %><%= tt.climate_c != null ? ' · 🌡️ ' + tt.climate_c + ' °C' : '' %></td>
