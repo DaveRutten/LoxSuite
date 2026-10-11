@@ -430,6 +430,7 @@ async function main() {
   // (modules.js starts and stops their workers; switching a module needs no restart).
   modules.startEnabledWorkers();
   startWithRetry('MCP clients', () => mcpClient.startMcpClients());
+  require('./learningDashboard').startLearningSnapshots();
   // A restart mid-turn (deploy, crash) abandons any AI Assistant reply still marked 'streaming' —
   // nothing will ever finalize that row otherwise, since the code path that would (routes/aiChat.js's
   // own try/catch around llm.runTurn) never got to run its `finally`-equivalent before the process

@@ -280,6 +280,14 @@ router.post('/recalc.json', requirePermission('energy_manager', 'edit'), asyncHa
 const mods = () => require('../energyModules');
 const kindOk = (k) => ['heatpump', 'solar'].includes(k);
 
+// Everything LoxSuite learns, in one place (learningDashboard.js).
+router.get('/learning', asyncHandler(async (req, res) => {
+  res.render('learning', { data: await require('../learningDashboard').overview() });
+}));
+router.post('/learning/snapshot.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
+  try { await require('../learningDashboard').snapshot(Date.now(), { force: true }); res.json({ ok: true }); } catch (e) { res.json({ ok: false, message: e.message }); }
+}));
+
 // Each device its own page: /modules/heatpump, /modules/solar (/modules: the heat pump).
 router.get('/modules', (req, res) => res.redirect('/energy-manager/modules/heatpump'));
 router.get('/modules/:kind', asyncHandler(async (req, res, next) => {

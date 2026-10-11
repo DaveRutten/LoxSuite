@@ -307,8 +307,12 @@ async function fetchMarket(cfg, fromMs, toMs, fetchImpl = fetchText) {
 async function priceSummary(nowMs = Date.now()) {
   const { localMidnight } = require('./localTime');
   const from = localMidnight(nowMs); const to = localMidnight(nowMs, undefined, 1);
-  const rows = await getPrices(new Date(from).toISOString(), new Date(to).toISOString()).catch(() => []);
-  const vals = rows.map((r) => Number(r.allin_eur_kwh)).filter(Number.isFinite);
+  // only hours that have a price: an empty one (null) is no € 0 — Number(null) is 0, which made the
+  // hours not known yet the "lowest" of the day
+  const rows = (await getPrices(new Date(from).toISOString(), new Date(to).toISOString()).catch(() => []))
+    .filter((r) => r.allin_eur_kwh !== null && r.allin_eur_kwh !== undefined && r.allin_eur_kwh !== '' && Number.isFinite(Number(r.allin_eur_kwh)))
+    .map((r) => ({ ...r, allin_eur_kwh: Number(r.allin_eur_kwh) }));
+  const vals = rows.map((r) => r.allin_eur_kwh);
   const cur = rows.find((r) => Date.parse(r.start_at) <= nowMs && Date.parse(r.end_at) > nowMs);
   const minR = rows.reduce((a, r) => (!a || r.allin_eur_kwh < a.allin_eur_kwh ? r : a), null);
   const maxR = rows.reduce((a, r) => (!a || r.allin_eur_kwh > a.allin_eur_kwh ? r : a), null);
@@ -321,7 +325,9 @@ async function priceSummary(nowMs = Date.now()) {
       const ws = require('./loxoneWebSocket');
       const val = (re) => { const k = Object.keys(st).find((n) => re.test(n)); const v = k ? Number(ws.getLiveValue(spo.miniserver.id, st[k])) : NaN; return Number.isFinite(v) ? round4(v) : null; };
       const sMin = val(/^(min|minimum|pricemin|lowest)/i); const sMax = val(/^(max|maximum|pricemax|highest)/i); const sAvg = val(/^(avg|average|mean)/i); const sNow = val(/^current$/i);
-      if (sMin !== null || sMax !== null) Object.assign(out, { source: 'loxone', min: sMin ?? out.min, max: sMax ?? out.max, avg: sAvg ?? out.avg, now: sNow ?? out.now, name: spo.name });
+      // the own prices first (with the time of the lowest and highest); the optimizer only when LoxSuite has none
+      if (!vals.length && (sMin !== null || sMax !== null)) Object.assign(out, { source: 'loxone', min: sMin, max: sMax, avg: sAvg ?? out.avg, now: sNow ?? out.now, name: spo.name, minAt: null, maxAt: null });
+      else if (out.now === null && sNow !== null) out.now = sNow;
     }
   } catch { /* the own prices stay */ }
   return out;

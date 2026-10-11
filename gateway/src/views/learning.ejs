@@ -1,0 +1,84 @@
+<%- include('partials/head', { pageTitle: 'Learning dashboard', active: 'learning' }) %>
+<%
+  // a text from learningDashboard.js: a plain string or { t: template, p: params }
+  const tt = (x) => (!x ? '' : typeof x === 'string' ? t(x) : x.parts ? (x.parts.length ? x.parts.map(tt).join(' · ') : t('still learning')) : t(x.t, Object.fromEntries(Object.entries(x.p || {}).map(([k, v]) => [k, typeof v === 'number' ? v.toLocaleString('nl-NL', { maximumFractionDigits: 2 }) : v]))));
+  const pct = (x) => Math.round((x || 0) * 100);
+  // a value { n, d, u, pre } in Dutch notation with its unit translated ('°C/h' -> '°C/u')
+  const fmtV = (v) => (v === null || v === undefined ? '—' : typeof v !== 'object' ? v : (v.pre || '') + Number(v.n).toLocaleString('nl-NL', { minimumFractionDigits: v.d || 0, maximumFractionDigits: v.d || 0 }) + (v.u ? (v.u === '%' ? '%' : ' ' + t(v.u)) : ''));
+  // the timeline keeps plain values ('0.3 °C/h'): the same notation
+  const fmtPlain = (x) => String(x || '').replace(/(\d+)\.(\d+)/g, '$1,$2').replace(/ (°C\/h|%\/h|kWh\/d|h)$/, (m, u) => ' ' + t(u));
+  const confText = (c) => (c >= 0.8 ? t('sure') : c >= 0.4 ? t('fairly sure') : c > 0 ? t('still learning') : t('no data yet'));
+  // a ring: how sure (the share of the data it needs)
+  const ring = (c, color) => { const r = 15, L = 2 * Math.PI * r, v = Math.max(0, Math.min(1, c || 0)); return `<svg viewBox="0 0 36 36" width="40" height="40" aria-hidden="true"><circle cx="18" cy="18" r="${r}" fill="none" stroke="currentColor" stroke-opacity="0.12" stroke-width="3.5"/><circle cx="18" cy="18" r="${r}" fill="none" style="stroke:${color};" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${(L * v).toFixed(1)} ${L.toFixed(1)}" transform="rotate(-90 18 18)"/><text x="18" y="21.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="currentColor">${pct(v)}%</text></svg>`; };
+  const topicTitle = { car: t('Car and charging'), house: t('House and solar'), loads: t('Consumers'), heatpump: t('Heat pump'), solar: t('Solar forecast') };
+  const day = (iso) => new Date(iso).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', timeZone: displayTimezone || 'UTC' });
+%>
+<p class="hint"><%= t('Everything LoxSuite learns from your own data, in one place: what it knows, how sure it is, and how right its predictions turned out. It learns by itself; the more days, the surer.') %></p>
+
+<div class="lr-tiles">
+  <% data.topics.filter((x) => x.key !== 'error').forEach((tp) => { %>
+  <a class="lr-tile<%= tp.off ? ' lr-off' : '' %>" href="#lr-<%= tp.key %>">
+    <div class="lr-tile-head"><%- enIcon(tp.icon, tp.color) %><div class="lr-tile-tx"><div class="lr-t"><%= topicTitle[tp.key] || t(tp.title) %></div><div class="lr-h"><%= tt(tp.headline) %></div></div></div>
+    <div class="lr-tile-foot">
+      <span class="lr-ring" title="<%= t('how sure: the share of the data it needs') %>"><%- ring(tp.conf, tp.color) %><span><%= confText(tp.conf) %></span></span>
+      <span class="lr-acc" title="<%= t('how right its predictions were, last 28 days') %>"><% if (tp.accuracy !== null && tp.accuracy !== undefined) { %><b><%= pct(tp.accuracy) %>%</b> <%= t('right') %><% } else { %><span class="lr-muted"><%= t('accuracy: not measured yet') %></span><% } %></span>
+    </div>
+  </a>
+  <% }) %>
+</div>
+
+<div class="card" data-card-key="events">
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('bulb', 'var(--accent)') %><%= t('Learned just now') %></h2>
+  <% if (!data.events.length) { %><p class="lr-muted" style="margin:0;"><%= t('A daily snapshot shows here what changed: a new pattern, a different standby power, a departure that moves. The first one comes after a day.') %></p>
+  <% } else { %><ul class="lr-events"><% data.events.slice(0, 25).forEach((e) => { %>
+    <li><span class="lr-ev-day"><%= day(e.at) %></span><span class="lr-ev-tp"><%= topicTitle[e.topic] || e.topic %></span>
+      <span><strong><%= t(e.label) %></strong>: <% if (e.kind === 'new') { %><%= t('learned') %> <b><%= fmtPlain(e.to) %></b><% } else if (e.kind === 'gone') { %><%= t('no longer seen') %> (<%= fmtPlain(e.from) %>)<% } else { %><%= fmtPlain(e.from) %> → <b><%= fmtPlain(e.to) %></b><% } %></span></li>
+  <% }) %></ul><% } %>
+</div>
+
+<% data.topics.filter((x) => x.key !== 'error').forEach((tp) => { %>
+<div class="card" id="lr-<%= tp.key %>" data-card-key="lr-<%= tp.key %>">
+  <div class="lr-sec-head"><h2 class="en-h" style="margin:0;"><%- enIcon(tp.icon, tp.color) %><%= topicTitle[tp.key] || t(tp.title) %></h2>
+    <span class="lr-sec-sum"><%= confText(tp.conf) %> · <%= pct(tp.conf) %>%<% if (tp.accuracy !== null && tp.accuracy !== undefined) { %> · <%= t('predictions {p}% right', { p: pct(tp.accuracy) }) %><% } %><% if (tp.link) { %> · <a href="<%= tp.link %>"><%= t('open') %> →</a><% } %></span></div>
+  <% if (tp.accuracyNote) { %><p class="lr-muted" style="margin:0.3rem 0 0;"><%= tt(tp.accuracyNote) %></p><% } %>
+  <% if (tp.items.length) { %>
+  <div class="lr-items">
+    <% tp.items.forEach((it) => { %>
+    <<%= it.link ? 'a href="' + it.link + '"' : 'div' %> class="lr-item">
+      <div class="lr-item-l"><%= t(it.label) %></div>
+      <div class="lr-item-v"><%= fmtV(it.value) %></div>
+      <div class="lr-item-s"><%= tt(it.sub) %><% if (it.anomalies) { %> · <span style="color:var(--en-import);"><%= t('{n} out of the ordinary', { n: it.anomalies }) %></span><% } %></div>
+      <div class="lr-bar" title="<%= t('how sure') %>: <%= pct(it.conf) %>%"><i style="width:<%= pct(it.conf) %>%; background:<%= tp.color %>;"></i></div>
+    </<%= it.link ? 'a' : 'div' %>>
+    <% }) %>
+  </div>
+  <% } else { %><p class="lr-muted" style="margin:0.4rem 0 0;"><%= tt(tp.headline) %></p><% } %>
+</div>
+<% }) %>
+<p class="lr-muted"><%= t('Car details (departures per weekday, energy per trip) and the house profile:') %> <a href="/learned"><%= t('Learned (Smart charging)') %></a></p>
+
+<style>
+  .lr-tiles { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:0.75rem; margin:0.4rem 0 1rem; }
+  .lr-tile { display:flex; flex-direction:column; gap:0.6rem; padding:0.85rem 1rem; border:1px solid var(--border); border-radius:12px; background:var(--card-bg, transparent); color:inherit; text-decoration:none; }
+  .lr-tile:hover { border-color:color-mix(in srgb, var(--accent) 50%, var(--border)); text-decoration:none; }
+  .lr-tile.lr-off { opacity:0.6; }
+  .lr-tile-head { display:flex; gap:0.7rem; align-items:flex-start; }
+  .lr-t { font-weight:650; } .lr-h { font-size:0.85rem; color:var(--text-muted); margin-top:0.1rem; }
+  .lr-tile-foot { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; font-size:0.82rem; }
+  .lr-ring { display:inline-flex; align-items:center; gap:0.35rem; color:var(--text-muted); }
+  .lr-ring svg { color:var(--text); }
+  .lr-acc b { font-size:1.05rem; }
+  .lr-muted { color:var(--text-muted); font-size:0.85rem; }
+  .lr-events { list-style:none; margin:0; padding:0; display:grid; gap:0.35rem; }
+  .lr-events li { display:flex; gap:0.7rem; flex-wrap:wrap; font-size:0.9rem; padding:0.35rem 0; border-bottom:1px solid var(--border); }
+  .lr-ev-day { color:var(--text-muted); min-width:6.5rem; font-variant-numeric:tabular-nums; } .lr-ev-tp { color:var(--text-muted); min-width:8rem; }
+  .lr-sec-head { display:flex; align-items:center; gap:0.5rem 1rem; flex-wrap:wrap; }
+  .lr-sec-sum { font-size:0.85rem; color:var(--text-muted); }
+  .lr-items { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:0.6rem; margin-top:0.7rem; }
+  .lr-item { display:block; padding:0.6rem 0.75rem; border:1px solid var(--border); border-radius:10px; color:inherit; text-decoration:none; }
+  a.lr-item:hover { border-color:color-mix(in srgb, var(--accent) 50%, var(--border)); }
+  .lr-item-l { font-size:0.78rem; color:var(--text-muted); } .lr-item-v { font-size:1.15rem; font-weight:650; font-variant-numeric:tabular-nums; margin:0.1rem 0; }
+  .lr-item-s { font-size:0.78rem; color:var(--text-muted); min-height:1em; }
+  .lr-bar { height:4px; border-radius:2px; background:color-mix(in srgb, currentColor 10%, transparent); margin-top:0.45rem; overflow:hidden; } .lr-bar i { display:block; height:100%; border-radius:2px; opacity:0.85; }
+</style>
+<%- include('partials/foot') %>

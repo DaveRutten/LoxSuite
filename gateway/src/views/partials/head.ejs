@@ -187,12 +187,12 @@
 
       <% const em = (k) => mod(k) && canView(k); const energyAny = em('charging') || em('vehicles') || em('energy') || em('energy_manager') || em('ocpp'); %>
       <% if (energyAny) { %>
-        <% const wallboxExpanded = ['planner', 'energymanager', 'agenda', 'vehicles', 'driving', 'energy', 'learned', 'ocpp'].includes(active); %>
+        <% const wallboxExpanded = ['planner', 'energymanager', 'learning', 'agenda', 'vehicles', 'driving', 'energy', 'learned', 'ocpp'].includes(active); %>
         <button type="button" class="nav-section-label" data-nav-section="wallbox" aria-expanded="<%= isCollapsed('wallbox', wallboxExpanded) ? 'false' : 'true' %>">
           <span><%= t('Energy & charging') %></span><%- icon('chevron') %>
         </button>
         <div class="nav-group" <%= isCollapsed('wallbox', wallboxExpanded) ? 'hidden' : '' %>>
-          <% if (em('energy_manager')) { %><a href="/energy-manager" class="<%= active === 'energymanager' ? 'active' : '' %>"><%= t('Energy manager') %></a><% } %>
+          <% if (em('energy_manager')) { %><a href="/energy-manager" class="<%= active === 'energymanager' ? 'active' : '' %>"><%= t('Energy manager') %></a><a href="/energy-manager/learning" class="<%= active === 'learning' ? 'active' : '' %>"><%= t('Learning dashboard') %></a><% } %>
           <% if (em('charging')) { %>
             <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>"><%= t('Smart charging') %></a>
             <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>"><%= t('Agenda') %></a>
