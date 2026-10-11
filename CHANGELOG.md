@@ -4,6 +4,28 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.60.5-alpha.1] - 2026-10-11
+
+### Added
+- **Learning dashboard** (Energy & charging > Learning dashboard): per topic — heat pump, consumers, car, house,
+  solar forecast — what LoxSuite learned, how sure it is (a ring) and how right its predictions were (last 28 days);
+  a timeline *Learned just now* from a daily snapshot; *Not right — learn again* per heat pump item.
+- **Smart charging: link with Loxone** like the energy modules — the Wallbox block it reads (live values), and the
+  charging power and *charging allowed* sent via a virtual input, straight to a Loxone object, or (allowed) off.
+- **Broker admin user and password** settable under Settings > Broker (stored encrypted), used instead of
+  `MQTT_ADMIN_PASSWORD`.
+- The energy style on more pages: icon tiles on the dashboard (Status, Load), Vehicles, Hardware, Client activity and
+  Live data; icons in front of the card titles.
+
+### Fixed
+- **MQTT broker offline for hours after a restart**: when the database restarted at the same moment (Unraid updating
+  containers at night) the MQTT client, live Loxone connections, MCP clients and collectors failed to start and were
+  never tried again. They are now retried (10 s, 30 s, 1 min, then every 5 min); an MQTT watchdog starts a fresh
+  connection after 2 minutes without one; a busy server and slow energy status are logged.
+- **Lowest price € 0**: hours without a price counted as € 0; the Spot Price Optimizer only when LoxSuite has no prices.
+- The heartbeat to Loxone is off unless a name is filled in; the dynamic-security bootstrap stops at once with an
+  explanation when the admin login is refused.
+
 ## [0.60.4-alpha.1] - 2026-10-10
 
 ### Fixed
