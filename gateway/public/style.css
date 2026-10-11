@@ -5038,3 +5038,6 @@ tr.ls-extra { display: none; }
 .en-h3 { display:inline-flex; align-items:center; gap:0.45rem; }
 .en-ic-plain { display:inline-flex; flex:none; opacity:0.85; }
 .en-kl { display:inline-flex !important; align-items:center; gap:0.3rem; }
+/* shared with the energy pages: a short muted line, and a folded "details" block */
+.mm-sum { font-size:0.85rem; color:var(--text-muted); }
+.mm-detail { margin-top:0.5rem; } .mm-detail > summary { cursor:pointer; margin:0; }

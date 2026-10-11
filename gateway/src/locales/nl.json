@@ -4972,5 +4972,13 @@
   "Charging allowed (1/0)": "Laden toegestaan (1/0)",
   "optional: 1 while it wants to charge, 0 to stop": "optioneel: 1 zolang hij wil laden, 0 om te stoppen",
   "Or, instead of virtual inputs: send straight to a Loxone object (Direct) — e.g. an analog virtual input that already exists, or your own logic block.": "Of, in plaats van virtuele ingangen: stuur direct naar een Loxone-object (Direct) — bijv. een analoge virtuele ingang die al bestaat, of je eigen logicablok.",
-  "per function: where it is read, how it is sent": "per functie: waar het gelezen wordt, hoe het gestuurd wordt"
+  "per function: where it is read, how it is sent": "per functie: waar het gelezen wordt, hoe het gestuurd wordt",
+  "source failing": "bron faalt",
+  "All details": "Alle details",
+  "Devices": "Apparaten",
+  "look at them in the list below": "zie de lijst hieronder",
+  "everything online": "alles online",
+  "Battery weak (< 20%)": "Batterij zwak (< 20%)",
+  "LoxSuite connections": "LoxSuite-verbindingen",
+  "since the last restart": "sinds de laatste herstart"
 }

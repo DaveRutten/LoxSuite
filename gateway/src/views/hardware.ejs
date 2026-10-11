@@ -14,6 +14,12 @@
 </form>
 <% } %>
 
+<% const hwOff = devices.filter((d) => d.online === 0).length; const hwBat = devices.filter((d) => d.battery !== null && d.battery !== undefined && Number(d.battery) < 20).length; %>
+<div class="en-tiles" style="margin-bottom:1rem;">
+  <div class="en-tile"><%- enIcon('cpu', 'var(--accent)') %><div class="en-tx"><div class="en-l"><%= t('Devices') %></div><div class="en-v" data-live-id="hw-count"><%= devices.length %></div></div></div>
+  <div class="en-tile"><%- enIcon('radio', hwOff ? 'var(--danger)' : 'var(--success)') %><div class="en-tx"><div class="en-l"><%= t('Offline') %></div><div class="en-v" data-live-id="hw-off"><%= hwOff %></div><div class="en-s"><%= hwOff ? t('look at them in the list below') : t('everything online') %></div></div></div>
+  <div class="en-tile"><%- enIcon('battery', hwBat ? 'var(--warning, #e6a700)' : 'var(--success)') %><div class="en-tx"><div class="en-l"><%= t('Battery weak (< 20%)') %></div><div class="en-v" data-live-id="hw-bat"><%= hwBat %></div></div></div>
+</div>
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="search-combo">

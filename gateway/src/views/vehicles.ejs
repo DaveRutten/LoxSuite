@@ -10,6 +10,17 @@
   <% if (!vehicles.length) { %>
     <p class="hint" style="margin:0;"><%= t('No vehicles yet.') %></p>
   <% } else { %>
+    <div class="en-tiles" style="margin-bottom:0.8rem;">
+      <% vehicles.forEach(x => { const s = x.status; const r = s.reading || {}; const bad = s.health && s.health.status === 'failing';
+         const col = !x.enabled ? 'var(--text-muted)' : bad ? 'var(--en-import)' : r.plugged === true ? 'var(--en-export)' : 'var(--en-car)'; %>
+      <a class="en-tile" href="/vehicles/<%= x.id %>"><%- enIcon('car', col) %><div class="en-tx">
+        <div class="en-l"><%= x.name %> · <%= x.type === 'phev' ? t('Plug-in hybrid') : t('Full electric') %></div>
+        <div class="en-v"><%= r.soc != null ? r.soc + '%' : '—' %><% if (r.range_km != null) { %> <small style="font-size:0.8rem; font-weight:500; color:var(--text-muted);"><%= r.range_km %> km</small><% } %></div>
+        <div class="en-s"><%= r.plugged === true ? t('plugged in') : r.home === true ? t('home') : r.home === false ? t('away') : '' %><%= !x.enabled ? t('(disabled)') : bad ? ' · ' + t('source failing') : '' %><%= s.sourceUpdatedAt ? ' · ' + formatDateTime(s.sourceUpdatedAt).slice(0, 17) : '' %></div>
+      </div></a>
+      <% }) %>
+    </div>
+    <details class="mm-detail"><summary class="mm-sum"><%= t('All details') %></summary>
     <table>
       <thead><tr><th><%= t('Name') %></th><th><%= t('Type') %></th><th><%= t('Battery') %></th><th><%= t('Source') %></th><th><%= t('Now') %></th><th><%= t('Updated') %></th></tr></thead>
       <tbody>
@@ -35,6 +46,7 @@
         <% }) %>
       </tbody>
     </table>
+    </details>
     <% const pins = vehicles.filter(x => x.enabled && x.status.reading && x.status.reading.latitude != null && x.status.reading.longitude != null).map(x => ({ lat: Number(x.status.reading.latitude), lon: Number(x.status.reading.longitude), label: x.name })); %>
     <% if (pins.length) { %>
       <div id="veh-map" style="margin-top:0.9rem;"></div>

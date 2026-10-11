@@ -5,6 +5,12 @@
   <strong><%= t('Device') %></strong> <%= t('column shows the topic prefix seen in that device\'s own MQTT traffic when one is known (hover to see the raw MQTT client ID) — otherwise it falls back to the raw client ID. Disconnected clients are also auto-removed after') %> <strong><%= retentionHours %></strong> <%= t('hours (') %><% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %><%= t(') — each removal is logged on the') %> <a href="/logs/system"><%= t('System') %></a> <%= t('log.') %>
 </p>
 
+<% const ccOn = clients.filter((c) => c.status === 'connected').length; %>
+<div class="en-tiles" style="margin-bottom:0.8rem;">
+  <div class="en-tile"><%- enIcon('users', 'var(--accent)') %><div class="en-tx"><div class="en-l"><%= tab === 'system' ? t('LoxSuite connections') : t('Devices') %></div><div class="en-v" data-live-id="cc-total"><%= clients.length %></div></div></div>
+  <div class="en-tile"><%- enIcon('radio', 'var(--success)') %><div class="en-tx"><div class="en-l"><%= t('Connected') %></div><div class="en-v" data-live-id="cc-on"><%= ccOn %></div></div></div>
+  <div class="en-tile"><%- enIcon('radio', clients.length - ccOn ? 'var(--text-muted)' : 'var(--success)') %><div class="en-tx"><div class="en-l"><%= t('Disconnected') %></div><div class="en-v" data-live-id="cc-off"><%= clients.length - ccOn %></div><div class="en-s"><%= t('since the last restart') %></div></div></div>
+</div>
 <div class="tabs">
   <a href="/incoming/clients?tab=device" class="<%= tab === 'device' ? 'active' : '' %>"><%= t('Devices (') %><%= deviceCount %>)</a>
   <a href="/incoming/clients?tab=system" class="<%= tab === 'system' ? 'active' : '' %>"><%= t('LoxSuite itself (') %><%= systemCount %>)</a>
