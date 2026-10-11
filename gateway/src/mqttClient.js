@@ -12,7 +12,7 @@ const messageLog = [];
 const topicOverview = new Map(); // topic -> { value, previousValue, lastSeen, count, retained }
 const lastForwardedAt = new Map(); // mapping id -> timestamp (ms), for min_interval_ms throttling
 const recentTimestamps = []; // ms epoch of recent messages, pruned to RATE_WINDOW_MS, for msgs/sec
-const state = { connected: false, host: null, port: null };
+const state = { connected: false, host: null, port: null, since: null, reconnects: 0 };
 let totalMessageCount = 0;
 
 // $SYS/broker/<suffix> -> raw string payload, e.g. suffix "clients/connected" -> "3". Mosquitto
@@ -243,7 +243,9 @@ function resubscribe() { if (client && client.connected) subscribeAll(client); }
 
 function attachHandlers(c) {
   c.on('connect', () => {
+    if (state.since) console.log(`MQTT: connected again after ${Math.round((Date.now() - state.since) / 1000)} s.`);
     state.connected = true;
+    state.since = null;
     // The other half of LWT_TOPIC's own comment above — the broker only ever flips this to
     // "offline" itself (on an ungraceful drop) or gets told to explicitly (see publishOffline,
     // graceful shutdown); it never flips it back to "online" on its own. Every successful
@@ -261,7 +263,7 @@ function attachHandlers(c) {
   });
 
   c.on('reconnect', () => console.log('Reconnecting to MQTT broker...'));
-  c.on('close', () => { state.connected = false; });
+  c.on('close', () => { if (state.connected) console.warn(`MQTT: connection to the broker lost (${new Date().toISOString()}).`); state.connected = false; if (!state.since) state.since = Date.now(); });
   c.on('error', (err) => console.error('MQTT client error:', err.message));
 
   c.on('message', async (topic, payload, packet) => {
@@ -393,10 +395,28 @@ function getBrokerStats() {
 // Used to be a bare module-load-time call (connectWithSettings(loadSettings());) — safe when
 // loadSettings() was a synchronous better-sqlite3 read, but the async facade means it can't be
 // awaited at plain require() time. server.js's main() calls this explicitly after db.init() instead.
+// Watchdog: the MQTT bridge on but no connection for 2 minutes — start a fresh connection with the saved
+// settings (what "Save & restart" does), instead of waiting on a client that no longer reconnects by itself.
+let watchdog = null;
+function startWatchdog() {
+  if (watchdog) return;
+  watchdog = setInterval(() => {
+    if (!require('./modules').isOn('mqtt') || state.connected) return;
+    if (!state.since) { state.since = Date.now(); return; }
+    if (Date.now() - state.since < 120000) return;
+    state.reconnects += 1;
+    console.warn(`MQTT: not connected for ${Math.round((Date.now() - state.since) / 1000)} s — starting a fresh connection (watchdog, ${state.reconnects}×).`);
+    state.since = Date.now();
+    (client ? reconnect() : startMqttClient()).catch((e) => console.error('MQTT watchdog: reconnect failed:', e.message));
+  }, 30000);
+  watchdog.unref?.();
+}
+
 async function startMqttClient() {
   // MQTT bridge module switched off (Administration > Modules): no connection at all — Mosquitto
   // itself is stopped too (see modules.js's flag file and docker-entrypoint.sh).
   if (!require('./modules').isOn('mqtt')) return;
+  startWatchdog(); // first, so it also covers a start that fails below
   await reloadMappings();
   connectWithSettings(await loadSettings());
 }
@@ -404,6 +424,7 @@ async function startMqttClient() {
 // The opposite, for switching the MQTT bridge module off at runtime: say "offline" while we still
 // can, then drop the connection for good (no reconnect loop against a broker that is stopping).
 function stopMqttClient() {
+  if (watchdog) { clearInterval(watchdog); watchdog = null; }
   return new Promise((resolve) => {
     if (!client) { state.connected = false; resolve(); return; }
     const c = client;

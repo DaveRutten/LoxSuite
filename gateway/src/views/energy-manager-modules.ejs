@@ -69,7 +69,7 @@
   <p class="mm-status" data-history-msg="<%= kind %>" hidden></p>
 <% } %>
 <% function heartbeatBox(kind, st) { const cfgH = st.cfg || {}; %>
-  <div class="mm-sub" data-heartbeat><h3 class="en-h3"><%- enIcon('shield', 'var(--success)', { plain: true }) %><%= t('Safety net (heartbeat)') %></h3>
+  <div class="mm-sub" data-heartbeat><h3 class="en-h3"><%- enIcon('shield', 'var(--success)', { plain: true }) %><%= t('Safety net (heartbeat)') %> <span class="mm-sum" style="font-weight:normal;"><%= t('optional — empty is off') %></span></h3>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
       <div><label><%= t('Virtual input in Loxone') %></label><input type="text" data-f="heartbeat_vi" value="<%= cfgH.heartbeat_vi || '' %>" placeholder="<%= kind === 'solar' ? 'LoxSuite_Heartbeat_PV' : 'LoxSuite_Heartbeat_WP' %>"></div>
     </div>

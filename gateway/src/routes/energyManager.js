@@ -331,7 +331,7 @@ router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), 
   const c = {};
   if (b.enabled !== undefined) c.enabled = !!b.enabled;
   if (kind === 'solar' && b.grid_invert !== undefined) c.grid_invert = !!b.grid_invert;
-  if (b.heartbeat_vi !== undefined) c.heartbeat_vi = String(b.heartbeat_vi || '').replace(/[^\w.-]/g, '_').slice(0, 60);
+  if (b.heartbeat_vi !== undefined) { c.heartbeat_vi = String(b.heartbeat_vi || '').replace(/[^\w.-]/g, '_').slice(0, 60); c.heartbeat_set = !!c.heartbeat_vi; }
   if (b.mode !== undefined) c.mode = b.mode === 'live' ? 'live' : 'shadow';
   if (b.device !== undefined) { c.device = b.device ? String(b.device).slice(0, 80) : null; c.miniserver_id = b.miniserver_id ? Number(b.miniserver_id) : null; }
   if (b.type_key !== undefined) c.type_key = b.type_key ? String(b.type_key).slice(0, 80) : null;

@@ -397,21 +397,39 @@ async function main() {
   // which worker failed (the Phase 1 async conversion made these async in the first place; the sync
   // functions below them never had this gap since a thrown error there was never a rejected promise
   // to begin with).
+  // A worker whose start fails (the database restarting at the same moment — Unraid updating containers at
+  // night — "the database system is shutting down") is tried again: after 10 s, 30 s, 1 min, then every
+  // 5 min until it runs. Before, it stayed off until the next restart: no MQTT, no live Loxone values.
+  const startWithRetry = (name, fn, attempt = 0) => {
+    Promise.resolve().then(fn).then(() => { if (attempt) console.log(`${name}: started (attempt ${attempt + 1}).`); }).catch((err) => {
+      const waitS = [10, 30, 60][attempt] || 300;
+      console.error(`Failed to start ${name}: ${err.message} — trying again in ${waitS} s.`);
+      setTimeout(() => startWithRetry(name, fn, attempt + 1), waitS * 1000).unref?.();
+    });
+  };
   runBootstrap().catch((err) => console.error('Dynamic security bootstrap failed:', err.message));
   startHealthchecks();
-  startTailing().catch((err) => console.error('Failed to start Mosquitto log tailing:', err.message));
+  // The server busy for seconds on end (one long computation) keeps everything waiting, MQTT's keep-alive
+  // too: the broker then drops LoxSuite. Logged, so the cause can be found.
+  let lagLast = Date.now();
+  setInterval(() => {
+    const lag = Date.now() - lagLast - 1000;
+    if (lag > 3000) console.warn(`[event loop] the server was busy for ${(lag / 1000).toFixed(1)} s without a break.`);
+    lagLast = Date.now();
+  }, 1000).unref();
+  startWithRetry('Mosquitto log tailing', startTailing);
   // Used to self-connect at plain module-load time (see mqttClient.js's own comment on
   // startMqttClient) — now started explicitly here, after db.init(), like every other worker below.
-  mqttClient.startMqttClient().catch((err) => console.error('Failed to start MQTT client:', err.message));
+  startWithRetry('MQTT client', () => mqttClient.startMqttClient());
   startUdpServer();
-  startMonitorCollector().catch((err) => console.error('Failed to start monitor collector:', err.message));
-  startLogCollector().catch((err) => console.error('Failed to start log collector:', err.message));
+  startWithRetry('monitor collector', startMonitorCollector);
+  startWithRetry('log collector', startLogCollector);
   startHardwarePolling();
-  startLiveConnections().catch((err) => console.error('Failed to start live Loxone connections:', err.message));
+  startWithRetry('live Loxone connections', startLiveConnections);
   // Energy, vehicles, smart charging, OCPP and the energy manager run only when their module is on
   // (modules.js starts and stops their workers; switching a module needs no restart).
   modules.startEnabledWorkers();
-  mcpClient.startMcpClients().catch((err) => console.error('Failed to start MCP clients:', err.message));
+  startWithRetry('MCP clients', () => mcpClient.startMcpClients());
   // A restart mid-turn (deploy, crash) abandons any AI Assistant reply still marked 'streaming' —
   // nothing will ever finalize that row otherwise, since the code path that would (routes/aiChat.js's
   // own try/catch around llm.runTurn) never got to run its `finally`-equivalent before the process

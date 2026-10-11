@@ -36,12 +36,14 @@ test('every async worker-starter server.js calls at boot has its own .catch()', 
   for (const name of ASYNC_WORKER_STARTERS) {
     const escaped = name.replace('.', '\\.');
     const callRe = new RegExp(`${escaped}\\(\\)\\.catch\\(`);
-    if (!callRe.test(SERVER_JS)) missing.push(name);
+    // or handed to startWithRetry, which catches (and retries) a failed start itself
+    const retryRe = new RegExp(`startWithRetry\\([^,]+,\\s*(\\(\\)\\s*=>\\s*)?${escaped}(\\(\\))?\\)`);
+    if (!callRe.test(SERVER_JS) && !retryRe.test(SERVER_JS)) missing.push(name);
   }
   assert.deepEqual(missing, [], `these worker-starters are missing their own .catch(): ${missing.join(', ')}`);
 });
 
 test('every ASYNC_WORKER_STARTERS entry is still actually called in server.js (catches a stale test list)', () => {
-  const notFound = ASYNC_WORKER_STARTERS.filter((name) => !SERVER_JS.includes(`${name}(`));
+  const notFound = ASYNC_WORKER_STARTERS.filter((name) => !SERVER_JS.includes(`${name}(`) && !new RegExp(`startWithRetry\\([^,]+,[^)]*\\b${name.replace('.', '\\.')}\\b`).test(SERVER_JS));
   assert.deepEqual(notFound, [], `these names weren't found being called at all — this test's own list is stale: ${notFound.join(', ')}`);
 });

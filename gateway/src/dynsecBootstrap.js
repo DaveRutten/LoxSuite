@@ -113,7 +113,15 @@ async function runBootstrap(attempt = 1) {
     });
   });
 
-  client.on('error', (err) => console.error('Dynamic security bootstrap connection error:', err.message));
+  client.on('error', (err) => {
+    if (/not authori[sz]ed/i.test(err.message)) {
+      // the admin password of the container (MQTT_ADMIN_PASSWORD) is not the broker's: retrying won't help
+      console.warn('Dynamic security bootstrap: the broker refuses the admin login (MQTT_ADMIN_PASSWORD differs from the broker\'s admin password). Skipped — the gateway account keeps the rights it has.');
+      client.end(true);
+      return;
+    }
+    console.error('Dynamic security bootstrap connection error:', err.message);
+  });
 }
 
 module.exports = { runBootstrap };

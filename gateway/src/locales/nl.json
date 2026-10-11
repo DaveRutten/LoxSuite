@@ -4878,5 +4878,6 @@
   "from the PV meter": "van de PV-meter",
   "inverter AC output": "AC-uitgang omvormer",
   "inverter DC output": "DC-uitgang omvormer",
-  "not linked": "niet gekoppeld"
+  "not linked": "niet gekoppeld",
+  "optional — empty is off": "optioneel — leeg is uit"
 }

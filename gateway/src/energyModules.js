@@ -42,20 +42,22 @@ const DEFAULTS = {
     // what this heat pump has (the setup wizard): power steps (relays / %) and an outdoor sensor (NTC) the
     // own Loxone logic can fake; null = not asked yet (shown when linked)
     features: { power_steps: null, ntc: null }, setup_done: false,
-    // live: a virtual input in Loxone that LoxSuite toggles every minute; without it for 5 min the own
-    // Loxone logic takes over again (the safety net)
-    heartbeat_vi: 'LoxSuite_Heartbeat_WP',
+    // live, optional: a virtual input in Loxone that LoxSuite toggles every minute; without it for 5 min the
+    // own Loxone logic takes over again (the safety net). Empty = off (the default).
+    heartbeat_vi: '',
     limits: { ...lg.DEFAULT_LIMITS }, heat_c_per_h: 10, loss_c_per_h: 0.6, hold_h: 2,
     legionella: { enabled: true, interval_days: 7, temp_c: 60, hold_min: 30, from_hour: 10, to_hour: 17, duration_h: 2, unit_backup: true },
   },
-  solar: { enabled: false, mode: 'shadow', miniserver_id: null, device: null, type_key: null, links: {}, grid_invert: false, heartbeat_vi: 'LoxSuite_Heartbeat_PV', inverter_kw: 8, step_pct: 5, margin_kw: 0.2 },
+  solar: { enabled: false, mode: 'shadow', miniserver_id: null, device: null, type_key: null, links: {}, grid_invert: false, heartbeat_vi: '', inverter_kw: 8, step_pct: 5, margin_kw: 0.2 },
 };
 
 const rt = { hb: { heatpump: {}, solar: {} }, alertMem: { heatpump: {}, solar: {} }, days: null, daysSavedAt: 0, conflicts: { heatpump: {}, solar: {} }, tank: [], weather: [], room: [], tune: [], last: { heatpump: {}, solar: {} }, sent: { heatpump: [], solar: [] }, timer: null, discovered: new Map() };
 
 async function getConfig(kind) {
   const d = DEFAULTS[kind];
-  const c = await settings.get(`energy_module_${kind}`, d);
+  const c = { ...(await settings.get(`energy_module_${kind}`, d)) };
+  // v0.60.0–0.60.4 stored a default name; only a name the user typed counts (heartbeat_set)
+  if (!c.heartbeat_set && /^LoxSuite_Heartbeat_(WP|PV)$/.test(c.heartbeat_vi || '')) c.heartbeat_vi = '';
   return { ...d, ...c, ...(kind === 'heatpump' ? { limits: { ...d.limits, ...(c.limits || {}) }, legionella: { ...d.legionella, ...(c.legionella || {}) }, room: { ...d.room, ...(c.room || {}) }, tuning: { ...d.tuning, ...(c.tuning || {}) }, features: { ...d.features, ...(c.features || {}) }, step_names: c.step_names || {}, ntc_names: c.ntc_names || {} } : {}), links: c.links || {} };
 }
 async function saveConfig(kind, c) {
@@ -531,7 +533,9 @@ async function tick(nowMs = Date.now()) {
   for (const kind of KINDS) {
     const cfg = await getConfig(kind);
     if (!cfg.enabled) continue;
+    const t0 = Date.now();
     const st = await status(kind, nowMs).catch((e) => { console.error(`[energy modules] ${kind}: ${e.message}`); return null; });
+    if (Date.now() - t0 > 2000) console.warn(`[energy modules] ${kind}: working out the status took ${((Date.now() - t0) / 1000).toFixed(1)} s.`);
     if (st) statusMemo.set(kind, { at: Date.now(), val: st }); // the overviews use the minute's status
     if (!st) continue;
     // only what was really sent (live) can be overruled by Loxone
