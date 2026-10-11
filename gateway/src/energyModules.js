@@ -657,6 +657,17 @@ async function importStatistics(kind, { days = 14, callTool = null, nowMs = Date
 const SERIES = ['tank', 'weather', 'room', 'tune'];
 const hourOf = (ms) => new Date(Math.floor(ms / HOUR) * HOUR).toISOString();
 
+// "Not right — learn again": forget what was learned from one series (and what is derived from it), so
+// it starts over from the next minute. weather also clears the days kept for the SCOP.
+async function forget(series) {
+  if (!SERIES.includes(series)) throw new Error(`unknown series ${series}`);
+  rt[series] = [];
+  await db.prepare('DELETE FROM em_samples WHERE series = ?').run(series).catch(() => {});
+  if (series === 'weather') { rt.days = {}; rt.report = null; await settings.set('energy_hp_days', {}); }
+  statusMemo.delete('heatpump');
+  return true;
+}
+
 // The hours of a series that changed, written as one row each (that hour's samples).
 async function persist(series, hours) {
   for (const h of hours) {
@@ -689,4 +700,4 @@ function stopEnergyModules() { if (rt.timer) clearInterval(rt.timer); rt.timer =
 
 function lastStructures(kind) { return rt.discovered.get(kind)?.structures || []; }
 
-module.exports = { statusCached, lastStructures, loadPersisted, detectConflicts, KINDS, DEFAULTS, getConfig, saveConfig, discover, resolve, status, tick, importStatistics, toMinutes, addTankHistory, addWeatherHistory, addRoomHistory, addTuneHistory, startEnergyModules, stopEnergyModules, rolesView };
+module.exports = { forget, statusCached, lastStructures, loadPersisted, detectConflicts, KINDS, DEFAULTS, getConfig, saveConfig, discover, resolve, status, tick, importStatistics, toMinutes, addTankHistory, addWeatherHistory, addRoomHistory, addTuneHistory, startEnergyModules, stopEnergyModules, rolesView };

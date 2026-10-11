@@ -28,7 +28,8 @@
 </div>
 
 <div class="card" data-card-key="events">
-  <h2 class="en-h" style="margin-top:0;"><%- enIcon('bulb', 'var(--accent)') %><%= t('Learned just now') %></h2>
+  <div class="lr-sec-head"><h2 class="en-h" style="margin:0;"><%- enIcon('bulb', 'var(--accent)') %><%= t('Learned just now') %></h2>
+    <span class="lr-sec-sum"><%= data.snapshotAt ? t('last snapshot {d}', { d: day(data.snapshotAt) }) : '' %><% if (canEdit('energy_manager')) { %> · <button type="button" class="lr-link" data-snapshot><%= t('Take one now') %></button><% } %></span></div>
   <% if (!data.events.length) { %><p class="lr-muted" style="margin:0;"><%= t('A daily snapshot shows here what changed: a new pattern, a different standby power, a departure that moves. The first one comes after a day.') %></p>
   <% } else { %><ul class="lr-events"><% data.events.slice(0, 25).forEach((e) => { %>
     <li><span class="lr-ev-day"><%= day(e.at) %></span><span class="lr-ev-tp"><%= topicTitle[e.topic] || e.topic %></span>
@@ -49,6 +50,7 @@
       <div class="lr-item-v"><%= fmtV(it.value) %></div>
       <div class="lr-item-s"><%= tt(it.sub) %><% if (it.anomalies) { %> · <span style="color:var(--en-import);"><%= t('{n} out of the ordinary', { n: it.anomalies }) %></span><% } %></div>
       <div class="lr-bar" title="<%= t('how sure') %>: <%= pct(it.conf) %>%"><i style="width:<%= pct(it.conf) %>%; background:<%= tp.color %>;"></i></div>
+      <% if (it.forget && canEdit('energy_manager')) { %><button type="button" class="lr-forget" data-forget="<%= it.forget %>" data-what="<%= t(it.label) %>"><%= t('Not right — learn again') %></button><% } %>
     </<%= it.link ? 'a' : 'div' %>>
     <% }) %>
   </div>
@@ -79,6 +81,27 @@
   a.lr-item:hover { border-color:color-mix(in srgb, var(--accent) 50%, var(--border)); }
   .lr-item-l { font-size:0.78rem; color:var(--text-muted); } .lr-item-v { font-size:1.15rem; font-weight:650; font-variant-numeric:tabular-nums; margin:0.1rem 0; }
   .lr-item-s { font-size:0.78rem; color:var(--text-muted); min-height:1em; }
+  .lr-forget { margin-top:0.45rem; font-size:0.75rem; padding:0.15rem 0.5rem; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; }
+  .lr-forget:hover { color:var(--danger); border-color:var(--danger); }
+  .lr-link { background:none; border:0; padding:0; color:var(--accent); cursor:pointer; font:inherit; text-decoration:underline; }
   .lr-bar { height:4px; border-radius:2px; background:color-mix(in srgb, currentColor 10%, transparent); margin-top:0.45rem; overflow:hidden; } .lr-bar i { display:block; height:100%; border-radius:2px; opacity:0.85; }
 </style>
+
+<script>
+(function () {
+  var CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+  var post = function (url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); };
+  var L = <%- JSON.stringify({ confirm: t('Forget what was learned for "{w}" (and what comes from the same data) and learn it again from now?'), failed: t('Not done:') }) %>;
+  document.querySelectorAll('[data-forget]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      if (!confirm(L.confirm.replace('{w}', b.getAttribute('data-what')))) return;
+      b.disabled = true;
+      post('/energy-manager/learning/forget.json', { series: b.getAttribute('data-forget') }).then(function (j) { if (j.ok) location.reload(); else { alert(L.failed + ' ' + (j.message || '')); b.disabled = false; } });
+    });
+  });
+  var sn = document.querySelector('[data-snapshot]');
+  if (sn) sn.addEventListener('click', function () { sn.disabled = true; post('/energy-manager/learning/snapshot.json').then(function (j) { if (j.ok) location.reload(); else { alert(L.failed + ' ' + (j.message || '')); sn.disabled = false; } }); });
+})();
+</script>
 <%- include('partials/foot') %>

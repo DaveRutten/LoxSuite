@@ -46,6 +46,17 @@
         <input type="password" name="password" value="<%= settings.password || '' %>">
       </div>
     </div>
+    <div class="form-grid" style="margin-top:0.85rem;">
+      <div>
+        <label><%= t('Broker admin user') %></label>
+        <input type="text" name="admin_username" value="<%= (typeof brokerAdmin !== 'undefined' && brokerAdmin.username) || '' %>" placeholder="admin">
+      </div>
+      <div>
+        <label><%= t('Broker admin password') %></label>
+        <input type="password" name="admin_password" value="" placeholder="<%= typeof brokerAdmin !== 'undefined' && brokerAdmin.set ? t('saved — leave empty to keep') : t('empty: MQTT_ADMIN_PASSWORD from the .env') %>" autocomplete="new-password">
+        <p class="hint" style="margin:0.2rem 0 0;"><%= t('Only for managing MQTT users and their rights (the account the broker made at its first start). Stored encrypted; used instead of MQTT_ADMIN_PASSWORD.') %></p>
+      </div>
+    </div>
 
     <h2 style="margin-top:1.5rem;"><%= t('Features') %></h2>
     <div class="settings-field">

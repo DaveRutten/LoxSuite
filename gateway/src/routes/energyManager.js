@@ -284,6 +284,9 @@ const kindOk = (k) => ['heatpump', 'solar'].includes(k);
 router.get('/learning', asyncHandler(async (req, res) => {
   res.render('learning', { data: await require('../learningDashboard').overview() });
 }));
+router.post('/learning/forget.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
+  try { await mods().forget(String(req.body?.series || '')); res.json({ ok: true }); } catch (e) { res.json({ ok: false, message: e.message }); }
+}));
 router.post('/learning/snapshot.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   try { await require('../learningDashboard').snapshot(Date.now(), { force: true }); res.json({ ok: true }); } catch (e) { res.json({ ok: false, message: e.message }); }
 }));

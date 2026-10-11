@@ -4950,5 +4950,15 @@
   "h": "u",
   "usually starts again after {m} min": "start meestal weer na {m} min",
   "learned · with 10 °C colder outside": "geleerd · bij 10 °C kouder buiten",
-  "start value · with 10 °C colder outside": "beginwaarde · bij 10 °C kouder buiten"
+  "start value · with 10 °C colder outside": "beginwaarde · bij 10 °C kouder buiten",
+  "Broker admin user": "Admin-gebruiker broker",
+  "Broker admin password": "Admin-wachtwoord broker",
+  "saved — leave empty to keep": "opgeslagen — leeg laten om te behouden",
+  "empty: MQTT_ADMIN_PASSWORD from the .env": "leeg: MQTT_ADMIN_PASSWORD uit de .env",
+  "Only for managing MQTT users and their rights (the account the broker made at its first start). Stored encrypted; used instead of MQTT_ADMIN_PASSWORD.": "Alleen voor het beheer van MQTT-gebruikers en hun rechten (het account dat de broker bij zijn eerste start aanmaakte). Versleuteld opgeslagen; gebruikt in plaats van MQTT_ADMIN_PASSWORD.",
+  "Not right — learn again": "Klopt niet — opnieuw leren",
+  "last snapshot {d}": "laatste momentopname {d}",
+  "Take one now": "Nu vastleggen",
+  "Forget what was learned for \"{w}\" (and what comes from the same data) and learn it again from now?": "Vergeten wat geleerd is voor \"{w}\" (en wat uit dezelfde data komt) en vanaf nu opnieuw leren?",
+  "Not done:": "Niet gelukt:"
 }

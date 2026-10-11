@@ -196,7 +196,7 @@
           <% if (em('charging')) { %>
             <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>"><%= t('Smart charging') %></a>
             <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>"><%= t('Agenda') %></a>
-            <a href="/learned" class="<%= active === 'learned' ? 'active' : '' %>"><%= t('Learned') %></a>
+            <% if (!em('energy_manager')) { %><a href="/learned" class="<%= active === 'learned' ? 'active' : '' %>"><%= t('Learned') %></a><% } %>
           <% } %>
           <% if (em('vehicles')) { %>
             <a href="/vehicles" class="<%= active === 'vehicles' ? 'active' : '' %>"><%= t('Vehicles') %></a>

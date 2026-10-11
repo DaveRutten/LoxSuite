@@ -72,10 +72,12 @@ async function ensureGatewayAccount(client, username, password) {
 // any manual mosquitto_ctrl steps, once the broker is reachable.
 async function runBootstrap(attempt = 1) {
   if (!require('./modules').isOn('mqtt')) return; // MQTT bridge module off: broker isn't running
-  const adminUsername = process.env.MQTT_ADMIN_USERNAME || 'admin';
-  const adminPassword = process.env.MQTT_ADMIN_PASSWORD;
+  // set under Settings > Broker (stored encrypted) first, else the container's MQTT_ADMIN_* (.env)
+  const saved = await require('./wallboxSettings').get('mqtt_admin', {}).catch(() => ({}));
+  const adminUsername = saved.username || process.env.MQTT_ADMIN_USERNAME || 'admin';
+  const adminPassword = (saved.password && require('./secretCrypto').decrypt(saved.password)) || process.env.MQTT_ADMIN_PASSWORD;
   if (!adminPassword) {
-    console.warn('MQTT_ADMIN_PASSWORD not set — skipping dynamic-security bootstrap.');
+    console.warn('No broker admin password (Settings > Broker, or MQTT_ADMIN_PASSWORD) — skipping dynamic-security bootstrap.');
     return;
   }
 
@@ -116,7 +118,7 @@ async function runBootstrap(attempt = 1) {
   client.on('error', (err) => {
     if (/not authori[sz]ed/i.test(err.message)) {
       // the admin password of the container (MQTT_ADMIN_PASSWORD) is not the broker's: retrying won't help
-      console.warn('Dynamic security bootstrap: the broker refuses the admin login (MQTT_ADMIN_PASSWORD differs from the broker\'s admin password). Skipped — the gateway account keeps the rights it has.');
+      console.warn('Dynamic security bootstrap: the broker refuses the admin login (the admin password under Settings > Broker, or MQTT_ADMIN_PASSWORD, is not the broker\'s). Skipped — the gateway account keeps the rights it has.');
       client.end(true);
       return;
     }

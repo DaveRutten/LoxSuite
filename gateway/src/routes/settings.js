@@ -5,6 +5,10 @@ const { requirePermission } = require('../middleware/requirePermission');
 const { invalidateTimezoneCache } = require('../dateFormat');
 const { logSystemEvent } = require('../auditLog');
 const { encrypt, decrypt } = require('../secretCrypto');
+const wbSettings = require('../wallboxSettings');
+// The broker admin as the page shows it: the user name and whether a password is saved (never the password).
+async function brokerAdminView() { const a = await wbSettings.get('mqtt_admin', {}).catch(() => ({})); return { username: a.username || '', set: !!a.password }; }
+
 const { getAllDistinctStateNames } = require('../loxoneStructure');
 const asyncHandler = require('../middleware/asyncHandler');
 
@@ -141,16 +145,17 @@ router.get('/live-data-state-names', asyncHandler(async (req, res) => {
 }));
 
 router.get('/broker', asyncHandler(async (req, res) => {
-  res.render('settings', { settings: await loadSettings(), gatewaySettings: await loadGatewaySettings(), error: null, saved: false, mqttConnected: mqttClient.state.connected });
+  res.render('settings', { settings: await loadSettings(), gatewaySettings: await loadGatewaySettings(), brokerAdmin: await brokerAdminView(), error: null, saved: false, mqttConnected: mqttClient.state.connected });
 }));
 
 router.post('/broker', requirePermission('settings', 'edit'), asyncHandler(async (req, res) => {
-  const { host, port, username, password, use_tls, auto_create_enabled, auto_scope_device_roles_enabled } = req.body;
+  const { host, port, username, password, use_tls, auto_create_enabled, auto_scope_device_roles_enabled, admin_username, admin_password } = req.body;
 
   if (!host || !port) {
     return res.render('settings', {
       settings: await loadSettings(),
       gatewaySettings: await loadGatewaySettings(),
+      brokerAdmin: await brokerAdminView(),
       error: 'Host and port are required.',
       saved: false,
       mqttConnected: mqttClient.state.connected,
@@ -163,10 +168,18 @@ router.post('/broker', requirePermission('settings', 'edit'), asyncHandler(async
   await db.prepare('UPDATE gateway_settings SET auto_create_loxone_mappings = ? WHERE id = 1').run(auto_create_enabled ? 1 : 0);
   await db.prepare('UPDATE gateway_settings SET auto_scope_device_roles = ? WHERE id = 1').run(auto_scope_device_roles_enabled ? 1 : 0);
 
+  // the broker's admin account (for managing MQTT users): an empty password keeps the saved one
+  {
+    const cur = await wbSettings.get('mqtt_admin', {});
+    const next = { username: String(admin_username || '').trim().slice(0, 80) || null, password: cur.password || null };
+    if (admin_password) next.password = encrypt(String(admin_password));
+    await wbSettings.set('mqtt_admin', next);
+  }
   await mqttClient.reconnect();
+  if (admin_password) require('../dynsecBootstrap').runBootstrap().catch(() => {});
 
   await logSystemEvent(`"${req.user.username}" updated broker connection settings.`);
-  res.render('settings', { settings: await loadSettings(), gatewaySettings: await loadGatewaySettings(), error: null, saved: true, mqttConnected: mqttClient.state.connected });
+  res.render('settings', { settings: await loadSettings(), gatewaySettings: await loadGatewaySettings(), brokerAdmin: await brokerAdminView(), error: null, saved: true, mqttConnected: mqttClient.state.connected });
 }));
 
 module.exports = router;
