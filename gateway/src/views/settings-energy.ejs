@@ -16,7 +16,7 @@
 <% if (saved) { %><p class="hint" data-hint-keep style="color: var(--success);"><%= t('Saved.') %><%= saved === 'load_history' ? ' ' + t('The last 30 days are being read from Loxone\'s statistics in the background, so it learns right away.') : '' %></p><% } %>
 
 <div class="card" id="prices">
-  <h2 style="margin-top:0;"><%= t('Prices, solar & fuel') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('euro', 'var(--en-price)') %><%= t('Prices, solar & fuel') %></h2>
   <p class="hint" style="margin:0 0 0.6rem;"><%= t('Used by Smart charging, the energy manager, Driving & costs and OCPP costs.') %></p>
   <div class="ls-fold-list">
   <details <%= saved === 'prices' ? 'open' : '' %>>
@@ -101,7 +101,7 @@
 
 <% if (canView('charging')) { %>
 <div class="card" id="calendars">
-  <h2 style="margin-top:0;"><%= t('Calendars') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('calendar', 'var(--accent)') %><%= t('Calendars') %></h2>
   <% if (!site.lat) { %><p class="hint" style="color:#b8860b;"><%= t('Set the home location under') %> <a href="/settings/energy#prices"><%= t('Administration → Energy & charging') %></a> <%= t('so distances can be calculated.') %></p><% } %>
   <% if (calendars.length) { %>
     <table>
@@ -173,7 +173,7 @@
 </div>
 
 <div class="card" id="agenda-settings">
-  <h2 style="margin-top:0;"><%= t('Agenda & climate at departure') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('car', 'var(--en-car)') %><%= t('Agenda & climate at departure') %></h2>
   <form method="post" action="/agenda/settings">
     <div class="form-grid">
       <div><label><%= t('Car markers in the title') %></label><input type="text" name="tags" value="<%= cfg.tags.join(' ') %>"></div>
@@ -211,7 +211,7 @@
 </div>
 
 <div class="card" id="day-types">
-  <h2 style="margin-top:0;"><%= t('Days away & holidays') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('calendar', 'var(--en-house)') %><%= t('Days away & holidays') %></h2>
   <p class="hint"><%= t('Not every Tuesday is a normal Tuesday. On a day away LoxSuite plans no tap water, no appliance runs and no learned departure, only the house\'s base load — and leaves the day out of what it learns. A public holiday is planned like a weekend day.') %></p>
   <div style="display:flex; flex-wrap:wrap; margin:0.3rem 0 0.8rem;">
     <% const typeLabel = { away: t('away'), holiday: t('holiday'), home: t('home'), weekend: t('weekend'), workday: t('workday') }; const typeColor = { away: '#e67e22', holiday: '#9b59b6', home: '#16a085', weekend: '#7f8c8d', workday: '#4a7bd0' }; %>
@@ -257,7 +257,7 @@
 </div>
 <% if (canEdit('charging')) { %>
 <div class="card" id="charging">
-  <h2 style="margin-top:0;"><%= t('Smart charging') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('bolt', 'var(--en-car)') %><%= t('Smart charging') %></h2>
   <p class="hint" style="margin:0 0 0.6rem;"><%= t('How the car is charged, what LoxSuite sends to Loxone and when it reminds you to plug in.') %></p>
   <div class="ls-fold-list">
   <details <%= chargingSaved === 'charging' ? 'open' : '' %>>
@@ -388,7 +388,7 @@
 <% } %>
 <% if (typeof emLoads !== 'undefined' && emLoads && canEdit('energy_manager')) { %>
 <div class="card" id="energy-manager">
-  <h2 style="margin-top:0;"><%= t('Energy manager — consumers') %></h2>
+  <h2 class="en-h" style="margin-top:0;"><%- enIcon('gauge', 'var(--accent)') %><%= t('Energy manager — consumers') %></h2>
   <p class="hint"><%= t('Output: shadow mode — LoxSuite measures, plans and shows on the Energy manager page what it would send to Loxone; nothing is sent yet. Switching a consumer to live (through the virtual inputs below) comes in a later version.') %></p>
   <p class="hint"><%= t('Priority 1 is served first when there is solar surplus. The car (Smart charging) takes its place at the priority set below.') %></p>
   <div class="ls-fold-list">
