@@ -4980,5 +4980,9 @@
   "everything online": "alles online",
   "Battery weak (< 20%)": "Batterij zwak (< 20%)",
   "LoxSuite connections": "LoxSuite-verbindingen",
-  "since the last restart": "sinds de laatste herstart"
+  "since the last restart": "sinds de laatste herstart",
+  "Topics seen": "Topics gezien",
+  "In use": "In gebruik",
+  "monitored, mapped or on a dashboard": "gemonitord, gekoppeld of op een dashboard",
+  "Mapped to Loxone": "Gekoppeld aan Loxone"
 }

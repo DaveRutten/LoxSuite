@@ -5,6 +5,13 @@
   <strong><%= t('Previous value') %></strong> <%= t('column shows what changed. In-memory only, so this clears on a gateway restart.') %>
 </p>
 
+<% const ldSet = (a) => new Set(a || []); const ldMon = ldSet(monitoredTopics), ldMap = ldSet(mappedTopics), ldW = ldSet(widgetedTopics);
+   const ldUsed = topics.filter((x) => ldMon.has(x.topic) || ldMap.has(x.topic) || ldW.has(x.topic)).length; %>
+<div class="en-tiles" style="margin-bottom:0.8rem;">
+  <div class="en-tile"><%- enIcon('hash', 'var(--en-battery)') %><div class="en-tx"><div class="en-l"><%= t('Topics seen') %></div><div class="en-v" data-live-id="ld-topics"><%= topics.length %></div></div></div>
+  <div class="en-tile"><%- enIcon('link', 'var(--accent)') %><div class="en-tx"><div class="en-l"><%= t('In use') %></div><div class="en-v" data-live-id="ld-used"><%= ldUsed %></div><div class="en-s"><%= t('monitored, mapped or on a dashboard') %></div></div></div>
+  <div class="en-tile"><%- enIcon('arrowIn', 'var(--en-car)') %><div class="en-tx"><div class="en-l"><%= t('Mapped to Loxone') %></div><div class="en-v" data-live-id="ld-mapped"><%= topics.filter((x) => ldMap.has(x.topic)).length %></div></div></div>
+</div>
 <div class="filterable-table-card">
   <div class="table-toolbar">
     <div class="search-combo">
