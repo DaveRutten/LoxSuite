@@ -316,21 +316,7 @@ router.get('/modules/:kind/discover.json', asyncHandler(async (req, res) => {
 // The states of a Miniserver to choose an own read link from (an object, a virtual output …) and the
 // controls with an action to send to directly.
 router.get('/modules/:kind/objects.json', asyncHandler(async (req, res) => {
-  // every Miniserver (Gateway first; the same object once), or one
-  const all = (await db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all()).sort((x, y) => Number(!!x.gateway_client_of) - Number(!!y.gateway_client_of));
-  const list = req.query.ms && req.query.ms !== 'all' ? all.filter((m) => m.id === Number(req.query.ms)) : all;
-  const out = []; const seen = new Set();
-  for (const ms of list) {
-    const s = await require('../loxoneStructure').getStructure(ms).catch(() => null);
-    const rooms = s?.rooms || {};
-    for (const [uuid, c] of Object.entries(s?.controls || {})) {
-      if (seen.has(uuid)) continue;
-      seen.add(uuid);
-      const state = Object.values(c.states || {}).find((x) => typeof x === 'string');
-      out.push({ uuid, name: c.name, type: c.type, room: rooms[c.room]?.name || null, state: state || null, action: c.uuidAction || null, ms: ms.id, msName: list.length > 1 ? ms.name : null });
-    }
-  }
-  res.json({ objects: out.sort((a, b) => String(a.name).localeCompare(String(b.name))) });
+  res.json({ objects: await require('../loxoneObjects').listObjects(req.query.ms || 'all') });
 }));
 
 const MODULE_NUM = { heatpump: ['heat_c_per_h', 'loss_c_per_h', 'hold_h'], solar: ['inverter_kw', 'step_pct', 'margin_kw'] };

@@ -37,6 +37,8 @@ router.get('/', asyncHandler(async (req, res) => {
     climateRuns: await require('../carClimate').recent(8),
     skodaCars: vehicles.some((v) => vehiclesMod.sourceKind(v) === 'skoda'),
     remCfg: await require('../reminders').getConfig().catch(() => ({})), chargingSaved: req.query.saved || null,
+    // the Wallbox block it reads (energy meter of role 'wallbox', else the OCPP bridge) and its live values
+    wallboxLink: await planner.wallboxLive().then((w) => (w ? { name: w.name, ms: w.miniserver?.name || null, connected: w.connected, kw: w.kw, sessionKwh: w.sessionKwh, mode: w.mode } : null)).catch(() => null),
     ...(await energyManagerData(req)),
     dayCfg: await require('../dayType').getConfig(),
     dayTypes: [...(await require('../dayType').typesBetween(Date.now(), Date.now() + 14 * 86400000).catch(() => new Map()))].map(([day, v]) => ({ day, ...v })),

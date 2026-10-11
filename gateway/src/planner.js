@@ -22,6 +22,10 @@ const DEFAULTS = {
   output: 'advise',               // 'advise' (show only) | 'live' (write to Loxone)
   vi_setpoint: '',                // Loxone virtual input receiving the charging power in kW (0 = stop)
   vi_enable: '',                  // optional virtual input receiving 1/0 (charging allowed)
+  // how each output goes to Loxone: 'vi' (the virtual input above), 'direct' (straight to a Loxone object,
+  // its uuidAction, on its own Miniserver) or 'off'; the power cannot be off
+  setpoint_via: 'vi', setpoint_action: null, setpoint_name: null, setpoint_ms: null,
+  enable_via: 'vi', enable_action: null, enable_name: null, enable_ms: null,
   vi_miniserver_id: null,         // Miniserver holding the virtual inputs (null = the first one)
   min_kw: 4.16,                   // 6 A x 3 phases
   max_kw: 11,
@@ -996,8 +1000,23 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   return plan;
 }
 
+// Where the power and "charging allowed" go: [{ ms, target, value, what }] — a virtual input by name on the
+// output Miniserver, or straight to a Loxone object (its uuidAction) on its own Miniserver.
+async function outputTargets(cfg, kw) {
+  const out = [];
+  const base = await outputMiniserver(cfg);
+  const msOf = async (id) => (id ? await require('./db').prepare('SELECT * FROM miniservers WHERE id = ?').get(Number(id)).catch(() => null) : null) || base;
+  if (cfg.setpoint_via === 'direct' && cfg.setpoint_action) out.push({ ms: await msOf(cfg.setpoint_ms), target: cfg.setpoint_action, value: String(kw), what: cfg.setpoint_name || 'power' });
+  else if (cfg.vi_setpoint) out.push({ ms: base, target: cfg.vi_setpoint, value: String(kw), what: cfg.vi_setpoint });
+  if (cfg.enable_via === 'direct' && cfg.enable_action) out.push({ ms: await msOf(cfg.enable_ms), target: cfg.enable_action, value: kw > 0 ? '1' : '0', what: cfg.enable_name || 'charging allowed' });
+  else if (cfg.enable_via !== 'off' && cfg.vi_enable) out.push({ ms: base, target: cfg.vi_enable, value: kw > 0 ? '1' : '0', what: cfg.vi_enable });
+  return out;
+}
+const hasPowerOutput = (cfg) => (cfg.setpoint_via === 'direct' ? !!cfg.setpoint_action : !!cfg.vi_setpoint);
+const enableSent = (cfg) => (cfg.enable_via === 'direct' ? !!cfg.enable_action : cfg.enable_via !== 'off' && !!cfg.vi_enable);
+
 async function writeOutput(cfg, kw, nowMs) {
-  if (cfg.output !== 'live' || !cfg.vi_setpoint) return { written: false };
+  if (cfg.output !== 'live' || !hasPowerOutput(cfg)) return { written: false };
   const same = rt.lastWrite.kw === kw;
   if (same && nowMs - rt.lastWrite.at < 5 * 60 * 1000) return { written: false };
   const { sendHttpVirtualInput } = require('./loxone');
@@ -1005,13 +1024,12 @@ async function writeOutput(cfg, kw, nowMs) {
   if (!ms) return { written: false, error: 'No Miniserver.' };
   const chargeLog = require('./chargeLog');
   try {
-    await sendHttpVirtualInput(ms, cfg.vi_setpoint, String(kw));
-    if (cfg.vi_enable) await sendHttpVirtualInput(ms, cfg.vi_enable, kw > 0 ? '1' : '0');
+    for (const o of await outputTargets(cfg, kw)) await sendHttpVirtualInput(o.ms || ms, o.target, o.value);
   } catch (err) {
-    if (!same) chargeLog.recordSent({ kw, enable: cfg.vi_enable ? (kw > 0 ? 1 : 0) : null, source: 'live', ok: false, error: err.message }).catch(() => {});
+    if (!same) chargeLog.recordSent({ kw, enable: enableSent(cfg) ? (kw > 0 ? 1 : 0) : null, source: 'live', ok: false, error: err.message }).catch(() => {});
     throw err;
   }
-  if (!same) chargeLog.recordSent({ kw, enable: cfg.vi_enable ? (kw > 0 ? 1 : 0) : null, source: 'live', miniserver: ms.name }).catch(() => {});
+  if (!same) chargeLog.recordSent({ kw, enable: enableSent(cfg) ? (kw > 0 ? 1 : 0) : null, source: 'live', miniserver: ms.name }).catch(() => {});
   rt.lastWrite = { kw, at: nowMs };
   if (!same) {
     const { logSystemEvent } = require('./auditLog');
@@ -1191,7 +1209,7 @@ function stopPlanner() {
   timer = null;
 }
 
-module.exports = {
+module.exports = { outputTargets, hasPowerOutput, enableSent,
   MODES, DEFAULTS, makePlan, withRest, planSplit, sameTrip, mergeTrips, batteryCurve, planWithBuffer, joinPlans, freeOf, fuelBreakEven, activeSlot, controlStep,
   houseWeather, getConfig, saveConfig, recalc, tick, outputMiniserver, sessionFull, setOverride, setReadyOverride, setSessionVehicle, primaryVehicle, getRuntime, startPlanner, stopPlanner, buildSlots, computeTarget, wallboxLive,
 };

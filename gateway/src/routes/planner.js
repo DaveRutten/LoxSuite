@@ -84,17 +84,18 @@ router.post('/recalc.json', requirePermission('charging', 'edit'), asyncHandler(
 // Write a test value to the configured virtual input(s) — only when asked, never automatically.
 router.post('/test-output.json', requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const cfg = await planner.getConfig();
-  if (!cfg.vi_setpoint) return res.json({ ok: false, message: 'Fill in the virtual input name first.' });
+  if (!planner.hasPowerOutput(cfg)) return res.json({ ok: false, message: 'Choose where the power goes first (a virtual input or a Loxone object).' });
   const { sendHttpVirtualInput } = require('../loxone');
   const ms = await planner.outputMiniserver(cfg);
   if (!ms) return res.json({ ok: false, message: 'No Miniserver configured.' });
   const kw = num(req.body?.kw, 0);
   try {
-    await sendHttpVirtualInput(ms, cfg.vi_setpoint, String(kw));
-    if (cfg.vi_enable) await sendHttpVirtualInput(ms, cfg.vi_enable, kw > 0 ? '1' : '0');
-    await logSystemEvent(`Planner: test value ${kw} kW written to "${cfg.vi_setpoint}" by ${req.session?.username || 'unknown user'}`).catch(() => {});
-    await require('../chargeLog').recordSent({ kw, enable: cfg.vi_enable ? (kw > 0 ? 1 : 0) : null, source: 'test', miniserver: ms.name }).catch(() => {});
-    res.json({ ok: true, message: `Sent ${kw} to "${cfg.vi_setpoint}"${cfg.vi_enable ? ` and ${kw > 0 ? 1 : 0} to "${cfg.vi_enable}"` : ''} on ${ms.name}.` });
+    const targets = await planner.outputTargets(cfg, kw);
+    for (const o of targets) await sendHttpVirtualInput(o.ms || ms, o.target, o.value);
+    const said = targets.map((o) => `${o.value} to "${o.what}" (${(o.ms || ms).name})`).join(' and ');
+    await logSystemEvent(`Planner: test value ${kw} kW sent — ${said} — by ${req.session?.username || 'unknown user'}`).catch(() => {});
+    await require('../chargeLog').recordSent({ kw, enable: planner.enableSent(cfg) ? (kw > 0 ? 1 : 0) : null, source: 'test', miniserver: ms.name }).catch(() => {});
+    res.json({ ok: true, message: `Sent ${said}.` });
   } catch (err) {
     await require('../chargeLog').recordSent({ kw, source: 'test', ok: false, error: err.message }).catch(() => {});
     res.json({ ok: false, message: err.message });
@@ -103,6 +104,11 @@ router.post('/test-output.json', requirePermission('charging', 'edit'), asyncHan
 
 // Charge log (chargeLog.js): every session recorded with automatic checks, for testing the Wallbox
 // control at any moment and looking at it later.
+// The Loxone objects for "send directly to…" (all Miniservers).
+router.get('/objects.json', asyncHandler(async (req, res) => {
+  res.json({ objects: await require('../loxoneObjects').listObjects('all') });
+}));
+
 router.get('/log', asyncHandler(async (req, res) => {
   res.render('planner-log', { sessionKey: String(req.query.session || '') });
 }));
@@ -133,6 +139,9 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
     await planner.saveConfig({
       min_kw: num(b.min_kw, 4.16), max_kw: num(b.max_kw, 11), grid_limit_kw: num(b.grid_limit_kw, 17.3),
       output: b.output === 'live' ? 'live' : 'advise', vi_setpoint: String(b.vi_setpoint || '').trim(), vi_enable: String(b.vi_enable || '').trim(), vi_miniserver_id: num(b.vi_miniserver_id) || null,
+      // per output: virtual input, straight to a Loxone object, or (charging allowed only) off
+      setpoint_via: b.setpoint_via === 'direct' && b.setpoint_action ? 'direct' : 'vi', setpoint_action: b.setpoint_via === 'direct' ? String(b.setpoint_action || '').slice(0, 80) || null : null, setpoint_name: String(b.setpoint_name || '').slice(0, 120) || null, setpoint_ms: num(b.setpoint_ms) || null,
+      enable_via: ['vi', 'direct', 'off'].includes(b.enable_via) && !(b.enable_via === 'direct' && !b.enable_action) ? b.enable_via : 'vi', enable_action: b.enable_via === 'direct' ? String(b.enable_action || '').slice(0, 80) || null : null, enable_name: String(b.enable_name || '').slice(0, 120) || null, enable_ms: num(b.enable_ms) || null,
       pv_start_kw: num(b.pv_start_kw), pv_start_delay_s: num(b.pv_start_delay_s, 120), pv_stop_delay_s: num(b.pv_stop_delay_s, 300),
       pv_allowed_import_kw: num(b.pv_allowed_import_kw, 0.5), pv_opportunistic: !!b.pv_opportunistic,
       solar_trust: ['low', 'expected', 'bonus'].includes(b.solar_trust) ? b.solar_trust : 'low',
@@ -146,7 +155,7 @@ router.post('/settings', requirePermission('charging', 'edit'), asyncHandler(asy
       depart_certainty: ['safe', 'normal', 'relaxed'].includes(b.depart_certainty) ? b.depart_certainty : 'normal',
     });
     const cfg = await planner.getConfig();
-    if (cfg.output === 'live') await logSystemEvent(`Planner output set to Live (virtual input "${cfg.vi_setpoint}") by ${req.session?.username || 'unknown user'}`).catch(() => {});
+    if (cfg.output === 'live') await logSystemEvent(`Planner output set to Live (${cfg.setpoint_via === 'direct' ? `object "${cfg.setpoint_name || cfg.setpoint_action}"` : `virtual input "${cfg.vi_setpoint}"`}) by ${req.session?.username || 'unknown user'}`).catch(() => {});
   } else if (section === 'prices') {
     await prices.saveConfig({
       source: ['energyzero', 'entsoe', 'loxone', 'fixed'].includes(b.source) ? b.source : 'energyzero',

@@ -4960,5 +4960,17 @@
   "last snapshot {d}": "laatste momentopname {d}",
   "Take one now": "Nu vastleggen",
   "Forget what was learned for \"{w}\" (and what comes from the same data) and learn it again from now?": "Vergeten wat geleerd is voor \"{w}\" (en wat uit dezelfde data komt) en vanaf nu opnieuw leren?",
-  "Not done:": "Niet gelukt:"
+  "Not done:": "Niet gelukt:",
+  "Live (control the Wallbox)": "Live (de Wallbox sturen)",
+  "Function": "Functie",
+  "car connected": "auto aangesloten",
+  "no car": "geen auto",
+  "session": "sessie",
+  "found": "gevonden",
+  "the Wallbox meter is set under Meters": "de Wallbox-meter stel je in onder Meters",
+  "Charging power (kW, 0 = stop)": "Laadvermogen (kW, 0 = stop)",
+  "Charging allowed (1/0)": "Laden toegestaan (1/0)",
+  "optional: 1 while it wants to charge, 0 to stop": "optioneel: 1 zolang hij wil laden, 0 om te stoppen",
+  "Or, instead of virtual inputs: send straight to a Loxone object (Direct) — e.g. an analog virtual input that already exists, or your own logic block.": "Of, in plaats van virtuele ingangen: stuur direct naar een Loxone-object (Direct) — bijv. een analoge virtuele ingang die al bestaat, of je eigen logicablok.",
+  "per function: where it is read, how it is sent": "per functie: waar het gelezen wordt, hoe het gestuurd wordt"
 }

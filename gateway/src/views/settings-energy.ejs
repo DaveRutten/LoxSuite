@@ -269,21 +269,39 @@
         <div><label><%= t('Maximum power (kW)') %></label><input type="text" name="max_kw" value="<%= cfg.max_kw %>"></div>
         <div><label><%= t('Grid connection limit (kW)') %></label><input type="text" name="grid_limit_kw" value="<%= cfg.grid_limit_kw %>"></div>
       </div>
-      <h3 class="subhead"><%= t('Output to Loxone') %></h3>
-      <div class="form-grid">
-        <div><label><%= t('Output') %></label><select name="output"><option value="advise" <%= cfg.output !== 'live' ? 'selected' : '' %>><%= t('Advise (don\'t control the Wallbox)') %></option><option value="live" <%= cfg.output === 'live' ? 'selected' : '' %>><%= t('Live (write to Loxone)') %></option></select></div>
-        <div><label><%= t('Virtual input for the power (kW, 0 = stop)') %></label><input type="text" name="vi_setpoint" value="<%= cfg.vi_setpoint %>" placeholder="<%= t('LoxSuite laadvermogen') %>"></div>
+      <h3 class="subhead en-h3"><%- enIcon('link', 'var(--text-muted)', { plain: true }) %><%= t('Link with Loxone') %> <span class="hint" style="font-weight:400; margin:0;">— <%= t('per function: where it is read, how it is sent') %></span></h3>
+      <div class="form-grid" style="margin-bottom:0.5rem;">
+        <div><label><%= t('Output') %></label><select name="output"><option value="advise" <%= cfg.output !== 'live' ? 'selected' : '' %>><%= t('Advise (don\'t control the Wallbox)') %></option><option value="live" <%= cfg.output === 'live' ? 'selected' : '' %>><%= t('Live (control the Wallbox)') %></option></select></div>
         <% if (miniservers.length > 1) { %><div><label><%= t('Miniserver with the virtual inputs') %></label><select name="vi_miniserver_id"><% miniservers.forEach(m => { %><option value="<%= m.id %>" <%= Number(cfg.vi_miniserver_id || miniservers[0].id) === m.id ? 'selected' : '' %>><%= m.name %></option><% }) %></select></div><% } %>
-        <div><label><%= t('Virtual input "charging allowed" (optional, 1/0)') %></label><input type="text" name="vi_enable" value="<%= cfg.vi_enable %>" placeholder="<%= t('LoxSuite laden') %>"></div>
       </div>
-      <h3 class="subhead"><%= t('Wiring in Loxone Config') %> <span class="hint" style="font-weight:400;"><%= t('(Wallbox block):') %></span></h3>
-      <ol class="hint" style="margin:0.3rem 0 0; padding-left:1.2rem; line-height:1.55;">
+      <div class="table-wrap" style="overflow-x:auto;"><table class="pl-link"><thead><tr><th><%= t('Function') %></th><th><%= t('Read from') %></th><th><%= t('Send via') %></th></tr></thead><tbody>
+        <tr><td><strong><%= t('Wallbox') %></strong><% if (wallboxLink) { %><div class="pl-now"><%= t('now:') %> <%= wallboxLink.connected ? t('car connected') : t('no car') %> · <%= (Number(wallboxLink.kw) || 0).toLocaleString('nl-NL', { maximumFractionDigits: 2 }) %> kW<%= wallboxLink.sessionKwh !== null && wallboxLink.sessionKwh !== undefined ? ' · ' + t('session') + ' ' + Number(wallboxLink.sessionKwh).toLocaleString('nl-NL', { maximumFractionDigits: 1 }) + ' kWh' : '' %></div><% } %></td>
+          <td><% if (wallboxLink) { %><span class="badge badge-ok"><%= t('found') %></span> <%= wallboxLink.name %><%= wallboxLink.ms ? ' (' + wallboxLink.ms + ')' : '' %><% } else { %><span class="badge badge-off"><%= t('not found') %></span><% } %>
+            <div class="pl-now"><a href="/energy"><%= t('the Wallbox meter is set under Meters') %></a></div></td><td><span class="hint" style="margin:0;">—</span></td></tr>
+        <% [['setpoint', t('Charging power (kW, 0 = stop)'), cfg.vi_setpoint, t('LoxSuite laadvermogen'), false], ['enable', t('Charging allowed (1/0)'), cfg.vi_enable, t('LoxSuite laden'), true]].forEach(([k, label, vi, ph, canOff]) => { const via = cfg[k + '_via'] || 'vi'; %>
+        <tr data-out="<%= k %>"><td><strong><%= label %></strong><% if (k === 'enable') { %><div class="pl-now"><%= t('optional: 1 while it wants to charge, 0 to stop') %></div><% } %></td><td><span class="hint" style="margin:0;">—</span></td>
+          <td><select name="<%= k %>_via" data-via>
+              <option value="vi" <%= via === 'vi' ? 'selected' : '' %>><%= t('Virtual input') %></option>
+              <% if (cfg[k + '_action']) { %><option value="direct" <%= via === 'direct' ? 'selected' : '' %>><%= t('Direct:') %> <%= cfg[k + '_name'] || cfg[k + '_action'] %></option><% } %>
+              <option value="__pick"><%= t('Other Loxone object (direct)…') %></option>
+              <% if (canOff) { %><option value="off" <%= via === 'off' ? 'selected' : '' %>><%= t('Off') %></option><% } %>
+            </select>
+            <input type="text" name="vi_<%= k %>" value="<%= vi %>" placeholder="<%= ph %>" data-vi style="margin-top:0.25rem;<%= via === 'vi' ? '' : ' display:none;' %>">
+            <input type="text" data-pick list="pl-actions" placeholder="<%= t('search a Loxone control…') %>" style="display:none; margin-top:0.25rem;">
+            <input type="hidden" name="<%= k %>_action" value="<%= cfg[k + '_action'] || '' %>"><input type="hidden" name="<%= k %>_name" value="<%= cfg[k + '_name'] || '' %>"><input type="hidden" name="<%= k %>_ms" value="<%= cfg[k + '_ms'] || '' %>">
+          </td></tr>
+        <% }) %>
+      </tbody></table></div>
+      <datalist id="pl-actions"></datalist>
+      <details class="mm-detail" style="margin-top:0.5rem;"><summary class="mm-sum"><%= t('Wiring in Loxone Config') %> <%= t('(Wallbox block):') %></summary>
+      <ol class="pl-steps">
         <li><%= t('Create the virtual inputs on the Miniserver LoxSuite sends to') %><% if (miniservers.length > 1) { %> <%= t('(chosen above)') %><% } %> <%= t('— in a gateway/client project that is usually the gateway; the Wallbox block may sit on a client, Loxone Config links across.') %></li>
         <li><%= t('Virtual input (analog, kW) with the power name above → input') %> <strong><%= t('Lm1') %></strong> (<em><%= t('Limit charging mode 1') %></em><%= t('). Mode 1 then becomes the mode "set by logic"; LoxSuite sends 0 to stop and otherwise a value between the block\'s min and max.') %></li>
         <li><%= t('Optional: virtual input (digital) with the "charging allowed" name → input') %> <strong><%= t('Ec') %></strong> (<em><%= t('Enable charging') %></em><%= t('). LoxSuite keeps it at 1 while it wants to charge and 0 to stop (a falling edge stops the session\'s charging). Note: once Ec is wired, charging needs LoxSuite (or other logic) to set it — leave it unwired until Output is') %> <em><%= t('Live') %></em> <%= t('and tested.') %></li>
         <li><%= t('Parameter') %> <strong><%= t('Muv') %></strong> (<em><%= t('Mode after unplugging vehicle') %></em>) = <strong>1</strong><%= t(', so every new session starts in the LoxSuite-controlled mode. With 0 the Wallbox keeps the last mode, e.g. "Max power", and charges straight away.') %></li>
         <li><%= t('Save to the Miniserver, keep Output on') %> <em><%= t('Advise') %></em><%= t(', and test with') %> <em><%= t('Send test value') %></em> <%= t('while no car is connected: the value of mode 1 in the Loxone app should follow it.') %></li>
-      </ol>
+        <li><%= t('Or, instead of virtual inputs: send straight to a Loxone object (Direct) — e.g. an analog virtual input that already exists, or your own logic block.') %></li>
+      </ol></details>
       <p class="hint" style="margin:0.3rem 0 0;"><%= t('Every value sent and what the Wallbox and the car did with it is recorded in the') %>
         <a href="/planner/log"><%= t('Charge log') %></a><%= t(', with automatic checks per session — test whenever it suits you and look later. LoxSuite writes the power on every change and at least every 5 minutes; it never controls the Wallbox directly, only through these virtual inputs.') %>
       </p>
@@ -499,4 +517,40 @@
 })();
 </script>
 
+
+<script>
+(function () {
+  var rows = document.querySelectorAll('tr[data-out]');
+  if (!rows.length) return;
+  var objects = null;
+  function load() { if (objects) return Promise.resolve(objects); return fetch('/planner/objects.json').then(function (r) { return r.json(); }).then(function (j) { objects = (j.objects || []).filter(function (o) { return o.action; }); var dl = document.getElementById('pl-actions'); dl.innerHTML = objects.map(function (o) { return '<option value="' + (o.name + (o.room ? ' · ' + o.room : '') + ' [' + o.type + (o.msName ? ' · ' + o.msName : '') + ']').replace(/"/g, '&quot;') + '">'; }).join(''); return objects; }); }
+  function labelOf(o) { return o.name + (o.room ? ' · ' + o.room : '') + ' [' + o.type + (o.msName ? ' · ' + o.msName : '') + ']'; }
+  rows.forEach(function (tr) {
+    var sel = tr.querySelector('[data-via]'), vi = tr.querySelector('[data-vi]'), pick = tr.querySelector('[data-pick]');
+    var k = tr.getAttribute('data-out');
+    var hidden = function (n) { return tr.querySelector('[name="' + k + '_' + n + '"]'); };
+    sel.addEventListener('change', function () {
+      vi.style.display = sel.value === 'vi' ? '' : 'none';
+      pick.style.display = sel.value === '__pick' ? '' : 'none';
+      if (sel.value === '__pick') load();
+    });
+    pick.addEventListener('change', function () {
+      var o = (objects || []).find(function (x) { return labelOf(x) === pick.value; });
+      if (!o) return;
+      hidden('action').value = o.action; hidden('name').value = o.name; hidden('ms').value = o.ms;
+      var opt = sel.querySelector('option[value="direct"]');
+      if (!opt) { opt = document.createElement('option'); opt.value = 'direct'; sel.insertBefore(opt, sel.querySelector('option[value="__pick"]')); }
+      opt.textContent = <%- JSON.stringify(t('Direct:')) %> + ' ' + o.name; sel.value = 'direct'; pick.style.display = 'none';
+    });
+  });
+})();
+</script>
+
+<style>
+  .pl-link { width:100%; border-collapse:collapse; } .pl-link th { text-align:left; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.03em; color:var(--text-muted); padding:0.4rem 0.5rem; border-bottom:1px solid var(--border); }
+  .pl-link td { padding:0.55rem 0.5rem; border-bottom:1px solid var(--border); vertical-align:top; } .pl-link td:first-child { width:32%; }
+  .pl-now { font-size:0.8rem; color:var(--text-muted); margin-top:0.15rem; }
+  .pl-steps { margin:0.4rem 0 0.2rem 1.2rem; padding:0; font-size:0.88rem; line-height:1.55; }
+  .mm-detail > summary { cursor:pointer; } .mm-sum { font-size:0.85rem; color:var(--text-muted); }
+</style>
 <%- include('partials/foot') %>
