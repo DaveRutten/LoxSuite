@@ -157,3 +157,17 @@ test('the house as a battery: a little warmer on solar (cooler when cooling), mo
   assert.equal(rw.solarShift(hours, { cooling: true, boostC: 0.6 })[2].targetC, 19.4);
   assert.deepEqual(rw.solarShift(hours, { boostC: 0 }), hours);
 });
+
+test('measured SCOP: minutes without electricity and heat while standing still do not inflate it', () => {
+  const dayOf = () => '2026-10-01';
+  const s = [];
+  // 2 h running: 1 kW in, 4 kW out
+  for (let i = 0; i < 120; i++) s.push({ ms: i * 60000, elecKw: 1, heatKw: 4 });
+  // 4 h the electric power unknown (not read), the heat meter still sees 3 kW
+  for (let i = 0; i < 240; i++) s.push({ ms: (120 + i) * 60000, elecKw: null, heatKw: 3 });
+  // 6 h standing still, the floor circuit pumping: 0.02 kW in, the heat meter shows 1 kW
+  for (let i = 0; i < 360; i++) s.push({ ms: (360 + i) * 60000, elecKw: 0.02, heatKw: 1 });
+  const days = hw.dailyEnergy(s, dayOf);
+  const r = hw.scop(days);
+  assert.ok(r.scop >= 3.5 && r.scop <= 4.5, `SCOP ${r.scop} should be about 4, the old count gave ${((2 * 4 + 4 * 3 + 6 * 1) / (2 + 0.12)).toFixed(1)}`);
+});

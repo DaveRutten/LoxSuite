@@ -12,6 +12,89 @@
   <div id="en-live" class="ls-tiles"><p class="hint" style="margin:0;"><%= t('Loading…') %></p></div>
 </div>
 
+<% if (own) { const T = own.totals; const pct = (x) => x === null || x === undefined ? '—' : Math.round(x * 100) + '%'; const kwh = (x) => String(x).replace('.', ','); %>
+<div class="card" id="own-energy">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+    <h2 class="en-h" style="margin:0;"><%- enIcon('sun', 'var(--en-solar)') %><%= t('Own energy') %></h2>
+    <div class="segmented own-period" role="group" aria-label="<%= t('Period') %>">
+      <% [[7, t('7 days')], [30, t('30 days')], [90, t('90 days')], [365, t('year')]].forEach(([d, l]) => { %>
+        <a href="/energy?su=<%= d %>#own-energy" class="<%= suDays === d ? 'on' : '' %>"><%= l %></a>
+      <% }) %>
+    </div>
+  </div>
+  <% if (!own.hasGrid || !own.hasSolar) { %>
+    <p class="hint" style="margin:0.6rem 0 0;"><%= t('Choose a grid meter and a solar meter below to see how much of your own solar power you use.') %></p>
+  <% } else if (!T.days) { %>
+    <p class="hint" style="margin:0.6rem 0 0;"><%= t('No hours stored for this period yet.') %></p>
+  <% } else { %>
+    <div class="ls-tiles" style="margin-top:0.7rem;">
+      <div class="ls-tile"><div class="ls-tile-label"><%= t('Used yourself') %></div><div class="ls-tile-value"><%= pct(T.selfRate) %></div>
+        <div class="ls-tile-sub"><%= t('{a} of {b} kWh solar', { a: kwh(T.selfKwh), b: kwh(T.pvKwh) }) %></div></div>
+      <div class="ls-tile"><div class="ls-tile-label"><%= t('Self-sufficient') %></div><div class="ls-tile-value"><%= pct(T.autarky) %></div>
+        <div class="ls-tile-sub"><%= t('of the {a} kWh you used came from your panels', { a: kwh(T.useKwh) }) %></div></div>
+      <div class="ls-tile"><div class="ls-tile-label"><%= t('To the grid') %></div><div class="ls-tile-value"><%= kwh(T.exportKwh) %> <small>kWh</small></div>
+        <div class="ls-tile-sub"><%= t('from the grid {a} kWh', { a: kwh(T.importKwh) }) %></div></div>
+      <% if (T.carKwh > 0.5) { %>
+      <div class="ls-tile"><div class="ls-tile-label"><%= t('Car on own solar') %></div><div class="ls-tile-value"><%= pct(T.carSolarRate) %></div>
+        <div class="ls-tile-sub"><%= t('{a} of {b} kWh charged', { a: kwh(T.carSolarKwh), b: kwh(T.carKwh) }) %></div></div>
+      <% } %>
+      <div class="ls-tile"><div class="ls-tile-label"><%= t('House on own solar') %></div><div class="ls-tile-value"><%= kwh(T.houseSolarKwh) %> <small>kWh</small></div>
+        <div class="ls-tile-sub"><%= t('of {a} kWh', { a: kwh(T.houseKwh) }) %></div></div>
+    </div>
+    <div id="own-chart" style="margin-top:0.8rem;"></div>
+    <div class="hint" style="margin:0.2rem 0 0;" id="own-legend"></div>
+    <h3 class="subhead" style="margin-top:1rem;"><%= t('How to use more of it yourself') %></h3>
+    <% if (!own.suggestions.length) { %>
+      <p class="hint" style="margin:0;"><%= t('Nothing stands out in this period — little goes to the grid, or there is not enough data yet.') %></p>
+    <% } else { %>
+      <div class="own-tips">
+        <% own.suggestions.forEach(s => { %>
+          <div class="own-tip"><%- enIcon(s.icon || 'bulb', 'var(--en-solar)') %><div>
+            <%= t(s.t, Object.fromEntries(Object.entries(s.p || {}).map(([k, v]) => [k, typeof v === 'number' ? kwh(v) : v]))) %>
+            <% if (s.link) { %> <a href="<%= s.link %>"><%= t('open') %> &rarr;</a><% } %>
+          </div></div>
+        <% }) %>
+      </div>
+    <% } %>
+  <% } %>
+</div>
+<script>
+(function () {
+  var el = document.getElementById('own-chart');
+  if (!el || !window.LsChart) return;
+  var days = <%- JSON.stringify(own.days || []).replace(/</g, '\\u003c') %>;
+  if (!days.length) return;
+  var L = <%- JSON.stringify({ self: t('used yourself'), exp: t('to the grid'), imp: t('from the grid') }) %>;
+  function draw() {
+    var W = window.lsChartW ? lsChartW(el, 700) : (el.clientWidth || 700), H = 150, top = 8, bottom = 22, left = 4, right = 4;
+    var n = days.length, slot = (W - left - right) / n, bw = Math.max(2, Math.min(28, slot * 0.66));
+    var max = Math.max.apply(null, days.map(function (d) { return Math.max(d.self + d.exp, d.imp); }).concat([1]));
+    var Y = function (v) { return (H - top - bottom) * v / max; };
+    var x0 = function (i) { return left + i * slot + (slot - bw) / 2; };
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" role="img">';
+    var base = H - bottom;
+    days.forEach(function (d, i) {
+      var hs = Y(d.self), he = Y(d.exp);
+      svg += LsChart.col(x0(i), base - hs, bw, hs, { r: he > 0.5 ? 0 : 4, color: 'var(--en-solar)' });
+      if (he > 0.5) svg += LsChart.col(x0(i), base - hs - he, bw, he, { color: 'var(--en-export)', opacity: 0.75 });
+      var hi = Y(d.imp);
+      if (hi > 0.5) svg += '<rect x="' + (x0(i) + bw * 0.3) + '" y="' + (base - hi) + '" width="' + (bw * 0.4) + '" height="1.6" style="fill:var(--en-import)"/>';
+      if (n <= 31 && (n <= 10 || i % Math.ceil(n / 10) === 0)) svg += '<text x="' + (x0(i) + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">' + d.day.slice(8) + '</text>';
+    });
+    svg += '</svg>';
+    el.innerHTML = svg;
+    LsChart.hover(el, { W: W, top: top, bottom: base, n: n, x: function (i) { return x0(i) + bw / 2; },
+      title: function (i) { return days[i].day; },
+      rows: function (i) { var d = days[i]; return [[L.self, d.self.toFixed(1) + ' kWh', 'var(--en-solar)', 'col'], [L.exp, d.exp.toFixed(1) + ' kWh', 'var(--en-export)', 'col'], [L.imp, d.imp.toFixed(1) + ' kWh', 'var(--en-import)', 'line']]; } });
+  }
+  draw();
+  var lg = document.getElementById('own-legend');
+  if (lg && LsChart.key) lg.innerHTML = LsChart.key('var(--en-solar)', 'col') + ' ' + L.self + ' &nbsp; ' + LsChart.key('var(--en-export)', 'col') + ' ' + L.exp + ' &nbsp; ' + LsChart.key('var(--en-import)', 'line') + ' ' + L.imp;
+  if (window.lsOnResize) lsOnResize(draw);
+})();
+</script>
+<% } %>
+
 <div class="card">
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
     <h2 class="en-h" style="margin:0;"><%- enIcon('chart', 'var(--en-price)') %><%= t('Per hour') %></h2>

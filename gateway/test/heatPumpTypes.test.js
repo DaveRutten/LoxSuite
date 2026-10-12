@@ -125,3 +125,10 @@ test('heat meter flow unit automatic: 19 is l/min (Loxone scaled 3600 -> 60), 11
   assert.equal(hp.heatFromMeter({ ...v, heatMeterFlowRate: 19 }), 6.89);
   assert.equal(hp.heatFromMeter({ ...v, heatMeterFlowRate: 1140 }), 6.89);
 });
+
+test('a heat meter only counts while the heat pump runs', () => {
+  const still = hp.interpret({ heatMeterPower: 1.2, compressorHz: 0, electricPower: 0.02, valveDhw: 0 });
+  assert.equal(still.thermalKw, 0, 'floor circuit pumping, compressor off: no new heat');
+  const run = hp.interpret({ heatMeterPower: 4.1, compressorHz: 40, electricPower: 1.1, valveDhw: 0 });
+  assert.equal(run.thermalKw, 4.1);
+});

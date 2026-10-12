@@ -77,7 +77,9 @@ async function saveConfig(kind, c) {
 // Heat and electricity per day, kept a year (the minute samples only 60 days): stored days, with the days
 // still in the samples recomputed from them. For the measured SCOP.
 async function energyDays(localOf, nowMs = Date.now()) {
-  if (!rt.days) rt.days = await settings.get('energy_hp_days', {}).catch(() => ({}));
+  // v2 (0.62): days counted without minutes lacking electricity and heat while standing still; the
+  // old store had both and gave a SCOP of 10+, so it is not read any more
+  if (!rt.days) rt.days = await settings.get('energy_hp_days_v2', {}).catch(() => ({}));
   // the local date per hour, not per minute sample: localOf formats with the time zone and is slow
   const dayCache = new Map();
   const dayOf = (ms) => { const h = Math.floor(ms / HOUR); let d = dayCache.get(h); if (d === undefined) { d = localOf(h * HOUR).day; dayCache.set(h, d); } return d; };
@@ -85,7 +87,7 @@ async function energyDays(localOf, nowMs = Date.now()) {
   const merged = { ...rt.days, ...fresh };
   const keys = Object.keys(merged).sort().slice(-400);
   const out = Object.fromEntries(keys.map((k) => [k, merged[k]]));
-  if (nowMs - rt.daysSavedAt > HOUR) { rt.daysSavedAt = nowMs; rt.days = out; settings.set('energy_hp_days', out).catch(() => {}); }
+  if (nowMs - rt.daysSavedAt > HOUR) { rt.daysSavedAt = nowMs; rt.days = out; settings.set('energy_hp_days_v2', out).catch(() => {}); }
   return out;
 }
 
@@ -635,7 +637,9 @@ async function importStatistics(kind, { days = 14, callTool = null, nowMs = Date
       if (Number.isFinite(x.tankTemp)) tank.push({ ms: x.ms, temp: x.tankTemp, heating: heatingTank, ...(Number.isFinite(x.dhwPipeTemp) ? { pipe: x.dhwPipeTemp } : {}) });
       if (Number.isFinite(x.outdoorTemp)) {
         const meterKw = Number.isFinite(x.heatMeterPower) ? x.heatMeterPower : hp.heatFromMeter(x, r.cfg.heat_meter_flow_unit || 'auto');
-        const heatKw = Number.isFinite(meterKw) && x.valveDhw !== 1 ? meterKw : x.thermalPower;
+        // the heat meter only while the unit runs (see heatPumpTypes.interpret)
+        const producing = (x.compressorHz || 0) > 0 || x.running === 1 || (Number.isFinite(x.electricPower) && x.electricPower > 0.2);
+        const heatKw = Number.isFinite(meterKw) && x.valveDhw !== 1 ? (producing ? meterKw : 0) : x.thermalPower;
         weather.push({ ms: x.ms, outdoorC: x.outdoorTemp, rh: x.outdoorRh ?? null, defrost: x.defrost === 2, elecKw: x.electricPower ?? null, heatKw: heatKw ?? null, step: Number.isFinite(x.powerStep) ? x.powerStep : hw.stepOf(x.powerLimit1 === 1, x.powerLimit2 === 1), ntc: Number.isFinite(x.ntcMode) ? x.ntcMode : 0 });
         if (Number.isFinite(x.roomTemp)) room.push({ ms: x.ms, roomC: x.roomTemp, outdoorC: x.outdoorTemp, heating: (x.compressorHz || 0) > 0 && x.valveDhw !== 1 && x.defrost !== 2, ...(Number.isFinite(x.roomTarget) ? { targetC: x.roomTarget } : {}) });
         tune.push({ ms: x.ms, running: (x.compressorHz || 0) > 0 && x.valveDhw !== 1, defrost: x.defrost === 2, elecKw: x.electricPower ?? null, heatKw: heatKw ?? null, outdoorC: x.outdoorTemp, rh: x.outdoorRh ?? null, flowC: Number.isFinite(x.logicFlowC) ? x.logicFlowC : x.heatingMode === 1 ? (x.flowSetpoint ?? x.roomSetpoint ?? null) : (x.flowSetpoint ?? null), step: Number.isFinite(x.powerStep) ? x.powerStep : hw.stepOf(x.powerLimit1 === 1, x.powerLimit2 === 1), ntc: Number.isFinite(x.ntcMode) ? x.ntcMode : 0 });
@@ -663,7 +667,7 @@ async function forget(series) {
   if (!SERIES.includes(series)) throw new Error(`unknown series ${series}`);
   rt[series] = [];
   await db.prepare('DELETE FROM em_samples WHERE series = ?').run(series).catch(() => {});
-  if (series === 'weather') { rt.days = {}; rt.report = null; await settings.set('energy_hp_days', {}); }
+  if (series === 'weather') { rt.days = {}; rt.report = null; await settings.set('energy_hp_days_v2', {}); }
   statusMemo.delete('heatpump');
   return true;
 }

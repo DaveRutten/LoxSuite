@@ -86,15 +86,21 @@ function learnSteps(samples, { minMinutes = 60 } = {}) {
 function costPerHeat(price, exp) { return Number.isFinite(price) && exp?.cop > 0 ? r2(price / exp.cop * 100) / 100 : price; }
 
 // Pure: per day the heat delivered and the electricity used (kWh), from samples of one minute (kW).
-// dayOf(ms) -> 'YYYY-MM-DD' in local time.
+// dayOf(ms) -> 'YYYY-MM-DD' in local time. A minute without a known electric power doesn't count at all
+// (Number(null) is 0: its heat used to count against no electricity), and the heat of a minute never
+// counts for more than MAX_COP × its electricity — heat while the unit stands still (a heat meter on a
+// floor circuit that keeps pumping) was already counted when it was made.
+const MAX_COP = 7;
 function dailyEnergy(samples, dayOf) {
   const out = {};
   for (const s of samples || []) {
+    if (s.elecKw === null || s.elecKw === undefined || s.elecKw === '') continue;
     const e = Number(s.elecKw);
     if (!Number.isFinite(e) || e < 0) continue;
     const d = dayOf(s.ms);
     const g = out[d] || (out[d] = { heat: 0, elec: 0, min: 0, tSum: 0, tN: 0, eh: {} });
-    g.elec += e / 60; g.heat += Math.max(0, Number(s.heatKw) || 0) / 60; g.min += 1;
+    const heat = Math.min(Math.max(0, Number(s.heatKw) || 0), e * MAX_COP);
+    g.elec += e / 60; g.heat += heat / 60; g.min += 1;
     const h = Math.floor(s.ms / 3600000); g.eh[h] = (g.eh[h] || 0) + e / 60; // power per hour, for the costs
     if (Number.isFinite(s.outdoorC)) { g.tSum += s.outdoorC; g.tN += 1; }
   }
@@ -135,4 +141,4 @@ function monthly(days, priceAt, hoursOfDay) {
   }));
 }
 
-module.exports = { monthly, dailyEnergy, scop, SOURCES, band, tbin, defaults, learn, expect, costPerHeat, stepOf, learnSteps };
+module.exports = { MAX_COP, monthly, dailyEnergy, scop, SOURCES, band, tbin, defaults, learn, expect, costPerHeat, stepOf, learnSteps };

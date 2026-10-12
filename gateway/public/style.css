@@ -5068,3 +5068,12 @@ tr.ls-extra { display: none; }
 .veh-map-tile .en-tx { flex:1; }
 .veh-map-tile .veh-map { margin-top:0.45rem; }
 .veh-where { margin-top:0.1rem; }
+
+/* Meters > Own energy (energy.ejs): period links in the segmented style, the suggestions as a list */
+.segmented a { padding: 0.45rem 0.85rem; font-weight: 600; font-size: 0.85rem; color: inherit; text-decoration: none; }
+.segmented a + a { border-left: 1px solid var(--border); }
+.segmented a:hover:not(.on) { background: var(--surface-alt); }
+.segmented a.on { background: var(--accent); color: #fff; }
+.own-tips { display: grid; gap: 0.55rem; }
+.own-tip { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.7rem 0.85rem; border: 1px solid var(--border); border-radius: 12px; line-height: 1.45; font-size: 0.9rem; }
+.own-tip > div { min-width: 0; }

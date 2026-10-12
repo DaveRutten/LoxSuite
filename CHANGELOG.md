@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.62.0-alpha.1] - 2026-10-12
+
+### Added
+- **Own energy** (Meters, asked: "how much of my own energy do I use — and how could that be better"): per 7 / 30 /
+  90 days or a year how much of the solar power you used yourself, how self-sufficient you were, to and from the
+  grid, and how much of the car and the house ran on own solar, with a chart per day. Below it at most five
+  suggestions from your own hours: solar exported while the car was not charging, appliances and tap water outside
+  the sunny hours (with the hours that have most to spare), a home battery size from what went out by day and came
+  back in the evening, what net metering ending in 2027 costs on your export, and the base load at night.
+
+### Fixed
+- **Measured SCOP far too high (about 13)**: a minute without a known electric power counted as 0 kW while its heat
+  still counted, and a heat meter on the heating circuit kept counting while the compressor was off (the floor
+  circuit pumping with a small ΔT — heat already counted). Such minutes no longer count, and a minute's heat never
+  counts for more than 7 × its electricity. The days stored the old way are no longer read; the last 60 days are
+  recomputed from the minute samples.
+
 ## [0.61.0-alpha.1] - 2026-10-12
 
 ### Added

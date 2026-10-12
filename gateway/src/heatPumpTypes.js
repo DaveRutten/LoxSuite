@@ -44,8 +44,11 @@ function interpret(v, { electricKw = null, compressorMaxKw = 3.5, meterFlowUnit 
   // a heat meter in the heating pipe (Kamstrup …) measures the heat best — but only while the heat pump
   // heats the house: tap water bypasses it (3-way valve); then the unit's own figure, else flow × ΔT
   const meterKw = Number.isFinite(v.heatMeterPower) ? v.heatMeterPower : heatFromMeter(v, meterFlowUnit);
+  // … and only while the unit runs: with the compressor off a floor circuit that keeps pumping shows a
+  // small ΔT — heat that was already counted when it was made
   const meterCounts = Number.isFinite(meterKw) && v.valveDhw !== 1;
-  const thermalKw = meterCounts ? meterKw : (v.thermalPower ?? measuredHeat);
+  const producing = running || (Number.isFinite(elec) && elec > 0.2);
+  const thermalKw = meterCounts ? (producing ? meterKw : 0) : (v.thermalPower ?? measuredHeat);
   const cop = thermalKw !== null && thermalKw !== undefined && elec > 0.2 ? r2(thermalKw / elec) : null;
   let boost = false; let boostWhy = null;
   if (v.boosterHeater !== undefined || v.immersionHeater !== undefined || v.heatSource !== undefined) {
