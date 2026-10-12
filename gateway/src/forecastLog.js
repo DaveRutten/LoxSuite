@@ -121,6 +121,22 @@ function summarize(rows, { event = false, localHourOf = null } = {}) {
   return out;
 }
 
+// Pure: the same rows summed per local day, then compared — what "per day" really means. Per hour a
+// consumer that runs at 14:00 instead of 13:00 counts as wrong twice (relErr ≥ 1 → 0 % right) while
+// the day's amount was spot on. Only days with at least `minHours` hours compared count (a
+// consumer's day-ahead forecast only reaches as far as the known prices, so not always all 24).
+function summarizeDays(rows, localDayOf, { minHours = 12 } = {}) {
+  const by = new Map();
+  for (const r of rows) {
+    if (!Number.isFinite(r.predicted) || !Number.isFinite(r.actual)) continue;
+    const k = localDayOf(Date.parse(r.target));
+    const d = by.get(k) || { target: k, predicted: 0, actual: 0, hours: 0 };
+    d.predicted += r.predicted; d.actual += r.actual; d.hours++;
+    by.set(k, d);
+  }
+  return summarize([...by.values()].filter((d) => d.hours >= minHours));
+}
+
 function quantile(arr, q) {
   if (!arr.length) return 0;
   const a = [...arr].sort((x, y) => x - y);
@@ -137,17 +153,20 @@ async function rowsOf(kind, horizon, fromIso) {
 async function summary(nowMs = Date.now(), days = 28) {
   const { localParts } = require('./localTime');
   const localHourOf = (ms) => localParts(ms).hour;
+  const localDayOf = (ms) => { const p = localParts(ms); return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`; };
   const from = new Date(nowMs - days * DAY).toISOString();
   const out = {};
   for (const k of ['pv', 'house']) {
-    out[k] = { h1: summarize(await rowsOf(k, 'h1', from), { localHourOf }), d1: summarize(await rowsOf(k, 'd1', from), { localHourOf }) };
+    const d1Rows = await rowsOf(k, 'd1', from);
+    out[k] = { h1: summarize(await rowsOf(k, 'h1', from), { localHourOf }), d1: summarize(d1Rows, { localHourOf }), day: summarizeDays(d1Rows, localDayOf) };
   }
   const loads = await db.prepare('SELECT id, name FROM energy_loads ORDER BY priority, id').all().catch(() => []);
   out.loads = [];
   for (const l of loads) {
-    const d1 = summarize(await rowsOf(`load:${l.id}`, 'd1', from));
+    const d1Rows = await rowsOf(`load:${l.id}`, 'd1', from);
+    const d1 = summarize(d1Rows);
     const h1 = summarize(await rowsOf(`load:${l.id}`, 'h1', from));
-    if (d1.n || h1.n) out.loads.push({ id: l.id, name: l.name, d1, h1 });
+    if (d1.n || h1.n) out.loads.push({ id: l.id, name: l.name, d1, h1, day: summarizeDays(d1Rows, localDayOf) });
   }
   out.depart = summarize(await rowsOf('depart', 'event', from), { event: true });
   out.arrive = summarize(await rowsOf('arrive', 'event', from), { event: true });
@@ -193,5 +212,5 @@ async function prune(nowMs = Date.now()) {
 }
 
 module.exports = {
-  horizonFor, summarize, correctionsFrom, record, setActual, recordSlots, recordLoad, recordEvent, fillActuals, summary, corrections, resetCache, prune,
+  horizonFor, summarize, summarizeDays, correctionsFrom, record, setActual, recordSlots, recordLoad, recordEvent, fillActuals, summary, corrections, resetCache, prune,
 };

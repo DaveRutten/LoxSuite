@@ -4,6 +4,26 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.61.0-alpha.1] - 2026-10-12
+
+### Added
+- **Vehicles: three tiles per car** — its state, a small map (its own position, else home when it is home or plugged
+  in; distance from home or the place name) and charging (charging / not charging / not plugged in, charge limit,
+  total range for a plug-in hybrid, odometer). The big map under the table is gone.
+
+### Changed
+- **Smart charging chart runs at least 24 h ahead**, also when the car is needed sooner: prices, solar and the
+  expected battery after departure stay visible. The plan itself still stops at the deadline. Side effect: the
+  day-ahead solar and house forecasts are now recorded every day (they mostly fell outside the old horizon).
+
+### Fixed
+- **Learning dashboard: "0% right" for most consumers** — a day forecast was judged per hour, so a consumer that ran
+  at 14:00 instead of 13:00 counted as completely wrong while the day's amount was right. Forecast and actual are now
+  summed per day first (days with at least 12 hours compared, from 3 days on); "{n} days compared" counts days.
+- **Phone: the topbar fits the screen** — the notification and account panels hang from the topbar at full width
+  instead of running off the left edge, a notification's title, message and time are stacked again (also on
+  desktop), and the row of buttons has room above the page.
+
 ## [0.60.5-alpha.1] - 2026-10-11
 
 ### Added

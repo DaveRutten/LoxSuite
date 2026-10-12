@@ -10,16 +10,44 @@
   <% if (!vehicles.length) { %>
     <p class="hint" style="margin:0;"><%= t('No vehicles yet.') %></p>
   <% } else { %>
-    <div class="en-tiles" style="margin-bottom:0.8rem;">
-      <% vehicles.forEach(x => { const s = x.status; const r = s.reading || {}; const bad = s.health && s.health.status === 'failing';
-         const col = !x.enabled ? 'var(--text-muted)' : bad ? 'var(--en-import)' : r.plugged === true ? 'var(--en-export)' : 'var(--en-car)'; %>
+    <% /* Per car one row of tiles: its state, where it is (a small map: its own position, else home
+          when it is known to be there) and charging + odometer. */ %>
+    <% vehicles.forEach(x => { const s = x.status; const r = s.reading || {}; const bad = s.health && s.health.status === 'failing';
+       const col = !x.enabled ? 'var(--text-muted)' : bad ? 'var(--en-import)' : r.plugged === true ? 'var(--en-export)' : 'var(--en-car)';
+       const num = (v) => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
+       const hasHome = num(x.home_lat) && num(x.home_lon);
+       const hasPos = num(r.latitude) && num(r.longitude);
+       const atHome = r.home === true || r.plugged === true;
+       const pins = hasPos ? [{ lat: Number(r.latitude), lon: Number(r.longitude), label: x.name }] : (atHome && hasHome ? [{ lat: Number(x.home_lat), lon: Number(x.home_lon), label: x.name }] : []);
+       if (hasPos && hasHome && r.home === false) pins.push({ lat: Number(x.home_lat), lon: Number(x.home_lon), title: t('home'), home: true });
+       const where = atHome ? t('home') : r.home === false ? (num(r.distance_m) ? t('{0} km from home', [Number(r.distance_m) >= 10000 ? Math.round(Number(r.distance_m) / 1000) : Math.round(Number(r.distance_m) / 100) / 10]) : t('away')) : (r.location || t('location unknown')); %>
+    <div class="en-tiles veh-tiles" style="margin-bottom:0.8rem;">
       <a class="en-tile" href="/vehicles/<%= x.id %>"><%- enIcon('car', col) %><div class="en-tx">
         <div class="en-l"><%= x.name %> · <%= x.type === 'phev' ? t('Plug-in hybrid') : t('Full electric') %></div>
         <div class="en-v"><%= r.soc != null ? r.soc + '%' : '—' %><% if (r.range_km != null) { %> <small style="font-size:0.8rem; font-weight:500; color:var(--text-muted);"><%= r.range_km %> km</small><% } %></div>
         <div class="en-s"><%= r.plugged === true ? t('plugged in') : r.home === true ? t('home') : r.home === false ? t('away') : '' %><%= !x.enabled ? t('(disabled)') : bad ? ' · ' + t('source failing') : '' %><%= s.sourceUpdatedAt ? ' · ' + formatDateTime(s.sourceUpdatedAt).slice(0, 17) : '' %></div>
       </div></a>
-      <% }) %>
+      <div class="en-tile veh-map-tile">
+        <div class="en-tx">
+          <div class="en-l"><%= t('Location') %></div>
+          <div class="en-s veh-where"><%= where %><% if (r.location && hasPos && !atHome) { %> · <%= r.location %><% } %></div>
+          <% if (pins.length) { %>
+            <div id="veh-map-<%= x.id %>" class="veh-map"></div>
+            <script>window.lsMiniMap(document.getElementById('veh-map-<%= x.id %>'), <%- JSON.stringify(pins).replace(/</g, '\\u003c') %>, { height: 120 });</script>
+          <% } else { %>
+            <div class="en-s"><%= t('no position yet') %></div>
+          <% } %>
+        </div>
+      </div>
+      <a class="en-tile" href="/planner"><%- enIcon('bolt', r.charging === true ? 'var(--en-car)' : 'var(--text-muted)') %><div class="en-tx">
+        <div class="en-l"><%= t('Charging') %></div>
+        <div class="en-v"><%= r.charging === true ? t('charging') : r.plugged === true ? t('not charging') : r.plugged === false ? t('not plugged in') : '—' %></div>
+        <div class="en-s"><%= [num(r.limit_soc) ? t('charge limit {0}%', [Number(r.limit_soc)]) : null,
+          x.type === 'phev' && num(r.total_range_km) ? t('total range {0} km', [Number(r.total_range_km)]) : null,
+          num(r.odometer_km) ? t('Odometer') + ' ' + Math.round(Number(r.odometer_km)) + ' km' : null].filter(Boolean).join(' · ') %></div>
+      </div></a>
     </div>
+    <% }) %>
     <details class="mm-detail"><summary class="mm-sum"><%= t('All details') %></summary>
     <table>
       <thead><tr><th><%= t('Name') %></th><th><%= t('Type') %></th><th><%= t('Battery') %></th><th><%= t('Source') %></th><th><%= t('Now') %></th><th><%= t('Updated') %></th></tr></thead>
@@ -47,11 +75,6 @@
       </tbody>
     </table>
     </details>
-    <% const pins = vehicles.filter(x => x.enabled && x.status.reading && x.status.reading.latitude != null && x.status.reading.longitude != null).map(x => ({ lat: Number(x.status.reading.latitude), lon: Number(x.status.reading.longitude), label: x.name })); %>
-    <% if (pins.length) { %>
-      <div id="veh-map" style="margin-top:0.9rem;"></div>
-      <script>window.lsMiniMap(document.getElementById('veh-map'), <%- JSON.stringify(pins) %>, { height: 220 });</script>
-    <% } %>
   <% } %>
 </div>
 

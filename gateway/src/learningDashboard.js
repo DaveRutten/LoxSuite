@@ -38,7 +38,8 @@ async function houseTopic(learning, acc) {
   const house = await learning.learnedHouse().catch(() => null);
   const day = (house?.workday || []).reduce((a, b) => a + (b || 0), 0);
   const days = house?.days || house?.n || 0;
-  const pv = acc?.pv?.d1, hs = acc?.house?.d1;
+  // per day (summed), not per hour: these are day amounts — see forecastLog.summarizeDays
+  const pv = acc?.pv?.day, hs = acc?.house?.day;
   const items = [
     { key: 'house.kwhDay', label: 'Usual use per workday', value: day ? { n: r1(day), d: 1, u: 'kWh' } : null, sub: '', conf: clamp01(days / 28) },
     { key: 'house.pvAcc', label: 'Solar forecast', value: accuracyOf(pv) === null ? null : { n: Math.round(accuracyOf(pv) * 100), u: '%' }, sub: pv?.n ? { t: '{n} days compared', p: { n: pv.n } } : { t: 'not compared yet', p: {} }, conf: clamp01((pv?.n || 0) / 14) },
@@ -68,11 +69,11 @@ async function loadsTopic(em, acc) {
       key: `load.${l.id}.kwhDay`, label: l.name, value: fin(lr.kwhPerDay) ? { n: r1(lr.kwhPerDay), d: 1, u: 'kWh/d' } : null,
       // several short parts, each translated on its own
       sub: { parts: [pats ? { t: '{n} patterns', p: { n: pats } } : null, sb.learned ? { t: 'standby {w} W', p: { w: Math.round(sb.standbyKw * 1000) } } : null,
-        lr.runStats?.runs ? { t: '{r}× a day', p: { r: lr.runStats.perDay } } : null, accuracyOf(a?.d1) !== null ? { t: 'forecast {a}% right', p: { a: Math.round(accuracyOf(a.d1) * 100) } } : null].filter(Boolean) },
+        lr.runStats?.runs ? { t: '{r}× a day', p: { r: lr.runStats.perDay } } : null, accuracyOf(a?.day) !== null ? { t: 'forecast {a}% right', p: { a: Math.round(accuracyOf(a.day) * 100) } } : null].filter(Boolean) },
       conf, standbyW: sb.learned ? Math.round(sb.standbyKw * 1000) : null, anomalies: (lr.anomalies || []).length, link: `/energy-manager/loads/${l.id}`,
     });
   }
-  const accs = (acc?.loads || []).map((x) => accuracyOf(x.d1)).filter((x) => x !== null);
+  const accs = (acc?.loads || []).map((x) => accuracyOf(x.day)).filter((x) => x !== null);
   const anomalies = items.reduce((a, x) => a + (x.anomalies || 0), 0);
   return topic('loads', 'Consumers', 'gauge', 'var(--accent)', {
     headline: loads.length ? { t: anomalies ? '{n} consumers · {a} out of the ordinary' : '{n} consumers', p: { n: loads.length, a: anomalies } } : { t: 'no consumers yet', p: {} },
@@ -114,15 +115,15 @@ async function heatpumpTopic(mods) {
 async function solarTopic(acc) {
   const pv = acc?.pv || {};
   const c = acc?.corrections || {};
-  const a1 = accuracyOf(pv.h1), ad = accuracyOf(pv.d1);
+  const a1 = accuracyOf(pv.h1), ad = accuracyOf(pv.day);
   const items = [
-    { key: 'pv.d1', label: 'Forecast for the day', value: ad === null ? null : { n: Math.round(ad * 100), u: '%' }, sub: pv.d1?.n ? { t: '{n} days compared', p: { n: pv.d1.n } } : { t: 'not compared yet', p: {} }, conf: clamp01((pv.d1?.n || 0) / 14) },
+    { key: 'pv.d1', label: 'Forecast for the day', value: ad === null ? null : { n: Math.round(ad * 100), u: '%' }, sub: pv.day?.n ? { t: '{n} days compared', p: { n: pv.day.n } } : { t: 'not compared yet', p: {} }, conf: clamp01((pv.day?.n || 0) / 14) },
     { key: 'pv.h1', label: 'Forecast for the next hour', value: a1 === null ? null : { n: Math.round(a1 * 100), u: '%' }, sub: pv.h1?.n ? { t: '{n} hours compared', p: { n: pv.h1.n } } : '', conf: clamp01((pv.h1?.n || 0) / 200) },
-    { key: 'pv.factor', label: 'Correction it applies', value: fin(pv.d1?.factor) ? { n: r2(pv.d1.factor), d: 2, pre: '× ' } : null, sub: { t: 'actual against forecast', p: {} }, conf: clamp01((pv.d1?.n || 0) / 14) },
+    { key: 'pv.factor', label: 'Correction it applies', value: fin(pv.d1?.factor) ? { n: r2(pv.d1.factor), d: 2, pre: '× ' } : null, sub: { t: 'actual against forecast', p: {} }, conf: clamp01((pv.day?.n || 0) / 14) },
   ];
   return topic('solar', 'Solar forecast', 'sun', 'var(--en-solar)', {
     headline: ad !== null ? { t: 'the day forecast is {p}% right', p: { p: Math.round(ad * 100) } } : { t: 'comparing forecast and actual', p: {} },
-    conf: clamp01((pv.d1?.n || 0) / 14), accuracy: ad, accuracyNote: ad !== null ? { t: 'over the last {n} days', p: { n: pv.d1.n } } : '',
+    conf: clamp01((pv.day?.n || 0) / 14), accuracy: ad, accuracyNote: ad !== null ? { t: 'over the last {n} days', p: { n: pv.day.n } } : '',
     items, link: '/learned#solar',
   });
 }

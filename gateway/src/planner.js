@@ -940,12 +940,15 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   const target = await computeTarget(nowMs, wb);
   const until = target.readyAtMs || nowMs + 24 * 3600000;
   const split = target.split || null;
-  const horizon = split ? Math.max(until, split.backAtMs + 24 * 3600000) : until;
-  let slots = await buildSlots(nowMs, Math.max(horizon, nowMs + 3600000));
+  // The slots (and so the chart) run at least 24 h ahead, also when the car is needed sooner: the
+  // plan itself still stops at the deadline (makePlan cuts every slot at readyAtMs), but the prices,
+  // solar and the expected battery after departure stay visible instead of the chart ending there.
+  const horizon = Math.max(split ? Math.max(until, split.backAtMs + 24 * 3600000) : until, nowMs + 24 * 3600000);
+  let slots = await buildSlots(nowMs, horizon);
   if (slots.priceGapFrom !== null && slots.priceGapFrom !== undefined && nowMs - (rt.gapRefreshAt || 0) > 30 * 60000) {
     rt.gapRefreshAt = nowMs;
     const ok = await require('./prices').refreshPrices(nowMs).then(() => true).catch(() => false);
-    if (ok) slots = await buildSlots(nowMs, Math.max(horizon, nowMs + 3600000));
+    if (ok) slots = await buildSlots(nowMs, horizon);
   }
   const priceGapFrom = slots.priceGapFrom ?? null;
   // write down what is expected, and fill in what really happened (how good the predictions are)

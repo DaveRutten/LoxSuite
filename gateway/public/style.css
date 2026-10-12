@@ -1150,6 +1150,7 @@ button:not(.icon-btn):not(.notification-center-btn):not(.topbar-support-btn):not
    sibling — see .notification-center-dismiss below) when this event has a source page to jump
    to. Plain block, no link styling, so a clickable item looks identical to a non-clickable one
    apart from the cursor and a slight hover tint. */
+.notification-center-panel .notification-center-item-link { display: block; }
 .notification-center-item-link { display: block; color: inherit; text-decoration: none; margin: -0.1rem -0.3rem; padding: 0.1rem 0.3rem; border-radius: var(--radius); }
 .notification-center-item-link:hover { background: var(--surface-alt); }
 
@@ -4583,6 +4584,25 @@ body.no-scroll { overflow: hidden; }
      reachable instead of running off the right edge. */
   .topbar-right { margin-left: auto; flex-shrink: 1; flex-wrap: wrap; justify-content: flex-end; }
   .topbar h1 { font-size: 1.15rem; margin-bottom: 0.85rem; }
+  /* The controls row (hints, support, bell, account) wraps under the title on a phone and used to
+     sit flush on the first card below it. Padding under the row instead of under the title. */
+  .topbar { padding-bottom: 1rem; row-gap: 0.6rem; }
+  .topbar-title, .topbar h1 { margin-bottom: 0; }
+  .topbar-right { gap: 0.5rem; }
+  /* The bell and account popovers were anchored to their own button (right: 0) with a 20rem
+     minimum width, so on a phone they ran off the left edge. Here they hang from the sticky topbar
+     itself (its own containing block once the wrappers are static) at full width minus a margin. */
+  .notification-center, .account-menu { position: static; }
+  .account-menu-panel, .notification-center-panel {
+    left: 0.75rem;
+    right: 0.75rem;
+    top: calc(100% - 0.4rem);
+    min-width: 0;
+    max-width: none;
+    max-height: calc(100dvh - 12rem);
+    overflow-y: auto;
+  }
+  .account-menu-panel:not(.notification-center-panel) { left: auto; min-width: 14rem; }
 
   main { padding: 0 1rem 1.5rem; }
 
@@ -5041,3 +5061,10 @@ tr.ls-extra { display: none; }
 /* shared with the energy pages: a short muted line, and a folded "details" block */
 .mm-sum { font-size:0.85rem; color:var(--text-muted); }
 .mm-detail { margin-top:0.5rem; } .mm-detail > summary { cursor:pointer; margin:0; }
+
+/* Vehicles: per car its state, a small map and charging side by side (vehicles.ejs) */
+.veh-tiles { grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); }
+.veh-map-tile { padding-bottom:0.75rem; }
+.veh-map-tile .en-tx { flex:1; }
+.veh-map-tile .veh-map { margin-top:0.45rem; }
+.veh-where { margin-top:0.1rem; }

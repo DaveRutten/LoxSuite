@@ -4984,5 +4984,11 @@
   "Topics seen": "Topics gezien",
   "In use": "In gebruik",
   "monitored, mapped or on a dashboard": "gemonitord, gekoppeld of op een dashboard",
-  "Mapped to Loxone": "Gekoppeld aan Loxone"
+  "Mapped to Loxone": "Gekoppeld aan Loxone",
+  "Location": "Locatie",
+  "no position yet": "nog geen positie",
+  "location unknown": "locatie onbekend",
+  "{0} km from home": "{0} km van huis",
+  "charge limit {0}%": "laadlimiet {0}%",
+  "total range {0} km": "totale actieradius {0} km"
 }
