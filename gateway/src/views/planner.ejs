@@ -148,7 +148,7 @@
           ? tile('Needs before leaving', nf(p.split.mustKwh, 1) + ' <small>kWh</small>', esc(T('trip {0} kWh + reserve {1} kWh; after it is back ({2}) {3} kWh more to be full again', nf(p.split.tripKwh, 1), nf(p.split.reserveKwh, 1), dtm(p.split.backAt), nf(p.split.restKwh, 1))))
           : tile(T(/^car reports/.test(tg.needSource || '') ? 'Room in the battery' : 'To charge (estimate)'), nf(p.needKwh, 1) + ' <small>kWh</small>', parts(tg.needSource))) +
         tile('Ready by', dtm(p.readyAt), esc(tg.readySource || 'no departure known — within 24 h')) +
-        (p.arrival ? tile('Expected home', dtm(p.arrival.at), esc(p.arrival.label)) : '');
+        (p.arrival ? tile('Expected home', p.arrival.at ? dtm(p.arrival.at) : esc(T('unknown')), esc(p.arrival.label)) : '');
     }
     document.getElementById('pl-target').innerHTML = th;
     // the one-time "ready by" (the fields themselves are not redrawn, so typing is never lost)
@@ -188,10 +188,17 @@
           (p.ifNow ? '<div class="hint" style="margin:0.45rem 0 0; padding-top:0.4rem; border-top:1px dashed var(--border);">' + esc(T('If it came home now (or another car were plugged in):')) + ' ' +
             (p.ifNow.slots.length ? mergeSlots(p.ifNow.slots).map(slotText).join(' · ') + ' · ' + eur(p.ifNow.cost) : esc(T('nothing to charge'))) + '</div>' : '') +
           '</div>';
+      } else if (p.arrival && p.arrival.afterDeadline) {
+        // out until after the deadline (or nobody knows when): nothing for the car, the sun goes elsewhere
+        ph = '<p class="hint" style="margin:0;">' + esc(p.arrival.at
+          ? T('The car is out until about {0}, after it is needed ({1}): nothing is planned for it until then — the solar is free for the heat pump and other consumers. Plugging it in plans again straight away.', dtm(p.arrival.at), dtm(p.readyAt))
+          : T('The car is out and it is not known when it is back: nothing is planned for it — the solar is free for the heat pump and other consumers. Plugging it in plans again straight away.')) + '</p>' +
+          (p.ifNow ? '<p class="hint" style="margin:0.3rem 0 0;">' + esc(T('If it came home now (or another car were plugged in):')) + ' ' +
+            (p.ifNow.slots.length ? mergeSlots(p.ifNow.slots).map(slotText).join(' · ') + ' · ' + eur(p.ifNow.cost) : esc(T('nothing to charge'))) + '</p>' : '');
       } else {
         ph = '<p class="hint" style="margin:0;">' + (p.needKwh > 0 ? 'Nothing planned.' : 'Nothing to charge.') + '</p>';
       }
-      if (p.notes && p.notes.length) ph += '<p class="hint" style="margin:0.4rem 0 0; color:#b8860b;">' + p.notes.map(esc).join(' ') + '</p>';
+      if (p.notes && p.notes.length && !(p.arrival && p.arrival.afterDeadline && !p.slots.length)) ph += '<p class="hint" style="margin:0.4rem 0 0; color:#b8860b;">' + p.notes.map(esc).join(' ') + '</p>';
     }
     document.getElementById('pl-plan').innerHTML = ph;
     renderChart(p);
@@ -451,7 +458,7 @@
     var top = P.price.y, flags = [], bands = [P.price, P.charge, P.battery, P.power];
     var vline = function (x, style, w) { return bands.map(function (pn) { return '<line x1="' + f1(x) + '" y1="' + pn.y + '" x2="' + f1(x) + '" y2="' + (pn.y + pn.h) + '" style="' + style + '" stroke-width="' + (w || 1.3) + '"/>'; }).join(''); };
     var vband = function (x, w, attrs) { return bands.map(function (pn) { return '<rect x="' + f1(x) + '" y="' + pn.y + '" width="' + f1(w) + '" height="' + pn.h + '" ' + attrs + '/>'; }).join(''); };
-    if (p.arrival) {
+    if (p.arrival && p.arrival.at) {
       var ax = X(Date.parse(p.arrival.at));
       if (ax > left && ax < W - right) { svg += vband(left, ax - left, 'fill="currentColor" opacity="0.025"') + vline(ax, 'stroke:currentColor; opacity:0.3;', 1); flags.push({ x: ax, txt: T('home ~{0}', tm(p.arrival.at)), dot: 'currentColor' }); }
     }

@@ -15014,5 +15014,26 @@
   "where": [
    "src/loxoneHardware.js"
   ]
+ },
+ {
+  "key": "The car is out until about {0}, after it is needed ({1}): nothing is planned for it until then — the solar is free for the heat pump and other consumers. Plugging it in plans again straight away.",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "The car is out and it is not known when it is back: nothing is planned for it — the solar is free for the heat pump and other consumers. Plugging it in plans again straight away.",
+  "module": "charging",
+  "where": [
+   "planner (script)"
+  ]
+ },
+ {
+  "key": "away — not known when it is back",
+  "module": "charging",
+  "where": [
+   "src/planner.js"
+  ]
  }
 ]

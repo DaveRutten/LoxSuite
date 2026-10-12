@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.62.1-alpha.1] - 2026-10-12
+
+### Fixed
+- **Smart charging planned while the car was away** (asked: "why plan charging when you know it stays at the other
+  place until 16:20 — use it for the heat pump"): when the car was expected home only after the deadline, or was
+  parked somewhere else without a known return, the plan started now as if it were plugged in. Now nothing is planned
+  for it until it is expected back (or, unknown, until it is plugged in — that plans again at once); the page says so
+  and keeps *if it came home now* next to it, and the solar hours are no longer held for the car, so the energy
+  manager can use them.
+
 ## [0.62.0-alpha.1] - 2026-10-12
 
 ### Added

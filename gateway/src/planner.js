@@ -599,19 +599,18 @@ async function computeTarget(nowMs, wb) {
 
 // When the car that is out is expected home: an appointment with the car that is going on now (its
 // end + travel time), else the learned weekday pattern — the end of the last trip of the day from the
-// odometer, or the usual plug-in time from the Wallbox sessions. Null = no idea, or later than the
-// deadline (then the plan simply starts now).
+// odometer, or the usual plug-in time from the Wallbox sessions. Also when that is after the deadline:
+// then nothing can be charged before it, and the solar is free for other consumers. { at: null,
+// unknown: true } = it is parked away and nobody knows when it is back (nothing is planned; plugging in
+// plans again at once). Null = it is not known to be away (then the plan simply starts now).
 async function expectedArrival(nowMs, target, untilMs) {
   if (!target.away) return null;
   const { displayTz, localParts, localMidnight, localTimeOn } = require('./localTime');
   const tz = displayTz();
   // What the car reports now: driving -> set off + the drive home; parked away -> not before the drive.
   const live = await require('./carEta').liveArrival(target.vehicle, nowMs).catch(() => null);
-  if (live?.at) return live.at < untilMs ? live : null;
-  const notBefore = (r) => {
-    if (!r || !live?.minAt || r.at >= live.minAt) return r;
-    return live.minAt >= untilMs ? null : { ...r, at: live.minAt, label: live.label };
-  };
+  if (live?.at) return live;
+  const notBefore = (r) => (!r || !live?.minAt || r.at >= live.minAt ? r : { ...r, at: live.minAt, label: live.label });
   try {
     // the drive from home that is going on now (to an appointment, dropping off, a route): back then
     const list = await require('./agenda').tours(new Date(nowMs - 12 * 3600000).toISOString(), new Date(nowMs + 3600000).toISOString());
@@ -619,7 +618,7 @@ async function expectedArrival(nowMs, target, untilMs) {
       && (!target.vehicle || !t.vehicle_id || t.vehicle_id === target.vehicle.id));
     if (cur) {
       const at = Date.parse(cur.backAt);
-      if (at > nowMs && at < untilMs) return notBefore({ at, source: 'agenda', label: `agenda: ${cur.title}`, confidence: 'set' });
+      if (at > nowMs) return notBefore({ at, source: 'agenda', label: `agenda: ${cur.title}`, confidence: 'set' });
     }
   } catch { /* no agenda */ }
   const sessionsStats = await require('./learning').learnedDepartures(target.vehicle?.id || null).catch(() => []);
@@ -634,9 +633,10 @@ async function expectedArrival(nowMs, target, untilMs) {
     if (!pick) continue;
     const at = localTimeOn(dayMs, pick.time, tz);
     if (at <= nowMs) continue;
-    if (at >= untilMs) return null;
     return notBefore({ at, source: pick.source, label: `learned: usually home around ${pick.time} on ${WEEKDAY_NAMES[wd]}`, confidence: pick.confidence });
   }
+  // parked somewhere else (it says so itself), no idea when it is back: plan nothing for it
+  if (live?.minAt || target.reading?.home === false) return { at: null, unknown: true, source: 'unknown', label: live?.label || 'away — not known when it is back', confidence: 'none' };
   return null;
 }
 
@@ -981,18 +981,21 @@ async function recalc(nowMs = Date.now(), { force = false } = {}) {
   // The car is out: plan from the moment it is expected home; what it would do if it came home (or
   // another car were plugged in) right now is kept next to it. Plugging in always re-plans from now.
   const arrival = await expectedArrival(nowMs, target, until).catch(() => null);
-  const plan = planWithBuffer({ args: planArgs, slots, split: arrival ? null : split, untilMs: until, startMs: arrival ? arrival.at : nowMs, bufferKwh: target.bufferKwh, bufferH: Number(cfg.buffer_h) || 3, bufferKm: target.bufferKm });
+  // Out until after the deadline, or not known when it is back: nothing is planned before then (the
+  // car can't charge anyway, and the energy manager gets the solar); 'if it came home now' stays next to it.
+  const startMs = arrival ? (arrival.at ?? until) : nowMs;
+  const plan = planWithBuffer({ args: planArgs, slots, split: arrival ? null : split, untilMs: until, startMs, bufferKwh: target.bufferKwh, bufferH: Number(cfg.buffer_h) || 3, bufferKm: target.bufferKm });
   if (arrival) {
     // the expected homecoming, kept to compare with when it really plugs in (made at least 30 min before)
-    if (arrival.at - nowMs >= 30 * 60000) rt.arrivalPred = { at: arrival.at, source: arrival.source };
-    plan.arrival = { at: new Date(arrival.at).toISOString(), source: arrival.source, label: arrival.label, confidence: arrival.confidence };
+    if (arrival.at && arrival.at - nowMs >= 30 * 60000) rt.arrivalPred = { at: arrival.at, source: arrival.source };
+    plan.arrival = { at: arrival.at ? new Date(arrival.at).toISOString() : null, source: arrival.source, label: arrival.label, confidence: arrival.confidence, unknown: !!arrival.unknown, afterDeadline: !arrival.at || arrival.at >= until };
     plan.ifNow = planSummary(planWithBuffer({ args: planArgs, slots, split: null, untilMs: until, startMs: nowMs, bufferKwh: target.bufferKwh, bufferH: Number(cfg.buffer_h) || 3, bufferKm: target.bufferKm }));
   }
   plan.target = { ...target, vehicle: vehicle ? { id: vehicle.id, name: vehicle.name, type: vehicle.type } : null, reading: undefined, drive: undefined };
   plan.fuelBreakEven = fuel;
   plan.priceCap = priceCap;
   plan.slotsAll = slots;
-  plan.battery = await batteryLine(target, plan, slots, arrival ? arrival.at : nowMs).catch(() => null);
+  plan.battery = await batteryLine(target, plan, slots, arrival?.at || nowMs).catch(() => null);
   plan.chartPrices = slots.length ? await require('./prices').chartQuarters(slots[0].start, slots[slots.length - 1].end).catch(() => null) : null;
   // the quarters for the details of an hour, also when the chart shows hours
   plan.quarterPrices = !plan.chartPrices && slots.length ? await require('./prices').quartersBetween(slots[0].start, slots[slots.length - 1].end).catch(() => null) : null;
