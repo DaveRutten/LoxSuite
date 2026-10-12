@@ -26,3 +26,26 @@
   var more = document.getElementById('mobile-tabbar-more');
   if (more) more.addEventListener('click', function () { var t = document.getElementById('mobile-nav-toggle'); if (t) t.click(); });
 })();
+
+// Push: an id this device keeps for itself, sent with its subscription so a renewed subscription
+// replaces the old one instead of both getting every notification. Once a day the current
+// subscription is sent again with it (also tags subscriptions made before the id existed).
+(function () {
+  window.lsPushDeviceId = function () {
+    try {
+      var id = localStorage.getItem('ls-push-device');
+      if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)).replace(/[^\w-]/g, ''); localStorage.setItem('ls-push-device', id); }
+      return id;
+    } catch (e) { return null; }
+  };
+  try {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
+    var last = Number(localStorage.getItem('ls-push-device-sent') || 0);
+    if (Date.now() - last < 86400000) return;
+    navigator.serviceWorker.getRegistration().then(function (reg) { return reg ? reg.pushManager.getSubscription() : null; }).then(function (sub) {
+      if (!sub) return;
+      return fetch('/app/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON(), deviceId: window.lsPushDeviceId() }) })
+        .then(function (r) { if (r.ok) localStorage.setItem('ls-push-device-sent', String(Date.now())); });
+    }).catch(function () {});
+  } catch (e) { /* no storage */ }
+})();

@@ -5018,5 +5018,20 @@
   "At night the house always uses about {w} W — {k} kWh a year, and at night that never comes from your panels. Look for devices that stay on (NAS, network, standby): every 10 W less is 88 kWh a year.": "'s Nachts gebruikt het huis altijd zo'n {w} W — {k} kWh per jaar, en 's nachts komt dat nooit van je panelen. Zoek apparaten die blijven aanstaan (NAS, netwerk, stand-by): elke 10 W minder is 88 kWh per jaar.",
   "The car is out until about {0}, after it is needed ({1}): nothing is planned for it until then — the solar is free for the heat pump and other consumers. Plugging it in plans again straight away.": "De auto is weg tot ongeveer {0}, na het moment dat hij nodig is ({1}): tot dan wordt er niets voor hem gepland — de zon is vrij voor de warmtepomp en andere verbruikers. Insteken plant meteen opnieuw.",
   "The car is out and it is not known when it is back: nothing is planned for it — the solar is free for the heat pump and other consumers. Plugging it in plans again straight away.": "De auto is weg en het is niet bekend wanneer hij terug is: er wordt niets voor hem gepland — de zon is vrij voor de warmtepomp en andere verbruikers. Insteken plant meteen opnieuw.",
-  "away — not known when it is back": "weg — niet bekend wanneer hij terug is"
+  "away — not known when it is back": "weg — niet bekend wanneer hij terug is",
+  "Charging away from home": "Laden onderweg",
+  "Sessions on a charge card or a public charger, counted in with the costs above. E-Flux has no public API: export your sessions in the E-Flux dashboard (Charging sessions → Export, CSV or Excel) and import the file here — sessions already imported are skipped, so you can import the same period again. Exports of other providers work too when they have a start time and kWh.": "Sessies met een laadpas of aan een openbare laadpaal, meegeteld in de kosten hierboven. E-Flux heeft geen openbare API: exporteer je sessies in het E-Flux-dashboard (Laadsessies → Exporteren, CSV of Excel) en importeer het bestand hier — al geïmporteerde sessies worden overgeslagen, dus je kunt dezelfde periode gerust opnieuw importeren. Exports van andere aanbieders werken ook als ze een starttijd en kWh hebben.",
+  "Export file": "Exportbestand",
+  "Add a session by hand": "Een sessie met de hand toevoegen",
+  "Cost (€)": "Kosten (€)",
+  "Charged away": "Onderweg geladen",
+  "Away": "Onderweg",
+  "{n} sessions": "{n} sessies",
+  "at home {a}/kWh": "thuis {a}/kWh",
+  "No sessions away from home yet.": "Nog geen sessies onderweg.",
+  "{a} sessions added, {k} already there, {s} rows skipped.": "{a} sessies toegevoegd, {k} waren er al, {s} regels overgeslagen.",
+  "Added.": "Toegevoegd.",
+  "Choose the export file (CSV or Excel).": "Kies het exportbestand (CSV of Excel).",
+  "Fill in a date and the kWh.": "Vul een datum en de kWh in.",
+  "No columns for the start time and kWh found — is this the export of your charging sessions?": "Geen kolommen voor de starttijd en kWh gevonden — is dit de export van je laadsessies?"
 }

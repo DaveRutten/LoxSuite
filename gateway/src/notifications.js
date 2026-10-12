@@ -399,6 +399,22 @@ function subscriberTargets(rows) {
   return out;
 }
 
+// Pure, in place: drop a target whose URL is already there, and personal push targets
+// (loxsuite-push://user/<id>) when loxsuite-push://all is one of them.
+function dedupeTargets(targets) {
+  const norm = (u) => String(u || '').trim().replace(/\/+$/, '').toLowerCase();
+  const all = targets.some((t) => norm(t.url) === 'loxsuite-push://all');
+  const kept = new Set();
+  const out = targets.filter((t) => {
+    const u = norm(t.url);
+    if ((all && u.startsWith('loxsuite-push://user/')) || kept.has(u)) return false;
+    kept.add(u);
+    return true;
+  });
+  targets.splice(0, targets.length, ...out);
+  return targets;
+}
+
 // One row per logical event (not per channel/subscriber delivery below — a rule with 3 channels
 // is still one alert, not three) — the Notification Center's own persisted history, independent of
 // whether any channel is even configured or a send succeeds. See db.js's notification_events
@@ -472,6 +488,10 @@ async function fireRule(rule, rawEvent) {
   for (const subscriber of await getSubscriberChannelsForRule(rule.id)) {
     targets.push({ name: subscriber.kind === 'push' ? `${subscriber.username}'s devices (push)` : `${subscriber.username}'s notifications`, url: subscriber.url });
   }
+
+  // A push to all devices already reaches every subscriber's devices, and the same URL twice is one
+  // send (the devices themselves are deduplicated in webPush.send).
+  dedupeTargets(targets);
 
   // Detached on purpose — a slow or retrying send to one target must not hold up the others or the
   // poller that fired this rule. Delivery status on the rule row is maintained inside
@@ -977,6 +997,7 @@ async function fireCarEvent(triggerType, key, event) {
 }
 
 module.exports = {
+  dedupeTargets,
   telegramMessage,
   escapeCommonMark,
   TRIGGER_TYPES,

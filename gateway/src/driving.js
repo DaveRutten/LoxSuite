@@ -377,8 +377,16 @@ async function report(vehicle) {
   }
   const lPer100 = Number(vehicle.fuel_l_per_100km) > 0 ? Number(vehicle.fuel_l_per_100km) : (vehicle.type === 'phev' ? 6.5 : null);
   const costByMonth = new Map(cost.map((c) => [c.month, c]));
-  const totalKwh = cost.reduce((s, c) => s + c.kwh, 0);
-  const avgEurKwh = totalKwh > 0 ? cost.reduce((s, c) => s + c.eur, 0) / totalKwh : null;
+  // charging away from home (E-Flux and other cards, externalCharging.js): counted in with the costs;
+  // sessions without a car count for the only car
+  const ext = require('./externalCharging');
+  const extSessions = await ext.list(vehicle.id, { includeUnassigned: Number(carCount) <= 1 }).catch(() => []);
+  const extByMonth = ext.byMonth(extSessions, (ms) => monthOf(ms));
+  const extKnown = extSessions.filter((x) => x.cost_eur !== null && x.cost_eur !== undefined);
+  const extKwh = extKnown.reduce((s, x) => s + (Number(x.kwh) || 0), 0), extEur = extKnown.reduce((s, x) => s + Number(x.cost_eur), 0);
+  const homeKwh = cost.reduce((s, c) => s + c.kwh, 0), homeEur = cost.reduce((s, c) => s + c.eur, 0);
+  const totalKwh = homeKwh + extKwh;
+  const avgEurKwh = totalKwh > 0 ? (homeEur + extEur) / totalKwh : null;
   // Without hourly meter data: the average all-in price of the last 30 days as an estimate.
   let estEurKwh = null;
   if (avgEurKwh === null) {
@@ -391,16 +399,28 @@ async function report(vehicle) {
   let savedTotal = 0;
   const months = a.byMonth.map((m) => {
     const c = costByMonth.get(m.month) || null;
-    const eurKwh = c?.eurPerKwh ?? avgEurKwh ?? estEurKwh;
+    const x = extByMonth.get(m.month) || null;
+    // home and away together, weighed by kWh (sessions away without a cost count at the home price)
+    const homeEurKwh = c?.eurPerKwh ?? (c || !x ? (avgEurKwh ?? estEurKwh) : null);
+    const xPaidKwh = x && x.eurPerKwh !== null ? x.eur / x.eurPerKwh : 0;
+    const hk = c?.kwh || 0;
+    const eurKwh = x && xPaidKwh > 0
+      ? (hk > 0 && homeEurKwh !== null ? (hk * homeEurKwh + x.eur) / (hk + xPaidKwh) : x.eurPerKwh)
+      : homeEurKwh;
     const perKm = costPerKm({ eurPerKwh: eurKwh, kwhPerKm: m.kwhPer100 ? m.kwhPer100 / 100 : kpk, fuelEurL, lPer100km: lPer100 || 6.5 });
     const saved = perKm.elec !== null ? Math.round(m.elecKm * (compareFuelPerKm - perKm.elec) * 100) / 100 : null;
     if (saved !== null) savedTotal += saved;
     const fuelEur = lPer100 ? Math.round(m.fuelKm * fuelPerKm * 100) / 100 : null;
-    return { ...m, chargedKwh: c?.kwh ?? null, solarShare: c?.solarShare ?? null, chargeEur: c?.eur ?? null, eurPerKwh: eurKwh !== null ? Math.round(eurKwh * 1000) / 1000 : null, eurPerKwhEstimated: !c, elecEurKm: perKm.elec, fuelEurKm: r3(compareFuelPerKm), fuelEur, saved };
+    return { ...m, chargedKwh: c?.kwh ?? null, solarShare: c?.solarShare ?? null, chargeEur: c?.eur ?? null, extKwh: x?.kwh ?? null, extEur: x ? x.eur : null, extN: x?.n || 0, eurPerKwh: eurKwh !== null ? Math.round(eurKwh * 1000) / 1000 : null, eurPerKwhEstimated: !c, elecEurKm: perKm.elec, fuelEurKm: r3(compareFuelPerKm), fuelEur, saved };
   });
   return {
     vehicle: { id: vehicle.id, name: vehicle.name, type: vehicle.type, battery_kwh: vehicle.battery_kwh, kwh_per_km: vehicle.kwh_per_km, fuel_l_per_100km: lPer100, hasOdometerField: hasField(vehicle, 'odometer_km') || a.hasOdometer, hasSocField: hasField(vehicle, 'soc') || a.hasSoc },
     ...a, kwhPerKmUsed: kpk, months,
+    external: {
+      kwh: r1(extSessions.reduce((s, x) => s + (Number(x.kwh) || 0), 0)), eur: Math.round(extEur * 100) / 100, n: extSessions.length,
+      eurPerKwh: extKwh > 0 ? r3(extEur / extKwh) : null, homeEurPerKwh: homeKwh > 0 ? r3(homeEur / homeKwh) : null,
+      sessions: extSessions.slice(0, 50).map((x) => ({ id: x.id, start: x.start_at, kwh: x.kwh, eur: x.cost_eur, provider: x.provider, location: x.location, source: x.source })),
+    },
     prices: { fuelEurL, fuelPerKm: r3(compareFuelPerKm), avgEurKwh: avgEurKwh !== null ? r3(avgEurKwh) : null, estEurKwh: estEurKwh !== null ? r3(estEurKwh) : null, elecPerKm: r3((avgEurKwh ?? estEurKwh ?? 0) * kpk) || null },
     savedTotal: Math.round(savedTotal * 100) / 100,
     trips: a.trips.slice(-25).reverse(),

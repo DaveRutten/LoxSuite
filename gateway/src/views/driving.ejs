@@ -34,6 +34,30 @@
   <p class="hint" id="dr-cost-note" style="margin:0.5rem 0 0; font-size:0.8rem;"></p>
 </div>
 
+<div class="card" id="dr-ext-card">
+  <h2 style="margin-top:0;"><%= t('Charging away from home') %></h2>
+  <p class="hint" style="margin:0 0 0.6rem;"><%= t('Sessions on a charge card or a public charger, counted in with the costs above. E-Flux has no public API: export your sessions in the E-Flux dashboard (Charging sessions → Export, CSV or Excel) and import the file here — sessions already imported are skipped, so you can import the same period again. Exports of other providers work too when they have a start time and kWh.') %></p>
+  <div id="dr-ext-tiles" class="ls-tiles" style="margin-bottom:0.7rem;"></div>
+  <% if (canEdit('vehicles')) { %>
+  <div class="btn-row" style="align-items:flex-end; flex-wrap:wrap; gap:0.6rem;">
+    <div><label><%= t('Provider') %></label><input type="text" id="dr-ext-provider" value="E-Flux" style="width:9rem;"></div>
+    <div><label><%= t('Export file') %></label><input type="file" id="dr-ext-file" accept=".csv,.xlsx,text/csv"></div>
+    <button type="button" class="btn-soft" id="dr-ext-import"><%- icon('download') %> <%= t('Import') %></button>
+  </div>
+  <details style="margin-top:0.7rem;"><summary><%= t('Add a session by hand') %></summary>
+    <div class="btn-row" style="align-items:flex-end; flex-wrap:wrap; gap:0.6rem; margin-top:0.5rem;">
+      <div><label><%= t('Date') %></label><input type="date" id="dr-ext-date"></div>
+      <div><label>kWh</label><input type="text" inputmode="decimal" id="dr-ext-kwh" style="width:6rem;"></div>
+      <div><label><%= t('Cost (€)') %></label><input type="text" inputmode="decimal" id="dr-ext-cost" style="width:6rem;"></div>
+      <div><label><%= t('Location') %></label><input type="text" id="dr-ext-loc" style="width:12rem;"></div>
+      <button type="button" class="btn-add" id="dr-ext-add"><%- icon('plus') %> <%= t('Add') %></button>
+    </div>
+  </details>
+  <% } %>
+  <div id="dr-ext-msg" class="hint" style="margin-top:0.5rem;"></div>
+  <div style="overflow-x:auto; margin-top:0.4rem;"><table id="dr-ext-list"><tbody></tbody></table></div>
+</div>
+
 <div class="card">
   <h2 style="margin-top:0;"><%= t('Recent trips') %></h2>
   <div style="overflow-x:auto;"><table id="dr-trips"><tbody><tr><td class="hint"><%= t('Loading…') %></td></tr></tbody></table></div>
@@ -45,6 +69,46 @@
   function nf(v, d) { return v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
   function eur(v, d) { return v == null ? '—' : '€ ' + nf(v, d == null ? 2 : d); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+  var EXT_T = <%- JSON.stringify({ away: t('Charged away'), awayCol: t('Away'), sessions: t('{n} sessions'), home: t('at home {a}/kWh'), none: t('No sessions away from home yet.'), del: t('Remove'), imported: t('{a} sessions added, {k} already there, {s} rows skipped.'), added: t('Added.'), chooseFile: t('Choose the export file (CSV or Excel).') }) %>;
+  function fillT(s, p) { return String(s).replace(/\{(\w+)\}/g, function (m, k) { return p[k] == null ? m : p[k]; }); }
+  function renderExternal(d) {
+    var x = d.external || { n: 0, sessions: [] };
+    document.getElementById('dr-ext-tiles').innerHTML = x.n ? tile(EXT_T.away, nf(x.kwh, 0) + ' <small>kWh</small>', fillT(EXT_T.sessions, { n: x.n }) + ' · ' + eur(x.eur)) +
+      tile('€/kWh', eur(x.eurPerKwh, 3), x.homeEurPerKwh != null ? fillT(EXT_T.home, { a: eur(x.homeEurPerKwh, 3) }) : '') : '';
+    var rows = (x.sessions || []).map(function (s) {
+      var dt = new Date(s.start);
+      return '<tr><td>' + dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: '2-digit' }) + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</td><td>' + esc(s.provider || '') + '</td><td>' + esc(s.location || '') + '</td><td>' + nf(s.kwh, 1) + ' kWh</td><td>' + eur(s.eur) + '</td><td>' + (s.kwh && s.eur != null ? eur(s.eur / s.kwh, 3) + '/kWh' : '—') + '</td>' +
+        (CAN_EDIT ? '<td><button type="button" class="btn-soft" data-ext-del="' + s.id + '">' + esc(EXT_T.del) + '</button></td>' : '') + '</tr>';
+    });
+    var tb = document.getElementById('dr-ext-list');
+    tb.innerHTML = rows.length ? '<tbody>' + rows.join('') + '</tbody>' : '<tbody><tr><td class="hint">' + esc(EXT_T.none) + '</td></tr></tbody>';
+    if (rows.length > 10 && window.lsMoreRows) lsMoreRows(tb, 10);
+  }
+  var CAN_EDIT = <%- JSON.stringify(!!canEdit('vehicles')) %>;
+  function reload() { location.reload(); }
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-ext-del]');
+    if (!b) return;
+    fetch('/driving/external/' + b.getAttribute('data-ext-del') + '/delete.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(reload);
+  });
+  var imp = document.getElementById('dr-ext-import');
+  if (imp) imp.onclick = function () {
+    var f = document.getElementById('dr-ext-file').files[0], msg = document.getElementById('dr-ext-msg');
+    if (!f) { msg.textContent = EXT_T.chooseFile; return; }
+    var fd = new FormData(); fd.append('_csrf', CSRF); fd.append('vehicle', VID || ''); fd.append('provider', document.getElementById('dr-ext-provider').value || 'E-Flux'); fd.append('file', f);
+    msg.textContent = '…';
+    fetch('/driving/external/import.json', { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (d) {
+      msg.textContent = d.ok ? fillT(EXT_T.imported, { a: d.added, k: d.known, s: d.skipped }) : (d.message || 'Import failed.');
+      if (d.ok && d.added) setTimeout(reload, 1200);
+    }).catch(function (e) { msg.textContent = e.message; });
+  };
+  var add = document.getElementById('dr-ext-add');
+  if (add) add.onclick = function () {
+    var msg = document.getElementById('dr-ext-msg');
+    fetch('/driving/external.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicle: VID, date: document.getElementById('dr-ext-date').value, kwh: document.getElementById('dr-ext-kwh').value, cost: document.getElementById('dr-ext-cost').value, location: document.getElementById('dr-ext-loc').value, provider: document.getElementById('dr-ext-provider').value }) })
+      .then(function (r) { return r.json(); }).then(function (d) { msg.textContent = d.ok ? EXT_T.added : d.message; if (d.ok) setTimeout(reload, 500); });
+  };
   function monthLabel(m) { var p = m.split('-'); return new Date(+p[0], +p[1] - 1, 1).toLocaleDateString(undefined, { month: 'short', year: '2-digit' }); }
   function tile(label, value, sub, color) {
     return '<div class="ls-tile"><div class="ls-tile-label">' + label + '</div>' +
@@ -126,18 +190,21 @@
     drawCharts();
     lsOnResize(drawCharts);
 
-    var mh = '<thead><tr><th>Month</th><th>Km</th>' + (phev ? '<th>Electric</th><th>Fuel</th>' : '') + '<th>Trips</th><th>Avg trip</th><th>kWh/100 km</th><th>Charged</th><th>Solar</th><th>€/kWh</th><th>€/km elec.</th><th>€/km fuel</th><th>Saved</th></tr></thead><tbody>';
-    if (!d.months.length) mh += '<tr><td colspan="13" class="hint">No driving recorded yet.</td></tr>';
+    var mh = '<thead><tr><th>Month</th><th>Km</th>' + (phev ? '<th>Electric</th><th>Fuel</th>' : '') + '<th>Trips</th><th>Avg trip</th><th>kWh/100 km</th><th>Charged</th><th>' + EXT_T.awayCol + '</th><th>Solar</th><th>€/kWh</th><th>€/km elec.</th><th>€/km fuel</th><th>Saved</th></tr></thead><tbody>';
+    if (!d.months.length) mh += '<tr><td colspan="14" class="hint">No driving recorded yet.</td></tr>';
     d.months.slice().reverse().forEach(function (m) {
       mh += '<tr><td><strong>' + esc(monthLabel(m.month)) + '</strong></td><td>' + nf(m.km, 0) + '</td>' +
         (phev ? '<td>' + nf(m.elecKm, 0) + (m.elecShare != null ? ' <span class="hint">(' + m.elecShare + '%)</span>' : '') + '</td><td>' + nf(m.fuelKm, 0) + '</td>' : '') +
         '<td>' + m.trips + '</td><td>' + nf(m.avgTripKm, 0) + ' km</td><td>' + nf(m.kwhPer100, 1) + '</td><td>' + (m.chargedKwh != null ? nf(m.chargedKwh, 0) + ' kWh' : '—') + '</td>' +
+        '<td>' + (m.extKwh != null ? nf(m.extKwh, 0) + ' kWh' + (m.extEur ? ' <span class="hint">' + eur(m.extEur, 0) + '</span>' : '') : '—') + '</td>' +
         '<td>' + (m.solarShare != null ? m.solarShare + '%' : '—') + '</td><td>' + eur(m.eurPerKwh, 3) + (m.eurPerKwhEstimated && m.eurPerKwh != null ? '*' : '') + '</td><td>' + eur(m.elecEurKm, 3) + '</td><td>' + eur(m.fuelEurKm, 3) + '</td>' +
         '<td style="color:' + (m.saved > 0 ? 'var(--success)' : 'inherit') + ';">' + eur(m.saved, 0) + '</td></tr>';
     });
     document.getElementById('dr-months').innerHTML = mh + '</tbody>';
-    document.getElementById('dr-cost-note').innerHTML = 'Charging cost per hour from the Wallbox and grid meters: grid energy at that hour\'s all-in price, solar at its feed-in value (as in Smart charging). ' +
+    document.getElementById('dr-cost-note').innerHTML = 'Charging cost per hour from the Wallbox and grid meters: grid energy at that hour\'s all-in price, solar at its feed-in value (as in Smart charging); charging away from home at what the sessions cost. ' +
       '* = no meter data for that month, estimated from the average price. Fuel at today\'s price' + (v.fuel_l_per_100km ? ' and ' + nf(v.fuel_l_per_100km, 1) + ' l/100 km' : ', compared with a car using 6.5 l/100 km') + '.';
+
+    renderExternal(d);
 
     var th = '<thead><tr><th>Date</th><th>Duration</th><th>Km</th>' + (phev ? '<th>Electric</th><th>Fuel</th>' : '') + '<th>Battery</th><th>kWh</th><th>kWh/100 km</th></tr></thead><tbody>';
     if (!d.trips.length) th += '<tr><td colspan="8" class="hint">No trips yet &mdash; they appear once the odometer changes between readings.</td></tr>';

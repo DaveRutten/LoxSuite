@@ -69,11 +69,17 @@ function explainError(err) {
 
 async function publicKey() { return (await keys()).publicKey; }
 
-async function subscribe(userId, sub, userAgent) {
+// deviceId: kept by the browser itself (localStorage); a new endpoint of the same device replaces its
+// old row, else both stay and every notification arrives twice on that phone.
+async function subscribe(userId, sub, userAgent, deviceId = null) {
   if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) throw new Error('Invalid subscription.');
+  const dev = /^[\w-]{8,64}$/.test(String(deviceId || '')) ? String(deviceId) : null;
+  const hash = endpointHash(sub.endpoint);
+  if (dev) await db.prepare('DELETE FROM push_subscriptions WHERE device_id = ? AND endpoint_hash <> ?').run(dev, hash).catch(() => {});
   await db.upsert('push_subscriptions', {
-    user_id: userId || null, endpoint: sub.endpoint, endpoint_hash: endpointHash(sub.endpoint), keys_json: JSON.stringify(sub.keys),
+    user_id: userId || null, endpoint: sub.endpoint, endpoint_hash: hash, keys_json: JSON.stringify(sub.keys),
     user_agent: String(userAgent || '').slice(0, 200), created_at: new Date().toISOString(), last_error: null,
+    ...(dev ? { device_id: dev } : {}),
   }, ['endpoint_hash']);
 }
 
@@ -89,6 +95,19 @@ function parseTarget(url) {
 
 function isPushUrl(url) { return /^loxsuite-push:\/\//i.test(String(url || '')); }
 
+// The same message to the same device once: a rule with the channel "push to all devices" next to a
+// personal subscription with push, or two rules firing on the same event, used to send it twice.
+// Remembered per subscription for a few minutes.
+const RECENT_MS = 3 * 60000;
+const recent = new Map(); // "<subscription id>|<hash of title + body>" -> sent at (ms)
+function seenRecently(subId, payload, nowMs = Date.now()) {
+  for (const [k, at] of recent) if (nowMs - at > RECENT_MS) recent.delete(k);
+  const key = `${subId}|${crypto.createHash('sha1').update(`${payload?.title || ''}\n${payload?.body || ''}`).digest('hex')}`;
+  if (recent.has(key)) return true;
+  recent.set(key, nowMs);
+  return false;
+}
+
 // payload: { title, body, url, tag, actions: [{action, title}], data }
 async function send(target, payload, { sendImpl } = {}) {
   const webpush = require('web-push');
@@ -103,6 +122,7 @@ async function send(target, payload, { sendImpl } = {}) {
   let ok = 0;
   const errors = [];
   for (const s of subs) {
+    if (seenRecently(s.id, payload)) { ok++; continue; } // already on this device
     try {
       await doSend({ endpoint: s.endpoint, keys: JSON.parse(s.keys_json) }, JSON.stringify(payload));
       ok++;
@@ -133,4 +153,4 @@ async function listDevices() {
   return db.prepare('SELECT s.id, s.user_id, s.user_agent, s.created_at, s.last_error, u.username FROM push_subscriptions s LEFT JOIN users u ON u.id = s.user_id ORDER BY s.created_at DESC').all();
 }
 
-module.exports = { keys, publicKey, adoptOrigin, setSubject, validSubject, explainError, subjectSetting: async () => (await settings.get('push', null))?.subject || null, subscribe, unsubscribe, parseTarget, isPushUrl, send, eventToPayload, listDevices };
+module.exports = { seenRecently, _recent: recent, keys, publicKey, adoptOrigin, setSubject, validSubject, explainError, subjectSetting: async () => (await settings.get('push', null))?.subject || null, subscribe, unsubscribe, parseTarget, isPushUrl, send, eventToPayload, listDevices };

@@ -25,7 +25,7 @@ router.get('/vapid.json', asyncHandler(async (req, res) => {
 
 router.post('/subscribe', asyncHandler(async (req, res) => {
   try {
-    await webPush.subscribe(req.user?.id || req.session?.userId, req.body?.subscription, req.get('user-agent'));
+    await webPush.subscribe(req.user?.id || req.session?.userId, req.body?.subscription, req.get('user-agent'), req.body?.deviceId);
     // The https address this device uses becomes the push contact (Apple rejects a made-up one).
     const origin = req.get('origin') || (req.get('x-forwarded-proto') && req.get('x-forwarded-host') ? `${req.get('x-forwarded-proto')}://${req.get('x-forwarded-host')}` : `${req.protocol}://${req.get('host')}`);
     await webPush.adoptOrigin(origin).catch(() => {});

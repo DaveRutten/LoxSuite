@@ -15035,5 +15035,26 @@
   "where": [
    "src/planner.js"
   ]
+ },
+ {
+  "key": "Fill in a date and the kWh.",
+  "module": "vehicles",
+  "where": [
+   "src/externalCharging.js"
+  ]
+ },
+ {
+  "key": "No columns for the start time and kWh found — is this the export of your charging sessions?",
+  "module": "vehicles",
+  "where": [
+   "src/externalCharging.js"
+  ]
+ },
+ {
+  "key": "Choose the export file (CSV or Excel).",
+  "module": "vehicles",
+  "where": [
+   "src/externalCharging.js"
+  ]
  }
 ]

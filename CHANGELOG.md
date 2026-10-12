@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.63.0-alpha.1] - 2026-10-12
+
+### Added
+- **Charging away from home** (Driving & costs, asked: "can the costs of charging elsewhere be in the overview — I
+  mostly charge with E-Flux"): import the export of your charging sessions (E-Flux has no public API: Charging
+  sessions → Export in its dashboard, CSV or Excel; other providers' exports work too when they have a start time
+  and kWh — the columns are recognised by name, Dutch or English), or add a session by hand. Sessions already
+  imported are skipped. The month table gets an *Away* column, and € per kWh, € per km and *saved* count home and
+  away together; tiles show what was charged away and its price per kWh next to the price at home (migration 045).
+
+### Fixed
+- **Push notifications arrived twice**: a rule with the channel *push to all devices* next to a personal
+  subscription with push sent to the same phone twice, and so did two rules firing on the same event. Now a device
+  gets the same message once (within 3 minutes), and *push to all* makes the personal push targets superfluous.
+  A device also keeps an id of its own: subscribing again (after an update, or push off and on) replaces its old
+  registration instead of adding a second one; existing registrations get the id the next time LoxSuite is opened
+  on the device (migration 044).
+
 ## [0.62.1-alpha.1] - 2026-10-12
 
 ### Fixed
