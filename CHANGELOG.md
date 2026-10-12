@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.63.1-alpha.1] - 2026-10-12
+
+### Fixed
+- **Dryer shown as running while it says Inactief** (asked: "the dryer shows its data differently from the washing
+  machine, same brand and series, both on Home Connect"): an on/off signal always won over the status, and Home
+  Connect's power state / online status stays 1 while the machine is switched on or connected — also when idle or
+  done. With a status, the status now says whether it runs; the on/off only counts when it says off.
+
 ## [0.63.0-alpha.1] - 2026-10-12
 
 ### Added

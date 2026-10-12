@@ -230,13 +230,20 @@ function loadState({ meter = {}, raw = {}, src = sourcesOf({}), onKw = 0.05, nam
     label = src.statusMap[status] || (n === null ? status : null);
   }
   let on = null;
+  let onoff = null;
   if (src.onoff && raw.onoff !== undefined && raw.onoff !== null && raw.onoff !== '') {
     const v = num(raw.onoff);
     const b = v !== null ? v !== 0 : /^(on|aan|true|1)$/i.test(String(raw.onoff));
-    on = src.onoffInvert ? !b : b;
-  } else if (status !== null) {
+    onoff = src.onoffInvert ? !b : b;
+  }
+  // With a status, the status says whether it runs: an on/off next to it (Home Connect's power state or
+  // online status) is 1 as long as the machine is switched on or connected — also "Inactief" or done —
+  // and only counts when it says off. Without a status the on/off decides, else the power.
+  if (status !== null) {
     on = src.statusOn.length ? src.statusOn.includes(status) || (label !== null && src.statusOn.includes(label)) : !(status === '0' || isOffText(label || status));
-  } else if (kw !== null) on = kw >= onKw;
+    if (onoff === false) on = false;
+  } else if (onoff !== null) on = onoff;
+  else if (kw !== null) on = kw >= onKw;
   const temp = src.temp ? num(raw.temp) : null;
   // a scheduled start: from its own "start in" signal, else from the status text
   let startAt = null;

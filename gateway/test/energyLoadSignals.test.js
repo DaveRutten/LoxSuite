@@ -245,3 +245,12 @@ test('devices: loose Home Connect outputs grouped per appliance by their uuid st
   const st = em.loadState({ raw: { status: 3, remaining: 3600 }, src: SRC({ status: 'u', status_map: em.HOME_CONNECT_STATUS, status_on: '3', remaining: 'r' }), nowMs: now });
   assert.equal(st.endAt, now + 3600000);
 });
+
+test('a status next to an on/off: the status decides, the on/off only when it says off (Home Connect dryer)', () => {
+  const src = SRC({ onoff: 'u-power', status: 'u-st', status_map: '0=Inactief\n1=Gereed\n3=Programma loopt\n6=Programma voltooid', status_on: '3' });
+  assert.equal(em.loadState({ raw: { onoff: 1, status: 0 }, src }).on, false, 'switched on but Inactief');
+  assert.equal(em.loadState({ raw: { onoff: 1, status: 6 }, src }).on, false, 'done');
+  assert.equal(em.loadState({ raw: { onoff: 1, status: 3 }, src }).on, true);
+  assert.equal(em.loadState({ raw: { onoff: 0, status: 3 }, src }).on, false, 'off wins');
+  assert.equal(em.loadState({ raw: { onoff: 1, status: 'Droger uitgeschakeld' }, src: SRC({ onoff: 'u', status: 'u-t' }), name: 'Droger' }).on, false);
+});
