@@ -79,7 +79,16 @@ async function saveConfig(kind, c) {
 async function energyDays(localOf, nowMs = Date.now()) {
   // v2 (0.62): days counted without minutes lacking electricity and heat while standing still; the
   // old store had both and gave a SCOP of 10+, so it is not read any more
-  if (!rt.days) rt.days = await settings.get('energy_hp_days_v2', {}).catch(() => ({}));
+  // (stored days not readable — the database restarting: counted from the samples only, and not saved,
+  // so the year it keeps is never overwritten with just these days)
+  if (!rt.days) {
+    const stored = await settings.get('energy_hp_days_v2', {}).catch(() => null);
+    if (!stored) {
+      const fresh0 = hw.dailyEnergy(rt.weather, (ms) => localOf(Math.floor(ms / HOUR) * HOUR).day);
+      return Object.fromEntries(Object.keys(fresh0).sort().slice(-400).map((k) => [k, fresh0[k]]));
+    }
+    rt.days = stored;
+  }
   // the local date per hour, not per minute sample: localOf formats with the time zone and is slow
   const dayCache = new Map();
   const dayOf = (ms) => { const h = Math.floor(ms / HOUR); let d = dayCache.get(h); if (d === undefined) { d = localOf(h * HOUR).day; dayCache.set(h, d); } return d; };
@@ -121,7 +130,9 @@ const miniservers = () => db.prepare('SELECT * FROM miniservers ORDER BY sort_or
 async function discover(kind, { refresh = false } = {}) {
   const hit = rt.discovered.get(kind);
   if (hit && !refresh && Date.now() - hit.at < 60000) return hit.list;
-  ed.setLearned(kind, await settings.get(`energy_names_${kind}`, {}).catch(() => ({})));
+  // the names you linked by hand (not readable — the database restarting: the ones known before stay)
+  const learned = await settings.get(`energy_names_${kind}`, {}).catch(() => null);
+  if (learned) ed.setLearned(kind, learned);
   // Gateway first: in a Gateway/Client setup the same objects can come in through both
   const all = (await miniservers()).sort((x, y) => Number(!!x.gateway_client_of) - Number(!!y.gateway_client_of));
   const structures = [];
@@ -686,7 +697,9 @@ const persistAll = (series, samples) => persist(series, [...new Set(samples.map(
 async function loadPersisted(nowMs = Date.now()) {
   const from = hourOf(nowMs - 60 * DAY);
   await db.prepare('DELETE FROM em_samples WHERE hour < ?').run(from).catch(() => {});
-  const rows = await db.prepare('SELECT series, data FROM em_samples WHERE hour >= ? ORDER BY hour').all(from).catch(() => []);
+  // (throws when the database doesn't answer: startEnergyModules tries again — before, an empty history
+  // was used until the next restart)
+  const rows = await db.prepare('SELECT series, data FROM em_samples WHERE hour >= ? ORDER BY hour').all(from);
   for (const sr of SERIES) {
     const got = rows.filter((r) => r.series === sr).flatMap((r) => { try { return JSON.parse(r.data); } catch { return []; } });
     const have = new Set(rt[sr].map((x) => x.ms));
@@ -699,7 +712,15 @@ function addWeatherHistory(samples) { rt.weather = [...rt.weather, ...samples].s
 function addRoomHistory(samples) { rt.room = [...rt.room, ...samples].sort((a, b) => a.ms - b.ms); return persistAll('room', samples); }
 function addTuneHistory(samples) { rt.tune = [...rt.tune, ...samples].sort((a, b) => a.ms - b.ms); return persistAll('tune', samples); }
 
-function startEnergyModules() { if (!rt.timer) { loadPersisted().catch((e) => console.error(`[energy modules] load: ${e.message}`)); rt.timer = setInterval(() => tick().catch(() => {}), 60000); setTimeout(() => tick().catch(() => {}), 5000); } }
+// The stored samples are read again until it works (the database restarting at the same moment).
+function loadWithRetry(attempt = 0) {
+  loadPersisted().catch((e) => {
+    const waitS = [10, 30, 60][attempt] || 300;
+    console.error(`[energy modules] load: ${e.message} — trying again in ${waitS} s.`);
+    setTimeout(() => loadWithRetry(attempt + 1), waitS * 1000).unref?.();
+  });
+}
+function startEnergyModules() { if (!rt.timer) { loadWithRetry(); rt.timer = setInterval(() => tick().catch(() => {}), 60000); setTimeout(() => tick().catch(() => {}), 5000); } }
 function stopEnergyModules() { if (rt.timer) clearInterval(rt.timer); rt.timer = null; }
 
 function lastStructures(kind) { return rt.discovered.get(kind)?.structures || []; }

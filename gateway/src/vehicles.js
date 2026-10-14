@@ -799,7 +799,12 @@ const HOUR_MS = 3600000;
 const skodaLog = new Map(); // vehicle id -> [ms]
 async function skodaRequests(id, nowMs = Date.now()) {
   const settings = require('./wallboxSettings');
-  if (!skodaLog.has(id)) { const saved = await settings.get(`skoda_requests_${id}`, []).catch(() => []); skodaLog.set(id, Array.isArray(saved) ? saved : []); }
+  if (!skodaLog.has(id)) {
+    // (not readable — the database restarting: read again next time, not remembered as none)
+    const saved = await settings.get(`skoda_requests_${id}`, []).catch(() => null);
+    if (saved === null) return [];
+    skodaLog.set(id, Array.isArray(saved) ? saved : []);
+  }
   const list = skodaLog.get(id).filter((t) => t > nowMs - HOUR_MS);
   skodaLog.set(id, list);
   return list;

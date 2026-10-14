@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.63.2-alpha.1] - 2026-10-14
+
+### Fixed
+- **Settings gone after an update** (asked: "how come I lost all my heat pump and wallbox settings after an
+  update?"): when the database restarts at the same moment as LoxSuite — Unraid updating containers at night, "the
+  database system is shutting down" — LoxSuite (since 0.60.5) starts anyway, and a settings read that failed was
+  remembered as *nothing stored*. The heat pump, Smart charging and the other settings then showed their defaults
+  until the next restart, and saving such a page (or the hourly heat pump history, the learning timeline) wrote
+  those defaults over what was stored.
+  - A settings read is now tried a few times; if the database still doesn't answer it is an error, and nothing is
+    remembered — the next read (a minute later, or the next page) gets your real settings without a restart.
+  - Nothing is saved over a setting that couldn't be read: a page can't be saved with defaults, the heat pump's
+    year of daily energy, the learning timeline, a set *Ready by*, the hand-linked names and the Škoda request log
+    are only written once they were read.
+  - The heat pump's stored samples are read again until it works (before: an empty history until the next
+    restart).
+
 ## [0.63.1-alpha.1] - 2026-10-12
 
 ### Fixed

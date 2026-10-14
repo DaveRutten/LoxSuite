@@ -173,11 +173,13 @@ function changes(before, now) {
 
 // Once a day: a snapshot of what it knows, and the differences with the previous one in the timeline.
 async function snapshot(nowMs = Date.now(), { force = false } = {}) {
-  const prev = await settings.get('learning_snapshot', {}).catch(() => ({}));
+  // (not readable — the database restarting: no snapshot now, so the timeline isn't saved over with
+  // just today's)
+  const prev = await settings.get('learning_snapshot', {});
   if (!force && prev.at && nowMs - Date.parse(prev.at) < 20 * 3600000) return null;
   const { topics } = await overview(nowMs);
   const values = valuesOf(topics);
-  const ev = await settings.get('learning_events', { list: [] }).catch(() => ({ list: [] }));
+  const ev = await settings.get('learning_events', { list: [] });
   const list = ev.list || [];
   if (prev.values) for (const c of changes(prev.values, values)) list.push({ at: new Date(nowMs).toISOString(), ...c });
   await settings.set('learning_events', { list: list.slice(-200) });

@@ -1070,8 +1070,10 @@ function sessionFull({ sessionKey, fullKey = null, done = false, reading = null,
 async function tick(nowMs = Date.now()) {
   const cfg = await getConfig();
   if (rt.readyLoaded !== true) {
-    rt.readyLoaded = true;
-    const saved = await settings.get('planner_ready_override', null).catch(() => null);
+    // (only once it could be read: the database restarting must not count as "nothing set" — that was
+    // then saved over it)
+    let saved;
+    try { saved = await settings.get('planner_ready_override', null); rt.readyLoaded = true; } catch { saved = null; }
     if (saved?.at > nowMs) { rt.readyOverride = saved.at; rt.readyOverrideAway = !!saved.away; rt.readyOverrideOwn = saved.own || null; }
   }
   const wb = await wallboxLive();
