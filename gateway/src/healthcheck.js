@@ -5,6 +5,7 @@ const { decrypt } = require('./secretCrypto');
 const { recordMiniserverDiagValue } = require('./monitorCollector');
 const { parseHeapStatus } = require('./format');
 const { getStructure } = require('./loxoneStructure');
+const { testConnection: testLiveConnection } = require('./loxoneWebSocket');
 
 const TIMEOUT_MS = 4000;
 
@@ -25,12 +26,14 @@ const AUTH_FAILED_RECHECK_MS = 15 * 60 * 1000;
 // Tests one specific address directly (no local->external fallback — the whole point here is to
 // report each candidate's own reachability separately, unlike fetchMiniserver's combined result
 // used for the plain online/offline status).
+// A Miniserver whose Loxone user has the login code (live_needs_code) is never sent the password as Basic auth
+// (see fetchMiniserver): this then only tests that the address answers.
 async function testAddress(miniserver, base, dispatcher, path) {
   const auth = Buffer.from(`${miniserver.username}:${decrypt(miniserver.password)}`).toString('base64');
   const start = Date.now();
   try {
     const res = await fetch(`${base}${path}`, {
-      headers: { Authorization: `Basic ${auth}` },
+      headers: miniserver.live_needs_code ? {} : { Authorization: `Basic ${auth}` },
       dispatcher,
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
@@ -84,6 +87,7 @@ async function runDetailedCheck(miniserver) {
   // local-then-external preference) rather than probing both again.
   const workingBase = local.ok ? localBase : (external && external.ok ? externalBase : null);
   const workingDispatcher = local.ok ? localDispatcher : undefined;
+  if (miniserver.live_needs_code) return { local, external, ...(await testViaLive(miniserver)) };
   const logbook = workingBase
     ? await testAddress(miniserver, workingBase, workingDispatcher, '/dev/fsget/log/def.log')
     : { ok: false, ms: 0, error: 'No reachable address to test it through' };
@@ -92,6 +96,29 @@ async function runDetailedCheck(miniserver) {
     : { ok: false, ms: 0, error: 'No reachable address to test it through' };
 
   return { local, external, logbook, api };
+}
+
+// The Logbook and Loxone API lines for a Miniserver whose user has the login code: over its live connection
+// (fetchMiniserver routes there), which is logged in with the token.
+async function testViaLive(miniserver) {
+  const one = async (path, check) => {
+    const start = Date.now();
+    try {
+      const res = await fetchMiniserver(miniserver, path, { timeoutMs: TIMEOUT_MS * 2 });
+      const ms = Date.now() - start;
+      if (!res.ok) return { ok: false, ms, error: `Loxone code ${res.status}` };
+      return { ok: true, ms, error: null, ...(await check(res)) };
+    } catch (err) {
+      return { ok: false, ms: Date.now() - start, error: err.message };
+    }
+  };
+  const api = await one('/jdev/cfg/version', async (res) => {
+    const body = await res.json().catch(() => null);
+    if (!body?.LL?.value) throw new Error("Reachable, but didn't look like a Loxone Miniserver's API response");
+    return { version: body.LL.value };
+  });
+  const logbook = await one('/dev/fsget/log/def.log', async () => ({}));
+  return { logbook, api };
 }
 
 // A single value read off a plain /jdev/... command — shared by fetchSystemStats below and
@@ -176,7 +203,20 @@ async function checkMiniserver(miniserver) {
     // comes back on its own — this is deterministic and won't resolve itself, so it gets its own
     // status entirely (see markMiniserverAuthFailed in monitorCollector.js for the retry-storm
     // this specifically prevents) rather than folding into plain 'offline'.
-    const reachRes = await fetchMiniserver(miniserver, '/', { timeoutMs: TIMEOUT_MS });
+    // A Miniserver whose user has the login code: reachable is any answer without the password (a 401 there says
+    // nothing about the credentials), and whether LoxSuite is let in is up to its live connection — waiting for a
+    // login code or refused counts as auth_failed, with what the live connection says.
+    if (miniserver.live_needs_code) {
+      await fetchMiniserver(miniserver, '/', { timeoutMs: TIMEOUT_MS, anonymous: true });
+      const live = await testLiveConnection(miniserver, TIMEOUT_MS * 2);
+      if (!live.ok && (live.status === 'code_required' || live.status === 'auth_failed')) {
+        await db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = ? WHERE id = ?')
+          .run('auth_failed', now, live.error, miniserver.id);
+        await checkMiniserverStatus(miniserver, 'auth_failed');
+        return;
+      }
+    }
+    const reachRes = miniserver.live_needs_code ? { status: 200 } : await fetchMiniserver(miniserver, '/', { timeoutMs: TIMEOUT_MS });
     if (reachRes.status === 401 || reachRes.status === 403) {
       await db.prepare('UPDATE miniservers SET status = ?, last_checked_at = ?, last_error = ? WHERE id = ?')
         .run('auth_failed', now, `Miniserver rejected the configured credentials (HTTP ${reachRes.status})`, miniserver.id);

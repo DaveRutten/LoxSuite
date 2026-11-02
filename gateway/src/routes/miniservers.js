@@ -559,7 +559,12 @@ router.post('/:id/login-code', requirePermission('miniservers', 'edit'), asyncHa
   const code = String(req.body?.code || '').replace(/\s/g, '');
   if (!/^\d{4,8}$/.test(code)) return res.status(400).json({ error: 'Enter the code from the mail of the Miniserver.' });
   const result = await loginWithCode(miniserver, code);
-  if (result.ok) await logSystemEvent(`"${req.user.username}" logged LoxSuite in to Miniserver "${miniserver.name}" with the login code from its mail.`);
+  if (result.ok) {
+    await logSystemEvent(`"${req.user.username}" logged LoxSuite in to Miniserver "${miniserver.name}" with the login code from its mail.`);
+    // Out of Auth failed right away (the healthcheck would only look again in 15 minutes); its calls now go over
+    // the live connection that just logged in.
+    await checkMiniserver(await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(miniserver.id));
+  }
   res.json(result);
 }));
 

@@ -220,6 +220,8 @@ class MiniserverLiveConnection {
     this.refreshTimer = null;
     this.pendingHeader = null;
     this.pending = []; // { match(control): boolean, resolve } — LL answers being waited for
+    this.fileWaiter = null; // { path, resolve } — the file being waited for (see requestFile)
+    this.fileQueue = Promise.resolve();
     this.authFails = 0;
     this.waiters = []; // { resolve } — woken on first successful open, for the Test-now check
     this.connect(firstLogin);
@@ -283,25 +285,71 @@ class MiniserverLiveConnection {
     return answer;
   }
 
+  // Message header (8 bytes, first 0x03): identifier 1 = a file follows (text or binary frame), 2/3 = value/text
+  // states, 6 = keepalive answer (nothing follows). A header flagged "estimated" is followed by the exact one — a real
+  // Miniserver announces LoxAPP3.json twice.
   onMessage(data, isBinary) {
     if (!isBinary) {
+      const text = data.toString();
+      if (this.pendingHeader?.identifier === 1) { this.pendingHeader = null; this.resolveFile(text); return; }
+      this.pendingHeader = null;
       let body;
-      try { body = JSON.parse(data.toString()); } catch { return; }
+      try { body = JSON.parse(text); } catch { return; }
       const control = String(body?.LL?.control ?? '');
+      // A file refused: an LL answer for that file instead of the file itself.
+      if (this.fileWaiter && control && this.fileWaiter.path.includes(control.replace(/^\/+/, ''))) { this.resolveFile(text); return; }
       const idx = this.pending.findIndex((p) => p.match(control));
       if (idx !== -1) this.pending.splice(idx, 1)[0].resolve(body);
       return;
     }
-    if (!this.pendingHeader && data.length === 8) {
-      this.pendingHeader = { identifier: data.readUInt8(1), length: data.readUInt32LE(4) };
-      return;
-    }
-    if (this.pendingHeader) {
+    const header = data.length === 8 && data[0] === 0x03
+      ? { identifier: data.readUInt8(1), estimated: Boolean(data[2] & 0x01), length: data.readUInt32LE(4) } : null;
+    if (this.pendingHeader && !this.pendingHeader.estimated && !(header && this.pendingHeader.length !== 8)) {
       const { identifier } = this.pendingHeader;
       this.pendingHeader = null;
       if (identifier === 2) parseValueStates(data, (uuid, val) => this.cache.set(uuid, val));
       else if (identifier === 3) parseTextStates(data, (uuid, val) => this.cache.set(uuid, val));
+      else if (identifier === 1) this.resolveFile(data.toString('utf8'));
+      return;
     }
+    if (!header) return;
+    // An empty file has no frame after its header.
+    if (header.identifier === 1 && header.length === 0 && !header.estimated) { this.pendingHeader = null; this.resolveFile(''); return; }
+    this.pendingHeader = header.identifier === 6 ? null : header;
+  }
+
+  resolveFile(text) {
+    const w = this.fileWaiter;
+    this.fileWaiter = null;
+    if (w) w.resolve(text);
+  }
+
+  // A file over this (logged-in) connection: data/LoxAPP3.json, data/status, dev/fsget/... One at a time, since the
+  // file itself comes without its name.
+  requestFile(path, timeoutMs = REQUEST_TIMEOUT_MS * 2) {
+    const run = () => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { this.fileWaiter = null; reject(new Error(`Timed out waiting for ${path}`)); }, timeoutMs);
+      this.fileWaiter = { path, resolve: (text) => { clearTimeout(timer); resolve(text); } };
+      this.send(path);
+    });
+    const p = this.fileQueue.then(run, run);
+    this.fileQueue = p.catch(() => {});
+    return p;
+  }
+
+  // A jdev command over this connection, answered as over HTTP ({ LL: { control, value, Code } }). The answer's
+  // control echoes the command, with "dev/" or "jdev/" in front.
+  command(path, timeoutMs = REQUEST_TIMEOUT_MS) {
+    const norm = (s) => {
+      let x = String(s);
+      try { x = decodeURIComponent(x); } catch { /* keep as is */ }
+      return x.replace(/^\/+/, '').replace(/^j?dev\//, '');
+    };
+    const want = norm(path);
+    return this.request(path, (control) => {
+      const c = norm(control);
+      return Boolean(c) && (c === want || c.startsWith(want) || want.startsWith(c));
+    }, { encrypted: false, timeoutMs });
   }
 
   // Websocket up and the session key exchanged. No Basic auth on getPublicKey or the websocket upgrade: Loxone
@@ -327,6 +375,8 @@ class MiniserverLiveConnection {
     const ws = new WebSocket(url, ['remotecontrol'], { handshakeTimeout: REQUEST_TIMEOUT_MS, rejectUnauthorized: false });
     this.ws = ws;
     this.pending = [];
+    this.pendingHeader = null;
+    this.fileWaiter = null;
     ws.on('message', (data, isBinary) => this.onMessage(data, isBinary));
 
     await new Promise((resolve, reject) => {
@@ -604,6 +654,32 @@ async function testConnection(miniserver, timeoutMs = 8000) {
     : { ok: false, ms, error: result.error || 'Could not open a live connection', status, tech, otp };
 }
 
+// For a Miniserver whose Loxone user has the login code (live_needs_code): the HTTP calls the rest of LoxSuite makes
+// (fetchMiniserver — Virtual Inputs, the structure file, Monitor, healthcheck, logbook, ...) go over this live
+// connection, which is logged in with the token. Never with the password as HTTP Basic auth: a Miniserver may refuse
+// that for such a user, and every refusal could count towards the lock (10 failed logins) and mail the user.
+// Answers as fetch() would: a Response with the file, or with the { LL } answer of a jdev command (HTTP 200, the
+// Loxone code inside, as a Miniserver answers over HTTP). A refused file gets the Loxone code as its status.
+async function fetchViaLive(miniserver, path, { timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+  const conn = ensureConnection(miniserver);
+  const opened = await conn.waitForOpen(timeoutMs);
+  if (!opened.ok) {
+    throw Object.assign(new Error(`LoxSuite is not logged in to this Miniserver: ${opened.error || 'the live connection is not open'}`), { liveStatus: conn.status });
+  }
+  const p = String(path).replace(/^\/+/, '');
+  if (/^(data\/|dev\/fsget\/)/.test(p)) {
+    const text = await conn.requestFile(p, timeoutMs * 2);
+    let refused = null;
+    if (/^\s*\{\s*"LL"/.test(text)) {
+      try { refused = llCode(JSON.parse(text)); } catch { refused = null; }
+    }
+    const status = refused && refused !== '200' && Number(refused) >= 400 && Number(refused) < 600 ? Number(refused) : 200;
+    return new Response(text, { status });
+  }
+  const body = await conn.command(p.replace(/^dev\//, 'jdev/'), timeoutMs);
+  return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
 // A fresh connection that logs in a particular way (see the constructor), for the Edit page's login code step.
 async function freshLogin(miniserver, firstLogin, timeoutMs) {
   resetConnection(miniserver.id);
@@ -647,5 +723,5 @@ function resetConnection(miniserverId) {
 
 module.exports = {
   startLiveConnections, ensureConnection, getLiveValue, getStatus, testConnection, resetConnection,
-  loginWithCode, sendLoginCode, isPermanentAuthFailure, otpAsked, otpHash, shapeOf, AUTH_TRIES, _tuning: tuning,
+  loginWithCode, sendLoginCode, fetchViaLive, isPermanentAuthFailure, otpAsked, otpHash, shapeOf, AUTH_TRIES, _tuning: tuning,
 };

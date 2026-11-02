@@ -210,3 +210,53 @@ test('no e-mail address (462) is said and not tried again: no code can come', as
   await sleep(200);
   assert.equal(sim.tokenRequests.length, 1);
 });
+
+test('with the login code every other call to the Miniserver goes over the live connection, logged in with the token — never the password as Basic auth', async () => {
+  const { fetchMiniserver, sendHttpVirtualInput } = require('../src/loxone');
+  const { runDetailedCheck, checkMiniserver } = require('../src/healthcheck');
+  const sim = await startSim({ mfa: { loxsuite: true } });
+  const ms = await addMiniserver(sim);
+  await live.testConnection(ms);
+  assert.equal((await live.loginWithCode(await row(ms.id), sim.mails[0].code)).ok, true);
+  const logged = await row(ms.id);
+
+  const version = await (await fetchMiniserver(logged, '/jdev/cfg/version', { timeoutMs: 4000 })).json();
+  assert.equal(version.LL.value, '17.3.10.28');
+  assert.deepEqual(await sendHttpVirtualInput(logged, 'Warmtepomp boost', '1'), { code: 200, value: '1' });
+  assert.ok(sim.commands.includes('jdev/sps/io/Warmtepomp%20boost/1'), sim.commands.join());
+  assert.equal((await (await fetchMiniserver(logged, '/jdev/sps/io/0f1e2d3c-0000-0000-ffff000000000001', { timeoutMs: 4000 })).json()).LL.value, '42');
+  const structure = await (await fetchMiniserver(logged, '/data/LoxAPP3.json', { timeoutMs: 4000 })).json();
+  assert.equal(structure.msInfo.miniserverType, 2, 'the structure file, announced twice as a real Miniserver does');
+  assert.match(await (await fetchMiniserver(logged, '/dev/fsget/log/def.log', { timeoutMs: 4000 })).text(), /Miniserver started/);
+  assert.match(await (await fetchMiniserver(logged, '/data/status', { timeoutMs: 4000 })).text(), /<Status>/);
+  assert.equal((await fetchMiniserver(logged, '/data/nothing', { timeoutMs: 4000 })).status, 404, 'a refused file keeps its Loxone code');
+
+  const detail = await runDetailedCheck(logged);
+  assert.equal(detail.local.ok, true);
+  assert.equal(detail.api.ok, true, detail.api.error);
+  assert.equal(detail.api.version, '17.3.10.28');
+  assert.equal(detail.logbook.ok, true, detail.logbook.error);
+  await checkMiniserver(logged);
+  const checked = await row(ms.id);
+  assert.equal(checked.status, 'online', checked.last_error);
+  assert.equal(checked.firmware_version, '17.3.10.28');
+
+  assert.equal(sim.basicAuthSeen, 0, 'the password never went out as Basic auth');
+  assert.equal(sim.mails.length, 1);
+});
+
+test('waiting for the login code: calls say LoxSuite is not logged in, the healthcheck says Auth failed, and no password goes out', async () => {
+  const { fetchMiniserver } = require('../src/loxone');
+  const { checkMiniserver } = require('../src/healthcheck');
+  const sim = await startSim({ mfa: { loxsuite: true } });
+  const ms = await addMiniserver(sim);
+  await live.testConnection(ms);
+  const waiting = await row(ms.id);
+  await assert.rejects(fetchMiniserver(waiting, '/jdev/sps/io/x/1', { timeoutMs: 2000 }), /not logged in to this Miniserver: .*login code/);
+  await checkMiniserver(waiting);
+  const checked = await row(ms.id);
+  assert.equal(checked.status, 'auth_failed');
+  assert.match(checked.last_error, /login code/);
+  assert.equal(sim.basicAuthSeen, 0);
+  assert.equal(sim.mails.length, 1, 'no new code mailed by the healthcheck');
+});

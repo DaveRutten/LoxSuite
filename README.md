@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.64.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.64.2-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -636,10 +636,20 @@ with its own message: 460 code mailed, 461 mailing failed, 462 no e-mail address
 After 462 or 467 no code can come: LoxSuite stops and says what to fix. A wrong password stays
 Loxone's 401.
 
+For a Miniserver whose user has the login code, LoxSuite never sends the password over HTTP (Basic
+auth) at all: a Miniserver may refuse that for such a user, and every refusal could count towards the
+lock and mail the user. Everything else LoxSuite asks of that Miniserver — Virtual Inputs (MQTT →
+Loxone, the Energy manager, heat pump and charging control), the structure file, Monitor polling,
+Diagnostics, the Logbook, Hardware, the OCPP user list, firmware update — goes over the live connection
+instead, which is logged in with the token. While LoxSuite waits for the code those calls say so, and
+the Miniserver shows **Auth failed** with the reason; entering the code clears it right away. **Test**
+then shows Local/External as plain reachability (without the password) and the Loxone API and Logbook
+lines over the live connection.
+
 Not yet verified on a real Miniserver: a complete login with the code (the code request, its 460 and
-the HMAC were seen or taken from the Miniserver's web interface), and whether the other HTTP features
-(Virtual Inputs, Monitor polling, Logs, Diagnostics, Test now's Local/Loxone API lines), which still log
-in with the password (HTTP Basic auth), work for a user with the login code.
+the HMAC were seen or taken from the Miniserver's web interface), and the files over the live
+connection other than the structure file (`data/status` for Hardware, `dev/fsget/log/def.log` for the
+Logbook). The AI Assistant logs in on the Miniserver's own page (OAuth), which asks for the code itself.
 
 A **Generation** column (Miniserver Gen 1/Gen 2, Miniserver Go Gen 1/Gen 2, or
 Compact) reads `msInfo.miniserverType` from the structure file once per Miniserver — confirmed

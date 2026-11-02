@@ -39,6 +39,7 @@ function createFakeMiniserver({ users = { loxsuite: 'geheim' }, mfa = {}, tokenD
     refreshes: 0,
     sockets: 0,
     basicAuthSeen: 0, // requests (HTTP or websocket upgrade) that carried an Authorization header
+    commands: [], // jdev commands over the websocket after the login (Virtual Inputs, healthcheck reads, ...)
   };
 
   const server = http.createServer((req, res) => {
@@ -48,9 +49,27 @@ function createFakeMiniserver({ users = { loxsuite: 'geheim' }, mfa = {}, tokenD
       res.end(JSON.stringify({ LL: { control: 'dev/sys/getPublicKey', value: certPem, Code: '200' } }));
       return;
     }
+    // The web interface's own page answers anyone; Basic auth for a user with the login code is refused (what a real
+    // Miniserver does there is not known yet — this plays the case LoxSuite must survive).
+    if (req.url === '/') { res.writeHead(200); res.end('Loxone'); return; }
+    const basicUser = req.headers.authorization ? Buffer.from(req.headers.authorization.replace(/^Basic /, ''), 'base64').toString().split(':')[0] : null;
+    if (basicUser && mfa[basicUser]) { res.writeHead(401); res.end(); return; }
     res.writeHead(404);
     res.end();
   });
+  const header = (identifier, length, estimated = false) => {
+    const h = Buffer.alloc(8);
+    h[0] = 0x03;
+    h[1] = identifier;
+    h[2] = estimated ? 0x01 : 0;
+    h.writeUInt32LE(length, 4);
+    return h;
+  };
+  const FILES = {
+    'data/LoxAPP3.json': JSON.stringify({ msInfo: { serialNr: '504F94AABBCC', miniserverType: 2, msName: 'Sim' }, controls: {}, rooms: {}, cats: {} }),
+    'data/status': '<?xml version="1.0" encoding="utf-8"?><Status><Miniserver Name="Sim"/></Status>',
+    'dev/fsget/log/def.log': '2026-11-02 12:00:00 Miniserver started\n',
+  };
   const wss = new WebSocket.Server({ server, path: '/ws/rfc6455' });
 
   wss.on('connection', (ws, req) => {
@@ -150,7 +169,28 @@ function createFakeMiniserver({ users = { loxsuite: 'geheim' }, mfa = {}, tokenD
         ll(cmd, c.user ? '1' : '', c.user ? '200' : '401');
         return;
       }
-      if (cmd === 'keepalive') ll('keepalive', 'ok');
+      // keepalive: only a header (identifier 6), as a real Miniserver.
+      if (cmd === 'keepalive') { ws.send(header(6, 0), { binary: true }); return; }
+      // Files: a header (LoxAPP3.json announced twice, first "estimated", as a real Miniserver), then the file.
+      if (cmd.startsWith('data/') || cmd.startsWith('dev/fsget/')) {
+        if (!c.user) { ll(cmd, '', '401'); return; }
+        const file = FILES[cmd];
+        if (file === undefined) { ll(cmd, '', '404'); return; }
+        if (cmd === 'data/LoxAPP3.json') ws.send(header(1, file.length, true), { binary: true });
+        ws.send(header(1, Buffer.byteLength(file)), { binary: true });
+        if (cmd === 'data/LoxAPP3.json') ws.send(file);
+        else ws.send(Buffer.from(file), { binary: true });
+        return;
+      }
+      // Any other jdev command, answered as the Miniserver does (control with "dev/" in front).
+      if (cmd.startsWith('jdev/')) {
+        const control = cmd.slice(1);
+        if (!c.user) { ll(control, '', '401'); return; }
+        sim.commands.push(cmd);
+        const io = cmd.match(/^jdev\/sps\/io\/([^/]+)(?:\/(.+))?$/);
+        if (io) { ll(control, io[2] !== undefined ? decodeURIComponent(io[2]) : '42'); return; }
+        ll(control, cmd === 'jdev/cfg/version' ? '17.3.10.28' : '1');
+      }
     });
   });
 

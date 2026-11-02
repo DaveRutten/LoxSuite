@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.64.2-alpha.1] - 2026-11-02
+
+### Fixed
+- **Login code: the rest of LoxSuite works too** (asked: "LoxSuite has more than the one websocket we use in SmartERE,
+  does logging in with the code work there as well?" — it didn't): only the live connection logged in with the
+  code; everything else sent the password as HTTP Basic auth, which a Miniserver may refuse for a user with the
+  login code — and the healthcheck retried that every 15 minutes, each refusal possibly counting towards the
+  Miniserver's lock (10 failed logins, a mail each time). For such a Miniserver the password no longer goes out
+  over HTTP at all: Virtual Inputs (MQTT → Loxone, Energy manager, heat pump and charging control), the structure
+  file, Monitor polling, Diagnostics, the Logbook, Hardware, the OCPP user list and firmware update go over the
+  live connection, logged in with the token.
+  - While LoxSuite waits for the code these calls say it is not logged in, and the healthcheck shows **Auth
+    failed** with the live connection's reason (without trying the password); entering the code clears that at once.
+  - **Test** shows Local/External as reachability without the password, and the Loxone API and Logbook lines over
+    the live connection.
+  - The live connection reads files (a header, then the file; LoxAPP3.json announced twice) and no longer takes the
+    keepalive answer's header for the start of the next value update.
+
 ## [0.64.1-alpha.1] - 2026-11-02
 
 ### Fixed

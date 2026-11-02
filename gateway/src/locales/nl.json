@@ -5080,5 +5080,9 @@
   "This code has expired, and a new one could not be mailed: {0}.": "Deze code is verlopen, en een nieuwe kon niet worden gemaild: {0}.",
   "A newer login has replaced this code. Use the code from the newest mail.": "Een nieuwere login heeft deze code vervangen. Gebruik de code uit de nieuwste mail.",
   "The Miniserver refused this login. Check the username and password, then click Test on the Miniserver's Edit page to try again.": "De Miniserver weigert deze login. Controleer de gebruikersnaam en het wachtwoord en klik dan op Testen op de bewerkpagina van de Miniserver om het opnieuw te proberen.",
-  "Mailed to {0}.": "Gemaild naar {0}."
+  "Mailed to {0}.": "Gemaild naar {0}.",
+  "Loxone code {0}": "Loxone-code {0}",
+  "LoxSuite is not logged in to this Miniserver: {0}": "LoxSuite is niet ingelogd op deze Miniserver: {0}",
+  "the live connection is not open": "de live verbinding is niet open",
+  "Timed out waiting for {0}": "Geen antwoord op tijd voor {0}"
 }

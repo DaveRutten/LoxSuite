@@ -54,8 +54,14 @@ function miniserverBaseUrl(miniserver) {
 // network and remotely without switching configuration.
 // anonymous: no Basic auth header, for the endpoints that need none (getPublicKey) — a Loxone user with
 // the login code (Multi-Factor Authentication) may not be let in with only a password there.
+// A Miniserver whose user has the login code (live_needs_code) is never sent the password at all: every
+// call goes over its live connection, logged in with the token (loxoneWebSocket.js's fetchViaLive).
 async function fetchMiniserver(miniserver, path, options = {}) {
   const { timeoutMs, anonymous, ...restOptions } = options;
+  if (miniserver.live_needs_code && !anonymous) {
+    // Required here, not at the top: loxoneWebSocket.js requires this module itself.
+    return require('./loxoneWebSocket').fetchViaLive(miniserver, path, { timeoutMs });
+  }
   const auth = anonymous ? null : Buffer.from(`${miniserver.username}:${decrypt(miniserver.password)}`).toString('base64');
   const headers = { ...(auth ? { Authorization: `Basic ${auth}` } : {}), ...(options.headers || {}) };
 

@@ -7702,6 +7702,13 @@
   ]
  },
  {
+  "key": "Loxone code {0}",
+  "module": "core",
+  "where": [
+   "src/healthcheck.js"
+  ]
+ },
+ {
   "key": "Loxone commands",
   "module": "core",
   "where": [
@@ -7784,6 +7791,13 @@
   "module": "core",
   "where": [
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "LoxSuite is not logged in to this Miniserver: {0}",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
   ]
  },
  {
@@ -13163,6 +13177,13 @@
   ]
  },
  {
+  "key": "the live connection is not open",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
   "key": "The login attempts time window must be at least 1 minute.",
   "module": "core",
   "where": [
@@ -13758,6 +13779,13 @@
   "module": "ai",
   "where": [
    "src/mcpClient.js"
+  ]
+ },
+ {
+  "key": "Timed out waiting for {0}",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
   ]
  },
  {
