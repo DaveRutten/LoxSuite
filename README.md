@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.64.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.64.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -610,7 +610,9 @@ logins the user is locked (and mailed). For the LoxSuite user on the Miniserver:
 1. Give the Loxone user an e-mail address in Loxone Config and make sure the Miniserver can send mail
    (Loxone's mail service, or a mail server of your own).
 2. Open the Miniserver's **Edit** page and click **Test** (or **Send login code**). The Miniserver
-   mails a code; the **Login code** step under the form shows until when it is valid.
+   mails a code; the **Login code** step under the form shows the (masked) address it went to and
+   until when it is valid. Switching the code on for a Loxone user LoxSuite was already logged in with
+   makes the Miniserver refuse its login on the next connection, so this step is needed once then too.
 3. Type or paste the six digits — LoxSuite logs in as soon as all six are in. **Send a new code**
    logs in again without a code, so the Miniserver mails a new one; only the newest code counts. Not
    the code from your authenticator app or password manager: that one is for LoxSuite itself (the
@@ -622,14 +624,22 @@ when the Miniserver refuses that token (the user's password changed, the user wa
 LoxSuite stop (after 3 tries), forget the token and wait for you to click **Send login code**; it
 never logs in with the password by itself while a code is needed, since every such login mails a
 code. Live Data shows **Login code needed** meanwhile. A refused token answer is shown and logged by
-its shape only (field names, plus `reason`, `attemptsLeft`, `retryAfter`, `expiresIn`, `resendIn`,
-`length`) under **Technical details** — never a password, code or token.
+its shape only (field names; values only where they can't be a secret, other text by its length) under
+**Technical details** — never a password, code, token or the e-mail address.
 
-Not yet verified on a real Miniserver with the login code: Loxone's protocol document (v17.0) doesn't
-describe it, so the request (`jdev/sys/getjwt/…?otp=<code>`) and the answer's fields are taken from
-Loxone Config 17.3 itself. The other HTTP features (Virtual Inputs, Monitor polling, Logs, Diagnostics,
-Test now's Local/Loxone API lines) still log in with the password (HTTP Basic auth); whether a
-Miniserver accepts that for a user with the login code is not known yet.
+How Loxone asks for the code isn't in its protocol document (v17.0); LoxSuite does what the
+Miniserver's own web interface (17.3) does. The code goes along with the token request
+(`jdev/sys/getjwt/…?otp=…`), not readable: as HMAC-SHA256 of the digits, keyed with the one-time key
+the Miniserver gives for that one request. The Miniserver answers with a code per situation, each
+with its own message: 460 code mailed, 461 mailing failed, 462 no e-mail address, 463 wrong code,
+464 expired (a new one mailed), 465 replaced by a newer login, 466 locked for a while, 467 refused.
+After 462 or 467 no code can come: LoxSuite stops and says what to fix. A wrong password stays
+Loxone's 401.
+
+Not yet verified on a real Miniserver: a complete login with the code (the code request, its 460 and
+the HMAC were seen or taken from the Miniserver's web interface), and whether the other HTTP features
+(Virtual Inputs, Monitor polling, Logs, Diagnostics, Test now's Local/Loxone API lines), which still log
+in with the password (HTTP Basic auth), work for a user with the login code.
 
 A **Generation** column (Miniserver Gen 1/Gen 2, Miniserver Go Gen 1/Gen 2, or
 Compact) reads `msInfo.miniserverType` from the structure file once per Miniserver — confirmed

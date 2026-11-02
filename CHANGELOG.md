@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.64.1-alpha.1] - 2026-11-02
+
+### Fixed
+- **Login code as a real Miniserver 17.3 asks for it** (seen on a real Miniserver, and in its own web interface):
+  - The code is sent as the Miniserver's web interface sends it: not the digits but their HMAC-SHA256, keyed with
+    the one-time key of the same token request (`?otp=<hex>`). A real Miniserver counted the plain digits as a
+    wrong code.
+  - The answers are read by their codes: 460 code mailed, 461 mailing failed (with the reason), 462 no e-mail
+    address, 463 wrong code (attempts left), 464 expired (a new one mailed, or not), 465 replaced by a newer login,
+    466 locked for a while (15 minutes unless the Miniserver says otherwise), 467 refused — each with its own
+    message. Before, a real Miniserver's 460 read as a refused login. After 462 and 467 no code can come: LoxSuite
+    stops there, like after a wrong password, instead of showing the code step.
+  - The code step shows the masked address the code was mailed to.
+  - *Technical details* now show what is inside the answer's `otp` field, with values only where they can't be a
+    secret (other text by its length).
+  - Seen on a real Miniserver: switching the code on for a user LoxSuite was already logged in with makes it
+    refuse that login on the next connection; the README says the code step is needed once then.
+
 ## [0.64.0-alpha.1] - 2026-11-02
 
 ### Added

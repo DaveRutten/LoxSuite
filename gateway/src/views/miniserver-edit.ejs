@@ -191,7 +191,7 @@
     <div class="login-code-boxes" id="login-code-boxes" hidden>
       <% for (var i = 1; i <= 6; i++) { %><input type="text" inputmode="numeric" maxlength="6" autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" aria-label="<%= t('Digit {n}', { n: i }) %>"><% } %>
     </div>
-    <p class="hint login-code-valid" id="login-code-valid"></p>
+    <p class="hint login-code-valid"><span id="login-code-to"></span> <span id="login-code-valid"></span></p>
     <div class="btn-row">
       <button type="button" class="btn-test" id="login-code-submit" hidden><%- icon('check') %> <%= t('Log in') %></button>
       <button type="button" class="btn-soft" id="login-code-send"><%= t('Send login code') %></button>
@@ -217,6 +217,7 @@
     var boxesWrap = document.getElementById('login-code-boxes');
     var boxes = Array.prototype.slice.call(boxesWrap.querySelectorAll('input'));
     var valid = document.getElementById('login-code-valid');
+    var mailedTo = document.getElementById('login-code-to');
     var submitBtn = document.getElementById('login-code-submit');
     var sendBtn = document.getElementById('login-code-send');
     var tech = document.getElementById('login-code-tech');
@@ -240,6 +241,8 @@
       submitBtn.hidden = !waiting;
       if (waiting) valid.textContent = 'This code is valid until ' + timeOf(otp.until) + '.';
       else valid.textContent = otp.sentAt ? 'The code from the last mail has expired. Send a new code.' : '';
+      // The address as the Miniserver masks it (l***@example.com).
+      mailedTo.textContent = waiting && otp.to ? 'Mailed to ' + otp.to + '.' : '';
       sendBtn.textContent = otp.sentAt ? 'Send a new code' : 'Send login code';
       // Not before the Miniserver allows a new mail (resendIn).
       clearTimeout(resendTimer);

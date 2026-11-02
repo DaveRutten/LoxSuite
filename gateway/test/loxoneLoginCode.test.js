@@ -63,8 +63,9 @@ test('login code: the Miniserver mails a code, a wrong one is said, the right on
   assert.equal(asked.ok, false);
   assert.equal(asked.status, 'code_required');
   assert.match(asked.error, /asks for a login code/);
-  assert.equal(asked.tech, 'getjwt 401 {ticket, length=6, expiresIn=600, resendIn=30}', 'the shape of the answer, not the ticket');
+  assert.equal(asked.tech, 'getjwt 460 {otp{mail=sent, to=(text, 16), length=6, expiresIn=600, resendIn=30}}', 'the shape of the answer, not the address');
   assert.ok(asked.otp.sentAt && asked.otp.until && asked.otp.resendAt);
+  assert.equal(asked.otp.to, 'l***@example.com', 'the masked address, for the code step');
   assert.equal(sim.mails.length, 1);
   assert.equal((await row(ms.id)).live_needs_code, 1);
 
@@ -73,12 +74,15 @@ test('login code: the Miniserver mails a code, a wrong one is said, the right on
   assert.equal(wrongRes.status, 'code_required');
   assert.equal(wrongRes.error, 'Wrong code. 4 attempts left.');
   assert.equal(wrongRes.otp.until, asked.otp.until, 'the mailed code stays the one to use');
+  assert.equal(wrongRes.otp.to, 'l***@example.com');
   assert.equal(sim.mails.length, 1, 'a wrong code mails nothing');
 
   const ok = await live.loginWithCode(await row(ms.id), sim.mails[0].code);
   assert.equal(ok.ok, true, ok.error);
   assert.equal(ok.status, 'open');
   assert.deepEqual(sim.tokenRequests.at(-1), { user: 'loxsuite', permission: 4, otp: true });
+  // As the Miniserver's own web interface: an HMAC-SHA256 of the digits, never the code itself.
+  assert.ok(sim.otpParams.every((x) => /^[0-9a-f]{64}$/.test(x)), sim.otpParams.join());
   const saved = await row(ms.id);
   assert.match(saved.live_token, /^enc:v1:/, 'the token is kept encrypted');
   assert.ok(new Date(saved.live_token_valid_until) > new Date(Date.now() + 20 * 86400000));
@@ -160,26 +164,49 @@ test('the kept token is refreshed before it runs out', async () => {
   await waitUntil(async () => new Date((await row(ms.id)).live_token_valid_until) > new Date(Date.now() + 20 * 86400000));
 });
 
-test('the code answer is known by its fields; a wrong password (401 {lastEdit, unix}) is not one', () => {
-  const ask = (v, withCode = false) => live.otpAsked({ LL: { Code: '401', value: v } }, v, { withCode });
-  assert.equal(ask({ lastEdit: 1, unix: 2 }), null);
-  assert.equal(ask(''), null);
-  assert.match(ask({ ticket: 'x', expiresIn: 600 }).message, /asks for a login code/);
-  assert.equal(ask({ ticket: 'x' }).mailed, true);
-  assert.equal(ask({ attemptsLeft: 1 }, true).message, 'Wrong code. 1 attempt left.');
-  assert.equal(ask({ attemptsLeft: 3 }, true).message, 'Wrong code. 3 attempts left.');
-  assert.equal(ask({ attemptsLeft: 0 }, true).message, 'Too many wrong codes. Send a new code.');
-  assert.equal(ask({ retryAfter: 300 }, true).message, 'Too many wrong codes. Try again in 5 minutes.');
-  assert.equal(ask({ retryAfter: 30 }, true).message, 'Too many wrong codes. Try again in 1 minute.');
-  assert.equal(ask({ reason: 'alreadySent' }).message, 'A code was sent a moment ago. Use the code from that mail.');
-  assert.equal(ask({ reason: 'alreadySent' }).mailed, false);
-  assert.equal(ask({ reason: 'codeExpired' }, true).message, 'This code has expired. Send a new code.');
-  assert.match(ask({ reason: 'noMailer' }).message, /could not mail the login code: no mail server is set up/);
-  assert.match(ask({ reason: 'notRegistered' }).message, /not registered with the Loxone mail service/);
-  assert.match(ask({ reason: 'noConnection' }).message, /no connection to the mail server/);
-  assert.match(ask({ reason: 'quota' }).message, /maximum number of mails/);
-  assert.match(ask({ reason: 'noEmailAddress' }).message, /no e-mail address for login codes/);
-  assert.match(ask({ codeVerified: false }, true).message, /not right/);
-  assert.equal(live.shapeOf('401', { ticket: 'secret', token: 'secret', attemptsLeft: 2, reason: 'x' }), '401 {ticket, token, attemptsLeft=2, reason=x}');
+test('the answers of a real Miniserver 17.3: 460 to 467 are the two-step codes; 401 {lastEdit, unix} stays a wrong password; the code goes as an HMAC; no secret in the detail', () => {
+  const ask = (code, v) => live.otpAsked(v, { code });
+  assert.equal(ask('401', { lastEdit: 1793600000, unix: 1793600000 }), null);
+  assert.equal(ask('403', ''), null);
+  for (const otp of [true, 1, 'email', { mail: 'sent', to: 'd***@example.com' }]) assert.equal(ask('460', { otp }).kind, 'asked', JSON.stringify(otp));
+  assert.equal(ask(460, '').kind, 'asked', 'the code alone');
+  assert.match(ask('460', { otp: { mail: 'sent' } }).message, /asks for a login code/);
+  assert.equal(ask('460', { otp: { mail: 'sent' } }).mailed, true);
+  assert.equal(ask('460', { otp: { mail: 'alreadySent' } }).message, 'A code was sent a moment ago. Use the code from that mail.');
+  assert.equal(ask('460', { otp: { mail: 'alreadySent' } }).mailed, false);
+  assert.match(ask('461', { otp: { reason: 'noMailer' } }).message, /could not mail the login code: no mail server is set up/);
+  assert.match(ask('461', { otp: { reason: 'notRegistered' } }).message, /not registered with the Loxone mail service/);
+  assert.match(ask('461', { otp: { reason: 'noConnection' } }).message, /no connection to the mail server/);
+  assert.match(ask('461', { otp: { reason: 'quota' } }).message, /maximum number of mails/);
+  assert.match(ask('461', { otp: { reason: 'smtp5' } }).message, /error smtp5/);
+  assert.equal(ask('462', { otp: {} }).again, false, 'no address: back to the password');
+  assert.match(ask('462', { otp: {} }).message, /no e-mail address for login codes/);
+  assert.equal(ask('463', { otp: { attemptsLeft: 1 } }).message, 'Wrong code. 1 attempt left.');
+  assert.equal(ask('463', { otp: { attemptsLeft: 3 } }).message, 'Wrong code. 3 attempts left.');
+  assert.equal(ask('463', { otp: { attemptsLeft: 0 } }).message, 'Too many wrong codes. Send a new code.');
+  assert.match(ask('463', { otp: {} }).message, /not right/);
+  assert.equal(ask('464', { otp: { mail: 'sent' } }).message, 'This code has expired. The Miniserver has mailed a new one.');
+  assert.equal(ask('464', { otp: { mail: 'sent' } }).mailed, true);
+  assert.match(ask('464', { otp: { mail: 'failed', reason: 'quota' } }).message, /expired, and a new one could not be mailed: the Miniserver has reached/);
+  assert.match(ask('465', { otp: {} }).message, /newest mail/);
+  assert.equal(ask('466', { otp: { retryAfter: 300 } }).message, 'Too many wrong codes. Try again in 5 minutes.');
+  assert.equal(ask('466', { otp: {} }).message, 'Too many wrong codes. Try again in 15 minutes.', 'the web interface waits 15 minutes by default');
+  assert.equal(ask('466', { otp: { retryAfter: 30 } }).message, 'Too many wrong codes. Try again in 1 minute.');
+  assert.equal(ask('467', { otp: {} }).again, false, 'refused: back to the password');
+  // As the Miniserver's own web interface: HMAC-SHA256 of the digits with the getkey2 key, lower-case hex.
+  assert.equal(live.otpHash('12 34 56', '3132'), require('crypto').createHmac('sha256', Buffer.from('3132', 'hex')).update('123456').digest('hex'));
+  assert.equal(live.shapeOf('460', { otp: { code: '123456', ticket: 'abcdef0123456789', expiresIn: 600, mail: 'sent' } }), '460 {otp{code=(text, 6), ticket=(text, 16), expiresIn=600, mail=sent}}');
+  assert.equal(live.shapeOf('200', { token: 'eyJ.secret', validUntil: 523000000 }), '200 {token=(text, 10), validUntil}');
+  assert.equal(live.shapeOf('401', { lastEdit: 1793600000, unix: 1793600000 }), '401 {lastEdit, unix}');
   assert.equal(live.shapeOf('500', 'some text'), '500 (text)');
+});
+
+test('no e-mail address (462) is said and not tried again: no code can come', async () => {
+  const sim = await startSim({ tokenAnswer: 462 });
+  const ms = await addMiniserver(sim);
+  const result = await live.testConnection(ms);
+  assert.equal(result.status, 'auth_failed');
+  assert.match(result.error, /no e-mail address for login codes/);
+  await sleep(200);
+  assert.equal(sim.tokenRequests.length, 1);
 });

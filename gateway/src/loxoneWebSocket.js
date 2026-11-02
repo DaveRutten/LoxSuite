@@ -15,12 +15,16 @@
 // and answer): Loxone Config 17.3 itself uses it, and only getjwt takes the login code below.
 //
 // Login code (Multi-Factor Authentication, Loxone Config 17.3): for a Loxone user with it on, getjwt
-// gives no token but asks for the 6-digit code the Miniserver mails to that user; the same getjwt
-// with ?otp=<code> then gives it. Not in Loxone's protocol document (v17.0): the command and the
-// fields of the answer are those of Loxone Config 17.3, and the answer is known by those fields, not
-// by its code. A password login on every reconnect would mail a new code each time, so the token
-// that comes with the code is kept (encrypted) and used with authwithtoken from then on; refreshjwt
-// keeps it valid, no code needed.
+// gives no token but answers 460 and mails a 6-digit code to that user; the same getjwt with
+// ?otp=<HMAC-SHA256 of the digits, keyed with getkey2's one-time key> then gives it, and a new login
+// without a code mails a new one. Not in Loxone's protocol document (v17.0): taken from the
+// Miniserver's own web interface (17.3: LxCommunicator.requestToken, computeOtpHash and its two-step
+// module) and seen on a real Miniserver. The answer codes 460-467 are in OTP below; the details in
+// the field otp: mail (sent, alreadySent, pending, failed), to (the address, masked), reason,
+// expiresIn, resendIn, attemptsLeft, retryAfter, length. Turning the code on for a user makes the
+// Miniserver refuse a token it gave before. A password login on every reconnect would mail a new code
+// each time, so the token that comes with the code is kept (encrypted) and used with authwithtoken
+// from then on; refreshjwt keeps it valid, no code needed.
 const crypto = require('crypto');
 const WebSocket = require('ws');
 const db = require('./db');
@@ -80,47 +84,75 @@ function llValue(body) {
 }
 const fromLoxoneTime = (s) => (Number(s) > 0 ? new Date(LOXONE_EPOCH_MS + Number(s) * 1000) : null);
 
-// The answer to a login code request: the fields that tell it apart from a wrong password (which a real Miniserver
-// answers with 401 and { lastEdit, unix }).
-const OTP_FIELDS = ['ticket', 'expiresIn', 'resendIn', 'attemptsLeft', 'retryAfter', 'length', 'codeVerified'];
+// The two-step answers of getjwt (Loxone 17.3), by their code — each with what LoxSuite can do next. A wrong
+// password stays Loxone's 401 (a real Miniserver adds { lastEdit, unix }) and is none of these.
+const OTP = {
+  460: 'asked', 461: 'send-failed', 462: 'no-address', 463: 'wrong-code', 464: 'expired', 465: 'replaced', 466: 'locked', 467: 'refused',
+};
 const MAIL_FAILED = {
   notRegistered: 'the Miniserver is not registered with the Loxone mail service',
   noConnection: 'the Miniserver has no connection to the mail server',
   quota: 'the Miniserver has reached its maximum number of mails',
   noMailer: 'no mail server is set up on the Miniserver',
 };
-const TOLD = ['reason', 'attemptsLeft', 'retryAfter', 'expiresIn', 'resendIn', 'length'];
+const SAFE_VALUES = ['reason', 'mail', 'attemptsLeft', 'retryAfter', 'expiresIn', 'resendIn', 'length', 'codeVerified'];
 
-// The shape of an answer, for the log and the Edit page: its field names, and only the values that are no secret
-// (never the token, a hash or a code) — so what a real Miniserver sends can be learned from it.
+// The code as the Miniserver's own web interface sends it: HMAC-SHA256 of the digits, keyed with the one-time key
+// of getkey2 (hex), lower-case hex. A real Miniserver counts the plain digits as a wrong code (463).
+const otpHash = (code, keyHex) => crypto.createHmac('sha256', Buffer.from(String(keyHex), 'hex')).update(String(code).replace(/\D/g, ''), 'utf8').digest('hex');
+
+// The shape of an answer, for the log and the Edit page — so what a real Miniserver sends can be learned from it.
+// A value is told only when it cannot be a secret: a known field, a yes/no, a short word, a number below 6 digits;
+// any other text only by its length (never a token, hash, code or the e-mail address).
 function shapeOf(code, v) {
+  const tell = (k, x) => {
+    if (x && typeof x === 'object') return `${k}{${Object.entries(x).slice(0, 12).map(([kk, xx]) => tell(kk, xx)).join(', ')}}`;
+    if (SAFE_VALUES.includes(k) || typeof x === 'boolean' || (typeof x === 'number' && Math.abs(x) < 100000)) return `${k}=${String(x).slice(0, 24)}`;
+    if (typeof x === 'string' && /^[A-Za-z]{1,24}$/.test(x)) return `${k}=${x}`;
+    return typeof x === 'string' ? `${k}=(text, ${x.length})` : k;
+  };
   if (!v || typeof v !== 'object') return `${code}${v ? ' (text)' : ''}`;
-  const told = Object.keys(v).map((k) => (TOLD.includes(k) ? `${k}=${String(v[k]).slice(0, 24)}` : k));
-  return `${code} {${told.join(', ')}}`;
+  return `${code} {${Object.entries(v).map(([k, x]) => tell(k, x)).join(', ')}}`;
 }
 
-// null, or { reason, attemptsLeft, retryAfter, expiresIn, resendIn, length, message } when the Miniserver asks for
-// the login code (withCode: this answer is to a request that had one).
-function otpAsked(res, v, { withCode }) {
-  const fields = { ...(res?.LL || {}), ...(v && typeof v === 'object' ? v : {}) };
-  const reason = typeof fields.reason === 'string' ? fields.reason : null;
-  if (!OTP_FIELDS.some((k) => k in fields) && !(reason && (reason in MAIL_FAILED || /otp|code|mfa|sent|expire|mail|address/i.test(reason)))) return null;
-  const num = (k) => (Number.isFinite(Number(fields[k])) && fields[k] !== '' && fields[k] !== null ? Number(fields[k]) : null);
-  const o = { reason, attemptsLeft: num('attemptsLeft'), retryAfter: num('retryAfter'), expiresIn: num('expiresIn'), resendIn: num('resendIn'), length: num('length') || 6 };
-  if (reason && MAIL_FAILED[reason]) o.message = `The Miniserver could not mail the login code: ${MAIL_FAILED[reason]}.`;
-  else if (o.retryAfter) {
-    const min = Math.max(1, Math.ceil(o.retryAfter / 60));
-    o.message = min === 1 ? 'Too many wrong codes. Try again in 1 minute.' : `Too many wrong codes. Try again in ${min} minutes.`;
-  } else if (reason === 'alreadySent') o.message = 'A code was sent a moment ago. Use the code from that mail.';
-  else if (reason && /expire/i.test(reason)) o.message = 'This code has expired. Send a new code.';
-  else if (reason && /mail|address/i.test(reason)) o.message = 'This Loxone user has no e-mail address for login codes. Add one to the user in Loxone Config, or switch the login code off for this user.';
-  else if (withCode && o.attemptsLeft !== null) {
-    if (o.attemptsLeft === 1) o.message = 'Wrong code. 1 attempt left.';
+// null, or { kind, mail, to, reason, attemptsLeft, retryAfter, expiresIn, resendIn, length, again, mailed, message }
+// when the answer is one of the two-step codes. again: the code step stays (a code can still be entered or asked
+// for); mailed: a new code just went out. The details are in the field otp (also read at the top level).
+function otpAsked(v, { code }) {
+  const kind = OTP[Number(code)];
+  if (!kind) return null;
+  const obj = v && typeof v === 'object' ? v : {};
+  const f = obj.otp && typeof obj.otp === 'object' ? obj.otp : obj;
+  const num = (k) => (Number.isFinite(Number(f[k])) && f[k] !== '' && f[k] !== null && f[k] !== undefined ? Number(f[k]) : null);
+  const str = (k) => (typeof f[k] === 'string' ? f[k] : null);
+  const o = {
+    kind, mail: str('mail'), to: str('to'), reason: str('reason'), attemptsLeft: num('attemptsLeft'), retryAfter: num('retryAfter'),
+    expiresIn: num('expiresIn'), resendIn: num('resendIn'), length: num('length') || 6, again: true, mailed: false,
+  };
+  const why = (o.reason && MAIL_FAILED[o.reason]) || (o.reason ? `error ${o.reason}` : 'an unknown error');
+  if (kind === 'asked') {
+    o.mailed = o.mail !== 'alreadySent' && o.mail !== 'failed';
+    o.message = o.mail === 'alreadySent' ? 'A code was sent a moment ago. Use the code from that mail.'
+      : 'The Miniserver asks for a login code (Multi-Factor Authentication). It has just mailed the code to the e-mail address of this Loxone user.';
+  } else if (kind === 'send-failed') o.message = `The Miniserver could not mail the login code: ${why}.`;
+  else if (kind === 'no-address') {
+    o.again = false;
+    o.message = 'This Loxone user has no e-mail address for login codes. Add one to the user in Loxone Config, or switch the login code off for this user.';
+  } else if (kind === 'wrong-code') {
+    if (o.attemptsLeft === null) o.message = 'This code is not right. Check that it is the code from the newest mail.';
+    else if (o.attemptsLeft === 1) o.message = 'Wrong code. 1 attempt left.';
     else o.message = o.attemptsLeft > 0 ? `Wrong code. ${o.attemptsLeft} attempts left.` : 'Too many wrong codes. Send a new code.';
-  } else if (withCode) o.message = 'This code is not right. Check that it is the code from the newest mail.';
-  else o.message = 'The Miniserver asks for a login code (Multi-Factor Authentication). It has just mailed the code to the e-mail address of this Loxone user.';
-  // Whether this answer means a mail just went out (the code to wait for), for "valid until" on the Edit page.
-  o.mailed = !withCode && !MAIL_FAILED[reason] && !o.retryAfter && reason !== 'alreadySent' && !(reason && /mail|address/i.test(reason));
+  } else if (kind === 'expired') {
+    o.mailed = o.mail !== 'failed';
+    o.message = o.mailed ? 'This code has expired. The Miniserver has mailed a new one.' : `This code has expired, and a new one could not be mailed: ${why}.`;
+  } else if (kind === 'replaced') o.message = 'A newer login has replaced this code. Use the code from the newest mail.';
+  else if (kind === 'locked') {
+    const min = Math.max(1, Math.ceil((o.retryAfter || 900) / 60));
+    o.message = min === 1 ? 'Too many wrong codes. Try again in 1 minute.' : `Too many wrong codes. Try again in ${min} minutes.`;
+  } else {
+    o.again = false;
+    o.message = 'The Miniserver refused this login. Check the username and password, then click Test on the Miniserver\'s Edit page to try again.';
+  }
   return o;
 }
 
@@ -318,10 +350,11 @@ class MiniserverLiveConnection {
     const pwHash = shaHex(hashAlg, `${password}:${salt}`);
     const finalHash = hmacHex(hashAlg, key, `${username}:${pwHash}`);
 
+    // The code never leaves as its digits: HMAC-SHA256 with this same one-time key (see otpHash).
     const code6 = otp ? String(otp).replace(/\D/g, '').slice(0, 8) : '';
     const permission = code6 || this.miniserver.live_needs_code ? PERMISSION_APP : PERMISSION_WEB;
     const tokenResp = await this.request(
-      `jdev/sys/getjwt/${finalHash}/${username}/${permission}/${CLIENT_UUID}/loxsuite${code6 ? `?otp=${code6}` : ''}`,
+      `jdev/sys/getjwt/${finalHash}/${username}/${permission}/${CLIENT_UUID}/loxsuite${code6 ? `?otp=${otpHash(code6, key)}` : ''}`,
       'getjwt'
     );
     const tokenCode = llCode(tokenResp);
@@ -329,7 +362,9 @@ class MiniserverLiveConnection {
     if (tokenCode !== '200' || !v?.token) {
       this.lastTech = `getjwt ${shapeOf(tokenCode, v)}`;
       console.warn(`[loxoneWebSocket] Miniserver ${id}: token refused, answer ${this.lastTech}`);
-      const asked = otpAsked(tokenResp, v, { withCode: Boolean(code6) });
+      const asked = otpAsked(v, { code: tokenCode });
+      // No e-mail address (462) or a refused login (467): no code can come — like a refused password, not retried.
+      if (asked && !asked.again) throw Object.assign(new Error(asked.message), { authRefused: true, final: true });
       if (asked) throw Object.assign(new Error(asked.message), { otp: asked });
       if (isPermanentAuthFailure(tokenCode)) {
         throw Object.assign(new Error(`The Miniserver rejected the username or password (code ${tokenCode}). Check them on the Miniserver's Edit page.`), { authRefused: true, final: true });
@@ -450,6 +485,7 @@ class MiniserverLiveConnection {
         const validMs = (err.otp.expiresIn ? err.otp.expiresIn * 1000 : CODE_VALID_MS);
         codeWaits.set(this.miniserver.id, {
           ...err.otp,
+          to: err.otp.to || before?.to || null,
           sentAt: err.otp.mailed ? new Date() : before?.sentAt || null,
           until: err.otp.mailed ? new Date(Date.now() + validMs) : before?.until || null,
           resendAt: err.otp.mailed && err.otp.resendIn ? new Date(Date.now() + err.otp.resendIn * 1000) : before?.resendAt || null,
@@ -508,8 +544,8 @@ class MiniserverLiveConnection {
 // stale session right after the gateway and Miniserver restart together, a transient 5xx, a
 // malformed/empty code) is treated as temporary so it falls through to a (limited, AUTH_TRIES)
 // retry instead of getting permanently stuck in 'auth_failed' — see the throw site above and
-// CHANGELOG 0.18.27 for the reported bug this exact distinction fixes. A 401 that asks for the
-// login code is told apart before this (otpAsked). Kept as a tiny pure function (and exported) so
+// CHANGELOG 0.18.27 for the reported bug this exact distinction fixes. The login code's own
+// answers (460-467) are told apart before this (otpAsked). Kept as a tiny pure function (and exported) so
 // that contract has a home a unit test can pin down.
 function isPermanentAuthFailure(tokenCode) {
   return String(tokenCode) === '401';
@@ -539,8 +575,8 @@ function codeWait(miniserverId) {
   if (w.until && w.until.getTime() < Date.now() - CODE_VALID_MS) { codeWaits.delete(miniserverId); return null; }
   const iso = (d) => (d ? d.toISOString() : null);
   return {
-    message: w.message, reason: w.reason, attemptsLeft: w.attemptsLeft, retryAfter: w.retryAfter, length: w.length,
-    sentAt: iso(w.sentAt), until: iso(w.until), resendAt: iso(w.resendAt),
+    message: w.message, kind: w.kind, reason: w.reason, attemptsLeft: w.attemptsLeft, retryAfter: w.retryAfter, length: w.length,
+    to: w.to, sentAt: iso(w.sentAt), until: iso(w.until), resendAt: iso(w.resendAt),
   };
 }
 
@@ -611,5 +647,5 @@ function resetConnection(miniserverId) {
 
 module.exports = {
   startLiveConnections, ensureConnection, getLiveValue, getStatus, testConnection, resetConnection,
-  loginWithCode, sendLoginCode, isPermanentAuthFailure, otpAsked, shapeOf, AUTH_TRIES, _tuning: tuning,
+  loginWithCode, sendLoginCode, isPermanentAuthFailure, otpAsked, otpHash, shapeOf, AUTH_TRIES, _tuning: tuning,
 };

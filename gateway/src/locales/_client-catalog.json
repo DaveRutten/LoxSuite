@@ -1888,6 +1888,13 @@
   ]
  },
  {
+  "key": "A newer login has replaced this code. Use the code from the newest mail.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
   "key": "A newer LoxSuite release (v{0}) is available on GitHub — currently running v{1}.",
   "module": "core",
   "where": [
@@ -2466,6 +2473,13 @@
   "module": "core",
   "where": [
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "an unknown error",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
   ]
  },
  {
@@ -7833,6 +7847,13 @@
   "module": "core",
   "where": [
    "src/routes/languages.js"
+  ]
+ },
+ {
+  "key": "Mailed to {0}.",
+  "module": "core",
+  "where": [
+   "miniserver-edit (script)"
   ]
  },
  {
@@ -13219,6 +13240,13 @@
   ]
  },
  {
+  "key": "The Miniserver refused this login. Check the username and password, then click Test on the Miniserver's Edit page to try again.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
   "key": "The Miniserver rejected the username or password (code {0}). Check them on the Miniserver's Edit page.",
   "module": "core",
   "where": [
@@ -13450,7 +13478,14 @@
   ]
  },
  {
-  "key": "This code has expired. Send a new code.",
+  "key": "This code has expired, and a new one could not be mailed: {0}.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "This code has expired. The Miniserver has mailed a new one.",
   "module": "core",
   "where": [
    "src/loxoneWebSocket.js"

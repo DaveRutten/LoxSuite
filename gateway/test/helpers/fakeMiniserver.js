@@ -4,10 +4,11 @@
 // refused token are testable. Unlike dev/screenshots/fake-miniserver.js this one runs without --security-revert:
 // the RSA key exchange is decrypted by hand (Node refuses PKCS#1 v1.5 padding for private decryption by default).
 //
-// mfa: { user: true } plays a user with the login code (Multi-Factor Authentication, Loxone Config 17.3): getjwt
-// without ?otp= mails a code (into `mails`) and answers with the fields Loxone Config reads (ticket, length,
-// expiresIn, resendIn); a wrong code costs one of 5 attempts. The real Miniserver's answer is not known yet (see
-// loxoneWebSocket.js), this follows the fields Loxone Config 17.3 knows.
+// mfa: { user: true } plays a user with the login code (Multi-Factor Authentication, Loxone Config 17.3) as a real
+// Miniserver 17.3 does it (see loxoneWebSocket.js): getjwt without ?otp= mails a code (into `mails`) and answers 460
+// with the details in the field otp; the code comes back as HMAC-SHA256 with that request's getkey2 key — the plain
+// digits count as a wrong code (463); a wrong code costs one of 5 attempts, then 466 (locked); an expired code 464,
+// a code replaced by a newer login (or none asked) 465.
 // tokenAnswer: a code getjwt answers with for every login (to play a Miniserver that keeps refusing).
 const http = require('http');
 const crypto = require('crypto');
@@ -32,6 +33,7 @@ function createFakeMiniserver({ users = { loxsuite: 'geheim' }, mfa = {}, tokenD
   const sim = {
     mails: [], // [{ user, code, at }] — the codes "mailed" to users with mfa
     tokenRequests: [], // [{ user, permission, otp: boolean }] — every getjwt
+    otpParams: [], // what came as ?otp= (must be an HMAC, never the code)
     tokenLogins: 0, // authwithtoken requests
     refused: 0, // getjwt/authwithtoken answered with something other than 200
     refreshes: 0,
@@ -89,29 +91,32 @@ function createFakeMiniserver({ users = { loxsuite: 'geheim' }, mfa = {}, tokenD
       if (cmd.startsWith('jdev/sys/getjwt/')) {
         const [, , , hash, userEnc, permission, , infoAndOtp] = parts;
         const user = decodeURIComponent(userEnc);
-        const otp = (infoAndOtp.match(/\?otp=(\d+)$/) || [])[1];
+        const otp = (infoAndOtp.match(/\?otp=([0-9A-Za-z]+)$/) || [])[1];
         sim.tokenRequests.push({ user, permission: Number(permission), otp: Boolean(otp) });
+        if (otp) sim.otpParams.push(otp);
         const control = `jdev/sys/getjwt/${hash}/${userEnc}`;
         const refuse = (value, code = '401') => { sim.refused += 1; ll(control, value, code); };
         if (tokenAnswer) { refuse('', String(tokenAnswer)); return; }
         const expected = user in users ? hmacHex('SHA256', c.key, `${user}:${shaUpper('SHA256', `${users[user]}:${salts[user]}`)}`) : null;
         // A wrong password, as a real Miniserver answers it.
-        if (!expected || expected !== hash) { refuse({ lastEdit: 1, unix: Math.floor(Date.now() / 1000) }); return; }
+        if (!expected || expected !== hash) { refuse({ lastEdit: 1793600000, unix: Math.floor(Date.now() / 1000) }); return; }
         if (mfa[user]) {
           const sent = codes.get(user);
+          const to = 'l***@example.com';
           if (!otp) {
             // Without a code: mail one (a new login replaces the previous code). With a code: 5 tries, 10 minutes.
             const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0');
             codes.set(user, { code, until: Date.now() + 600000, attempts: 5 });
             sim.mails.push({ user, code, at: Date.now() });
-            refuse({ ticket: crypto.randomBytes(8).toString('hex'), length: 6, expiresIn: 600, resendIn: 30 });
+            refuse({ otp: { mail: 'sent', to, length: 6, expiresIn: 600, resendIn: 30 } }, '460');
             return;
           }
-          if (!sent || sent.until < Date.now()) { refuse({ reason: 'expired', length: 6 }); return; }
-          if (sent.code !== otp) {
+          if (!sent) { refuse({ otp: { length: 6 } }, '465'); return; }
+          if (sent.until < Date.now()) { refuse({ otp: { mail: 'sent', to, length: 6 } }, '464'); return; }
+          if (hmacHex('SHA256', c.key, sent.code) !== otp) {
             sent.attempts -= 1;
-            refuse(sent.attempts > 0 ? { attemptsLeft: sent.attempts, length: 6 } : { retryAfter: 300 });
-            if (sent.attempts <= 0) codes.delete(user);
+            if (sent.attempts > 0) refuse({ otp: { attemptsLeft: sent.attempts, length: 6 } }, '463');
+            else { codes.delete(user); refuse({ otp: { retryAfter: 300, length: 6 } }, '466'); }
             return;
           }
           codes.delete(user);
