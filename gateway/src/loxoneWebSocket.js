@@ -6,23 +6,56 @@
 // this HTTP polling never could. See docs/ (or ask) for the full writeup; the short version is this
 // isn't a speed problem, it's that most states have no HTTP-pollable equivalent at all.
 //
-// The handshake below (RSA key exchange -> AES-encrypted getkey2/gettoken -> enablebinstatusupdate)
+// The handshake below (RSA key exchange -> AES-encrypted getkey2/getjwt -> enablebinstatusupdate)
 // mirrors the well-established open-source Loxone integrations (e.g. Home Assistant's PyLoxone) —
 // reverse-engineering this from scratch would be needlessly risky when the protocol is already
 // documented in working code; verified end to end against a real Miniserver before relying on it.
+//
+// The token request is getjwt (Loxone's documented successor of gettoken since 10.2, same arguments
+// and answer): Loxone Config 17.3 itself uses it, and only getjwt takes the login code below.
+//
+// Login code (Multi-Factor Authentication, Loxone Config 17.3): for a Loxone user with it on, getjwt
+// gives no token but asks for the 6-digit code the Miniserver mails to that user; the same getjwt
+// with ?otp=<code> then gives it. Not in Loxone's protocol document (v17.0): the command and the
+// fields of the answer are those of Loxone Config 17.3, and the answer is known by those fields, not
+// by its code. A password login on every reconnect would mail a new code each time, so the token
+// that comes with the code is kept (encrypted) and used with authwithtoken from then on; refreshjwt
+// keeps it valid, no code needed.
 const crypto = require('crypto');
 const WebSocket = require('ws');
 const db = require('./db');
 const { fetchMiniserver } = require('./loxone');
-const { decrypt } = require('./secretCrypto');
+const { encrypt, decrypt } = require('./secretCrypto');
 
 const RESCAN_TICK_MS = 60000;
 
 const KEEPALIVE_MS = 4 * 60 * 1000;
 const RECONNECT_BASE_MS = 2000;
 const RECONNECT_MAX_MS = 60000;
+const REQUEST_TIMEOUT_MS = 8000;
+// A refused login is tried this many times, slowly (AUTH_RETRY_MS, then twice that), and then left alone until
+// someone saves the Miniserver or clicks Test now: a Miniserver with the login code locks the user after 10 failed
+// logins and mails him each time.
+const AUTH_TRIES = 3;
+const AUTH_RETRY_MS = 60 * 1000;
+const tuning = { authRetryMs: AUTH_RETRY_MS }; // tests shorten it
+// Loxone's own permission numbers for getjwt: 2 = web (short-lived), 4 = app (weeks, refreshable). The app
+// token is only asked for with the login code, since that is the one LoxSuite keeps.
+const PERMISSION_WEB = 2;
+const PERMISSION_APP = 4;
+const CLIENT_UUID = 'aaaabbbb-cccc-dddd-eeeeffff0000';
+const LOXONE_EPOCH_MS = Date.UTC(2009, 0, 1); // Loxone's times count seconds from 2009-01-01
+const REFRESH_BEFORE_MS = 3 * 24 * 3600 * 1000;
+const REFRESH_CHECK_MS = 12 * 3600 * 1000;
+const CODE_VALID_MS = 10 * 60 * 1000; // what Loxone says a mailed code is valid for, when the answer doesn't say
+
+const NEEDS_CODE = 'This Loxone user logs in with a login code (Multi-Factor Authentication). Click "Send login code" on the Miniserver\'s Edit page; the Miniserver then mails a new code.';
 
 const connections = new Map(); // miniserver id -> MiniserverLiveConnection
+// miniserver id -> what the Miniserver said when it asked for the login code ({ reason, attemptsLeft, ..., until }).
+// Kept here, not on the connection, because every code and every "send a new code" is a new connection. No
+// password or code in it, and gone once the code is no longer valid or the login worked.
+const codeWaits = new Map();
 
 function pkcs7pad(buf, blockSize) {
   const padLen = blockSize - (buf.length % blockSize);
@@ -37,6 +70,69 @@ function hmacHex(hashAlg, keyHex, message) {
 function shaHex(hashAlg, message) {
   const nodeAlg = hashAlg === 'SHA256' ? 'sha256' : 'sha1';
   return crypto.createHash(nodeAlg).update(message, 'utf8').digest('hex').toUpperCase();
+}
+
+const llCode = (body) => String(body?.LL?.Code ?? body?.LL?.code);
+function llValue(body) {
+  const v = body?.LL?.value;
+  if (typeof v !== 'string' || !/^\s*[{[]/.test(v)) return v;
+  try { return JSON.parse(v); } catch { return v; }
+}
+const fromLoxoneTime = (s) => (Number(s) > 0 ? new Date(LOXONE_EPOCH_MS + Number(s) * 1000) : null);
+
+// The answer to a login code request: the fields that tell it apart from a wrong password (which a real Miniserver
+// answers with 401 and { lastEdit, unix }).
+const OTP_FIELDS = ['ticket', 'expiresIn', 'resendIn', 'attemptsLeft', 'retryAfter', 'length', 'codeVerified'];
+const MAIL_FAILED = {
+  notRegistered: 'the Miniserver is not registered with the Loxone mail service',
+  noConnection: 'the Miniserver has no connection to the mail server',
+  quota: 'the Miniserver has reached its maximum number of mails',
+  noMailer: 'no mail server is set up on the Miniserver',
+};
+const TOLD = ['reason', 'attemptsLeft', 'retryAfter', 'expiresIn', 'resendIn', 'length'];
+
+// The shape of an answer, for the log and the Edit page: its field names, and only the values that are no secret
+// (never the token, a hash or a code) — so what a real Miniserver sends can be learned from it.
+function shapeOf(code, v) {
+  if (!v || typeof v !== 'object') return `${code}${v ? ' (text)' : ''}`;
+  const told = Object.keys(v).map((k) => (TOLD.includes(k) ? `${k}=${String(v[k]).slice(0, 24)}` : k));
+  return `${code} {${told.join(', ')}}`;
+}
+
+// null, or { reason, attemptsLeft, retryAfter, expiresIn, resendIn, length, message } when the Miniserver asks for
+// the login code (withCode: this answer is to a request that had one).
+function otpAsked(res, v, { withCode }) {
+  const fields = { ...(res?.LL || {}), ...(v && typeof v === 'object' ? v : {}) };
+  const reason = typeof fields.reason === 'string' ? fields.reason : null;
+  if (!OTP_FIELDS.some((k) => k in fields) && !(reason && (reason in MAIL_FAILED || /otp|code|mfa|sent|expire|mail|address/i.test(reason)))) return null;
+  const num = (k) => (Number.isFinite(Number(fields[k])) && fields[k] !== '' && fields[k] !== null ? Number(fields[k]) : null);
+  const o = { reason, attemptsLeft: num('attemptsLeft'), retryAfter: num('retryAfter'), expiresIn: num('expiresIn'), resendIn: num('resendIn'), length: num('length') || 6 };
+  if (reason && MAIL_FAILED[reason]) o.message = `The Miniserver could not mail the login code: ${MAIL_FAILED[reason]}.`;
+  else if (o.retryAfter) {
+    const min = Math.max(1, Math.ceil(o.retryAfter / 60));
+    o.message = min === 1 ? 'Too many wrong codes. Try again in 1 minute.' : `Too many wrong codes. Try again in ${min} minutes.`;
+  } else if (reason === 'alreadySent') o.message = 'A code was sent a moment ago. Use the code from that mail.';
+  else if (reason && /expire/i.test(reason)) o.message = 'This code has expired. Send a new code.';
+  else if (reason && /mail|address/i.test(reason)) o.message = 'This Loxone user has no e-mail address for login codes. Add one to the user in Loxone Config, or switch the login code off for this user.';
+  else if (withCode && o.attemptsLeft !== null) {
+    if (o.attemptsLeft === 1) o.message = 'Wrong code. 1 attempt left.';
+    else o.message = o.attemptsLeft > 0 ? `Wrong code. ${o.attemptsLeft} attempts left.` : 'Too many wrong codes. Send a new code.';
+  } else if (withCode) o.message = 'This code is not right. Check that it is the code from the newest mail.';
+  else o.message = 'The Miniserver asks for a login code (Multi-Factor Authentication). It has just mailed the code to the e-mail address of this Loxone user.';
+  // Whether this answer means a mail just went out (the code to wait for), for "valid until" on the Edit page.
+  o.mailed = !withCode && !MAIL_FAILED[reason] && !o.retryAfter && reason !== 'alreadySent' && !(reason && /mail|address/i.test(reason));
+  return o;
+}
+
+function readToken(miniserver) {
+  if (!miniserver.live_token) return null;
+  try {
+    const t = JSON.parse(decrypt(miniserver.live_token));
+    if (!t?.token) return null;
+    return { token: t.token, hashAlg: t.hashAlg || 'SHA1', validUntil: miniserver.live_token_valid_until ? new Date(miniserver.live_token_valid_until) : null };
+  } catch {
+    return null; // SESSION_SECRET changed: as good as no token
+  }
 }
 
 // Loxone's own UUID text format (4-2-2-8 byte grouping) rather than standard RFC4122 (4-2-2-2-6) —
@@ -74,20 +170,27 @@ function parseTextStates(buf, onValue) {
 }
 
 class MiniserverLiveConnection {
-  constructor(miniserver) {
-    // Decrypted once here rather than at each of this.miniserver.password's two use sites below.
+  // firstLogin: { otp } logs in with the login code, { sendCode: true } logs in with the password so the
+  // Miniserver mails a new code (see loginWithCode/sendLoginCode below); otherwise the usual login.
+  constructor(miniserver, firstLogin = {}) {
+    // Decrypted once here rather than at each of this.miniserver.password's use sites below.
     this.miniserver = { ...miniserver, password: decrypt(miniserver.password) };
+    this.token = readToken(miniserver);
     this.cache = new Map(); // uuid -> value (number or string)
     this.status = 'connecting';
     this.lastError = null;
+    this.lastTech = null; // the shape of the last refused token answer (see shapeOf), never a secret
     this.ws = null;
     this.destroyed = false;
     this.reconnectDelay = RECONNECT_BASE_MS;
     this.reconnectTimer = null;
     this.keepaliveTimer = null;
+    this.refreshTimer = null;
     this.pendingHeader = null;
+    this.pending = []; // { match(control): boolean, resolve } — LL answers being waited for
+    this.authFails = 0;
     this.waiters = []; // { resolve } — woken on first successful open, for the Test-now check
-    this.connect();
+    this.connect(firstLogin);
   }
 
   updateStatus(status, error) {
@@ -97,7 +200,7 @@ class MiniserverLiveConnection {
       const waiters = this.waiters;
       this.waiters = [];
       waiters.forEach((w) => w.resolve({ ok: true }));
-    } else if (status === 'error' || status === 'closed' || status === 'auth_failed') {
+    } else if (status === 'error' || status === 'closed' || status === 'auth_failed' || status === 'code_required') {
       const waiters = this.waiters;
       this.waiters = [];
       waiters.forEach((w) => w.resolve({ ok: false, error: this.lastError }));
@@ -106,6 +209,8 @@ class MiniserverLiveConnection {
 
   waitForOpen(timeoutMs) {
     if (this.status === 'open') return Promise.resolve({ ok: true });
+    // Settled without a retry coming: no point in waiting for the timeout.
+    if (this.status === 'auth_failed' || this.status === 'code_required') return Promise.resolve({ ok: false, error: this.lastError });
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.waiters = this.waiters.filter((w) => w.resolve !== resolve);
@@ -119,7 +224,8 @@ class MiniserverLiveConnection {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(command);
   }
 
-  sendEncrypted(command, aesKey, iv, salt) {
+  sendEncrypted(command) {
+    const { aesKey, iv, salt } = this.session;
     const commandString = `salt/${salt}/${command}\0`;
     const padded = pkcs7pad(Buffer.from(commandString, 'utf8'), 16);
     const cipher = crypto.createCipheriv('aes-256-cbc', aesKey, iv);
@@ -128,122 +234,206 @@ class MiniserverLiveConnection {
     this.send(`jdev/sys/enc/${encodeURIComponent(encrypted.toString('base64'))}`);
   }
 
-  async connect() {
+  // Sends a command and waits for the LL answer whose control matches (a substring, or a test on the control).
+  request(command, match, { encrypted = true, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+    const test = typeof match === 'function' ? match : (control) => control.includes(match);
+    const answer = new Promise((resolve, reject) => {
+      const entry = { match: test };
+      const timer = setTimeout(() => {
+        this.pending = this.pending.filter((p) => p !== entry);
+        reject(new Error('Timed out waiting for a response'));
+      }, timeoutMs);
+      entry.resolve = (v) => { clearTimeout(timer); resolve(v); };
+      this.pending.push(entry);
+    });
+    if (encrypted) this.sendEncrypted(command);
+    else this.send(command);
+    return answer;
+  }
+
+  onMessage(data, isBinary) {
+    if (!isBinary) {
+      let body;
+      try { body = JSON.parse(data.toString()); } catch { return; }
+      const control = String(body?.LL?.control ?? '');
+      const idx = this.pending.findIndex((p) => p.match(control));
+      if (idx !== -1) this.pending.splice(idx, 1)[0].resolve(body);
+      return;
+    }
+    if (!this.pendingHeader && data.length === 8) {
+      this.pendingHeader = { identifier: data.readUInt8(1), length: data.readUInt32LE(4) };
+      return;
+    }
+    if (this.pendingHeader) {
+      const { identifier } = this.pendingHeader;
+      this.pendingHeader = null;
+      if (identifier === 2) parseValueStates(data, (uuid, val) => this.cache.set(uuid, val));
+      else if (identifier === 3) parseTextStates(data, (uuid, val) => this.cache.set(uuid, val));
+    }
+  }
+
+  // Websocket up and the session key exchanged. No Basic auth on getPublicKey or the websocket upgrade: Loxone
+  // asks for none there (the login happens inside), and a user with the login code may not be let in by it.
+  async openSocket() {
+    const pkRes = await fetchMiniserver(this.miniserver, '/jdev/sys/getPublicKey', { timeoutMs: REQUEST_TIMEOUT_MS, anonymous: true });
+    const pkBody = await pkRes.json();
+    const pem = pkBody.LL.value.trim()
+      .replace('-----BEGIN CERTIFICATE-----', '-----BEGIN PUBLIC KEY-----\n')
+      .replace('-----END CERTIFICATE-----', '\n-----END PUBLIC KEY-----\n');
+
+    const aesKey = crypto.randomBytes(32);
+    const iv = crypto.randomBytes(16);
+    this.session = { aesKey, iv, salt: crypto.randomBytes(16).toString('hex') };
+    const sessionKeyPlain = `${aesKey.toString('hex')}:${iv.toString('hex')}`;
+    const encryptedSessionKey = crypto.publicEncrypt(
+      { key: pem, padding: crypto.constants.RSA_PKCS1_PADDING },
+      Buffer.from(sessionKeyPlain, 'utf8')
+    ).toString('base64');
+
+    const scheme = this.miniserver.use_https ? 'wss' : 'ws';
+    const url = `${scheme}://${this.miniserver.host}:${this.miniserver.http_port}/ws/rfc6455`;
+    const ws = new WebSocket(url, ['remotecontrol'], { handshakeTimeout: REQUEST_TIMEOUT_MS, rejectUnauthorized: false });
+    this.ws = ws;
+    this.pending = [];
+    ws.on('message', (data, isBinary) => this.onMessage(data, isBinary));
+
+    await new Promise((resolve, reject) => {
+      ws.once('open', resolve);
+      ws.once('error', reject);
+      ws.once('unexpected-response', (req, res) => reject(new Error(`HTTP ${res.statusCode} on websocket handshake`)));
+    });
+
+    const keyExchangeResp = await this.request(`jdev/sys/keyexchange/${encryptedSessionKey}`, 'keyexchange', { encrypted: false });
+    const keCode = llCode(keyExchangeResp);
+    if (keCode !== '200') throw new Error(`Key exchange failed (code ${keCode})`);
+  }
+
+  // Password (+ login code) -> token. With the code the token is kept (see the top of this file).
+  async loginWithPassword(otp) {
+    const { username, password, id } = this.miniserver;
+    const keyData = llValue(await this.request(`jdev/sys/getkey2/${username}`, 'getkey2'));
+    const { key, salt } = keyData;
+    const hashAlg = keyData.hashAlg || 'SHA1';
+
+    const pwHash = shaHex(hashAlg, `${password}:${salt}`);
+    const finalHash = hmacHex(hashAlg, key, `${username}:${pwHash}`);
+
+    const code6 = otp ? String(otp).replace(/\D/g, '').slice(0, 8) : '';
+    const permission = code6 || this.miniserver.live_needs_code ? PERMISSION_APP : PERMISSION_WEB;
+    const tokenResp = await this.request(
+      `jdev/sys/getjwt/${finalHash}/${username}/${permission}/${CLIENT_UUID}/loxsuite${code6 ? `?otp=${code6}` : ''}`,
+      'getjwt'
+    );
+    const tokenCode = llCode(tokenResp);
+    const v = llValue(tokenResp);
+    if (tokenCode !== '200' || !v?.token) {
+      this.lastTech = `getjwt ${shapeOf(tokenCode, v)}`;
+      console.warn(`[loxoneWebSocket] Miniserver ${id}: token refused, answer ${this.lastTech}`);
+      const asked = otpAsked(tokenResp, v, { withCode: Boolean(code6) });
+      if (asked) throw Object.assign(new Error(asked.message), { otp: asked });
+      if (isPermanentAuthFailure(tokenCode)) {
+        throw Object.assign(new Error(`The Miniserver rejected the username or password (code ${tokenCode}). Check them on the Miniserver's Edit page.`), { authRefused: true, final: true });
+      }
+      // Only Loxone's own documented "Unauthorized" (401 — the actual credentials being wrong)
+      // is treated as deterministic/never-worth-retrying. Confirmed the hard way: a Miniserver
+      // and this gateway restarting together (a container restart, e.g. triggered by an
+      // unattended backup snapshot) can leave a stale token/session for this exact client UUID
+      // (see CLIENT_UUID above — every connection this gateway ever makes identifies itself with
+      // the SAME one, never a fresh one per attempt) still considered "logged in" from the
+      // Miniserver's own point of view for a little while after the old connection actually died —
+      // genuinely temporary, gone within a retry or two. Retried, but no more than AUTH_TRIES times.
+      throw Object.assign(new Error(`The Miniserver refused the login (code ${tokenCode}). If the login code (Multi-Factor Authentication) was just switched on for this Loxone user, click Test on the Miniserver's Edit page to log in with the code.`), { authRefused: true });
+    }
+    this.lastTech = null;
+    if (code6) {
+      this.token = { token: v.token, hashAlg, validUntil: fromLoxoneTime(v.validUntil) };
+      await this.saveToken();
+    } else if (this.token || this.miniserver.live_needs_code) {
+      // In with the password alone: the login code was switched off for this user.
+      this.token = null;
+      this.miniserver.live_needs_code = 0;
+      await db.prepare('UPDATE miniservers SET live_token = NULL, live_token_valid_until = NULL, live_needs_code = 0 WHERE id = ?').run(id);
+    }
+  }
+
+  async tokenHash() {
+    const key = llValue(await this.request('jdev/sys/getkey', (c) => c.includes('getkey') && !c.includes('getkey2')));
+    return hmacHex(this.token.hashAlg, String(key), this.token.token);
+  }
+
+  async loginWithToken() {
+    const res = await this.request(`authwithtoken/${await this.tokenHash()}/${this.miniserver.username}`, 'authwithtoken');
+    const code = llCode(res);
+    if (code === '401' || code === '477' || code === '403' || code === '400') {
+      this.lastTech = `authwithtoken ${shapeOf(code, llValue(res))}`;
+      console.warn(`[loxoneWebSocket] Miniserver ${this.miniserver.id}: saved login refused, answer ${this.lastTech}`);
+      throw Object.assign(new Error(`The Miniserver no longer accepts LoxSuite's saved login (code ${code}). Was the Loxone user removed, its password changed or its login code reset? Check the password on the Miniserver's Edit page, then log in again with a new login code.`), { authRefused: true, tokenRefused: true });
+    }
+    // Anything else (a busy or restarting Miniserver) is not a refusal: retried like an unreachable one.
+    if (code !== '200') throw new Error(`The Miniserver did not answer the saved login properly (code ${code})`);
+    this.lastTech = null;
+    const until = fromLoxoneTime(llValue(res)?.validUntil);
+    if (until) this.token.validUntil = until;
+  }
+
+  async refreshTokenIfDue() {
+    const until = this.token?.validUntil;
+    if (!until || until.getTime() - Date.now() > REFRESH_BEFORE_MS) return;
+    try {
+      const res = await this.request(`jdev/sys/refreshjwt/${await this.tokenHash()}/${this.miniserver.username}`, 'refreshjwt');
+      const code = llCode(res);
+      const v = llValue(res);
+      if (code !== '200') {
+        console.warn(`[loxoneWebSocket] Miniserver ${this.miniserver.id}: token refresh refused, answer refreshjwt ${shapeOf(code, v)}`);
+        return;
+      }
+      this.token = { ...this.token, token: v?.token || this.token.token, validUntil: fromLoxoneTime(v?.validUntil) || until };
+      await this.saveToken();
+    } catch (err) {
+      console.warn(`[loxoneWebSocket] Miniserver ${this.miniserver.id}: token refresh failed: ${err.message}`);
+    }
+  }
+
+  async saveToken() {
+    const { token, hashAlg, validUntil } = this.token;
+    this.miniserver.live_needs_code = 1;
+    await db.prepare('UPDATE miniservers SET live_token = ?, live_token_valid_until = ?, live_needs_code = 1 WHERE id = ?')
+      .run(encrypt(JSON.stringify({ token, hashAlg })), validUntil ? validUntil.toISOString() : null, this.miniserver.id);
+  }
+
+  async connect({ otp = null, sendCode = false } = {}) {
     if (this.destroyed) return;
+    // Asked for the login code before and no token: a login now would mail a new code, so only on request.
+    if (!this.token && this.miniserver.live_needs_code && !otp && !sendCode) {
+      this.updateStatus('code_required', NEEDS_CODE);
+      return;
+    }
     this.updateStatus('connecting', null);
 
     try {
-      const pkRes = await fetchMiniserver(this.miniserver, '/jdev/sys/getPublicKey', { timeoutMs: 8000 });
-      const pkBody = await pkRes.json();
-      const pem = pkBody.LL.value.trim()
-        .replace('-----BEGIN CERTIFICATE-----', '-----BEGIN PUBLIC KEY-----\n')
-        .replace('-----END CERTIFICATE-----', '\n-----END PUBLIC KEY-----\n');
+      await this.openSocket();
+      if (this.token && !otp && !sendCode) await this.loginWithToken();
+      else await this.loginWithPassword(otp);
 
-      const aesKey = crypto.randomBytes(32);
-      const iv = crypto.randomBytes(16);
-      const commandSalt = crypto.randomBytes(16).toString('hex');
-      const sessionKeyPlain = `${aesKey.toString('hex')}:${iv.toString('hex')}`;
-      const encryptedSessionKey = crypto.publicEncrypt(
-        { key: pem, padding: crypto.constants.RSA_PKCS1_PADDING },
-        Buffer.from(sessionKeyPlain, 'utf8')
-      ).toString('base64');
-
-      const scheme = this.miniserver.use_https ? 'wss' : 'ws';
-      const url = `${scheme}://${this.miniserver.host}:${this.miniserver.http_port}/ws/rfc6455`;
-      const auth = Buffer.from(`${this.miniserver.username}:${this.miniserver.password}`).toString('base64');
-      const ws = new WebSocket(url, ['remotecontrol'], {
-        headers: { Authorization: `Basic ${auth}` },
-        handshakeTimeout: 8000,
-        rejectUnauthorized: false,
-      });
-      this.ws = ws;
-
-      const pending = []; // { match(body): boolean, resolve, reject }
-      const waitForLL = (match, timeoutMs = 8000) => new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Timed out waiting for a response')), timeoutMs);
-        pending.push({ match, resolve: (v) => { clearTimeout(timer); resolve(v); }, reject: (e) => { clearTimeout(timer); reject(e); } });
-      });
-
-      ws.on('message', (data, isBinary) => {
-        if (!isBinary) {
-          let body;
-          try { body = JSON.parse(data.toString()); } catch { return; }
-          const idx = pending.findIndex((p) => p.match(body));
-          if (idx !== -1) pending.splice(idx, 1)[0].resolve(body);
-          return;
-        }
-        if (!this.pendingHeader && data.length === 8) {
-          this.pendingHeader = { identifier: data.readUInt8(1), length: data.readUInt32LE(4) };
-          return;
-        }
-        if (this.pendingHeader) {
-          const { identifier } = this.pendingHeader;
-          this.pendingHeader = null;
-          if (identifier === 2) parseValueStates(data, (uuid, val) => this.cache.set(uuid, val));
-          else if (identifier === 3) parseTextStates(data, (uuid, val) => this.cache.set(uuid, val));
-        }
-      });
-
-      await new Promise((resolve, reject) => {
-        ws.once('open', resolve);
-        ws.once('error', reject);
-        ws.once('unexpected-response', (req, res) => reject(new Error(`HTTP ${res.statusCode} on websocket handshake`)));
-      });
-
-      const keyExchangePromise = waitForLL((b) => b?.LL?.control?.includes('keyexchange'));
-      this.send(`jdev/sys/keyexchange/${encryptedSessionKey}`);
-      const keyExchangeResp = await keyExchangePromise;
-      const keCode = String(keyExchangeResp?.LL?.Code ?? keyExchangeResp?.LL?.code);
-      if (keCode !== '200') throw new Error(`Key exchange failed (code ${keCode})`);
-
-      const getKey2Promise = waitForLL((b) => b?.LL?.control?.includes('getkey2'));
-      this.sendEncrypted(`jdev/sys/getkey2/${this.miniserver.username}`, aesKey, iv, commandSalt);
-      const getKey2Resp = await getKey2Promise;
-      let keyData = getKey2Resp.LL.value;
-      if (typeof keyData === 'string') keyData = JSON.parse(keyData);
-      const { key, salt } = keyData;
-      const hashAlg = keyData.hashAlg || 'SHA1';
-
-      const pwHash = shaHex(hashAlg, `${this.miniserver.password}:${salt}`);
-      const finalHash = hmacHex(hashAlg, key, `${this.miniserver.username}:${pwHash}`);
-
-      const tokenPromise = waitForLL((b) => b?.LL?.control?.includes('gettoken'));
-      this.sendEncrypted(
-        `jdev/sys/gettoken/${finalHash}/${this.miniserver.username}/2/aaaabbbb-cccc-dddd-eeeeffff0000/loxsuite`,
-        aesKey, iv, commandSalt
-      );
-      const tokenResp = await tokenPromise;
-      const tokenCode = String(tokenResp?.LL?.Code ?? tokenResp?.LL?.code);
-      if (tokenCode !== '200') {
-        const err = new Error(`Authentication failed (code ${tokenCode})`);
-        // Only Loxone's own documented "Unauthorized" (401 — the actual credentials being wrong)
-        // is treated as deterministic/never-worth-retrying. Confirmed the hard way: a Miniserver
-        // and this gateway restarting together (a container restart, e.g. triggered by an
-        // unattended backup snapshot) can leave a stale token/session for this exact client UUID
-        // (see gettoken's own hardcoded "aaaabbbb-cccc-dddd-eeeeffff0000" below — every connection
-        // this gateway ever makes identifies itself with the SAME one, never a fresh one per
-        // attempt) still considered "logged in" from the Miniserver's own point of view for a
-        // little while after the old connection actually died — genuinely temporary, gone within
-        // the normal reconnect backoff below, but a code that isn't literally 401 used to get
-        // permanently stuck in 'auth_failed' anyway, indistinguishable from a real wrong password
-        // until someone noticed and clicked "Test now" by hand.
-        err.authFailed = isPermanentAuthFailure(tokenCode);
-        throw err;
-      }
-
-      const enablePromise = waitForLL((b) => b?.LL?.control?.includes('enablebinstatusupdate'));
-      this.send('jdev/sps/enablebinstatusupdate');
-      const enableResp = await enablePromise;
-      const enableCode = String(enableResp?.LL?.Code ?? enableResp?.LL?.code);
+      const enableResp = await this.request('jdev/sps/enablebinstatusupdate', 'enablebinstatusupdate', { encrypted: false });
+      const enableCode = llCode(enableResp);
       if (enableCode !== '200') throw new Error(`enablebinstatusupdate failed (code ${enableCode})`);
 
       this.reconnectDelay = RECONNECT_BASE_MS;
+      this.authFails = 0;
+      codeWaits.delete(this.miniserver.id);
       this.updateStatus('open', null);
 
       this.keepaliveTimer = setInterval(() => this.send('keepalive'), KEEPALIVE_MS);
+      if (this.token) {
+        this.refreshTokenIfDue();
+        this.refreshTimer = setInterval(() => this.refreshTokenIfDue(), REFRESH_CHECK_MS);
+      }
 
+      const ws = this.ws;
       ws.on('close', () => {
         clearInterval(this.keepaliveTimer);
+        clearInterval(this.refreshTimer);
         this.cache.clear();
         this.updateStatus('closed', this.lastError);
         this.scheduleReconnect();
@@ -254,13 +444,40 @@ class MiniserverLiveConnection {
     } catch (err) {
       console.error(`[loxoneWebSocket] Miniserver ${this.miniserver.id} handshake failed:`, err.message);
       try { this.ws?.close(); } catch { /* already closing */ }
-      if (err.authFailed) {
-        // Deliberately no scheduleReconnect() here — the exact same credentials would be
-        // rejected again immediately, forever. This connection object just sits idle in
-        // 'auth_failed' from here on; ensureConnection() only ever creates a NEW one when none
-        // exists yet, so it won't touch this one again until resetConnection() (called from
-        // saving the Miniserver's settings or its "Test now" action) destroys it outright.
-        this.updateStatus('auth_failed', err.message);
+      if (err.otp) {
+        // Never retried by itself: every login without the code mails a new one.
+        const before = codeWaits.get(this.miniserver.id);
+        const validMs = (err.otp.expiresIn ? err.otp.expiresIn * 1000 : CODE_VALID_MS);
+        codeWaits.set(this.miniserver.id, {
+          ...err.otp,
+          sentAt: err.otp.mailed ? new Date() : before?.sentAt || null,
+          until: err.otp.mailed ? new Date(Date.now() + validMs) : before?.until || null,
+          resendAt: err.otp.mailed && err.otp.resendIn ? new Date(Date.now() + err.otp.resendIn * 1000) : before?.resendAt || null,
+        });
+        if (!this.miniserver.live_needs_code) {
+          this.miniserver.live_needs_code = 1;
+          await db.prepare('UPDATE miniservers SET live_needs_code = 1 WHERE id = ?').run(this.miniserver.id).catch(() => {});
+        }
+        this.updateStatus('code_required', err.message);
+      } else if (err.authRefused) {
+        // A refused login stays refused: tried a few times only (AUTH_TRIES), slowly, so a Miniserver that counts
+        // failed logins does not lock the user. A wrong password (401) is not tried again at all. This
+        // connection then just sits in 'auth_failed'; ensureConnection() only ever creates a NEW one when none
+        // exists yet, so nothing touches it again until resetConnection() (saving the Miniserver's settings or
+        // its "Test now" action) destroys it outright.
+        this.authFails += 1;
+        const giveUp = err.final || this.authFails >= AUTH_TRIES;
+        if (!giveUp) {
+          this.updateStatus('error', err.message);
+          this.scheduleReconnect(tuning.authRetryMs * this.authFails);
+        } else {
+          if (err.tokenRefused) {
+            // A refused token won't come back: without it, the next try asks for "Send login code".
+            this.token = null;
+            await db.prepare('UPDATE miniservers SET live_token = NULL, live_token_valid_until = NULL WHERE id = ?').run(this.miniserver.id).catch(() => {});
+          }
+          this.updateStatus('auth_failed', err.final ? err.message : `${err.message} LoxSuite has stopped trying by itself, so the Loxone user does not get locked. Click Test on the Miniserver's Edit page to try again.`);
+        }
       } else {
         this.updateStatus('error', err.message);
         this.scheduleReconnect();
@@ -268,37 +485,39 @@ class MiniserverLiveConnection {
     }
   }
 
-  scheduleReconnect() {
+  scheduleReconnect(delayMs = null) {
     if (this.destroyed || this.reconnectTimer) return;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
-    }, this.reconnectDelay);
-    this.reconnectDelay = Math.min(this.reconnectDelay * 2, RECONNECT_MAX_MS);
+    }, delayMs ?? this.reconnectDelay);
+    if (delayMs === null) this.reconnectDelay = Math.min(this.reconnectDelay * 2, RECONNECT_MAX_MS);
   }
 
   destroy() {
     this.destroyed = true;
     clearInterval(this.keepaliveTimer);
+    clearInterval(this.refreshTimer);
     clearTimeout(this.reconnectTimer);
     try { this.ws?.close(); } catch { /* already closing */ }
   }
 }
 
-// Idempotent — safe to call on every page load / values request. Miniservers with no live
-// connection yet get one started; an existing (even still-connecting or errored-and-retrying) one
-// is left alone rather than restarted, so a request doesn't pile up parallel handshakes.
-// A gettoken response code that means "these credentials are genuinely wrong — never retry",
+// A token answer code that means "these credentials are genuinely wrong — never retry",
 // deliberately ONLY Loxone's own documented 401 ("Unauthorized"). Every OTHER non-200 code (a
 // stale session right after the gateway and Miniserver restart together, a transient 5xx, a
-// malformed/empty code) is treated as temporary so it falls through to the normal reconnect
-// backoff instead of getting permanently stuck in 'auth_failed' — see the throw site above and
-// CHANGELOG 0.18.27 for the reported bug this exact distinction fixes. Kept as a tiny pure
-// function (and exported) so that contract has a home a unit test can pin down.
+// malformed/empty code) is treated as temporary so it falls through to a (limited, AUTH_TRIES)
+// retry instead of getting permanently stuck in 'auth_failed' — see the throw site above and
+// CHANGELOG 0.18.27 for the reported bug this exact distinction fixes. A 401 that asks for the
+// login code is told apart before this (otpAsked). Kept as a tiny pure function (and exported) so
+// that contract has a home a unit test can pin down.
 function isPermanentAuthFailure(tokenCode) {
   return String(tokenCode) === '401';
 }
 
+// Idempotent — safe to call on every page load / values request. Miniservers with no live
+// connection yet get one started; an existing (even still-connecting or errored-and-retrying) one
+// is left alone rather than restarted, so a request doesn't pile up parallel handshakes.
 function ensureConnection(miniserver) {
   let conn = connections.get(miniserver.id);
   if (!conn) {
@@ -313,10 +532,26 @@ function getLiveValue(miniserverId, uuid) {
   return conn ? conn.cache.get(uuid) : undefined;
 }
 
+// The login code wait as the Edit page shows it: no ticket, no code.
+function codeWait(miniserverId) {
+  const w = codeWaits.get(miniserverId);
+  if (!w) return null;
+  if (w.until && w.until.getTime() < Date.now() - CODE_VALID_MS) { codeWaits.delete(miniserverId); return null; }
+  const iso = (d) => (d ? d.toISOString() : null);
+  return {
+    message: w.message, reason: w.reason, attemptsLeft: w.attemptsLeft, retryAfter: w.retryAfter, length: w.length,
+    sentAt: iso(w.sentAt), until: iso(w.until), resendAt: iso(w.resendAt),
+  };
+}
+
 function getStatus(miniserverId) {
   const conn = connections.get(miniserverId);
   if (!conn) return { status: 'not_connected', error: null, valueCount: 0 };
-  return { status: conn.status, error: conn.lastError, valueCount: conn.cache.size };
+  return {
+    status: conn.status, error: conn.lastError, valueCount: conn.cache.size, tech: conn.lastTech,
+    otp: conn.status === 'code_required' ? codeWait(miniserverId) : null,
+    loginCode: Boolean(conn.token), tokenValidUntil: conn.token?.validUntil ? conn.token.validUntil.toISOString() : null,
+  };
 }
 
 // Used by the Miniservers "Test now" panel — starts a connection if there isn't one yet, then
@@ -327,9 +562,29 @@ async function testConnection(miniserver, timeoutMs = 8000) {
   const conn = ensureConnection(miniserver);
   const result = await conn.waitForOpen(timeoutMs);
   const ms = Date.now() - start;
+  const { status, tech, otp } = getStatus(miniserver.id);
   return result.ok
-    ? { ok: true, ms, error: null }
-    : { ok: false, ms, error: result.error || 'Could not open a live connection' };
+    ? { ok: true, ms, error: null, status }
+    : { ok: false, ms, error: result.error || 'Could not open a live connection', status, tech, otp };
+}
+
+// A fresh connection that logs in a particular way (see the constructor), for the Edit page's login code step.
+async function freshLogin(miniserver, firstLogin, timeoutMs) {
+  resetConnection(miniserver.id);
+  const conn = new MiniserverLiveConnection(miniserver, firstLogin);
+  connections.set(miniserver.id, conn);
+  const result = await conn.waitForOpen(timeoutMs);
+  return { ok: result.ok, ...getStatus(miniserver.id), error: result.ok ? null : result.error };
+}
+
+// The code the Miniserver mailed -> a token, kept for the reconnects that follow.
+function loginWithCode(miniserver, code, timeoutMs = 10000) {
+  return freshLogin(miniserver, { otp: code }, timeoutMs);
+}
+
+// A login without the code, which makes the Miniserver mail a new one (only the newest code counts).
+function sendLoginCode(miniserver, timeoutMs = 10000) {
+  return freshLogin(miniserver, { sendCode: true }, timeoutMs);
 }
 
 // Connects to every known Miniserver at boot (rather than waiting for someone to open Live Data
@@ -354,4 +609,7 @@ function resetConnection(miniserverId) {
   connections.delete(miniserverId);
 }
 
-module.exports = { startLiveConnections, ensureConnection, getLiveValue, getStatus, testConnection, resetConnection, isPermanentAuthFailure };
+module.exports = {
+  startLiveConnections, ensureConnection, getLiveValue, getStatus, testConnection, resetConnection,
+  loginWithCode, sendLoginCode, isPermanentAuthFailure, otpAsked, shapeOf, AUTH_TRIES, _tuning: tuning,
+};

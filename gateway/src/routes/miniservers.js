@@ -4,7 +4,9 @@ const { checkMiniserver, runDetailedCheck } = require('../healthcheck');
 const { miniserverGenerationLabel, formatHeapStatus, plcStateLabel } = require('../format');
 const { formatDateTime } = require('../dateFormat');
 const { fetchMiniserver } = require('../loxone');
-const { testConnection: testLiveConnection, resetConnection: resetLiveConnection } = require('../loxoneWebSocket');
+const {
+  testConnection: testLiveConnection, resetConnection: resetLiveConnection, getStatus: getLiveStatus, loginWithCode, sendLoginCode,
+} = require('../loxoneWebSocket');
 const { requirePermission } = require('../middleware/requirePermission');
 const { logSystemEvent, describeChanges } = require('../auditLog');
 const { encrypt } = require('../secretCrypto');
@@ -262,7 +264,10 @@ router.get('/:id/edit', asyncHandler(async (req, res) => {
   const existingClients = await db
     .prepare('SELECT id, name, host, http_port, use_https FROM miniservers WHERE gateway_client_of = ? ORDER BY sort_order, id')
     .all(miniserver.id);
-  res.render('miniserver-edit', { miniserver, otherMiniservers, existingClients, error: null, saved: req.query.saved === '1', authorized: req.query.authorized === '1' });
+  res.render('miniserver-edit', {
+    miniserver, otherMiniservers, existingClients, error: null, saved: req.query.saved === '1', authorized: req.query.authorized === '1',
+    liveStatus: getLiveStatus(miniserver.id),
+  });
 }));
 
 router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
@@ -307,6 +312,10 @@ router.post('/:id/update', requirePermission('miniservers', 'edit'), asyncHandle
     resolved.external_url, resolved.gateway_client_of, resolved.ai_enabled, resolved.ai_allow_write_commands, resolved.mcp_url,
     msId
   );
+  // The live connection's saved login (see loxoneWebSocket.js) belongs to the old Loxone user: gone with it.
+  if (existing && existing.username !== username) {
+    await db.prepare('UPDATE miniservers SET live_token = NULL, live_token_valid_until = NULL, live_needs_code = 0 WHERE id = ? OR gateway_client_of = ?').run(msId, msId);
+  }
   resetLiveConnection(msId);
   const changes = describeChanges(existing, resolved, [
     { key: 'name', label: 'Name' },
@@ -539,6 +548,27 @@ router.post('/:id/check', requirePermission('miniservers', 'edit'), asyncHandler
     deviceMonitorStatus: updated.device_monitor_status,
     generationLabel: miniserverGenerationLabel(updated.miniserver_type),
   });
+}));
+
+// The login code step on the Edit page (Multi-Factor Authentication, Loxone Config 17.3, see loxoneWebSocket.js):
+// the code the Miniserver mailed, or a login without it so the Miniserver mails a new one (only the newest code
+// counts). The live connection keeps the token it then gets; the code itself is never stored or logged.
+router.post('/:id/login-code', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
+  if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
+  const code = String(req.body?.code || '').replace(/\s/g, '');
+  if (!/^\d{4,8}$/.test(code)) return res.status(400).json({ error: 'Enter the code from the mail of the Miniserver.' });
+  const result = await loginWithCode(miniserver, code);
+  if (result.ok) await logSystemEvent(`"${req.user.username}" logged LoxSuite in to Miniserver "${miniserver.name}" with the login code from its mail.`);
+  res.json(result);
+}));
+
+router.post('/:id/login-code/send', requirePermission('miniservers', 'edit'), asyncHandler(async (req, res) => {
+  const miniserver = await db.prepare('SELECT * FROM miniservers WHERE id = ?').get(req.params.id);
+  if (!miniserver) return res.status(404).json({ error: 'Miniserver not found' });
+  const result = await sendLoginCode(miniserver);
+  await logSystemEvent(`"${req.user.username}" asked Miniserver "${miniserver.name}" to mail a new login code.`);
+  res.json(result);
 }));
 
 // /jdev/sys/updatecheck — undocumented, found the same way as the diagnostics endpoints (grepped

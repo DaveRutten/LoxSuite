@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.63.2-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.64.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -595,6 +595,41 @@ on its own), a credentials rejection won't resolve itself. Both the background c
 polling stop retrying it automatically the moment this happens, rather than hammering it with the
 exact same doomed request forever; **Test now** (or saving new credentials) always retries for
 real regardless, since that's an explicit ask.
+
+The live connection (the websocket behind Live Data, Meters, the Energy manager, ...) has the same
+brake: a login the Miniserver refuses is tried at most **3 times**, a minute and then two minutes
+apart, and then left alone with a message saying so — a wrong password (Loxone's 401) is not tried
+again at all. **Test now** or saving the Miniserver starts a fresh attempt.
+
+#### Login code (Multi-Factor Authentication, Loxone Config 17.3)
+
+Loxone Config 17.3 can switch on a **login code** per user or user group: logging in then needs the
+password plus a 6-digit code the Miniserver mails to that user, valid for 10 minutes; after 10 failed
+logins the user is locked (and mailed). For the LoxSuite user on the Miniserver:
+
+1. Give the Loxone user an e-mail address in Loxone Config and make sure the Miniserver can send mail
+   (Loxone's mail service, or a mail server of your own).
+2. Open the Miniserver's **Edit** page and click **Test** (or **Send login code**). The Miniserver
+   mails a code; the **Login code** step under the form shows until when it is valid.
+3. Type or paste the six digits — LoxSuite logs in as soon as all six are in. **Send a new code**
+   logs in again without a code, so the Miniserver mails a new one; only the newest code counts. Not
+   the code from your authenticator app or password manager: that one is for LoxSuite itself (the
+   boxes are kept out of password managers' reach for that reason).
+
+After that LoxSuite keeps the login token it got (encrypted, like the password) and logs in with it,
+like the Loxone app, renewing it before it runs out — no code again, also not after a restart. Only
+when the Miniserver refuses that token (the user's password changed, the user was removed) does
+LoxSuite stop (after 3 tries), forget the token and wait for you to click **Send login code**; it
+never logs in with the password by itself while a code is needed, since every such login mails a
+code. Live Data shows **Login code needed** meanwhile. A refused token answer is shown and logged by
+its shape only (field names, plus `reason`, `attemptsLeft`, `retryAfter`, `expiresIn`, `resendIn`,
+`length`) under **Technical details** — never a password, code or token.
+
+Not yet verified on a real Miniserver with the login code: Loxone's protocol document (v17.0) doesn't
+describe it, so the request (`jdev/sys/getjwt/…?otp=<code>`) and the answer's fields are taken from
+Loxone Config 17.3 itself. The other HTTP features (Virtual Inputs, Monitor polling, Logs, Diagnostics,
+Test now's Local/Loxone API lines) still log in with the password (HTTP Basic auth); whether a
+Miniserver accepts that for a user with the login code is not known yet.
 
 A **Generation** column (Miniserver Gen 1/Gen 2, Miniserver Go Gen 1/Gen 2, or
 Compact) reads `msInfo.miniserverType` from the structure file once per Miniserver — confirmed

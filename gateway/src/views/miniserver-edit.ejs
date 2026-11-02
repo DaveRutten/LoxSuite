@@ -176,6 +176,130 @@
     </div>
   </form>
 </div>
+
+<%
+  // The login code step (Multi-Factor Authentication, Loxone Config 17.3 — see loxoneWebSocket.js): shown when
+  // the Miniserver asks for the 6-digit code it mailed, on load or after Test. Outside the form above, so Enter
+  // in a box never saves the Miniserver.
+  var codeStep = liveStatus && liveStatus.status === 'code_required' ? { status: liveStatus.status, error: liveStatus.error, otp: liveStatus.otp, tech: liveStatus.tech } : null;
+%>
+<div class="card login-code" id="edit-ms-login-code"<%= codeStep ? '' : ' hidden' %>>
+  <div class="login-code-in">
+    <h2><%= t('Login code') %></h2>
+    <p class="login-code-message" id="login-code-message"></p>
+    <%# Password managers are kept off these boxes: they offer LoxSuite's own authenticator code, not the Miniserver's. %>
+    <div class="login-code-boxes" id="login-code-boxes" hidden>
+      <% for (var i = 1; i <= 6; i++) { %><input type="text" inputmode="numeric" maxlength="6" autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" aria-label="<%= t('Digit {n}', { n: i }) %>"><% } %>
+    </div>
+    <p class="hint login-code-valid" id="login-code-valid"></p>
+    <div class="btn-row">
+      <button type="button" class="btn-test" id="login-code-submit" hidden><%- icon('check') %> <%= t('Log in') %></button>
+      <button type="button" class="btn-soft" id="login-code-send"><%= t('Send login code') %></button>
+    </div>
+    <details class="login-code-tech" id="login-code-tech" hidden>
+      <summary><%= t('Technical details') %></summary>
+      <p class="hint mono" id="login-code-tech-text"></p>
+      <p class="hint"><%= t('What the Miniserver answered, without password, code or token.') %></p>
+    </details>
+  </div>
+  <ol class="login-code-how">
+    <li><b><%= t('The Miniserver mails a code') %></b><span><%= t('to the e-mail address of the Loxone user {user}. No mail? Look in the spam folder, or send a new code: only the newest code counts.', { user: miniserver.username }) %></span></li>
+    <li><b><%= t('You enter it here') %></b><span><%= t('LoxSuite logs in as soon as all six digits are in. A code is valid for 10 minutes.') %></span></li>
+    <li><b><%= t('Then no code again') %></b><span><%= t('LoxSuite keeps a login token for this Miniserver, like the Loxone app, and renews it by itself. A new code is only needed when the Miniserver refuses that token, for example after the Loxone user\'s password changed.') %></span></li>
+  </ol>
+</div>
+
+<script>
+  (function () {
+    var card = document.getElementById('edit-ms-login-code');
+    if (!card) return;
+    var msg = document.getElementById('login-code-message');
+    var boxesWrap = document.getElementById('login-code-boxes');
+    var boxes = Array.prototype.slice.call(boxesWrap.querySelectorAll('input'));
+    var valid = document.getElementById('login-code-valid');
+    var submitBtn = document.getElementById('login-code-submit');
+    var sendBtn = document.getElementById('login-code-send');
+    var tech = document.getElementById('login-code-tech');
+    var techText = document.getElementById('login-code-tech-text');
+    var testResult = document.getElementById('edit-ms-test-result');
+    var base = '/miniservers/<%= miniserver.id %>/login-code';
+    var resendTimer = null;
+    var busy = false;
+
+    function timeOf(iso) { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+
+    // state: the live connection's status ({ status, error, otp, tech }) — from the page, Test, or a code login.
+    function render(state) {
+      if (!state || state.status !== 'code_required') { card.hidden = true; return; }
+      card.hidden = false;
+      var otp = state.otp || {};
+      var now = Date.now();
+      var waiting = !!(otp.sentAt && otp.until && new Date(otp.until).getTime() > now);
+      msg.textContent = state.error || '';
+      boxesWrap.hidden = !waiting;
+      submitBtn.hidden = !waiting;
+      if (waiting) valid.textContent = 'This code is valid until ' + timeOf(otp.until) + '.';
+      else valid.textContent = otp.sentAt ? 'The code from the last mail has expired. Send a new code.' : '';
+      sendBtn.textContent = otp.sentAt ? 'Send a new code' : 'Send login code';
+      // Not before the Miniserver allows a new mail (resendIn).
+      clearTimeout(resendTimer);
+      resendTimer = null;
+      var wait = otp.resendAt ? new Date(otp.resendAt).getTime() - now : 0;
+      sendBtn.disabled = wait > 0;
+      if (wait > 0) resendTimer = setTimeout(function () { resendTimer = null; sendBtn.disabled = busy; }, wait);
+      tech.hidden = !state.tech;
+      techText.textContent = state.tech || '';
+      boxes.forEach(function (b) { b.value = ''; });
+      if (waiting) boxes[0].focus();
+    }
+
+    function post(url, body) {
+      busy = true;
+      submitBtn.disabled = true;
+      sendBtn.disabled = true;
+      msg.textContent = body ? 'Checking the code…' : 'Asking the Miniserver for a new code…';
+      // Content-Type: application/json exempts this from the CSRF form-token check (see middleware/csrf.js).
+      return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+        .then(function (r) { return r.json(); })
+        .then(function (state) {
+          busy = false;
+          if (state.status === 'open' && testResult) {
+            // Not a .hint: those hide with the page's hints switched off (#edit-ms-form .hint).
+            testResult.innerHTML = '<div style="font-size:0.85rem; color:var(--success);">Logged in. The live connection is open and needs no code again until the Miniserver refuses its login token.</div>';
+          }
+          render(state.status ? state : { status: 'code_required', error: state.error });
+        })
+        .catch(function () { busy = false; msg.textContent = 'The request failed to run. Try again.'; })
+        .then(function () { submitBtn.disabled = false; if (!resendTimer) sendBtn.disabled = false; });
+    }
+
+    function code() { return boxes.map(function (b) { return b.value; }).join(''); }
+    function submit() {
+      if (busy || code().length !== boxes.length) return;
+      post(base, { code: code() });
+    }
+
+    boxes.forEach(function (box, i) {
+      box.addEventListener('input', function () {
+        // Typed or pasted: digits only, spread over the boxes from here on; all six in logs in.
+        var digits = box.value.replace(/\D/g, '');
+        box.value = '';
+        for (var j = 0; j < digits.length && i + j < boxes.length; j++) boxes[i + j].value = digits[j];
+        if (digits.length) boxes[Math.min(i + digits.length, boxes.length - 1)].focus();
+        if (code().length === boxes.length) submit();
+      });
+      box.addEventListener('keydown', function (e) {
+        if (e.key === 'Backspace' && !box.value && i > 0) { boxes[i - 1].value = ''; boxes[i - 1].focus(); e.preventDefault(); }
+        if (e.key === 'Enter') { e.preventDefault(); submit(); }
+      });
+    });
+    submitBtn.addEventListener('click', submit);
+    sendBtn.addEventListener('click', function () { if (!busy) post(base + '/send', null); });
+
+    window.lsLoginCodeStep = render;
+    render(<%- JSON.stringify(codeStep).replace(/</g, '\\u003c') %>);
+  })();
+</script>
 <% } else { %>
   <p class="hint"><%= t('Your Access Role doesn\'t have permission to edit Miniservers.') %></p>
 <% } %>
@@ -226,6 +350,8 @@
           html += data.mcp ? renderLine('AI Assistant (MCP)', data.mcp) : '';
           html += '</div>';
           wrap.innerHTML = html;
+          // The Miniserver asks for its login code: the step below the form takes it from here.
+          if (data.live && window.lsLoginCodeStep) window.lsLoginCodeStep(data.live);
         })
         .catch(function () {
           wrap.innerHTML = '<p class="hint" style="margin:0; color:var(--danger);">Test failed to run.</p>';

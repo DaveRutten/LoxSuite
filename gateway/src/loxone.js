@@ -52,10 +52,12 @@ function miniserverBaseUrl(miniserver) {
 // still means the Miniserver was reached, so callers check res.ok themselves and no fallback
 // happens in that case. This is what lets a single Miniserver stay usable both on the local
 // network and remotely without switching configuration.
+// anonymous: no Basic auth header, for the endpoints that need none (getPublicKey) — a Loxone user with
+// the login code (Multi-Factor Authentication) may not be let in with only a password there.
 async function fetchMiniserver(miniserver, path, options = {}) {
-  const auth = Buffer.from(`${miniserver.username}:${decrypt(miniserver.password)}`).toString('base64');
-  const headers = { Authorization: `Basic ${auth}`, ...(options.headers || {}) };
-  const { timeoutMs, ...restOptions } = options;
+  const { timeoutMs, anonymous, ...restOptions } = options;
+  const auth = anonymous ? null : Buffer.from(`${miniserver.username}:${decrypt(miniserver.password)}`).toString('base64');
+  const headers = { ...(auth ? { Authorization: `Basic ${auth}` } : {}), ...(options.headers || {}) };
 
   const candidates = [{ base: miniserverBaseUrl(miniserver), dispatcher: miniserver.use_https ? insecureAgent : undefined }];
   if (miniserver.external_url) {

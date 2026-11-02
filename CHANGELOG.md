@@ -4,6 +4,37 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.64.0-alpha.1] - 2026-11-02
+
+### Added
+- **Login code (Multi-Factor Authentication, Loxone Config 17.3)**: Loxone 17.3 can ask a user for a 6-digit code
+  the Miniserver mails, on top of the password. When the Miniserver asks for it, the Miniserver's Edit page shows a
+  **Login code** step: six boxes (logs in as soon as all six digits are in), until when the code is valid, **Send a
+  new code** (logs in again without a code, so the Miniserver mails a new one — only the newest counts) and what
+  happens next. Password managers are kept off the boxes: they offer LoxSuite's own authenticator code. A wrong
+  code, too many wrong codes (try again in … minutes), a code already sent, an expired code, a mail the Miniserver
+  couldn't send (not registered with Loxone's mail service, no connection, mail quota, no mail server) and a user
+  without an e-mail address are each said plainly. With the code LoxSuite gets a long-lived token, keeps it
+  (encrypted, like the password) and logs in with it from then on, renewing it before it runs out — no code again,
+  also not after a restart. Without that token LoxSuite never logs in by itself for such a user (each login would
+  mail a code) but waits for **Send login code**; Live Data shows *Login code needed* meanwhile (migration 046).
+  Not yet verified on a real Miniserver with the login code: Loxone's protocol document doesn't describe it, the
+  request (`getjwt …?otp=<code>`) and the answer's fields are taken from Loxone Config 17.3.
+
+### Changed
+- **The live connection asks for its token with getjwt** instead of the older gettoken (Loxone's successor since
+  10.2, same arguments and answer, what Loxone Config itself uses; only getjwt takes the login code), and no longer
+  sends the password as HTTP Basic auth on getPublicKey and the websocket upgrade, which need none.
+- **A refused login is tried 3 times, then left alone**: a refused token request (anything but a wrong password,
+  which is not tried again at all) or a refused saved login is retried a minute and then two minutes later, and
+  then the live connection stops with a message saying so — a Miniserver with the login code locks the user after
+  10 failed logins and mails him every time. Before, such a refusal was retried every minute, forever. Test or
+  saving the Miniserver starts a fresh attempt. The messages name the login code as a possible cause and say how
+  to log in again.
+- A refused token answer is logged, and shown under *Technical details* in the code step, by its shape only: field
+  names, plus the values of `reason`, `attemptsLeft`, `retryAfter`, `expiresIn`, `resendIn` and `length` — never a
+  token, hash, password or code.
+
 ## [0.63.2-alpha.1] - 2026-10-14
 
 ### Fixed

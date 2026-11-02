@@ -1208,6 +1208,13 @@
   ]
  },
  {
+  "key": "{0} LoxSuite has stopped trying by itself, so the Loxone user does not get locked. Click Test on the Miniserver's Edit page to try again.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
   "key": "{0} MB / {1} MB",
   "module": "core",
   "where": [
@@ -1807,6 +1814,13 @@
   "module": "core",
   "where": [
    "src/moduleInfo.js"
+  ]
+ },
+ {
+  "key": "A code was sent a moment ago. Use the code from that mail.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
   ]
  },
  {
@@ -2595,6 +2609,13 @@
   ]
  },
  {
+  "key": "Asking the Miniserver for a new code…",
+  "module": "core",
+  "where": [
+   "miniserver-edit (script)"
+  ]
+ },
+ {
   "key": "at {0}",
   "module": "charging",
   "where": [
@@ -2696,13 +2717,6 @@
    "partials/miniserver-row",
    "src/notifications.js",
    "src/routes/miniservers.js"
-  ]
- },
- {
-  "key": "Authentication failed (code {0})",
-  "module": "core",
-  "where": [
-   "src/loxoneWebSocket.js"
   ]
  },
  {
@@ -2847,6 +2861,13 @@
   "module": "ocpp",
   "where": [
    "src/ocppBridge.js"
+  ]
+ },
+ {
+  "key": "Backspace",
+  "module": "core",
+  "where": [
+   "miniserver-edit (script)"
   ]
  },
  {
@@ -3641,6 +3662,13 @@
   "module": "monitor",
   "where": [
    "public/monitor-picks.js"
+  ]
+ },
+ {
+  "key": "Checking the code…",
+  "module": "core",
+  "where": [
+   "miniserver-edit (script)"
   ]
  },
  {
@@ -5314,6 +5342,13 @@
   ]
  },
  {
+  "key": "Enter the code from the mail of the Miniserver.",
+  "module": "core",
+  "where": [
+   "src/routes/miniservers.js"
+  ]
+ },
+ {
   "key": "Entity not found: {0}.",
   "module": "vehicles",
   "where": [
@@ -6866,7 +6901,7 @@
   ]
  },
  {
-  "key": "jdev/sys/gettoken/{0}/{1}/2/aaaabbbb-cccc-dddd-eeeeffff0000/loxsuite",
+  "key": "jdev/sys/getjwt/{0}/{1}/{2}/{3}/loxsuite{4}",
   "module": "core",
   "where": [
    "src/loxoneWebSocket.js"
@@ -7524,6 +7559,20 @@
    "miniservers (script)",
    "public/miniservers-tabulator.js",
    "setup-wizard (script)"
+  ]
+ },
+ {
+  "key": "Logged in. The live connection is open and needs no code again until the Miniserver refuses its login token.",
+  "module": "core",
+  "where": [
+   "miniserver-edit (script)"
+  ]
+ },
+ {
+  "key": "Login code needed",
+  "module": "core",
+  "where": [
+   "live-data (script)"
   ]
  },
  {
@@ -9128,6 +9177,13 @@
   "module": "energy",
   "where": [
    "src/prices.js"
+  ]
+ },
+ {
+  "key": "no mail server is set up on the Miniserver",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
   ]
  },
  {
@@ -11783,6 +11839,20 @@
   ]
  },
  {
+  "key": "Send a new code",
+  "module": "core",
+  "where": [
+   "miniserver-edit (script)"
+  ]
+ },
+ {
+  "key": "Send login code",
+  "module": "core",
+  "where": [
+   "miniserver-edit (script)"
+  ]
+ },
+ {
   "key": "Send this value to the Loxone virtual input now? Do this with no car connected.",
   "module": "core",
   "where": [
@@ -13002,6 +13072,13 @@
   ]
  },
  {
+  "key": "The code from the last mail has expired. Send a new code.",
+  "module": "core",
+  "where": [
+   "miniserver-edit (script)"
+  ]
+ },
+ {
   "key": "The comparison with the PV meter starts as soon as forecasts and measured hours overlap (a day or two).",
   "module": "charging",
   "where": [
@@ -13086,6 +13163,69 @@
   ]
  },
  {
+  "key": "The Miniserver asks for a login code (Multi-Factor Authentication). It has just mailed the code to the e-mail address of this Loxone user.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "The Miniserver could not mail the login code: {0}.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "The Miniserver did not answer the saved login properly (code {0})",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "the Miniserver has no connection to the mail server",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "the Miniserver has reached its maximum number of mails",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "the Miniserver is not registered with the Loxone mail service",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "The Miniserver no longer accepts LoxSuite's saved login (code {0}). Was the Loxone user removed, its password changed or its login code reset? Check the password on the Miniserver's Edit page, then log in again with a new login code.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "The Miniserver refused the login (code {0}). If the login code (Multi-Factor Authentication) was just switched on for this Loxone user, click Test on the Miniserver's Edit page to log in with the code.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "The Miniserver rejected the username or password (code {0}). Check them on the Miniserver's Edit page.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
   "key": "The Miniserver returned an error.",
   "module": "energy",
   "where": [
@@ -13139,6 +13279,13 @@
   "module": "ocpp",
   "where": [
    "ocpp-bridge-edit"
+  ]
+ },
+ {
+  "key": "The request failed to run. Try again.",
+  "module": "core",
+  "where": [
+   "miniserver-edit (script)"
   ]
  },
  {
@@ -13303,6 +13450,27 @@
   ]
  },
  {
+  "key": "This code has expired. Send a new code.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "This code is not right. Check that it is the code from the newest mail.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "This code is valid until {0}.",
+  "module": "core",
+  "where": [
+   "miniserver-edit (script)"
+  ]
+ },
+ {
   "key": "This control has no meter statistics.",
   "module": "energy",
   "where": [
@@ -13363,6 +13531,20 @@
   "module": "core",
   "where": [
    "src/routes/admin.js"
+  ]
+ },
+ {
+  "key": "This Loxone user has no e-mail address for login codes. Add one to the user in Loxone Config, or switch the login code off for this user.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "This Loxone user logs in with a login code (Multi-Factor Authentication). Click \"Send login code\" on the Miniserver's Edit page; the Miniserver then mails a new code.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
   ]
  },
  {
@@ -13670,6 +13852,27 @@
   "module": "core",
   "where": [
    "src/caldav.js"
+  ]
+ },
+ {
+  "key": "Too many wrong codes. Send a new code.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "Too many wrong codes. Try again in {0} minutes.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "Too many wrong codes. Try again in 1 minute.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
   ]
  },
  {
@@ -14858,6 +15061,20 @@
   "module": "core",
   "where": [
    "src/carClimate.js"
+  ]
+ },
+ {
+  "key": "Wrong code. {0} attempts left.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
+  ]
+ },
+ {
+  "key": "Wrong code. 1 attempt left.",
+  "module": "core",
+  "where": [
+   "src/loxoneWebSocket.js"
   ]
  },
  {

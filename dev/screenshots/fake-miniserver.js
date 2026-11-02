@@ -6,7 +6,7 @@
 //
 // Deliberately NOT cryptographically faithful beyond what the real client actually checks: getkey2
 // returns *some* key/salt (the client hashes with it, but this server never verifies that hash —
-// gettoken always succeeds). Only the RSA key-exchange decrypt (needed to recover the client's own
+// getjwt (and the older gettoken) always succeeds). Only the RSA key-exchange decrypt (needed to recover the client's own
 // AES session key so later encrypted commands are readable) and the AES-CBC decrypt of those
 // commands are done for real.
 //
@@ -262,8 +262,8 @@ wss.on('connection', (ws) => {
         sendLL('jdev/sys/getkey2/ok', { key: crypto.randomBytes(16).toString('hex'), salt: crypto.randomBytes(8).toString('hex'), hashAlg: 'SHA1' });
         return;
       }
-      if (command.startsWith('jdev/sys/gettoken/')) {
-        sendLL('jdev/sys/gettoken/ok', { token: 'fake-token', validUntil: 0, tokenRights: 4, unsecurePass: false });
+      if (command.startsWith('jdev/sys/getjwt/') || command.startsWith('jdev/sys/gettoken/')) {
+        sendLL(command.startsWith('jdev/sys/getjwt/') ? 'jdev/sys/getjwt/ok' : 'jdev/sys/gettoken/ok', { token: 'fake-token', validUntil: 0, tokenRights: 4, unsecurePass: false });
         return;
       }
       return;
