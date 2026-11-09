@@ -1,8 +1,9 @@
-<%- include('partials/head', { pageTitle: 'OCPP', active: 'ocpp' }) %>
+<%- include('partials/head', { pageTitle: 'Charging allowance (OCPP)', active: 'ocpp' }) %>
 
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 
-<p class="hint">
+<%- include('partials/page-intro', { text: t('Reports the Wallbox to your employer\'s charging backend (OCPP).'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
   <%= t('Reports a Loxone Wallbox to an OCPP 1.6 backend (for example Laadloon) as a charge point, using the live Wallbox data LoxSuite already receives from the Miniserver. Meant for setups where Loxone\'s own OCPP Server Connector can\'t be used, such as a Wallbox on a Gen 1 Client Miniserver. Start in') %> <strong><%= t('Dry run') %></strong><%= t(': it logs what it would send without connecting to the backend. Each bridge page also has a') %> <strong><%= t('quarterly export') %></strong> <%= t('(Excel/CSV) of all charging sessions.') %>
 </p>
 

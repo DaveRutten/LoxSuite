@@ -1,6 +1,7 @@
-<%- include('partials/head', { pageTitle: 'Client Activity', active: 'incoming-clients', refresh: 5, liveSwap: true }) %>
+<%- include('partials/head', { pageTitle: 'MQTT devices', active: 'incoming-clients', refresh: 5, liveSwap: true }) %>
 
-<p class="hint">
+<%- include('partials/page-intro', { text: t('The devices that talk to the MQTT broker.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
   <%= t('Refreshes every 5 seconds. In-memory only, so this clears on a gateway restart. The') %>
   <strong><%= t('Device') %></strong> <%= t('column shows the topic prefix seen in that device\'s own MQTT traffic when one is known (hover to see the raw MQTT client ID) — otherwise it falls back to the raw client ID. Disconnected clients are also auto-removed after') %> <strong><%= retentionHours %></strong> <%= t('hours (') %><% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %><%= t(') — each removal is logged on the') %> <a href="/logs/system"><%= t('System') %></a> <%= t('log.') %>
 </p>

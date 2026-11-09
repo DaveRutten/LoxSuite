@@ -613,6 +613,9 @@ function ensureConnection(miniserver) {
   return conn;
 }
 
+// Open and logged in right now (no waiting): other calls can go over it (loxone.js fetchMiniserver).
+function isOpen(miniserverId) { return connections.get(miniserverId)?.status === 'open'; }
+
 function getLiveValue(miniserverId, uuid) {
   const conn = connections.get(miniserverId);
   return conn ? conn.cache.get(uuid) : undefined;
@@ -722,6 +725,6 @@ function resetConnection(miniserverId) {
 }
 
 module.exports = {
-  startLiveConnections, ensureConnection, getLiveValue, getStatus, testConnection, resetConnection,
+  startLiveConnections, ensureConnection, getLiveValue, getStatus, isOpen, testConnection, resetConnection,
   loginWithCode, sendLoginCode, fetchViaLive, isPermanentAuthFailure, otpAsked, otpHash, shapeOf, AUTH_TRIES, _tuning: tuning,
 };

@@ -169,7 +169,8 @@ function compute({ hours = [], loads = [], prices = {}, localHourOf, dayOf, days
 async function overview(days = 30, nowMs = Date.now()) {
   const tz = displayTz();
   const from = new Date(Math.floor((nowMs - days * DAY) / HOUR) * HOUR).toISOString();
-  const rows = await db.prepare('SELECT hour, role, import_kwh, export_kwh FROM energy_hourly WHERE hour >= ? ORDER BY hour').all(from);
+  const to = new Date(Math.floor(nowMs / HOUR) * HOUR + HOUR).toISOString();
+  const rows = await db.prepare('SELECT hour, role, import_kwh, export_kwh FROM energy_hourly WHERE hour >= ? AND hour < ? ORDER BY hour').all(from, to);
   const by = new Map();
   const roles = new Set();
   for (const r of rows) {
@@ -184,7 +185,7 @@ async function overview(days = 30, nowMs = Date.now()) {
   // only hours with both the grid and the solar meter — else self use can't be told
   const gridHours = new Set(rows.filter((r) => r.role === 'grid').map((r) => r.hour));
   const hours = [...by.values()].filter((h) => gridHours.has(h.hour));
-  const loadRows = await db.prepare('SELECT l.id, l.name, l.kind, h.hour, h.kwh FROM energy_loads l JOIN load_hourly h ON h.load_id = l.id WHERE l.enabled = 1 AND h.hour >= ?').all(from).catch(() => []);
+  const loadRows = await db.prepare('SELECT l.id, l.name, l.kind, h.hour, h.kwh FROM energy_loads l JOIN load_hourly h ON h.load_id = l.id WHERE l.enabled = 1 AND h.hour >= ? AND h.hour < ?').all(from, to).catch(() => []);
   const loads = new Map();
   for (const r of loadRows) {
     const l = loads.get(r.id) || { id: r.id, name: r.name, kind: r.kind, hourly: {} };

@@ -63,7 +63,7 @@ const MODULES = [
     key: 'energy', group: 'energy', label: 'Energy', defaultOn: false, requires: [],
     description: 'Meters for grid, solar, Wallbox and home battery, hourly values, energy prices and the solar forecast. The base for charging and the energy manager.',
     parts: ['Meters and hourly values, import from Loxone', 'Energy prices (dynamic or fixed)', 'Solar forecast with learned correction', 'House consumption profile'],
-    routes: ['/energy'],
+    routes: ['/energy', '/settings/energy'],
     workers: [
       { start: lazy('./energyMeters', 'startEnergyMeters'), stop: lazy('./energyMeters', 'stopEnergyMeters') },
       { start: lazy('./prices', 'startPrices'), stop: lazy('./prices', 'stopPrices') },
@@ -86,7 +86,7 @@ const MODULES = [
     key: 'charging', group: 'energy', label: 'Smart charging', defaultOn: false, requires: ['energy', 'vehicles'],
     description: 'Charge at the cheapest and sunniest moments, ready before you leave, with a log of every session.',
     parts: ['Smart charging (planner, output to the Wallbox)', 'Charge log with automatic checks', 'Learned departures and energy per trip', 'Agenda (calendars, trips)', 'Plug-in reminders, fuel price'],
-    routes: ['/planner', '/learned', '/agenda', '/settings/energy'],
+    routes: ['/planner', '/learned', '/agenda'],
     workers: [
       { start: lazy('./planner', 'startPlanner'), stop: lazy('./planner', 'stopPlanner') },
       { start: lazy('./chargeLog', 'startChargeLog'), stop: lazy('./chargeLog', 'stopChargeLog') },

@@ -271,12 +271,12 @@
     // need it for. Only needed when the settings form (and its threshold/annotation builders)
     // actually rendered above — a view-only visitor gets neither.
   %>
-  <link rel="stylesheet" href="/vendor/gridstack.min.css">
-  <script src="/vendor/gridstack-all.min.js"></script>
-  <script src="/vendor/sortable.min.js"></script>
-  <script src="/color-picker.js"></script>
-  <script src="/threshold-annotation-builder.js"></script>
-  <script src="/panel-drawer-resize.js"></script>
+  <link rel="stylesheet" href="/vendor/gridstack.min.css?v=<%= assetVersion %>">
+  <script src="/vendor/gridstack-all.min.js?v=<%= assetVersion %>"></script>
+  <script src="/vendor/sortable.min.js?v=<%= assetVersion %>"></script>
+  <script src="/color-picker.js?v=<%= assetVersion %>"></script>
+  <script src="/threshold-annotation-builder.js?v=<%= assetVersion %>"></script>
+  <script src="/panel-drawer-resize.js?v=<%= assetVersion %>"></script>
   <script>
     // The min/max/avg/current legend toggles are meaningless with no legend to show them in — this
     // page has no chart-type switcher to piggyback this on (see panel-grid.ejs's own sync(), which
@@ -483,7 +483,7 @@
     })();
   </script>
 <% } %>
-<script src="/vendor/chart.umd.min.js"></script>
+<script src="/vendor/chart.umd.min.js?v=<%= assetVersion %>"></script>
 <%
   // chartjs-plugin-zoom reads window.Hammer at its OWN script-evaluation time (it's a UMD module
   // whose browser-globals branch does `t.ChartZoom = n(t.Chart, t.Hammer, ...)`) — Hammer.js has
@@ -492,8 +492,8 @@
   // while wheel-zoom keeps working fine since that's wired via a plain native 'wheel' listener,
   // not Hammer — exactly the "zoom works, pan doesn't, no error anywhere" shape this had.
 %>
-<script src="/vendor/hammer.min.js"></script>
-<script src="/vendor/chartjs-plugin-zoom.min.js"></script>
+<script src="/vendor/hammer.min.js?v=<%= assetVersion %>"></script>
+<script src="/vendor/chartjs-plugin-zoom.min.js?v=<%= assetVersion %>"></script>
 <script src="/monitor-chart.js?v=<%= assetVersion %>" defer></script>
 <script>
   // "?open=settings" (see notificationLinks.js) — a threshold-ladder notification lands here

@@ -2,7 +2,8 @@
 
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 
-<p class="hint">
+<%- include('partials/page-intro', { text: t('The cars charged at home and where their live data comes from.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
   <%= t('The cars charged at home. Each one can read its live state — battery %, range, plugged in, location — from something that already talks to the car: a Homey Pro or Home Assistant (which have apps for most car brands), or MQTT topics from Node-RED, evcc and similar tools. Without a source the charging planner estimates the battery level.') %>
 </p>
 

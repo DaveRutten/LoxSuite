@@ -2,7 +2,7 @@
 // efficiency, from what the module has learned. Pure; the texts are English templates with {params},
 // translated by the view.
 //
-// in: { comfortAt, reachAt, roomEnabled, tankMinC, tankMinAt, limits, legionella, scop, source, outdoorC,
+// in: { comfortAt, reachAt, roomEnabled, preheat ({ capped, shortC, late }), tankMinC, tankMinAt, limits, legionella, scop, source, outdoorC,
 //       current, advice, overshoot, curRow, differs }
 // out: [{ kind: 'comfort' | 'energy' | 'efficiency', text, params }] — at most `max`, most important first
 const r1 = (x) => Math.round(x * 10) / 10;
@@ -15,6 +15,12 @@ function suggestions(x, { max = 3 } = {}) {
   // comfort: the room is warm too late, the tank too cold
   if (x.roomEnabled && x.comfortAt && x.reachAt && x.reachAt > x.comfortAt + 15 * 60000 && x.reachAt < x.comfortAt + 6 * 3600000) {
     add(90, 'comfort', 'The room is expected warm {m} min after the comfort time: start pre-heating earlier, or set the comfort time in Loxone earlier.', { m: Math.round((x.reachAt - x.comfortAt) / 60000) });
+  }
+  // pre-heating cut off at its maximum (8 h) or a start already in the past: comfort is not reached in time
+  if (x.roomEnabled && x.preheat?.capped) {
+    add(92, 'comfort', 'Comfort is not reached in time: even {h} h of pre-heating leaves the room about {c} °C short at the learned warm-up rate. Raise the flow temperature or the set-back temperature at night.', { h: 8, c: x.preheat.shortC });
+  } else if (x.roomEnabled && x.preheat?.late && !(x.reachAt && x.comfortAt && x.reachAt > x.comfortAt + 15 * 60000)) {
+    add(70, 'comfort', 'Pre-heating should already have started for the next comfort time: the room will be warm a little later than planned.');
   }
   if (Number.isFinite(x.tankMinC) && Number.isFinite(L.comfortMinC) && x.tankMinC < L.comfortMinC - 0.5) {
     add(85, 'comfort', 'The tank is expected to drop to {c} °C, below your minimum of {min} °C: raise the normal target or the buffer on cheap power.', { c: r1(x.tankMinC), min: L.comfortMinC });

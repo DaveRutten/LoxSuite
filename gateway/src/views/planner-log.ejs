@@ -1,6 +1,7 @@
-<%- include('partials/head', { pageTitle: 'Charge log', active: 'chargelog' }) %>
+<%- include('partials/head', { pageTitle: 'Charge sessions', active: 'chargelog' }) %>
 
-<p class="hint">
+<%- include('partials/page-intro', { text: t('Every charging session: what the Wallbox, LoxSuite and the car did.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
   <%= t('Every charging session is recorded here automatically: what the Wallbox did, what LoxSuite sent to the virtual inputs and what the car reported. LoxSuite checks per session whether the control works. You can test at any moment and look at the result later — no need to watch.') %>
   <a href="/planner"><%= t('← Smart charging') %></a>
 </p>

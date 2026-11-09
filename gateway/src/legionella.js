@@ -9,7 +9,8 @@
 //                  afternoon on a full buffer — they all count)
 //   planLegionella the cheapest block of the coming days to do it, before it is due: within the hours
 //                  allowed, solar surplus first (the booster's kWh are then free); overdue = the first
-//                  allowed block
+//                  allowed block. Not earlier than a day before it is due (earlyH), except on solar
+//                  surplus — before, the cheapest block within 36 h was taken, so it ran every ~2 days
 //
 // The unit's own legionella program stays the safety net: set it in the Ecodan to a longer interval
 // than LoxSuite's, so it only runs when LoxSuite didn't.
@@ -52,7 +53,7 @@ function lastDone(samples, { targetC = 60, holdMin = 30, maxGapMin = 15 } = {}) 
 
 // Pure: when to do it. hours [{ ms, price, surplusKwh }] for the coming days; localHour(ms) -> 0..23.
 //   -> { due, overdue, block: { startMs, endMs, cost, solar }, reason } (block null: nothing allowed)
-function planLegionella({ hours, nowMs, lastDoneMs = null, intervalDays = 7, fromHour = 10, toHour = 17, durationH = 2, boosterKw = 3, localHour, minLeadH = 0 }) {
+function planLegionella({ hours, nowMs, lastDoneMs = null, intervalDays = 7, fromHour = 10, toHour = 17, durationH = 2, boosterKw = 3, localHour, minLeadH = 0, earlyH = 24 }) {
   const due = lastDoneMs === null ? nowMs : lastDoneMs + intervalDays * DAY;
   const overdue = due <= nowMs;
   const inWindow = (ms) => { const h = localHour(ms); return fromHour <= toHour ? h >= fromHour && h + 1 <= toHour : h >= fromHour || h < toHour; };
@@ -69,6 +70,8 @@ function planLegionella({ hours, nowMs, lastDoneMs = null, intervalDays = 7, fro
     if (!overdue && block[0].ms > due) break;
     const c = block.reduce((a, h) => a + cost(h), 0);
     const solar = block.every((h) => (h.surplusKwh || 0) >= boosterKw * 0.8);
+    // more than a day early only on solar surplus (then the booster's kWh are free anyway)
+    if (!overdue && block[0].ms < due - earlyH * HOUR && !solar) continue;
     if (!best || c < best.cost - 1e-9) best = { startMs: block[0].ms, endMs, cost: Math.round(c * 100) / 100, solar };
     if (overdue) break;
   }

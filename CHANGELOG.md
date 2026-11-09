@@ -4,6 +4,53 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.65.0-alpha.1] - 2026-11-09
+
+### Added
+- **A new Home**: a greeting with one plain sentence about now, the electricity price now and the lowest of the day;
+  the energy flowing between sun, house, car, grid and battery (moving lines, faster with more kW; on a phone as
+  blocks with big figures); key figures (own solar used over 30 days with ▲▼ against the 30 days before, when the
+  car is ready, what the heat pump does, what needs attention); and **Today**: one bar with solar to spare, when
+  the car charges and when the heat pump makes tap water, legionella or pre-heats, with a line for now. The
+  technical blocks (Status, Load) and the energy tiles start folded.
+- **Search** (Ctrl+K, "/" or the magnifier in the top bar): pages and the sections and settings on them, read from
+  the pages' own headings. A result opens the page, unfolds the section, switches to its tab and lights it up.
+  A function whose module is off is found too, with where to switch it on.
+- **Breadcrumb** above the page title, and a **Settings** button next to the title of every function page.
+- **Notification centre**: its own page (60 days, per category, filters, "What do I want to get": bell and push
+  per category), a wider bell, categories, and notifications about LoxSuite itself (database unreachable,
+  certificate expiring, disk, live connections, quiet MQTT topics, Loxone program saved, security) and about the
+  heat pump's set-up and data (energyChecks.js). Profile and App & push point to it.
+- **Heat pump**: Shadow/Live, tabs (Overview, Plan, Learning & advice, Data quality, Settings), a Data quality tab,
+  prediction accuracy in Shadow, setpoint modes (hold/normal/high), the booster as its own measurement; **Own
+  energy** page with suggestions.
+- Per Miniserver: how its calls went (live connection, HTTP, HTTP after the live connection didn't answer).
+
+### Changed
+- **The menu, grouped by what you do at home**: Overview, Energy, Car & charging, Loxone, MQTT (folded by default),
+  Administration — one list (navigation.js) for the sidebar, the phone bar, the breadcrumb and the search. Every page
+  has one name everywhere (Energy now, Charts, Charge sessions, Driving pattern, Loxone values, MQTT messages, MQTT
+  devices, each log its own title). System and notification logs under Administration.
+- **Phone bar**: Home, Energy, Charging, Notifications (with its count), Menu — lit for the whole section.
+- **Calls to a Miniserver go over its open live connection first** (commands, writing Virtual Inputs, the
+  structure file, the logbook): no password on the wire per call, no new connection per value. When it isn't open
+  or doesn't answer within 4 s, HTTP as before. `LOXSUITE_LIVE_FIRST=0` switches it off.
+- **Explanations**: one short sentence under the title with "What is this?" for the rest (the page's own text, or
+  the help drawer); an explanation under a form field is an ⓘ next to its label; empty tables with a next step show
+  one line and one button; "show help text" is remembered per user. Outdated names (SQLite where any database is
+  meant, Live Traffic, Client Activity) corrected, with a test that keeps them out. In Dutch "Monitor" is "Grafiek".
+- **Energy settings** (price, home & solar, fuel) can be set and saved with Smart charging off.
+- **Faster**: the heat pump's learned models kept 15 minutes (the week schedule 6 hours) instead of relearned every
+  minute (2–9 s → 0.3–1 s per minute in the demo); one status per minute for all pages; pages gzipped (a fifth of
+  the size); scripts and styles cached a year by version; the help text loaded when the drawer opens; nothing
+  polled in a background tab; the forecast log no longer asks the database per hour every half minute; five
+  indexes for queries by time (migration 048); background calls skip the menu and bell queries.
+
+### Fixed
+- History added twice (the demo on every start) is folded to one sample per minute, also in the database.
+- Heat pump review: power and heat only counted from minutes with power measured, COP capped, SCOP from real days;
+  the tuning advice says when it can't compare.
+
 ## [0.64.2-alpha.1] - 2026-11-02
 
 ### Fixed

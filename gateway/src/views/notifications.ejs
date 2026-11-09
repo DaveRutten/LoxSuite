@@ -1,0 +1,135 @@
+<%- include('partials/head', { pageTitle: 'Notifications', active: 'notifications' }) %>
+
+<%- include('partials/page-intro', { text: t('Everything LoxSuite told you in the last 60 days.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden><%= t('Everything LoxSuite told you in the last 60 days, newest first. New ones are marked; open one to go where it is about. Which notifications also go to Telegram or push is set under Administration → Notifications.') %></p>
+
+<div class="card nc-card">
+  <div class="nc-bar">
+    <div class="nc-cats" role="group" aria-label="<%= t('Category') %>">
+      <button type="button" class="nc-cat on" data-cat=""><%= t('All') %> <span class="nc-n"><%= total %></span></button>
+      <% cats.forEach((c) => { %>
+        <button type="button" class="nc-cat" data-cat="<%= c.key %>"><%- enIcon(c.icon, 'currentColor', { plain: true, size: 14 }) %><%= t(c.label) %> <span class="nc-n"><%= c.n %></span></button>
+      <% }) %>
+    </div>
+    <div class="nc-tools">
+      <select id="nc-sev" aria-label="<%= t('Severity') %>">
+        <option value=""><%= t('Every severity') %></option>
+        <option value="critical,error"><%= t('Errors') %></option>
+        <option value="warning"><%= t('Warnings') %></option>
+        <option value="info"><%= t('Info') %></option>
+      </select>
+      <label class="nc-only"><input type="checkbox" id="nc-unread"> <%= t('Only new') %> <span class="nc-n"><%= unread %></span></label>
+      <input type="search" id="nc-q" placeholder="<%= t('Search…') %>" aria-label="<%= t('Search') %>">
+      <button type="button" class="btn-soft" id="nc-all-read" <%= unread ? '' : 'disabled' %>><%= t('Mark all read') %></button>
+      <button type="button" class="btn-soft" id="nc-prefs-btn" aria-expanded="false" aria-controls="nc-prefs"><%- icon('bell') %> <%= t('What do I want to get') %></button>
+    </div>
+  </div>
+
+  <div class="nc-prefs" id="nc-prefs" hidden>
+    <div class="nc-prefs-head">
+      <strong><%= t('What do I want to get') %></strong>
+      <span class="hint" style="margin:0;"><%= prefs.channel.url || prefs.channel.push
+        ? t('"Also send" goes to {where} — set under Profile → Notifications.', { where: [prefs.channel.url ? t('your own channel (Telegram …)') : null, prefs.channel.push ? t('push on your devices') : null].filter(Boolean).join(' ' + t('and') + ' ') })
+        : t('To also get them outside LoxSuite, first set your own channel (Telegram …) or push under Profile → Notifications.') %> <a href="/profile#notifications"><%= t('Profile') %> &rarr;</a></span>
+    </div>
+    <div class="nc-prefs-grid" role="table">
+      <div class="nc-prefs-row nc-prefs-th" role="row"><span role="columnheader"><%= t('Category') %></span><span role="columnheader"><%= t('In the bell') %></span><span role="columnheader"><%= t('Also send') %></span></div>
+      <% prefs.rows.forEach((r) => { %>
+        <div class="nc-prefs-row" role="row" data-pref="<%= r.key %>">
+          <span role="cell"><%- enIcon(r.icon, 'currentColor', { plain: true, size: 14 }) %> <%= t(r.label) %></span>
+          <span role="cell"><label class="switch"><input type="checkbox" id="nc-bell-<%= r.key %>" data-pref-bell <%= r.bell ? 'checked' : '' %> aria-label="<%= t('In the bell') %>: <%= t(r.label) %>"><span class="switch-track"><span class="switch-thumb"></span></span></label></span>
+          <span role="cell"><% if (r.canPush) { %><label class="switch"><input type="checkbox" id="nc-push-<%= r.key %>" data-pref-push <%= r.push ? 'checked' : '' %> aria-label="<%= t('Also send') %>: <%= t(r.label) %>"><span class="switch-track"><span class="switch-thumb"></span></span></label><% } else { %><a class="hint" href="/admin/notifications"><%= t('per rule under Administration') %></a><% } %></span>
+        </div>
+      <% }) %>
+    </div>
+    <p class="hint" id="nc-prefs-msg" style="margin:0.4rem 0 0;"></p>
+  </div>
+
+  <% if (!groups.length) { %>
+    <p class="hint" style="margin:1rem 0 0;"><%= t('No notifications in the last 60 days.') %></p>
+  <% } %>
+  <% groups.forEach((g) => { %>
+    <section class="nc-day" data-day>
+      <h3 class="nc-day-h"><%= g.day === today ? t('Today') : g.day === yesterday ? t('Yesterday') : formatDateTime(g.day + 'T12:00:00Z').slice(0, 10) %></h3>
+      <% g.events.forEach((e) => { const link = notificationSourceLink(e.event_type, e.source_id, canView, e.source_ref); const sev = e.severity || 'info'; %>
+        <article class="nc-item nc-<%= sev %><%= e.unread ? ' nc-unread' : '' %>" data-id="<%= e.id %>" data-cat="<%= e.category %>" data-sev="<%= sev %>" data-unread="<%= e.unread ? 1 : 0 %>">
+          <div class="nc-dot" aria-hidden="true"></div>
+          <div class="nc-body">
+            <div class="nc-head">
+              <strong class="nc-title"><%= t(e.title) %></strong>
+              <% if (e.unread) { %><span class="nc-new"><%= t('new') %></span><% } %>
+            </div>
+            <div class="nc-msg"><%= t(e.message) %></div>
+            <div class="nc-meta">
+              <span><%= (String(formatDateTime(e.created_at)).split(', ')[1] || '').slice(0, 5) %></span>
+              <span class="nc-chip"><%= t((cats.find((c) => c.key === e.category) || { label: 'Other' }).label) %></span>
+              <span class="nc-sev"><%= t({ critical: 'critical', error: 'error', warning: 'warning', info: 'info' }[sev] || sev) %></span>
+            </div>
+          </div>
+          <div class="nc-actions">
+            <% if (link) { %><a class="btn-soft" href="<%= link %>" data-open><%= t('Open') %> &rarr;</a><% } %>
+            <% if (e.unread) { %><button type="button" class="btn-soft" data-read><%= t('Read') %></button><% } %>
+          </div>
+        </article>
+      <% }) %>
+    </section>
+  <% }) %>
+  <p class="hint" id="nc-none" style="margin:1rem 0 0;" hidden><%= t('Nothing matches this filter.') %></p>
+</div>
+
+<script>
+(function () {
+  var cat = '', items = Array.prototype.slice.call(document.querySelectorAll('.nc-item'));
+  function apply() {
+    var sev = document.getElementById('nc-sev').value, only = document.getElementById('nc-unread').checked, q = document.getElementById('nc-q').value.trim().toLowerCase();
+    var shown = 0;
+    items.forEach(function (el) {
+      var ok = (!cat || el.getAttribute('data-cat') === cat) && (!sev || sev.split(',').indexOf(el.getAttribute('data-sev')) >= 0)
+        && (!only || el.getAttribute('data-unread') === '1') && (!q || el.textContent.toLowerCase().indexOf(q) >= 0);
+      el.hidden = !ok; if (ok) shown++;
+    });
+    document.querySelectorAll('[data-day]').forEach(function (s) { s.hidden = !s.querySelector('.nc-item:not([hidden])'); });
+    document.getElementById('nc-none').hidden = shown > 0 || !items.length;
+  }
+  document.querySelectorAll('.nc-cat').forEach(function (b) {
+    b.addEventListener('click', function () { document.querySelectorAll('.nc-cat').forEach(function (x) { x.classList.toggle('on', x === b); }); cat = b.getAttribute('data-cat'); apply(); });
+  });
+  ['nc-sev', 'nc-unread'].forEach(function (id) { document.getElementById(id).addEventListener('change', apply); });
+  document.getElementById('nc-q').addEventListener('input', apply);
+  function post(url) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); }
+  function markRead(el) {
+    el.classList.remove('nc-unread'); el.setAttribute('data-unread', '0');
+    var n = el.querySelector('.nc-new'); if (n) n.remove();
+    var b = el.querySelector('[data-read]'); if (b) b.remove();
+  }
+  document.addEventListener('click', function (ev) {
+    var read = ev.target.closest && ev.target.closest('[data-read]');
+    var open = ev.target.closest && ev.target.closest('[data-open]');
+    var el = (read || open) && (read || open).closest('.nc-item');
+    if (!el) return;
+    post('/notifications/' + el.getAttribute('data-id') + '/mark-read');
+    if (read) markRead(el);
+  });
+  var pb = document.getElementById('nc-prefs-btn'), pp = document.getElementById('nc-prefs');
+  pb.addEventListener('click', function () { pp.hidden = !pp.hidden; pb.setAttribute('aria-expanded', String(!pp.hidden)); });
+  // arriving from Profile or App & push (#prefs): the choice open right away
+  if (location.hash === '#prefs') { pp.hidden = false; pb.setAttribute('aria-expanded', 'true'); pp.scrollIntoView({ block: 'start' }); }
+  var PM = <%- JSON.stringify({ saved: t('Saved.'), failed: t('Not saved:') }) %>;
+  pp.addEventListener('change', function (ev) {
+    var row = ev.target.closest('[data-pref]'); if (!row) return;
+    var body = { category: row.getAttribute('data-pref') };
+    if (ev.target.hasAttribute('data-pref-bell')) body.bell = ev.target.checked;
+    if (ev.target.hasAttribute('data-pref-push')) body.push = ev.target.checked;
+    var msg = document.getElementById('nc-prefs-msg');
+    fetch('/notifications/prefs.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { msg.textContent = d.ok ? PM.saved : PM.failed + ' ' + (d.message || ''); if (!d.ok) ev.target.checked = !ev.target.checked; })
+      .catch(function (e) { msg.textContent = PM.failed + ' ' + e.message; ev.target.checked = !ev.target.checked; });
+  });
+  document.getElementById('nc-all-read').addEventListener('click', function () {
+    post('/notifications/mark-read').then(function () { return post('/notifications/dismiss-all'); }).then(function () { items.forEach(markRead); document.getElementById('nc-all-read').disabled = true; apply(); });
+  });
+})();
+</script>
+
+<%- include('partials/foot') %>

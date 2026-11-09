@@ -1,16 +1,13 @@
-<%- include('partials/head', { pageTitle: 'Monitor', active: 'monitor' }) %>
+<%- include('partials/head', { pageTitle: 'Charts', active: 'monitor' }) %>
 
-<p class="hint">
-  <%= t('Track an MQTT topic or a value read directly from a Loxone Miniserver over time. History is stored in SQLite (so it survives a gateway restart) and kept for') %> <strong><%= retentionDays %></strong> <%= t('days before being purged automatically —') %>
-  <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %><%= t('. Open a monitor for a chart, a raw-values table, and a CSV export.') %>
-</p>
+<%- include('partials/page-intro', { text: t('Values from Loxone and MQTT over time, kept {days} days.', { days: retentionDays }), help: 'monitor' }) %>
 
 <% if (error) { %>
   <p class="error"><%= error %></p>
 <% } %>
 
 <% if (canEdit('monitor')) { %>
-<details class="add-panel" <%= prefillTopic ? 'open' : '' %>>
+<details class="add-panel" id="add-monitor" <%= prefillTopic ? 'open' : '' %>>
   <summary><%= t('Add monitor') %></summary>
   <div class="add-panel-body">
     <form method="post" action="/monitor" id="add-monitor-form">
@@ -244,7 +241,7 @@
         <% } %>
       <% }) %>
       <% if (monitors.length === 0) { %>
-        <tr><td colspan="8" class="empty"><%= t('No monitors yet — add one above, or use the "Monitor" shortcut on a topic in') %> <a href="/incoming/messages"><%= t('Live Traffic') %></a>.</td></tr>
+        <tr><td colspan="8" class="empty"><%- include('partials/empty-state', { title: t('No charts yet'), action: canEdit('monitor') ? { label: t('Add a chart'), open: '#add-monitor' } : null, alt: t('or choose "Monitor" at a value in'), altLink: { label: t('MQTT messages'), href: '/incoming/messages' } }) %></td></tr>
       <% } %>
     </tbody>
   </table>

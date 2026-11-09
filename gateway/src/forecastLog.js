@@ -17,11 +17,32 @@ const r3 = (x) => (x === null || x === undefined ? null : Math.round(x * 1000) /
 
 // ------------------------------------------------------------------ recording
 
+// What is already written down (kind|target|horizon), so the plans that run every half minute don't ask
+// the database for each hour again: read once (the hours from two hours ago on), then kept up to date
+// here; read again every 6 hours, and old keys dropped then.
+let written = null;
+let writtenAt = 0;
+async function knownKeys(nowMs) {
+  if (!written || nowMs - writtenAt > 6 * HOUR || nowMs < writtenAt) {
+    const rows = await db.prepare('SELECT kind, target, horizon FROM forecast_log WHERE target >= ?').all(new Date(nowMs - 2 * HOUR).toISOString());
+    written = new Set(rows.map((r) => `${r.kind}|${r.target}|${r.horizon}`));
+    writtenAt = nowMs;
+  }
+  return written;
+}
+
 async function record(kind, target, horizon, predicted, nowMs = Date.now(), { overwrite = false, note = null } = {}) {
   if (predicted === null || predicted === undefined || !Number.isFinite(Number(predicted))) return false;
-  const row = await db.prepare('SELECT id FROM forecast_log WHERE kind = ? AND target = ? AND horizon = ?').get(kind, target, horizon);
-  if (row && !overwrite) return false;
+  const key = `${kind}|${target}|${horizon}`;
+  const recent = Date.parse(target) >= nowMs - HOUR;
+  if (!overwrite) {
+    if (recent) { if ((await knownKeys(nowMs)).has(key)) return false; } else {
+      const row = await db.prepare('SELECT id FROM forecast_log WHERE kind = ? AND target = ? AND horizon = ?').get(kind, target, horizon);
+      if (row) return false;
+    }
+  }
   await db.upsert('forecast_log', { kind, target, horizon, predicted: r3(Number(predicted)), actual: null, made_at: new Date(nowMs).toISOString(), note }, ['kind', 'target', 'horizon']);
+  if (recent && written) written.add(key);
   return true;
 }
 
@@ -69,8 +90,12 @@ async function recordEvent(kind, predictedMs, actualMs, note = null) {
   return true;
 }
 
-// Fill in the real values of the hours that passed (the last three days).
+// Fill in the real values of the hours that passed (the last three days). Hours pass once an hour, so
+// at most every 10 minutes (the planner asks every half minute).
+let filledAt = null;
 async function fillActuals(nowMs = Date.now()) {
+  if (filledAt !== null && nowMs >= filledAt && nowMs - filledAt < 10 * 60000) return 0;
+  filledAt = nowMs;
   const rows = await db.prepare("SELECT kind, target, horizon FROM forecast_log WHERE actual IS NULL AND horizon <> 'event' AND target < ? AND target >= ?")
     .all(new Date(nowMs - HOUR).toISOString(), new Date(nowMs - 3 * DAY).toISOString());
   let n = 0;
@@ -204,7 +229,7 @@ async function corrections(nowMs = Date.now(), { fresh = false } = {}) {
   cache = { at: nowMs, value };
   return value;
 }
-function resetCache() { cache = null; }
+function resetCache() { cache = null; written = null; filledAt = null; }
 
 // Old rows away (kept 120 days).
 async function prune(nowMs = Date.now()) {

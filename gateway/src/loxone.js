@@ -56,12 +56,42 @@ function miniserverBaseUrl(miniserver) {
 // the login code (Multi-Factor Authentication) may not be let in with only a password there.
 // A Miniserver whose user has the login code (live_needs_code) is never sent the password at all: every
 // call goes over its live connection, logged in with the token (loxoneWebSocket.js's fetchViaLive).
+// What can go over the live connection (the websocket LoxSuite keeps open per Miniserver, logged in with a
+// token): jdev commands, writing a value, the structure file and the logbook. Not: anonymous calls (the
+// public key to log in with), and file lists (dev/fslist), which don't answer as a command.
+const LIVE_PATH = /^\/?(jdev\/(sps|cfg|sys)\/|dev\/sps\/io\/|data\/LoxAPP3\.json$|dev\/fsget\/)/;
+// Per Miniserver how its calls went: over the live connection, over HTTP, or over HTTP after the live
+// connection did not answer in time (shown on the Miniservers page).
+const transport = new Map();
+function countTransport(id, kind) {
+  let t = transport.get(id);
+  if (!t) { t = { live: 0, http: 0, fallback: 0, since: new Date().toISOString(), last: null }; transport.set(id, t); }
+  t[kind] += 1;
+  t.last = kind;
+}
+function transportStats(id) { return transport.get(id) || null; }
+
 async function fetchMiniserver(miniserver, path, options = {}) {
   const { timeoutMs, anonymous, ...restOptions } = options;
   if (miniserver.live_needs_code && !anonymous) {
     // Required here, not at the top: loxoneWebSocket.js requires this module itself.
+    countTransport(miniserver.id, 'live');
     return require('./loxoneWebSocket').fetchViaLive(miniserver, path, { timeoutMs });
   }
+  // The live connection first when it is open: no password on the wire, no new connection per call. When it
+  // doesn't answer in time, HTTP as before — nothing depends on the websocket being there.
+  if (!anonymous && LIVE_PATH.test(path) && process.env.LOXSUITE_LIVE_FIRST !== '0') {
+    const ws = require('./loxoneWebSocket');
+    if (ws.isOpen(miniserver.id)) {
+      try {
+        const res = await ws.fetchViaLive(miniserver, path, { timeoutMs: Math.min(Number(timeoutMs) || 4000, 4000) });
+        countTransport(miniserver.id, 'live');
+        return res;
+      } catch {
+        countTransport(miniserver.id, 'fallback');
+      }
+    } else countTransport(miniserver.id, 'http');
+  } else countTransport(miniserver.id, 'http');
   const auth = anonymous ? null : Buffer.from(`${miniserver.username}:${decrypt(miniserver.password)}`).toString('base64');
   const headers = { ...(auth ? { Authorization: `Basic ${auth}` } : {}), ...(options.headers || {}) };
 
@@ -378,7 +408,7 @@ async function forwardToLoxone(mapping, rawValue, actualTopic) {
 
 module.exports = {
   llCode,
-  sendHttpVirtualInput,
+  sendHttpVirtualInput, transportStats,
   forwardToLoxone,
   applyTransform,
   applyLoxoneToMqttTransform,

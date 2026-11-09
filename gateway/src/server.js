@@ -196,6 +196,12 @@ async function main() {
   app.locals.getVersionStatus = getVersionStatus;
   app.locals.getSqliteImportStatus = getSqliteImportStatus;
   app.locals.notificationSourceLink = notificationSourceLink;
+  app.locals.notificationCategoryOf = require('./notificationCategories').categoryOf;
+  // The menu as one list (navigation.js): sidebar, phone bar, breadcrumb and search all read it.
+  app.locals.navBuild = require('./navigation').build;
+  // per Miniserver: how its calls went (live connection / HTTP / HTTP after the live one didn't answer)
+  app.locals.loxoneTransport = (id) => require('./loxone').transportStats(id);
+  app.locals.navCurrent = require('./navigation').current;
   app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
   app.locals.serializeThresholdLadder = dashboardsRoutes.serializeThresholdLadder;
   app.locals.serializeValueMappings = dashboardsRoutes.serializeValueMappings;
@@ -217,7 +223,20 @@ async function main() {
   app.use(geoBlockMiddleware);
   app.use(express.urlencoded({ extended: true }));
   app.use(express.json());
-  app.use(express.static(path.join(__dirname, '..', 'public')));
+  // Pages, scripts and data gzipped (a page is a fifth of the size on the wire) — except the answers that
+  // are streamed piece by piece (the AI chat, pulling an Ollama model, the setup import), which must not
+  // wait in a compression buffer.
+  const STREAMED = ['/ai-chat', '/admin/ai', '/setup'];
+  app.use(require('compression')({ threshold: 1024, filter: (req, res) => !STREAMED.some((p) => req.path === p || req.path.startsWith(`${p}/`)) && require('compression').filter(req, res) }));
+  // Scripts and styles are linked with ?v=<version of this start>, so the browser may keep those a year;
+  // the rest (icons, images, the service worker) an hour, sw.js never (a new one must be seen).
+  app.use(express.static(path.join(__dirname, '..', 'public'), {
+    setHeaders: (res, file) => {
+      if (/sw\.js$/.test(file)) res.setHeader('Cache-Control', 'no-cache');
+      else if (res.req && res.req.query && res.req.query.v) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      else res.setHeader('Cache-Control', 'public, max-age=3600');
+    },
+  }));
   app.use(
     session({
       // connect-session-knex (replacing better-sqlite3-session-store — see
@@ -260,6 +279,7 @@ async function main() {
   app.use(authRoutes);
   // Modules that are off: hidden from the menu (res.locals.moduleOn) and their pages answer "switched off".
   app.use(modules.middleware());
+  app.use((req, res, next) => { res.locals.currentPath = req.path; next(); });
   
   app.get('/', requireAuth, requirePermission('dashboard', 'view'), asyncHandler(async (req, res) => {
     const miniserverRows = await db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all();
@@ -300,10 +320,13 @@ async function main() {
       const meters = await require('./energyMeters').live().catch(() => null);
       const em = modules.isOn('energy_manager') ? require('./energyModules') : null;
       const dev = async (kind) => { if (!em) return null; const c = await em.getConfig(kind).catch(() => ({})); return c.enabled ? em.statusCached(kind).catch(() => null) : null; };
-      energy = { meters, price: await require('./prices').priceSummary().catch(() => null), heatpump: await dev('heatpump'), solar: await dev('solar') };
+      energy = { meters, price: await require('./prices').priceSummary().catch(() => null), heatpump: await dev('heatpump'), solar: await dev('solar'), own: await require('./routes/energyManager').ownEnergyCached().catch(() => null) };
     }
+    // Home's top: now, what needs you and the day in one look (homeSummary.js)
+    const attention = await require('./routes/notificationCenter').attentionFor(req.user.id, ['energy_config', 'energy_device', 'energy_meter_status', 'system_check']).catch(() => []);
+    const home = await require('./homeSummary').build({ energy, attention }).catch((e) => { console.error(`[home] ${e.message}`); return null; });
     res.render('dashboard', {
-      energy,
+      energy, home,
       username: req.session.username,
       mqttConnected: mqttClient.state.connected,
       miniservers,
@@ -326,7 +349,8 @@ async function main() {
   app.use('/mappings', requireAuth, mappingRoutes);
   app.use('/incoming', requireAuth, requirePermission('incoming', 'view'), incomingRoutes);
   // Settings → Energy & charging (prices, solar, fuel, calendars): part of Smart charging, so its own rights
-  app.use('/settings/energy', requireAuth, requirePermission('charging', 'view'), require('./routes/settingsEnergy'));
+  // Shared energy settings (price, home & solar, fuel) for every energy function; the charging parts on it need Smart charging.
+  app.use('/settings/energy', requireAuth, require('./middleware/requirePermission').requireAnyPermission(['charging', 'energy', 'energy_manager'], 'view'), require('./routes/settingsEnergy'));
   app.use('/settings', requireAuth, requirePermission('settings', 'view'), settingsRoutes);
   app.use('/mqtt-users', requireAuth, requirePermission('mqtt_users', 'view'), mqttUsersRoutes);
   app.use('/mqtt-roles', requireAuth, requirePermission('mqtt_roles', 'view'), mqttRolesRoutes);
@@ -353,6 +377,8 @@ async function main() {
   app.use('/ai-chat', requireAuth, requirePermission('ai_chat', 'view'), aiChatRoutes);
   app.use('/api/table-prefs', requireAuth, tablePrefsRoutes);
   app.use('/api/nav-prefs', requireAuth, navPrefsRoutes);
+  // What the search in the top bar can find, for this user (searchIndex.js).
+  app.get('/api/search-index', requireAuth, (req, res) => { res.set('Cache-Control', 'private, no-cache'); res.json(require('./searchIndex').forUser(res.locals)); });
   // Mounted before the general '/admin' router below so their routes take precedence without
   // relying on that router falling through for a path it doesn't recognize.
   app.use('/admin/modules', requireAuth, requireAdmin, modulesRoutes);
@@ -373,6 +399,8 @@ async function main() {
   // gated (see routes/logs.js's requirePermission('logs_notifications', ...)).
   app.use('/notifications', requireAuth, notificationCenterRoutes);
   app.get('/help', requireAuth, (req, res) => res.render('help'));
+  // The help text alone, for the help drawer (fetched when it is first opened, see partials/foot.ejs).
+  app.get('/help/content', requireAuth, (req, res) => res.render('partials/help-content'));
 
   // Registered last, after every route — Express's own error-handling convention (a 4-parameter
   // function is what marks this as an error handler rather than a request handler). Anything
@@ -431,6 +459,8 @@ async function main() {
   modules.startEnabledWorkers();
   startWithRetry('MCP clients', () => mcpClient.startMcpClients());
   require('./learningDashboard').startLearningSnapshots();
+  // LoxSuite about itself: down time, disk, live connections, quiet MQTT topics, the Loxone program, security
+  startWithRetry('system checks', () => require('./systemChecks').startSystemChecks());
   // A restart mid-turn (deploy, crash) abandons any AI Assistant reply still marked 'streaming' —
   // nothing will ever finalize that row otherwise, since the code path that would (routes/aiChat.js's
   // own try/catch around llm.runTurn) never got to run its `finally`-equivalent before the process

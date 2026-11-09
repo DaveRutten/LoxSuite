@@ -1,6 +1,7 @@
-<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-loxone', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/loxone', topbarRangeValue: range, topbarRangeExtra: { q: query.q, level: query.level, miniserver_id: miniserverId } }) %>
+<%- include('partials/head', { pageTitle: 'Miniserver log', active: 'logs-loxone', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/loxone', topbarRangeValue: range, topbarRangeExtra: { q: query.q, level: query.level, miniserver_id: miniserverId } }) %>
 
-<p class="hint">
+<%- include('partials/page-intro', { text: t('The Miniservers\' own log, newest first.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
   <%= t('Real log lines fetched from each Miniserver\'s own') %> <code>def.log</code><%= t(', newest first, refreshing every 5 seconds. The gateway polls each Miniserver every minute (there\'s no push channel for this on the Loxone side) and persists only newly appended lines. Kept for') %>
   <strong><%= retentionDays %></strong> <%= t('days —') %>
   <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
@@ -114,5 +115,5 @@
   </div>
 </div>
 
-<script src="/log-select.js" defer></script>
+<script src="/log-select.js?v=<%= assetVersion %>" defer></script>
 <%- include('partials/foot') %>

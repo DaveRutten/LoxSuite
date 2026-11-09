@@ -1,7 +1,8 @@
-<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-mqtt', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/mqtt', topbarRangeValue: range, topbarRangeExtra: { q: query.q, level: query.level } }) %>
+<%- include('partials/head', { pageTitle: 'MQTT log', active: 'logs-mqtt', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/mqtt', topbarRangeValue: range, topbarRangeExtra: { q: query.q, level: query.level } }) %>
 
-<p class="hint">
-  <%= t('Raw lines from the Mosquitto broker\'s own log file, newest first, refreshing every 5 seconds. Persisted in SQLite and kept for') %> <strong><%= retentionDays %></strong> <%= t('days —') %>
+<%- include('partials/page-intro', { text: t('The MQTT broker\'s own log, newest first.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
+  <%= t('Raw lines from the Mosquitto broker\'s own log file, newest first, refreshing every 5 seconds. Kept in the database for') %> <strong><%= retentionDays %></strong> <%= t('days —') %>
   <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
   <strong><%= t('Level') %></strong> <%= t('is a best-effort guess from each line\'s wording (Mosquitto doesn\'t tag lines with a severity itself) — not a guarantee.') %>
 </p>
@@ -80,5 +81,5 @@
   </div>
 </div>
 
-<script src="/log-select.js" defer></script>
+<script src="/log-select.js?v=<%= assetVersion %>" defer></script>
 <%- include('partials/foot') %>

@@ -18,14 +18,18 @@ router.get('/', asyncHandler(async (req, res) => {
   const byRole = Object.fromEntries(meters.map((m) => [m.role, m]));
   const candidates = await energy.candidateMeters();
   const counts = await db.prepare('SELECT role, COUNT(*) AS n, MIN(hour) AS first FROM energy_hourly GROUP BY role').all();
-  // Own energy: self use and self-sufficiency over a period, with suggestions (selfUse.js)
-  const suDays = [7, 30, 90, 365].includes(Number(req.query.su)) ? Number(req.query.su) : 30;
-  const own = await selfUse.overview(suDays).catch(() => null);
   res.render('energy', {
-    own, suDays,
     roles: energy.ROLES, byRole, candidates, counts: Object.fromEntries(counts.map((c) => [c.role, c])),
     topics: energy.energyTopics(), saved: !!req.query.saved, error: req.query.error || null,
   });
+}));
+
+// Own energy (its own page since the UI review): self use and self-sufficiency over a period, with
+// suggestions (selfUse.js).
+router.get('/own', asyncHandler(async (req, res) => {
+  const suDays = [7, 30, 90, 365].includes(Number(req.query.su)) ? Number(req.query.su) : 30;
+  const own = await selfUse.overview(suDays).catch(() => null);
+  res.render('own-energy', { own, suDays });
 }));
 
 router.get('/live.json', asyncHandler(async (req, res) => {

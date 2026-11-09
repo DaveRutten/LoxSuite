@@ -7,9 +7,17 @@ function requirePermission(area, level) {
   };
 }
 
+// Allowed when the user has `level` on at least one of the areas (a page shared by several functions).
+function requireAnyPermission(areas, level) {
+  return function (req, res, next) {
+    if (req.user && (req.user.isAdmin || areas.some((a) => req.user.permissions[a]?.[level]))) return next();
+    res.status(403).render('forbidden', { area: areas[0] });
+  };
+}
+
 function requireAdmin(req, res, next) {
   if (req.user && req.user.isAdmin) return next();
   res.status(403).render('forbidden', { area: 'Administration' });
 }
 
-module.exports = { requirePermission, requireAdmin };
+module.exports = { requirePermission, requireAnyPermission, requireAdmin };

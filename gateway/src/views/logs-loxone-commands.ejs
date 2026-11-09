@@ -1,7 +1,8 @@
-<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-loxone-commands', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/loxone-commands', topbarRangeValue: range, topbarRangeExtra: { q: query.q, level: query.level } }) %>
+<%- include('partials/head', { pageTitle: 'Command log', active: 'logs-loxone-commands', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/loxone-commands', topbarRangeValue: range, topbarRangeExtra: { q: query.q, level: query.level } }) %>
 
-<p class="hint">
-  <%= t('Every Virtual Output command Loxone sends this gateway (UDP or HTTP), accepted or rejected — who sent it (the configured Miniserver\'s name when its Host matches the sender\'s IP, otherwise just the IP), when, which MQTT topic it targeted, and the value transition (what it was before → what it became). Use this to check whether a command from the Miniserver actually arrives here at all before chasing the Loxone → MQTT mapping itself. Persisted in SQLite and kept for') %> <strong><%= retentionDays %></strong> <%= t('days, same retention setting as the other tabs —') %> <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
+<%- include('partials/page-intro', { text: t('Every command Loxone sent to LoxSuite, accepted or not.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
+  <%= t('Every Virtual Output command Loxone sends this gateway (UDP or HTTP), accepted or rejected — who sent it (the configured Miniserver\'s name when its Host matches the sender\'s IP, otherwise just the IP), when, which MQTT topic it targeted, and the value transition (what it was before → what it became). Use this to check whether a command from the Miniserver actually arrives here at all before chasing the Loxone → MQTT mapping itself. Kept in the database for') %> <strong><%= retentionDays %></strong> <%= t('days, same retention setting as the other tabs —') %> <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
 </p>
 
 <form method="get" action="/logs/loxone-commands" class="form-grid" style="margin-bottom:1rem; align-items:end;">
@@ -131,5 +132,5 @@
   </div>
 </div>
 
-<script src="/log-select.js" defer></script>
+<script src="/log-select.js?v=<%= assetVersion %>" defer></script>
 <%- include('partials/foot') %>

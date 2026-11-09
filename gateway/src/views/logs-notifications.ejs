@@ -1,7 +1,8 @@
-<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-notifications', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/notifications', topbarRangeValue: range, topbarRangeExtra: { q: query.q, severity: query.severity, category: query.category } }) %>
+<%- include('partials/head', { pageTitle: 'Notification log', active: 'logs-notifications', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/notifications', topbarRangeValue: range, topbarRangeExtra: { q: query.q, severity: query.severity, category: query.category } }) %>
 
-<p class="hint">
-  <%= t('Every notification fired by a rule (') %><a href="/admin/notifications"><%= t('Notifications settings') %></a><%= t(') or a monitor\'s own threshold ladder marked "Notify" — one entry per event, independent of how many channels it was sent to or whether delivery succeeded. Persisted in SQLite and kept for') %>
+<%- include('partials/page-intro', { text: t('Every notification that was sent, and to which channels.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
+  <%= t('Every notification fired by a rule (') %><a href="/admin/notifications"><%= t('Notifications settings') %></a><%= t(') or a monitor\'s own threshold ladder marked "Notify" — one entry per event, independent of how many channels it was sent to or whether delivery succeeded. Kept in the database for') %>
   <strong><%= retentionDays %></strong> <%= t('days —') %>
   <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
 </p>
@@ -88,5 +89,5 @@
   </div>
 </div>
 
-<script src="/log-select.js" defer></script>
+<script src="/log-select.js?v=<%= assetVersion %>" defer></script>
 <%- include('partials/foot') %>

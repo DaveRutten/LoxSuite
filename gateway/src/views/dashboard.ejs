@@ -1,17 +1,19 @@
-<%- include('partials/head', { pageTitle: 'Dashboard', active: 'dashboard', refresh: 5, liveSwap: true, dashboardId: dashboard.id }) %>
+<%- include('partials/head', { pageTitle: 'Home', active: 'dashboard', refresh: 5, liveSwap: true, dashboardId: dashboard.id }) %>
 
-<p class="hint">
-<%= t('Logged in as') %> <strong><%= username %></strong>
-</p>
-
-<% const isCollapsed = (key) => collapsedSections.includes(key); %>
+<%
+  // Home: first what happens now (partials/home-hero.ejs), then the details. The technical blocks
+  // (Status, Load) start folded; the energy tiles too once the top shows the flow.
+  const FOLDED = ['home-status', 'home-load'].concat(typeof home !== 'undefined' && home && home.flow ? ['home-energy'] : []);
+  const isCollapsed = (key) => FOLDED.includes(key) ? !(typeof expandedSections !== 'undefined' && expandedSections.includes(key)) : collapsedSections.includes(key);
+%>
+<% if (typeof home !== 'undefined' && home) { %><%- include('partials/home-hero', { home }) %><% } %>
 
 <% if (typeof energy !== 'undefined' && energy) {
      const nfd = (v, d = 1) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }));
      const R = (energy.meters && energy.meters.roles) || {}, P = energy.price || {}, H = energy.heatpump, S = energy.solar;
      const hm = (iso) => (iso ? new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }) : ''); %>
 <button type="button" class="section-toggle" data-nav-section="home-energy" aria-expanded="<%= isCollapsed('home-energy') ? 'false' : 'true' %>">
-  <h2><%= t('Energy') %></h2><%- icon('chevron') %>
+  <h2><%= typeof home !== 'undefined' && home && home.flow ? t('Energy details') : t('Energy') %></h2><%- icon('chevron') %>
 </button>
 <div class="section-body" <%= isCollapsed('home-energy') ? 'hidden' : '' %> style="margin-bottom:1.5rem;">
   <% const sign = (v) => (v > 0.005 ? 'in' : v < -0.005 ? 'out' : 'zero'); %>
@@ -22,6 +24,7 @@
     <% if (R.battery) { const bt = R.battery.power_kw || 0; %><a class="en-tile" href="/energy"><%- enIcon('battery', 'var(--en-battery)') %><div class="en-tx"><div class="en-l"><%= t('Home battery') %></div><div class="en-v" data-live-id="en-bat"><%= nfd(Math.abs(bt), 2) %> kW</div><div class="en-s" data-live-id="en-bat-sub"><%= bt > 0.005 ? t('charging') : bt < -0.005 ? t('discharging') : t('idle') %><%= R.battery.soc_pct !== undefined && R.battery.soc_pct !== null ? ' · ' + nfd(R.battery.soc_pct, 0) + '%' : '' %></div></div></a><% } %>
     <% if (P.now !== null && P.now !== undefined) { %><a class="en-tile" href="/planner"><%- enIcon('euro', 'var(--en-price)') %><div class="en-tx"><div class="en-l"><%= t('Price now') %></div><div class="en-v" data-live-id="en-price">€ <%= nfd(P.now, 3) %></div><div class="en-s en-range" data-live-id="en-price-range"><% if (P.min !== null && P.min !== undefined) { %><span class="en-lo" title="<%= t('lowest today') %>"><svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M5 9L0.5 2h9z" fill="currentColor"/></svg> € <%= nfd(P.min, 3) %> <small><%= hm(P.minAt) %></small></span><span class="en-hi" title="<%= t('highest today') %>"><svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M5 1l4.5 7h-9z" fill="currentColor"/></svg> € <%= nfd(P.max, 3) %> <small><%= hm(P.maxAt) %></small></span><% } %></div></div></a><% } %>
     <% if (H && H.state) { %><a class="en-tile" href="/energy-manager/modules/heatpump"><%- enIcon('heat', '#e67e22') %><div class="en-tx"><div class="en-l"><%= t('Heat pump') %></div><div class="en-v" data-live-id="en-hp"><%= { dhw: t('Tap water'), heating: t('Heating'), idle: t('Idle'), defrost: t('Defrosting'), fault: t('Fault') }[H.state.mode] || H.state.mode %></div><div class="en-s" data-live-id="en-hp-sub"><%= t('tank') %> <%= nfd(H.state.tankC) %> °C · <%= t('room') %> <%= nfd(H.state.roomC) %> °C<%= H.state.cop ? ' · COP ' + nfd(H.state.cop, 1) : '' %></div></div></a><% } %>
+    <% if (energy.own) { const O = energy.own; %><a class="en-tile" href="/energy/own"><%- enIcon('sun', 'var(--en-export)') %><div class="en-tx"><div class="en-l"><%= t('Own energy') %> · <%= t('30 days') %></div><div class="en-v"><%= O.selfRate === null ? '—' : Math.round(O.selfRate * 100) + ' %' %> <small style="font-size:0.8rem; font-weight:500; color:var(--text-muted);"><%= t('used yourself') %></small></div><div class="en-s"><%= t('self-sufficient') %> <%= O.autarky === null ? '—' : Math.round(O.autarky * 100) + ' %' %></div></div></a><% } %>
     <% if (S && S.limit) { %><a class="en-tile" href="/energy-manager/modules/solar"><%- enIcon('panel', 'var(--en-solar)') %><div class="en-tx"><div class="en-l"><%= t('Solar panels') %></div><div class="en-v" data-live-id="en-limit"><%= S.limit.pct %> %</div><div class="en-s" data-live-id="en-limit-sub"><%= S.limit.pct < 100 ? t('limited: exporting costs money') : t('no limit') %></div></div></a><% } %>
   </div>
 </div>
@@ -71,13 +74,13 @@
       <div id="home-ms-tabulator"></div>
     </div>
   </div>
-  <link rel="stylesheet" href="/vendor/tabulator.min.css">
-  <link rel="stylesheet" href="/tabulator-theme.css">
-  <script src="/vendor/tabulator.min.js"></script>
-  <script src="/vendor/floating-ui.core.umd.min.js"></script>
-  <script src="/vendor/floating-ui.dom.umd.min.js"></script>
-  <script src="/tabulator-table.js"></script>
-  <script src="/dashboard-miniservers-tabulator.js"></script>
+  <link rel="stylesheet" href="/vendor/tabulator.min.css?v=<%= assetVersion %>">
+  <link rel="stylesheet" href="/tabulator-theme.css?v=<%= assetVersion %>">
+  <script src="/vendor/tabulator.min.js?v=<%= assetVersion %>"></script>
+  <script src="/vendor/floating-ui.core.umd.min.js?v=<%= assetVersion %>"></script>
+  <script src="/vendor/floating-ui.dom.umd.min.js?v=<%= assetVersion %>"></script>
+  <script src="/tabulator-table.js?v=<%= assetVersion %>"></script>
+  <script src="/dashboard-miniservers-tabulator.js?v=<%= assetVersion %>"></script>
 </div>
 
 <button type="button" class="section-toggle" data-nav-section="home-panels" aria-expanded="<%= isCollapsed('home-panels') ? 'false' : 'true' %>">

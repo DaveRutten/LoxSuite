@@ -190,7 +190,42 @@ test('side menu: no Translations and no separate Settings entry; Administration 
   assert.ok(!/<a href="\/translations"/.test(head), 'Translations belongs under Administration');
   assert.ok(!/<a href="\/settings" class=/.test(head), 'Settings is a tab under Administration');
   assert.ok(/adminHref/.test(head) && /t\('Administration'\)/.test(head));
-  assert.ok(head.indexOf("'chargelog'") > head.indexOf('logActiveKeys'), 'Charge log sits under Logs');
+  // the menu itself is one list (src/navigation.js)
+  const nav = require('../src/navigation');
+  const all = nav.build({ canView: () => true, canEdit: () => true, moduleOn: () => true, currentUser: { isAdmin: true }, multiLang: true });
+  const keys = (k) => all.find((s) => s.key === k).items.map((i) => i.key);
+  assert.ok(keys('car').includes('chargelog'), 'Charge sessions sit with Car & charging');
+  assert.ok(!all.some((s) => s.items.some((i) => i.href === '/translations' || i.href === '/settings')), 'Translations and Settings are tabs under Administration');
+  assert.ok(keys('admin').includes('logs-system') && keys('admin').includes('logs-notifications'), 'system and notification logs under Administration');
+});
+
+test('menu: every page belongs to one menu item, the longest matching address wins', () => {
+  const nav = require('../src/navigation');
+  const all = nav.build({ canView: () => true, canEdit: () => true, moduleOn: () => true, currentUser: { isAdmin: true } });
+  const at = (p) => (nav.current(all, p) || { item: { key: null } }).item.key;
+  assert.equal(at('/'), 'home');
+  assert.equal(at('/planner'), 'planner');
+  assert.equal(at('/planner/log'), 'chargelog');
+  assert.equal(at('/energy-manager'), 'energy-now');
+  assert.equal(at('/energy-manager/modules/heatpump'), 'heatpump');
+  assert.equal(at('/energy/own'), 'own-energy');
+  assert.equal(at('/energy'), 'meters');
+  assert.equal(at('/settings/broker'), 'broker');
+  assert.equal(at('/settings/energy'), 'admin');
+  assert.equal(at('/dashboards/7'), 'dashboards');
+  // a module that is off: not in the menu, but search says where to switch it on (admins)
+  const off = { canView: () => true, canEdit: () => true, moduleOn: (k) => k !== 'ocpp', currentUser: { isAdmin: true }, t: (k) => k };
+  assert.ok(!nav.build(off).some((s) => s.items.some((i) => i.key === 'ocpp')));
+  const hit = require('../src/searchIndex').forUser(off).find((e) => e.label === 'Charging allowance (OCPP)');
+  assert.ok(hit && hit.off && hit.href === '/admin/modules#mod-ocpp');
+});
+
+test('search finds the settings sections of the pages (from their headings)', () => {
+  const idx = require('../src/searchIndex').forUser({ canView: () => true, canEdit: () => true, moduleOn: () => true, currentUser: { isAdmin: true }, t: (k) => k });
+  const price = idx.find((e) => e.label === 'Electricity price');
+  assert.ok(price && price.href === '/settings/energy' && price.find === 'Electricity price');
+  const tab = idx.find((e) => e.href.startsWith('/energy-manager/modules/heatpump#'));
+  assert.ok(tab, 'heat pump sections open on their tab');
 });
 
 test('agenda page: Sync sits left of Day / Week / Month / Year', () => {

@@ -39,7 +39,8 @@ function learn(samples, { minMinutes = 60 } = {}) {
     const b = bins.get(k) || { t: tbin(s.outdoorC), band: band(s.rh), minutes: 0, defrostMin: 0, elec: 0, heat: 0, runMin: 0 };
     b.minutes += 1;
     if (s.defrost) b.defrostMin += 1;
-    if (Number(s.elecKw) > 0.2) { b.runMin += 1; b.elec += Number(s.elecKw); b.heat += Math.max(0, Number(s.heatKw) || 0); }
+    // only minutes with a known electric power, and never more heat than MAX_COP × that power (see dailyEnergy)
+    if (Number(s.elecKw) > 0.2) { b.runMin += 1; b.elec += Number(s.elecKw); b.heat += Math.min(Math.max(0, Number(s.heatKw) || 0), Number(s.elecKw) * MAX_COP); }
     bins.set(k, b);
   }
   const out = {};
@@ -74,7 +75,7 @@ function learnSteps(samples, { minMinutes = 60 } = {}) {
     if (!Number.isFinite(s.outdoorC) || !(Number(s.elecKw) > 0.2)) continue;
     const k = `${s.step ?? 0}|${s.ntc ?? 0}|${tbin(s.outdoorC)}`;
     const g = by.get(k) || { step: s.step ?? 0, ntc: s.ntc ?? 0, t: tbin(s.outdoorC), minutes: 0, elec: 0, heat: 0 };
-    g.minutes += 1; g.elec += Number(s.elecKw); g.heat += Math.max(0, Number(s.heatKw) || 0);
+    g.minutes += 1; g.elec += Number(s.elecKw); g.heat += Math.min(Math.max(0, Number(s.heatKw) || 0), Number(s.elecKw) * MAX_COP);
     by.set(k, g);
   }
   return [...by.values()].filter((g) => g.minutes >= minMinutes)
@@ -101,10 +102,13 @@ function dailyEnergy(samples, dayOf) {
     const g = out[d] || (out[d] = { heat: 0, elec: 0, min: 0, tSum: 0, tN: 0, eh: {} });
     const heat = Math.min(Math.max(0, Number(s.heatKw) || 0), e * MAX_COP);
     g.elec += e / 60; g.heat += heat / 60; g.min += 1;
+    // the booster's own meter: its power is used and turned into heat 1:1 (COP 1) — counted in, and kept apart
+    const b = Number(s.boostKw);
+    if (Number.isFinite(b) && b > 0.05) { g.elec += b / 60; g.heat += b / 60; g.boost = (g.boost || 0) + b / 60; }
     const h = Math.floor(s.ms / 3600000); g.eh[h] = (g.eh[h] || 0) + e / 60; // power per hour, for the costs
     if (Number.isFinite(s.outdoorC)) { g.tSum += s.outdoorC; g.tN += 1; }
   }
-  return Object.fromEntries(Object.entries(out).map(([d, g]) => [d, { heat: r2(g.heat), elec: r2(g.elec), min: g.min, t: g.tN ? r2(g.tSum / g.tN) : null, eh: Object.fromEntries(Object.entries(g.eh).map(([h, v]) => [h, Math.round(v * 1000) / 1000])) }]));
+  return Object.fromEntries(Object.entries(out).map(([d, g]) => [d, { heat: r2(g.heat), elec: r2(g.elec), boost: r2(g.boost || 0), min: g.min, t: g.tN ? r2(g.tSum / g.tN) : null, eh: Object.fromEntries(Object.entries(g.eh).map(([h, v]) => [h, Math.round(v * 1000) / 1000])) }]));
 }
 
 // Pure: the seasonal COP as measured — all heat delivered divided by all electricity used, over the
@@ -112,7 +116,8 @@ function dailyEnergy(samples, dayOf) {
 function scop(days, { fromDay = null } = {}) {
   const list = Object.entries(days || {}).filter(([d, g]) => (!fromDay || d >= fromDay) && g.min >= 60).sort(([a], [b]) => a.localeCompare(b)).slice(-365);
   const heat = list.reduce((a, [, g]) => a + g.heat, 0), elec = list.reduce((a, [, g]) => a + g.elec, 0);
-  return { scop: elec > 1 ? r2(heat / elec) : null, heatKwh: Math.round(heat), elecKwh: Math.round(elec), days: list.length, from: list[0]?.[0] || null, to: list[list.length - 1]?.[0] || null };
+  const boost = list.reduce((a, [, g]) => a + (g.boost || 0), 0);
+  return { scop: elec > 1 ? r2(heat / elec) : null, heatKwh: Math.round(heat), elecKwh: Math.round(elec), boostKwh: Math.round(boost), days: list.length, from: list[0]?.[0] || null, to: list[list.length - 1]?.[0] || null };
 }
 
 // Pure: per month what the heat pump used and cost, against the same kWh at the day's average price

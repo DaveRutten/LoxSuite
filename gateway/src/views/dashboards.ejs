@@ -1,6 +1,7 @@
 <%- include('partials/head', { pageTitle: 'My Dashboards', active: 'dashboards' }) %>
 
-<p class="hint">
+<%- include('partials/page-intro', { text: t('Your own dashboards, with charts, tables and tiles.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
   <%= t('Build your own dashboards out of the monitors you\'re tracking on the') %> <a href="/monitor"><%= t('Monitor') %></a>
   <%= t('page — charts, tables, or current-value tiles, arranged however you like. These are personal to your account; other logged-in users have their own.') %>
 </p>
@@ -9,7 +10,7 @@
   <p class="error"><%= error %></p>
 <% } %>
 
-<details class="add-panel">
+<details class="add-panel" id="add-dashboard">
   <summary><%= t('Create dashboard') %></summary>
   <div class="add-panel-body">
     <form method="post" action="/dashboards" class="form-grid">
@@ -135,7 +136,7 @@
         </tr>
       <% }) %>
       <% if (dashboards.length === 0) { %>
-        <tr><td colspan="3" class="empty"><%= t('No dashboards yet — create one above.') %></td></tr>
+        <tr><td colspan="3" class="empty"><%- include('partials/empty-state', { title: t('No dashboards yet'), action: { label: t('Create dashboard'), open: '#add-dashboard' } }) %></td></tr>
       <% } %>
     </tbody>
   </table>

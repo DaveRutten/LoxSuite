@@ -42,6 +42,23 @@
       W.prototype = DTF.prototype; W.supportedLocalesOf = DTF.supportedLocalesOf;
       Intl.DateTimeFormat = W;
     })();
+    // Polling (every 2 s or slower) waits while the tab is in the background: nothing is fetched for a page
+    // nobody looks at. When the tab is shown again, each one that skipped a turn runs once right away.
+    (function () {
+      var si = window.setInterval, ci = window.clearInterval, live = new Map();
+      window.setInterval = function (fn, ms) {
+        if (typeof fn !== 'function' || !(Number(ms) >= 2000)) return si.apply(window, arguments);
+        var args = Array.prototype.slice.call(arguments, 2), e = { fn: fn, args: args, missed: false };
+        var id = si(function () { if (document.hidden) { e.missed = true; return; } fn.apply(window, args); }, ms);
+        live.set(id, e);
+        return id;
+      };
+      window.clearInterval = function (id) { live.delete(id); return ci(id); };
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) return;
+        live.forEach(function (e) { if (e.missed) { e.missed = false; try { e.fn.apply(window, e.args); } catch (x) { /* its own error */ } } });
+      });
+    })();
     // Applied before first paint to avoid a flash of the wrong theme.
     (function () {
       var saved = localStorage.getItem('theme');
@@ -80,7 +97,7 @@
     };
   </script>
 </head>
-<body data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>" data-page-size="<%= tablePageSize %>">
+<body data-hints="<%= typeof expandedSections !== 'undefined' && expandedSections.includes('ui-hints') ? 'shown' : (typeof collapsedSections !== 'undefined' && collapsedSections.includes('ui-hints') ? 'hidden' : '') %>" data-refresh="<%= typeof refresh !== 'undefined' ? refresh : '' %>" data-live-swap="<%= typeof liveSwap !== 'undefined' && liveSwap ? 'true' : 'false' %>" data-page-size="<%= tablePageSize %>">
 <div class="app-shell">
   <%
     // Hidden on desktop entirely via CSS (display:none outside the mobile breakpoint) — always
@@ -100,143 +117,31 @@
       </a>
     <% } %>
     <%
-      // canView/canEdit come from res.locals (see middleware/loadUserContext.js) — hiding a nav
-      // item or button a role can't use is UX only, requirePermission on the server is the actual
-      // boundary (middleware/requirePermission.js).
-
-      // Pages that used to each get their own sidebar link now live together behind one link, with
-      // tabs at the top of the page itself doing the switching (see partials/tabs-*.ejs) — these
-      // work out which of a group's areas the current user can actually reach, and land them on
-      // the first one, rather than a fixed href that might 403 for their role.
-      const mappingAreas = [
-        { key: 'mqtt_to_loxone', href: '/mappings/mqtt-to-loxone' },
-        { key: 'loxone_to_mqtt', href: '/mappings/loxone-to-mqtt' },
-        { key: 'commands', href: '/mappings/commands' },
-        { key: 'transformations', href: '/transformations' },
-      ];
-      const mappingsHref = (mappingAreas.find((a) => canView(a.key)) || {}).href;
-      const mappingsActive = ['mqtt-to-loxone', 'loxone-to-mqtt', 'commands', 'transformations'].includes(active);
-
-      // Same order as the tab strip itself (partials/tabs-mqtt-broker.ejs) — landing on the first
-      // one a role can actually see is the point of this whole indirection, so this list has to
-      // match that tab order or the sidebar link would land on some other, later tab instead.
-      const brokerAreas = [
-        { key: 'settings', href: '/settings/broker' },
-        { key: 'mqtt_users', href: '/mqtt-users' },
-        { key: 'mqtt_roles', href: '/mqtt-roles' },
-      ];
-      const brokerHref = (brokerAreas.find((a) => canView(a.key)) || {}).href;
-      const brokerActive = ['mqtt-users', 'mqtt-roles', 'broker-settings'].includes(active);
-
-      const loxoneSectionVisible = canView('miniservers') || canView('live_data') || canView('hardware') || !!mappingsHref;
-      const mqttSectionVisible = canView('incoming') || !!brokerHref;
-
-      // A section stays expanded regardless of the user's saved preference while they're actually
-      // on one of its pages — otherwise the active link would be invisible inside its own collapsed
-      // section, which reads as broken navigation rather than a deliberate collapse.
-      const isCollapsed = (key, forceExpanded) => !forceExpanded && collapsedSections.includes(key);
+      // The menu comes from one list (src/navigation.js), grouped by what you do at home; the same
+      // list makes the phone bar, the breadcrumb above the title and the search. Hiding an item a
+      // role can't use is UX only — requirePermission on the server is the actual boundary.
+      const navSections = currentUser ? navBuild(locals) : [];
+      const navHere = navCurrent(navSections, typeof currentPath !== 'undefined' ? currentPath : '/');
+      const navOpen = (s) => (navHere && navHere.section.key === s.key) || (s.foldedByDefault ? (typeof expandedSections !== 'undefined' && expandedSections.includes(s.key)) : !collapsedSections.includes(s.key));
+      const currentDashboardId = typeof dashboardId !== 'undefined' ? dashboardId : null;
+      const adminHrefOk = (href) => !href.startsWith('/settings/energy') || ['charging', 'energy', 'energy_manager'].some((k) => canView(k) && (typeof moduleOn !== 'function' || moduleOn(k)));
     %>
     <nav>
-      <% const mod = typeof moduleOn === 'function' ? moduleOn : () => true; %>
-      <% if (canView('dashboard')) { %><a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>"><%= t('Dashboard') %></a><% } %>
-
-      <% if (mod('monitor')) { %>
-      <% const monitorExpanded = active === 'monitor' || active === 'dashboards'; %>
-      <button type="button" class="nav-section-label" data-nav-section="monitor" aria-expanded="<%= isCollapsed('monitor', monitorExpanded) ? 'false' : 'true' %>">
-        <span><%= t('Monitor') %></span><%- icon('chevron') %>
-      </button>
-      <div class="nav-group" <%= isCollapsed('monitor', monitorExpanded) ? 'hidden' : '' %>>
-        <% if (canView('monitor')) { %><a href="/monitor" class="<%= active === 'monitor' ? 'active' : '' %>"><%= t('Monitor') %></a><% } %>
-        <a href="/dashboards" class="<%= active === 'dashboards' ? 'active' : '' %>"><%= t('My Dashboards') %></a>
-        <% if (favoriteDashboards.length > 0) { %>
-          <%
-            // Starred from a dashboard's own "Add to sidebar" button (dashboards.ejs,
-            // dashboard-detail.ejs) — favoriteDashboards itself already only ever holds ones this
-            // user can still actually reach (see loadFavoriteDashboards in loadUserContext.js).
-            // dashboardId isn't set by every page (only dashboard.ejs/dashboard-detail.ejs pass
-            // it) — typeof-guarded the same way refresh/liveSwap are on <body> above, rather than
-            // requiring every other page's own include('partials/head', {...}) call to know about
-            // a local it has no use for.
-            const currentDashboardId = typeof dashboardId !== 'undefined' ? dashboardId : null;
-            const favoritesExpanded = active === 'dashboards' || active === 'dashboard';
-          %>
-          <button type="button" class="nav-section-label" data-nav-section="favorite-dashboards" aria-expanded="<%= isCollapsed('favorite-dashboards', favoritesExpanded) ? 'false' : 'true' %>">
-            <span><%= t('Favorite Dashboards') %></span><%- icon('chevron') %>
-          </button>
-          <div class="nav-group" <%= isCollapsed('favorite-dashboards', favoritesExpanded) ? 'hidden' : '' %>>
-            <% favoriteDashboards.forEach(d => { %>
-              <a href="/dashboards/<%= d.id %>" class="<%= currentDashboardId != null && d.id === currentDashboardId ? 'active' : '' %>"><%= d.name %></a>
-            <% }) %>
-          </div>
-        <% } %>
-      </div>
-      <% } %>
-
-      <% if (loxoneSectionVisible) { %>
-        <% const loxoneExpanded = active === 'miniservers' || active === 'live-data' || active === 'hardware' || mappingsActive; %>
-        <button type="button" class="nav-section-label" data-nav-section="loxone-mappings" aria-expanded="<%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'false' : 'true' %>">
-          <span><%= t('Loxone') %></span><%- icon('chevron') %>
+      <% navSections.forEach((s) => { const open = navOpen(s); %>
+        <button type="button" class="nav-section-label" data-nav-section="<%= s.key %>" aria-expanded="<%= open ? 'true' : 'false' %>">
+          <span><%= t(s.label) %></span><%- icon('chevron') %>
         </button>
-        <div class="nav-group" <%= isCollapsed('loxone-mappings', loxoneExpanded) ? 'hidden' : '' %>>
-          <% if (canView('miniservers')) { %><a href="/miniservers" class="<%= active === 'miniservers' ? 'active' : '' %>"><%= t('Miniservers') %></a><% } %>
-          <% if (canView('live_data')) { %><a href="/live-data" class="<%= active === 'live-data' ? 'active' : '' %>"><%= t('Live Data') %></a><% } %>
-          <% if (canView('hardware')) { %><a href="/hardware" class="<%= active === 'hardware' ? 'active' : '' %>"><%= t('Hardware') %></a><% } %>
-          <% if (mappingsHref && mod('mqtt')) { %><a href="<%= mappingsHref %>" class="<%= mappingsActive ? 'active' : '' %>"><%= t('Mappings') %></a><% } %>
+        <div class="nav-group" <%= open ? '' : 'hidden' %>>
+          <% s.items.forEach((it) => { const on = navHere && navHere.item.key === it.key && !(it.key === 'dashboards' && currentDashboardId != null && favoriteDashboards.some((d) => d.id === currentDashboardId)); %>
+            <a href="<%= it.href %>" class="<%= on ? 'active' : '' %>" <%= on ? 'aria-current=page' : '' %>><%= t(it.label) %><% if (it.badge === 'unread' && unreadNotificationCount > 0) { %> <span class="nav-badge"><%= unreadNotificationCount > 99 ? '99+' : unreadNotificationCount %></span><% } %></a>
+            <% if (it.key === 'dashboards' && favoriteDashboards.length) { %>
+              <div class="nav-sub">
+                <% favoriteDashboards.forEach((d) => { %><a href="/dashboards/<%= d.id %>" class="<%= currentDashboardId != null && d.id === currentDashboardId ? 'active' : '' %>"><%= d.name %></a><% }) %>
+              </div>
+            <% } %>
+          <% }) %>
         </div>
-      <% } %>
-
-      <% const em = (k) => mod(k) && canView(k); const energyAny = em('charging') || em('vehicles') || em('energy') || em('energy_manager') || em('ocpp'); %>
-      <% if (energyAny) { %>
-        <% const wallboxExpanded = ['planner', 'energymanager', 'learning', 'agenda', 'vehicles', 'driving', 'energy', 'learned', 'ocpp'].includes(active); %>
-        <button type="button" class="nav-section-label" data-nav-section="wallbox" aria-expanded="<%= isCollapsed('wallbox', wallboxExpanded) ? 'false' : 'true' %>">
-          <span><%= t('Energy & charging') %></span><%- icon('chevron') %>
-        </button>
-        <div class="nav-group" <%= isCollapsed('wallbox', wallboxExpanded) ? 'hidden' : '' %>>
-          <% if (em('energy_manager')) { %><a href="/energy-manager" class="<%= active === 'energymanager' ? 'active' : '' %>"><%= t('Energy manager') %></a><a href="/energy-manager/learning" class="<%= active === 'learning' ? 'active' : '' %>"><%= t('Learning dashboard') %></a><% } %>
-          <% if (em('charging')) { %>
-            <a href="/planner" class="<%= active === 'planner' ? 'active' : '' %>"><%= t('Smart charging') %></a>
-            <a href="/agenda" class="<%= active === 'agenda' ? 'active' : '' %>"><%= t('Agenda') %></a>
-            <% if (!em('energy_manager')) { %><a href="/learned" class="<%= active === 'learned' ? 'active' : '' %>"><%= t('Learned') %></a><% } %>
-          <% } %>
-          <% if (em('vehicles')) { %>
-            <a href="/vehicles" class="<%= active === 'vehicles' ? 'active' : '' %>"><%= t('Vehicles') %></a>
-            <a href="/driving" class="<%= active === 'driving' ? 'active' : '' %>"><%= t('Driving & costs') %></a>
-          <% } %>
-          <% if (em('energy')) { %><a href="/energy" class="<%= active === 'energy' ? 'active' : '' %>"><%= t('Meters') %></a><% } %>
-          <% if (em('ocpp')) { %><a href="/ocpp" class="<%= active === 'ocpp' ? 'active' : '' %>"><%= t('OCPP (charging costs)') %></a><% } %>
-        </div>
-      <% } %>
-
-      <% if (mqttSectionVisible && mod('mqtt')) { %>
-        <% const brokerExpanded = active === 'incoming' || active === 'incoming-clients' || brokerActive; %>
-        <button type="button" class="nav-section-label" data-nav-section="mqtt-broker" aria-expanded="<%= isCollapsed('mqtt-broker', brokerExpanded) ? 'false' : 'true' %>">
-          <span><%= t('MQTT') %></span><%- icon('chevron') %>
-        </button>
-        <div class="nav-group" <%= isCollapsed('mqtt-broker', brokerExpanded) ? 'hidden' : '' %>>
-          <% if (brokerHref) { %><a href="<%= brokerHref %>" class="<%= brokerActive ? 'active' : '' %>"><%= t('Broker') %></a><% } %>
-          <% if (canView('incoming')) { %><a href="/incoming/messages" class="<%= active === 'incoming' ? 'active' : '' %>"><%= t('Live Data') %></a><% } %>
-          <% if (canView('incoming')) { %><a href="/incoming/clients" class="<%= active === 'incoming-clients' ? 'active' : '' %>"><%= t('Client Activity') %></a><% } %>
-        </div>
-      <% } %>
-
-      <%
-        const logActiveKeys = ['logs-system', 'logs-notifications', 'logs-loxone', 'logs-loxone-commands', 'logs-mqtt', 'chargelog'];
-        const logsSectionVisible = canView('logs_system') || canView('logs_notifications') || canView('logs_loxone') || canView('logs_loxone_commands') || canView('logs_mqtt') || em('charging');
-      %>
-      <% if (logsSectionVisible) { %>
-        <% const logsExpanded = logActiveKeys.includes(active); %>
-        <button type="button" class="nav-section-label" data-nav-section="logs" aria-expanded="<%= isCollapsed('logs', logsExpanded) ? 'false' : 'true' %>">
-          <span><%= t('Logs') %></span><%- icon('chevron') %>
-        </button>
-        <div class="nav-group" <%= isCollapsed('logs', logsExpanded) ? 'hidden' : '' %>>
-          <% if (canView('logs_system')) { %><a href="/logs/system" class="<%= active === 'logs-system' ? 'active' : '' %>"><%= t('System') %></a><% } %>
-          <% if (canView('logs_notifications')) { %><a href="/logs/notifications" class="<%= active === 'logs-notifications' ? 'active' : '' %>"><%= t('Notifications') %></a><% } %>
-          <% if (canView('logs_loxone') && mod('loxone_logs')) { %><a href="/logs/loxone" class="<%= active === 'logs-loxone' ? 'active' : '' %>"><%= t('Loxone Miniservers') %></a><% } %>
-          <% if (canView('logs_loxone_commands') && mod('mqtt')) { %><a href="/logs/loxone-commands" class="<%= active === 'logs-loxone-commands' ? 'active' : '' %>"><%= t('Loxone Commands') %></a><% } %>
-          <% if (canView('logs_mqtt') && mod('mqtt')) { %><a href="/logs/mqtt" class="<%= active === 'logs-mqtt' ? 'active' : '' %>"><%= t('MQTT Broker') %></a><% } %>
-          <% if (em('charging')) { %><a href="/planner/log" class="<%= active === 'chargelog' ? 'active' : '' %>"><%= t('Charge log') %></a><% } %>
-        </div>
-      <% } %>
+      <% }) %>
     </nav>
     <button type="button" id="theme-toggle" class="theme-toggle"><%- icon('theme') %> <%= t('Toggle theme') %></button>
     <%
@@ -259,7 +164,15 @@
     <header class="topbar">
       <button type="button" id="mobile-nav-toggle" class="icon-btn mobile-nav-toggle" title="<%= t('Menu') %>"><%- icon('menu') %></button>
       <div class="topbar-title">
+        <% if (navHere && navHere.item.key !== 'home' && t(navHere.section.label) !== t(pageTitle)) { const crumbItem = t(navHere.item.label), crumbTitle = t(pageTitle); %>
+          <nav class="crumbs" aria-label="<%= t('You are here') %>">
+            <a href="<%= navHere.section.items[0].href %>"><%= t(navHere.section.label) %></a><% if (crumbItem !== crumbTitle && crumbItem !== t(navHere.section.label)) { %><span aria-hidden="true">›</span><a href="<%= navHere.item.href %>"><%= crumbItem %></a><% } %>
+          </nav>
+        <% } %>
         <h1 id="page-title"><%= t(pageTitle) %></h1>
+        <% if (navHere && navHere.item.settings && (navHere.item.settings[0] === '#' || adminHrefOk(navHere.item.settings))) { %>
+          <a class="title-settings" href="<%= navHere.item.settings %>" <%= navHere.item.settings[0] === '#' ? 'data-tab-jump' : '' %> title="<%= t('Settings of this page') %>"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span><%= t('Settings') %></span></a>
+        <% } %>
         <% if (typeof dashboardId !== 'undefined' && typeof canEditPanels !== 'undefined' && canEditPanels) { %>
         <button type="button" id="dashboard-rename-trigger" class="icon-btn" title="<%= t('Rename dashboard') %>" aria-label="<%= t('Rename dashboard') %>"><%- icon('edit') %></button>
         <form method="post" action="/dashboards/<%= dashboardId %>/rename" id="dashboard-rename-form" class="dashboard-rename-form" hidden>
@@ -302,6 +215,12 @@
         const helpAnchor = helpAnchors[active];
       %>
       <div class="topbar-right">
+        <% if (currentUser) { %>
+        <button type="button" id="ls-search-btn" class="topbar-search" aria-haspopup="dialog" title="<%= t('Search (Ctrl+K)') %>" data-t="<%= JSON.stringify({ 'Search': t('Search'), 'Search pages and settings…': t('Search pages and settings…'), 'choose': t('choose'), 'open': t('open'), 'Loading…': t('Loading…'), 'Nothing found. Try another word.': t('Nothing found. Try another word.'), 'switched off': t('switched off'), 'setting': t('setting'), 'page': t('page'), 'Switch on under Administration › Modules': t('Switch on under Administration › Modules') }) %>">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span class="topbar-search-text"><%= t('Search…') %></span><kbd class="topbar-search-kbd">Ctrl K</kbd>
+        </button>
+        <% } %>
         <% if (typeof topbarRange !== 'undefined' && topbarRange) { %>
         <%
           // A page-wide time filter next to the auto-refresh control — opted into by My Dashboards
@@ -395,9 +314,7 @@
               <div class="account-menu-divider"></div>
               <div class="notification-center-footer">
                 <button type="button" id="notification-center-dismiss-all" class="btn-soft" <%= recentNotifications.length === 0 ? 'disabled' : '' %>><%= t('Mark all read') %></button>
-                <% if (canView('logs_notifications')) { %>
-                  <a href="/logs/notifications" id="notification-center-view-all"><%= t('View all') %></a>
-                <% } %>
+                <a href="/notifications" id="notification-center-view-all"><%= t('View all') %></a>
               </div>
             </div>
           </div>
@@ -416,10 +333,7 @@
               <% /* Administration: General, Settings, Energy & charging, Users, ... as tabs (see
                      partials/tabs-admin.ejs). Someone without admin rights still gets here for the
                      tabs they may use: Settings (edit) and Energy & charging (Smart charging). */
-                 const adminHref = currentUser.isAdmin ? '/admin/general'
-                   : canEdit('settings') ? '/settings'
-                   : ((typeof moduleOn !== 'function' || moduleOn('charging')) && canView('charging')) ? '/settings/energy'
-                   : (canView('translations') && typeof multiLang !== 'undefined' && multiLang) ? '/translations' : null; %>
+                 const adminHref = ((navSections.find((s) => s.key === 'admin') || { items: [] }).items.find((i) => i.key === 'admin') || {}).href || null; %>
               <% if (adminHref) { %>
                 <a href="<%= adminHref %>" class="<%= active === 'admin' ? 'active' : '' %>"><%= t('Administration') %></a>
               <% } %>

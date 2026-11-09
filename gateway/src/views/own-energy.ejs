@@ -1,0 +1,8 @@
+<%- include('partials/head', { pageTitle: 'Self-consumption', active: 'own-energy' }) %>
+
+<%- include('partials/page-intro', { text: t('How much of your solar power you use yourself, and what helps to use more.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden><%= t('How much of your own solar power you use yourself, how much of what you use comes from your panels, and what would help to use more of it. The meters themselves are chosen under Meters.') %></p>
+
+<%- include('partials/own-energy', { own, suDays }) %>
+
+<%- include('partials/foot') %>

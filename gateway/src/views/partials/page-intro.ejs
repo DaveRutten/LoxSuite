@@ -1,0 +1,10 @@
+<%
+  // One short sentence under the page title, and "ⓘ What is this?" for the rest: the help drawer at this
+  // page's part (help: anchor without "help-"), or the page's own full explanation right below it, folded
+  // (more: true — the next element with class page-intro-more). locals: text, help, more.
+%>
+<div class="page-intro">
+  <p><%= text %></p>
+  <% if (typeof help !== 'undefined' && help) { %><a class="page-intro-help" href="/help#help-<%= help %>" data-help-open data-help-anchor="help-<%= help %>"><span aria-hidden="true">ⓘ</span> <%= t('What is this?') %></a>
+  <% } else if (typeof more !== 'undefined' && more) { %><button type="button" class="page-intro-help" data-intro-more aria-expanded="false"><span aria-hidden="true">ⓘ</span> <%= t('What is this?') %></button><% } %>
+</div>

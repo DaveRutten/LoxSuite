@@ -32,6 +32,7 @@ const SUGGEST = {
     ['flowSetpoint', /flow temp(erature)? setpoint.*zone 1|aanvoer.*setpoint|vorlauf.?soll/i],
     ['flowSetpointZone2', /flow temp(erature)? setpoint.*zone 2/i],
     ['valveDhw', /3-?way valve|3-?wegklep|3-?wege/i, 'r'],
+    ['boosterPower', /(meter|vermogen|power|leistung).*(boost|bijverwarming|booster|heizstab)|(boost|bijverwarming|booster|heizstab).*(meter|vermogen|power|leistung)/i, 'r'],
     ['boosterHeater', /booster heater 1|booster ?heater$|bijverwarming|heizstab/i, 'r'],
     ['immersionHeater', /immersion|dompelaar|elektrisch element/i, 'r'],
     ['heatSource', /heat source (status|phase)|warmtebron/i, 'r'],

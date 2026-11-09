@@ -1,6 +1,7 @@
 <%- include('partials/head', { pageTitle: 'Driving & costs', active: 'driving' }) %>
 
-<p class="hint">
+<%- include('partials/page-intro', { text: t('How the car is driven and what it costs per km.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
   <%= t('How the car is driven and what it costs, from its own odometer and battery percentage (Wallbox > Vehicles). The electric consumption is learned from the battery drop per km on stretches where the battery didn\'t run empty; LoxSuite plans with it unless you set a consumption yourself.') %> <span id="dr-meta"></span>
 </p>
 

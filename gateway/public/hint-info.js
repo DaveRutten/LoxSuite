@@ -45,8 +45,33 @@
       : block.querySelector(':scope > .card-head h2, :scope > h2, :scope > .card-head, :scope > div > h2');
     return title ? { block: block, title: title } : null;
   }
+  // An explanation under a form field: its own ⓘ right after the field's label, which shows just this one.
+  function setupLabel(el) {
+    var wrap = el.parentElement;
+    var label = wrap && wrap.querySelector(':scope > label');
+    if (!label || !wrap.querySelector('input, select, textarea') || label.querySelector(':scope > .hint-i')) return false;
+    el.dataset.hintInfo = '1';
+    el.classList.add('hint-field');
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'hint-i hint-i-label';
+    btn.textContent = 'ⓘ';
+    btn.setAttribute('aria-expanded', 'false');
+    var text = el.textContent.replace(/\s+/g, ' ').trim();
+    btn.title = text.length > 220 ? text.slice(0, 217) + '…' : text;
+    btn.setAttribute('aria-label', text);
+    btn.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation(); // a click on a label would focus/toggle its field
+      var open = btn.getAttribute('aria-expanded') !== 'true';
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      el.classList.toggle('hint-field-open', open);
+    });
+    label.appendChild(btn);
+    return true;
+  }
   function setupField(el) {
     if (el.dataset.hintInfo) return false;
+    if (setupLabel(el)) return true;
     var b = blockOf(el);
     if (!b) return false;
     el.dataset.hintInfo = '1';

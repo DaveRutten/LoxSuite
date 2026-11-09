@@ -23,6 +23,18 @@
 %>
 <div class="ms-diagnostics-card">
   <div class="ms-diagnostics" data-ms-diagnostics-id="<%= ms.id %>">
+    <% const tr = typeof loxoneTransport === 'function' ? loxoneTransport(ms.id) : null; %>
+    <div>
+      <span class="hint" style="margin:0;"><%= t('Calls to this Miniserver') %></span>
+      <div>
+        <% if (tr) { const all = tr.live + tr.http + tr.fallback; %>
+          <span class="badge <%= tr.live >= tr.http + tr.fallback ? 'badge-ok' : 'badge-off' %>" title="<%= t('Since LoxSuite started') %>"><%= all ? Math.round((tr.live / all) * 100) : 0 %> % <%= t('over the live connection') %></span>
+          <span class="hint" style="margin:0;"><%= t('{live} live · {http} HTTP · {fallback} HTTP after the live connection did not answer', { live: tr.live, http: tr.http, fallback: tr.fallback }) %></span>
+        <% } else { %>
+          <span class="hint" style="margin:0;"><%= t('none yet since the start') %></span>
+        <% } %>
+      </div>
+    </div>
     <div>
       <span class="hint" style="margin:0;"><%= t('Miniserver state') %></span>
       <div>

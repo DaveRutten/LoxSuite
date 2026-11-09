@@ -14,9 +14,10 @@
     <div class="notification-center-item notification-center-item-<%= n.severity %>" data-notification-id="<%= n.id %>">
       <button type="button" class="icon-btn notification-center-dismiss" data-dismiss-notification="<%= n.id %>" title="<%= t('Dismiss') %>" aria-label="<%= t('Dismiss') %>">&times;</button>
       <% if (sourceLink) { %><a href="<%= sourceLink %>" class="notification-center-item-link"><% } %>
-        <div class="notification-center-item-title"><%= n.title %></div>
-        <div class="notification-center-item-message"><%= n.message %></div>
-        <div class="notification-center-item-time"><%= formatDateTime(n.created_at) %></div>
+        <% const cat = notificationCategoryOf(n.event_type); %>
+        <div class="notification-center-item-title"><%= t(n.title) %></div>
+        <div class="notification-center-item-message"><%= t(n.message) %></div>
+        <div class="notification-center-item-time"><span class="nc-chip"><%= t(cat.label) %></span> <%= formatDateTime(n.created_at) %></div>
       <% if (sourceLink) { %></a><% } %>
     </div>
   <% }) %>

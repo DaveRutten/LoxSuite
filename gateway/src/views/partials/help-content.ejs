@@ -26,12 +26,12 @@
   <div class="add-panel-body">
     <p><%= t('Add a monitor from one of two sources:') %></p>
     <ul>
-      <li><strong><%= t('MQTT topic') %></strong> <%= t('— pick any topic the gateway has seen (or add it directly from Live Traffic\'s "Monitor" button). Every message on that exact topic is recorded.') %></li>
+      <li><strong><%= t('MQTT topic') %></strong> <%= t('— pick any topic the gateway has seen (or add it directly with the "Monitor" button in MQTT messages). Every message on that exact topic is recorded.') %></li>
       <li><strong><%= t('Loxone (direct, polled)') %></strong> <%= t('— pick a Miniserver, then a control/state from its structure export (') %><code>LoxAPP3.json</code><%= t(') — the same file used for the Miniservers page, but here it also lists ordinary controls (sensors, lights, etc.), not just Virtual Inputs. The gateway then polls that value\'s live reading (') %><code>/jdev/sps/io/&lt;uuid&gt;</code><%= t(') on the interval you pick (5s to 5 minutes). This is deliberate polling at a fixed cadence, not the websocket push feed') %>
         <a href="/live-data"><%= t('Live Data') %></a> <%= t('uses — fine for a value you\'re recording into a chart every few seconds, but see the Live Data answer above if you want a browse-everything, always-current view instead.') %></li>
     </ul>
     <p>
-      <%= t('Every reading is stored in SQLite, so it survives a gateway restart. Old readings are purged automatically after the configured') %> <strong><%= t('retention') %></strong> <%= t('(in days, editable on the Monitor page) to keep the database from growing forever.') %>
+      <%= t('Every reading is stored in the database, so it survives a restart. Old readings are removed automatically after the configured') %> <strong><%= t('retention') %></strong> <%= t('(in days, editable on the Monitor page) to keep the database from growing forever.') %>
     </p>
     <p>
       <%= t('Opening a monitor shows a line chart (only for monitors that have recorded at least one numeric value) plus the full raw-values table, both filterable by time range.') %> <strong><%= t('Export CSV') %></strong> <%= t('downloads the currently selected range as a plain') %> <code>timestamp,value</code> <%= t('file that opens in Excel or any spreadsheet/analysis tool.') %>
@@ -93,6 +93,32 @@
       <%= t('Every other panel type\'s Edit drawer got the same labeled-section treatment (Appearance, Range, Condition, Labels, ...) so the same kind of setting always lives under the same heading regardless of panel type — the fields themselves are unchanged, just organized.') %>
     </p>
     <p><a href="/dashboards"><%= t('Open My Dashboards →') %></a></p>
+  </div>
+</details>
+
+<h2><%= t('Energy') %></h2>
+
+<details class="add-panel" id="help-heatpump">
+  <summary><%= t('Heat pump — what does LoxSuite do with it?') %></summary>
+  <div class="add-panel-body">
+    <p><%= t('LoxSuite finds the heat pump in your Loxone project (like the Home Connect appliances), learns from what it does, and plans when to make tap water and heat the house: when power is cheap or the sun gives more than the house uses. Loxone carries it out and keeps its own safety limits.') %></p>
+    <ul>
+      <li><strong><%= t('Shadow and Live') %></strong> <%= t('— in Shadow LoxSuite only shows what it would do, so you can compare with what Loxone does; in Live it sends its setpoints to Loxone.') %></li>
+      <li><strong><%= t('Overview') %></strong> <%= t('— what it is doing now, the suggestions, and what planning brought.') %></li>
+      <li><strong><%= t('Plan') %></strong> <%= t('— the next 24 hours: tap water, heating, legionella, with the price and the expected COP per hour.') %></li>
+      <li><strong><%= t('Learning & advice') %></strong> <%= t('— what it learned: tap water draws, warm-up time of the rooms, the best settings per weather, and how accurate its predictions are.') %></li>
+      <li><strong><%= t('Data quality') %></strong> <%= t('— which links and measurements are missing or implausible, with what to do about it.') %></li>
+      <li><strong><%= t('Settings') %></strong> <%= t('— the device and its link with Loxone, the tap water limits, legionella and what is sent to Loxone.') %></li>
+    </ul>
+    <p><a href="/energy-manager/modules/heatpump"><%= t('Open Heat pump →') %></a></p>
+  </div>
+</details>
+
+<details class="add-panel" id="help-solar">
+  <summary><%= t('Solar panels — what does LoxSuite do with them?') %></summary>
+  <div class="add-panel-body">
+    <p><%= t('LoxSuite reads the inverter from Loxone and, when your contract makes exporting cost money (a negative price, or feed-in costs higher than what you get), limits it to what the house and the car use. In Shadow it only shows what it would do.') %></p>
+    <p><a href="/energy-manager/modules/solar"><%= t('Open Solar panels →') %></a></p>
   </div>
 </details>
 
@@ -252,7 +278,7 @@
       <%= t('Each line gets a') %> <strong><%= t('Level') %></strong> <%= t('badge (info/warning/error) — a best-effort guess from the line\'s own wording, since neither Mosquitto nor Loxone tags lines with a real severity. Treat it as a scanning aid, not a guarantee.') %>
     </p>
     <p>
-      <%= t('All four are persisted in SQLite and purged automatically after the configured') %>
+      <%= t('All four are kept in the database and removed automatically after the configured') %>
       <strong><%= t('retention') %></strong> <%= t('(in days, editable from') %> <a href="/settings"><%= t('Settings') %></a><%= t(') so the database doesn\'t grow forever.') %> <strong><%= t('Export .log') %></strong> <%= t('downloads everything currently retained as a plain-text file (unfiltered, always the full retained history).') %>
     </p>
     <p>
@@ -472,7 +498,7 @@
   <summary><%= t('What does "Remember me" do on the login page?') %></summary>
   <div class="add-panel-body">
     <p>
-      <%= t('Without it, your session ends when you close the browser. With it, the login is kept for 30 days. Sessions are stored in the same SQLite database as everything else, so a "remembered" login also survives a gateway restart or redeploy — it isn\'t just a longer-lived cookie on top of an in-memory session.') %>
+      <%= t('Without it, your session ends when you close the browser. With it, the login is kept for 30 days. Sessions are stored in the same database as everything else, so a "remembered" login also survives a restart or redeploy — it isn\'t just a longer-lived cookie on top of an in-memory session.') %>
     </p>
   </div>
 </details>

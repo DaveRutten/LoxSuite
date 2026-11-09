@@ -1,8 +1,11 @@
 // What the energy manager's devices should tell the user (notification trigger 'energy_device').
 // Pure: the status of this minute + a small memory of how long something has been going on ->
-// alerts { key, title, message, severity }. The key makes each one go out once (notifications.js keeps
-// the sent keys per rule for two weeks).
+// alerts { key, title, message, severity, i18n }. The key makes each one go out once (notifications.js keeps
+// the sent keys per rule for two weeks). Texts are English templates with {params} (energyChecks.made), made
+// in the user's language when the notification is sent.
 //   mem: { defrostSince, limitSince } — kept by the caller between minutes, updated here
+const { made } = require('./energyChecks');
+
 const MIN = 60000;
 const HOUR = 3600000;
 const r1 = (x) => Math.round(x * 10) / 10;
@@ -15,25 +18,28 @@ function heatpumpAlerts(st, mem, nowMs, { defrostMaxMin = 30, localParts = null 
   const out = [];
   const L = st.legionella;
   if (L && L.overdue) {
-    out.push({ key: `leg|${dayKey(L.due || nowMs)}`, severity: 'warning', title: 'Heat pump: legionella overdue',
-      message: `The tank was not held hot enough in time${L.lastDoneMs ? ` (last time ${new Date(L.lastDoneMs).toISOString().slice(0, 10)})` : ''}. ${L.block ? 'A block is planned.' : 'No block fits today: check the times.'}` });
+    const last = L.lastDoneMs ? new Date(L.lastDoneMs).toISOString().slice(0, 10) : null;
+    const msg = last
+      ? (L.block ? 'The tank was not held hot enough in time (last time {d}). A block is planned.' : 'The tank was not held hot enough in time (last time {d}). No block fits today: check the times.')
+      : (L.block ? 'The tank was not held hot enough in time. A block is planned.' : 'The tank was not held hot enough in time. No block fits today: check the times.');
+    out.push(made(`leg|${dayKey(L.due || nowMs)}`, 'warning', ['Heat pump: legionella overdue'], [msg, { d: last }]));
   }
   const min = Number(st.limits?.comfortMinC);
   const low = (st.plan || []).find((h) => Number.isFinite(h.predC) && h.predC < min - 0.5);
   if (Number.isFinite(min) && low) {
-    out.push({ key: `tank|${dayKey(low.ms)}`, severity: 'warning', title: 'Heat pump: tank expected too cold',
-      message: `The tank is expected to drop to ${r1(low.predC)} °C around ${clockOf(low.ms, localParts)}, below your minimum of ${min} °C.` });
+    out.push(made(`tank|${dayKey(low.ms)}`, 'warning', ['Heat pump: tank expected too cold'],
+      ['The tank is expected to drop to {c} °C around {t}, below your minimum of {m} °C.', { c: r1(low.predC), t: clockOf(low.ms, localParts), m: min }]));
   }
   const code = Number(st.values?.errorCode);
   if (Number.isFinite(code) && code !== 0) {
-    out.push({ key: `fault|${code}|${dayKey(nowMs)}`, severity: 'error', title: 'Heat pump: fault', message: `The unit reports error code ${code}.` });
+    out.push(made(`fault|${code}|${dayKey(nowMs)}`, 'error', ['Heat pump: fault'], ['The unit reports error code {c}.', { c: code }]));
   }
   const defrosting = st.state?.mode === 'defrost';
   if (defrosting && !mem.defrostSince) mem.defrostSince = nowMs;
   if (!defrosting) mem.defrostSince = null;
   if (mem.defrostSince && nowMs - mem.defrostSince >= defrostMaxMin * MIN) {
-    out.push({ key: `defrost|${mem.defrostSince}`, severity: 'warning', title: 'Heat pump: defrosting does not end',
-      message: `It has been defrosting for ${Math.round((nowMs - mem.defrostSince) / MIN)} minutes (usually a few).` });
+    out.push(made(`defrost|${mem.defrostSince}`, 'warning', ['Heat pump: defrosting does not end'],
+      ['It has been defrosting for {m} minutes (usually a few).', { m: Math.round((nowMs - mem.defrostSince) / MIN) }]));
   }
   return out;
 }
@@ -44,8 +50,8 @@ function solarAlerts(st, mem, nowMs, { limitMaxH = 3 } = {}) {
   if (limited && !mem.limitSince) mem.limitSince = nowMs;
   if (!limited) mem.limitSince = null;
   if (mem.limitSince && nowMs - mem.limitSince >= limitMaxH * HOUR) {
-    out.push({ key: `limit|${dayKey(mem.limitSince)}`, severity: 'info', title: 'Solar panels: limited for hours',
-      message: `The inverter has been limited to ${st.limit.pct}% for ${r1((nowMs - mem.limitSince) / HOUR)} hours: exporting costs money now.` });
+    out.push(made(`limit|${dayKey(mem.limitSince)}`, 'info', ['Solar panels: limited for hours'],
+      ['The inverter has been limited to {p}% for {h} hours: exporting costs money now.', { p: st.limit.pct, h: r1((nowMs - mem.limitSince) / HOUR) }]));
   }
   return out;
 }
@@ -53,8 +59,8 @@ function solarAlerts(st, mem, nowMs, { limitMaxH = 3 } = {}) {
 // LoxSuite's heartbeat to Loxone failing: Loxone falls back to its own logic, the user should know why.
 function heartbeatAlert(kind, hb, nowMs) {
   if (!hb || !hb.error || !hb.failingSince || nowMs - hb.failingSince < 5 * MIN) return [];
-  return [{ key: `hb|${kind}|${hb.failingSince}`, severity: 'error', title: kind === 'solar' ? 'Solar panels: heartbeat to Loxone fails' : 'Heat pump: heartbeat to Loxone fails',
-    message: `LoxSuite cannot reach the virtual input ${hb.vi} (${hb.error}). Loxone falls back to its own logic.` }];
+  return [made(`hb|${kind}|${hb.failingSince}`, 'error', [kind === 'solar' ? 'Solar panels: heartbeat to Loxone fails' : 'Heat pump: heartbeat to Loxone fails'],
+    ['LoxSuite cannot reach the virtual input {vi} ({e}). Loxone falls back to its own logic.', { vi: hb.vi, e: hb.error }])];
 }
 
 module.exports = { heatpumpAlerts, solarAlerts, heartbeatAlert };

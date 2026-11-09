@@ -92,7 +92,7 @@ async function energyDays(localOf, nowMs = Date.now()) {
   // the local date per hour, not per minute sample: localOf formats with the time zone and is slow
   const dayCache = new Map();
   const dayOf = (ms) => { const h = Math.floor(ms / HOUR); let d = dayCache.get(h); if (d === undefined) { d = localOf(h * HOUR).day; dayCache.set(h, d); } return d; };
-  const fresh = hw.dailyEnergy(rt.weather, dayOf);
+  const fresh = learned('days', rt.weather, LEARN_TTL, nowMs, () => hw.dailyEnergy(rt.weather, dayOf));
   const merged = { ...rt.days, ...fresh };
   const keys = Object.keys(merged).sort().slice(-400);
   const out = Object.fromEntries(keys.map((k) => [k, merged[k]]));
@@ -126,10 +126,10 @@ async function monthlyReport(days, nowMs = Date.now()) {
 
 const miniservers = () => db.prepare('SELECT * FROM miniservers ORDER BY sort_order, id').all().catch(() => []);
 
-// Candidates on every Miniserver, best first. Kept a minute: the structure rarely changes.
+// Candidates on every Miniserver, best first. Kept 10 minutes: the structure rarely changes ("Search again" refreshes).
 async function discover(kind, { refresh = false } = {}) {
   const hit = rt.discovered.get(kind);
-  if (hit && !refresh && Date.now() - hit.at < 60000) return hit.list;
+  if (hit && !refresh && Date.now() - hit.at < 10 * 60000) return hit.list;
   // the names you linked by hand (not readable — the database restarting: the ones known before stay)
   const learned = await settings.get(`energy_names_${kind}`, {}).catch(() => null);
   if (learned) ed.setLearned(kind, learned);
@@ -291,33 +291,76 @@ function localTools() {
   return { localOf, clock, localHour: (ms) => localOf(ms).hour };
 }
 
+// The live power (kW) of the energy manager's consumer of this kind with a Loxone meter (cached a minute).
+const consumerKwCache = new Map();
+async function consumerPowerKw(kind, nowMs = Date.now()) {
+  const c = consumerKwCache.get(kind);
+  if (c && nowMs - c.at < 60000) return c.kw;
+  const em = require('./energyManager');
+  const load = (await em.listLoads()).find((l) => l.kind === kind && l.enabled && l.meter_uuid);
+  const kw = load ? (await em.readLoad(load).catch(() => null))?.kw ?? null : null;
+  consumerKwCache.set(kind, { at: nowMs, kw });
+  return kw;
+}
+
+// What is learned from weeks of minute samples (weather, room, runs, draws) changes slowly: kept for a
+// while instead of relearned every minute. Relearned when the time is up, when the clock goes back, or
+// when the samples were replaced (an import, forget: a new array) — new minutes pushed onto the same
+// array are picked up at the next relearn.
+const LEARN_TTL = 15 * 60000;
+const learnedMemo = new Map();
+function learned(name, src, ttlMs, nowMs, fn) {
+  const m = learnedMemo.get(name);
+  if (m && m.src === src && nowMs >= m.at && nowMs - m.at < ttlMs) return m.val;
+  const val = fn();
+  learnedMemo.set(name, { src, at: nowMs, val });
+  return val;
+}
+const forgetLearned = () => learnedMemo.clear();
+
 // The heat pump: what it is doing, the learned draws, the tank plan, legionella and the writes now.
 async function heatpumpStatus(nowMs = Date.now()) {
   const r = await resolve('heatpump');
   const { cfg, type, msId } = r;
   const v = msId ? et.fromRaw(type, readRaw(type, msId)) : {};
+  // for the data checks (energyChecks.js): linked roles that give no value, and roles not linked although
+  // the project has a candidate for them
+  const linkedRoles = Object.keys(et.ROLES.heatpump.roles).filter((role) => et.byRole(type, role)?.state && !et.byRole(type, role)?.unread);
+  const noValueRoles = linkedRoles.filter((role) => v[role] === undefined || v[role] === null || (typeof v[role] === 'number' && !Number.isFinite(v[role])));
+  const sug = r.chosen?.suggest || {};
+  const unlinkedWithCandidate = Object.keys(et.ROLES.heatpump.roles).filter((role) => !et.byRole(type, role)?.state && (sug[role] || []).length).map((role) => ({ role, label: et.ROLES.heatpump.roles[role].label, candidate: sug[role][0]?.name || null }));
   // switched off in the wizard: not read, not learned, not steered
   const F = cfg.features || {};
   if (F.power_steps === false) for (const k of ['powerStep', 'powerLimit1', 'powerLimit2']) delete v[k];
   if (F.ntc === false) for (const k of ['ntcMode', 'ntcRelay1', 'ntcRelay2']) delete v[k];
+  // no electric power linked or read: the consumer of kind "heat pump" in the energy manager with its own
+  // Loxone meter (one source for the heat pump's use, instead of each module its own link)
+  let electricFrom = Number.isFinite(v.electricPower) ? 'module' : null;
+  if (!electricFrom) {
+    const kw = await consumerPowerKw('heatpump').catch(() => null);
+    if (Number.isFinite(kw)) { v.electricPower = kw; electricFrom = 'consumer'; }
+  }
   const state = hp.interpret(v, { meterFlowUnit: cfg.heat_meter_flow_unit || 'auto' });
   const { localOf, clock, localHour } = localTools();
   const { limits, warnings } = lg.dhwLimits({ ...cfg.limits, hpMaxC: cfg.limits.hpMaxC });
   // draws learned from the kept tank temperature
   const samples = rt.tank.filter((s) => s.ms > nowMs - KEEP_MS);
-  const th = td.learnThreshold(td.dropRates(samples));
-  // with a sensor on the hot-water pipe: its jumps are the draws (exact, small ones too); else the tank
-  const withPipe = samples.filter((x) => Number.isFinite(x.pipe)).length > 60;
-  const draws = withPipe ? td.pipeDraws(samples) : td.detectDraws(samples, { thresholdCph: th.cph });
-  const prof = samples.length ? td.drawProfile(draws, { localOf, nowMs, firstMs: samples[0].ms }) : null;
-  const patterns = prof ? ep.hourPatterns(prof, { minDays: 3 }).filter((p) => p.type === 'daily') : [];
+  const { th, withPipe, draws, prof, patterns } = learned('draws', rt.tank, LEARN_TTL, nowMs, () => {
+    const th = td.learnThreshold(td.dropRates(samples));
+    // with a sensor on the hot-water pipe: its jumps are the draws (exact, small ones too); else the tank
+    const withPipe = samples.filter((x) => Number.isFinite(x.pipe)).length > 60;
+    const draws = withPipe ? td.pipeDraws(samples) : td.detectDraws(samples, { thresholdCph: th.cph });
+    const prof = samples.length ? td.drawProfile(draws, { localOf, nowMs, firstMs: samples[0].ms }) : null;
+    const patterns = prof ? ep.hourPatterns(prof, { minDays: 3 }).filter((p) => p.type === 'daily') : [];
+    return { th, withPipe, draws, prof, patterns };
+  });
   const dropOf = (ms) => (prof ? ep.expectedKwh(prof, ms, localOf) : 0);
   const hours = await hoursAhead(nowMs);
   const tankC = state.tankC ?? limits.targetC;
   // the weather: what a kWh of heat costs per hour (price ÷ the COP expected in that weather, defrosting
   // included) — learned per outdoor temperature and humidity, from the start curve until then
   const source = hw.SOURCES.includes(cfg.source) ? cfg.source : 'air';
-  const wmodel = hw.learn(rt.weather.filter((x) => x.ms > nowMs - 60 * DAY));
+  const wmodel = learned('weather', rt.weather, LEARN_TTL, nowMs, () => hw.learn(rt.weather.filter((x) => x.ms > nowMs - 60 * DAY)));
   const wx = await weatherAhead(hours[0]?.ms ?? nowMs, (hours[hours.length - 1]?.ms ?? nowMs) + HOUR);
   const expAt = (h) => { const w = wx.get(h.ms) || {}; return { ...hw.expect(wmodel, { source, outdoorC: w.t ?? (h.ms <= nowMs ? state.outdoorC : null), rh: w.rh, flowC: 55 }), outdoorC: w.t ?? null, rh: w.rh ?? null }; };
   const exps = new Map(hours.map((h) => [h.ms, expAt(h)]));
@@ -326,15 +369,16 @@ async function heatpumpStatus(nowMs = Date.now()) {
   // outdoor temperature, so pre-heating starts earlier on a cold morning — and tap water goes right
   // before or after that block, never in between
   const R = cfg.room || {};
-  const rmodel = rwu.learn(rt.room.filter((x) => x.ms > nowMs - 30 * DAY));
-  const sched = rwu.learnSchedule(rt.room.filter((x) => x.ms > nowMs - 28 * DAY && Number.isFinite(x.targetC)), localOf);
+  const rmodel = learned('room', rt.room, LEARN_TTL, nowMs, () => rwu.learn(rt.room.filter((x) => x.ms > nowMs - 30 * DAY)));
+  // the week schedule: learned from four weeks, so once every 6 hours is plenty
+  const sched = learned('schedule', rt.room, 6 * HOUR, nowMs, () => rwu.learnSchedule(rt.room.filter((x) => x.ms > nowMs - 28 * DAY && Number.isFinite(x.targetC)), localOf));
   const room = R.enabled ? roomPlan({ R, nowMs, roomC: state.roomC, rmodel, outdoorAt: (ms) => wx.get(Math.floor(ms / HOUR) * HOUR)?.t ?? state.outdoorC ?? null, localOf, sched }) : null;
   // bijsturen: per weather the setting (flow, power step, NTC) with the longest, calmest runs
   const T = cfg.tuning || {};
   const onFlow = v.heatingMode === 1;
   const current = { flowC: Number.isFinite(v.logicFlowC) ? v.logicFlowC : onFlow ? (v.flowSetpoint ?? v.roomSetpoint ?? null) : (v.flowSetpoint ?? null), step: Number.isFinite(v.powerStep) ? v.powerStep : hw.stepOf(v.powerLimit1 === 1, v.powerLimit2 === 1), ntc: Number.isFinite(v.ntcMode) ? v.ntcMode : hw.stepOf(v.ntcRelay1 === 1, v.ntcRelay2 === 1) };
-  const truns = tu.runs(rt.tune.filter((x) => x.ms > nowMs - 60 * DAY));
-  const tmodel = tu.learn(truns);
+  const truns = learned('runs', rt.tune, LEARN_TTL, nowMs, () => tu.runs(rt.tune.filter((x) => x.ms > nowMs - 60 * DAY)));
+  const tmodel = learned('tuning', truns, LEARN_TTL, nowMs, () => tu.learn(truns));
   const overshoot = tu.overshoot(truns.filter((x) => x.startMs > nowMs - 7 * DAY));
   const wNow = wx.get(Math.floor(nowMs / HOUR) * HOUR) || {};
   const outNow = Number.isFinite(state.outdoorC) ? state.outdoorC : wNow.t;
@@ -357,21 +401,23 @@ async function heatpumpStatus(nowMs = Date.now()) {
   const solarNow = roomHours.get(Math.floor(nowMs / HOUR) * HOUR);
   if (room && solarNow?.room === 'solar' && !room.preheating) { room.setpointNow = solarNow.targetC; room.why = cooling ? 'solar to spare: cooling a little more (the house stores it)' : 'solar to spare: a little warmer (the house stores it)'; }
   // the room ahead: when the heat pump is expected to come on, and when the room is at its target
-  const cool = rwu.learnCooling(rt.room.filter((x) => x.ms > nowMs - 30 * DAY));
+  const cool = learned('cooling', rt.room, LEARN_TTL, nowMs, () => rwu.learnCooling(rt.room.filter((x) => x.ms > nowMs - 30 * DAY)));
   const rf = room && Number.isFinite(state.roomC) ? rwu.forecast(rmodel, { startC: state.roomC, k: cool.k, hours: plan.hours.map((h) => ({ ms: h.ms, targetC: roomHours.get(h.ms)?.targetC ?? null, outdoorC: wx.get(h.ms)?.t ?? state.outdoorC ?? null })) }) : null;
   const roomAhead = new Map(rf ? rf.rows.map((x) => [x.ms, x]) : []);
   const hourPlan = plan.hours.find((h) => h.ms === Math.floor(nowMs / HOUR) * HOUR) || plan.hours[0] || { mode: 'free' };
   const mode = legNow ? 'legionella' : hourPlan.mode;
   const tuneLive = T.mode === 'live' && advice && tu.keyOf(advice.setting) !== tu.keyOf(current);
   const tunePlan = tuneLive ? { ...(Number.isFinite(advice.setting.flowC) ? { flowC: advice.setting.flowC, flowWhy: advice.why } : {}), ...(F.power_steps === false ? {} : { step: advice.setting.step }), ...(F.ntc === false ? {} : { ntc: advice.setting.ntc }), tuneWhy: advice.why } : {};
-  const writes = hp.writesFor({ type, plan: { mode, ...(room ? { roomC: room.setpointNow, roomWhy: room.why } : {}), ...tunePlan }, now: v, last: rt.last.heatpump, nowMs, settings: { ...type.defaults, ...limits, legionellaC: Number(L.temp_c) || 60 } });
+  const CL = cfg.limits || {};
+  const setpointModes = CL.setpointModes ? { hold: Number(CL.setpointHold ?? 40), normal: Number(CL.setpointNormal ?? 52), high: Number(CL.setpointHigh ?? 60) } : null;
+  const writes = hp.writesFor({ type, plan: { mode, buffer: /tank as a buffer/.test(hourPlan.reason || ''), ...(room ? { roomC: room.setpointNow, roomWhy: room.why } : {}), ...tunePlan }, now: v, last: rt.last.heatpump, nowMs, settings: { ...type.defaults, ...limits, legionellaC: Number(L.temp_c) || 60, setpointModes } });
   const hpDays = await energyDays(localOf, nowMs);
   const scopNow = hw.scop(hpDays);
   const report = await monthlyReport(hpDays, nowMs).catch(() => []);
   const tankLow = (plan.hours || []).reduce((m, h) => (Number.isFinite(h.predC) && (!m || h.predC < m.c) ? { c: h.predC, ms: h.ms } : m), null);
   const curKey = current ? tu.keyOf(current) : null;
   const suggestions = require('./heatPumpAdvice').suggestions({
-    roomEnabled: !!room, comfortAt: room?.comfortAt ?? null, reachAt: rf?.reachAt ?? null,
+    roomEnabled: !!room, comfortAt: room?.comfortAt ?? null, reachAt: rf?.reachAt ?? null, preheat: room?.preheat || null,
     tankMinC: tankLow?.c ?? null, tankMinAt: tankLow?.ms ?? null, limits, legionella: L, scop: scopNow, source, outdoorC: outNow,
     current, advice, overshoot, curRow: Object.values(tmodel).find((x) => curKey && tu.keyOf(x.setting) === curKey && (!advice || x.weather === advice.weather)) || null,
     differs: !!(advice && curKey && tu.keyOf(advice.setting) !== curKey),
@@ -379,12 +425,33 @@ async function heatpumpStatus(nowMs = Date.now()) {
   return {
     kind: 'heatpump', report, suggestions, heartbeat: { ...rt.hb.heatpump }, cfg, check: r.check, found: summary(r.found), chosen: r.chosen ? summaryOne(r.chosen) : null, msId,
     roles: rolesView('heatpump', type, r.chosen), values: v, state, limits, warnings,
-    learned: { threshold: th, fromPipe: withPipe, draws: draws.slice(-20), patterns, samples: samples.length, days: prof?.days || 0 },
+    learned: { threshold: th, fromPipe: withPipe, draws: draws.slice(-20), patterns, samples: samples.length, days: prof?.days || 0, tankRange: tankRangeOf(rt.tank, nowMs) },
     plan: plan.hours.map((h, i) => { const e = exps.get(h.ms) || {}; const rh2 = roomHours.get(h.ms) || {}; const legH = leg?.block && h.ms >= leg.block.startMs && h.ms < leg.block.endMs; return { ...h, roomC: roomAhead.get(h.ms)?.roomC ?? null, heatOn: !!roomAhead.get(h.ms)?.on, room: rh2.room || null, roomTargetC: rh2.targetC ?? null, does: legH ? 'legionella' : h.mode === 'dhw' ? 'dhw' : rh2.room === 'solar' ? 'solar' : rh2.room === 'preheat' ? 'preheat' : rh2.room === 'comfort' ? (cooling ? 'cool' : 'comfort') : rh2.room === 'setback' ? 'setback' : 'free', price: hours[i]?.price ?? null, surplusKwh: hours[i]?.surplusKwh ?? 0, estimated: !!hours[i]?.estimated, drop: Math.round(dropOf(h.ms) * 10) / 10, cop: e.cop ?? null, defrost: e.defrost ?? null, outdoorC: e.outdoorC, rh: e.rh, heatCost: hw.costPerHeat(hours[i]?.price ?? null, e) }; }),
-    weather: { source, scop: scopNow, model: wmodel, now: exps.get(Math.floor(nowMs / HOUR) * HOUR) || null, steps: hw.learnSteps(rt.weather.filter((x) => x.ms > nowMs - 60 * DAY)) },
+    weather: { source, scop: scopNow, model: wmodel, now: exps.get(Math.floor(nowMs / HOUR) * HOUR) || null, steps: learned('steps', rt.weather, LEARN_TTL, nowMs, () => hw.learnSteps(rt.weather.filter((x) => x.ms > nowMs - 60 * DAY))) },
     cooling, roomForecast: rf ? { onAt: rf.onAt, reachAt: rf.reachAt, runs: rf.runs.slice(0, 24).map((x) => ({ onAt: Math.round(x.onAt), offAt: x.offAt, fromC: x.fromC, toC: x.toC })), cooling: cool } : null, room: room ? { ...room, hourly: undefined, model: rmodel, schedule: sched, controller: r.roomController ? { uuid: r.roomController.uuid, name: r.roomController.name, room: r.roomController.room } : null } : null,
     controllers: (await roomControllerList()).map((x) => ({ value: x.value, uuid: x.uuid, name: x.name, room: x.room, msName: x.msName })),
-    tuning: { overshoot, mode: T.mode, current, advice, model: Object.values(tmodel).filter((x) => advice && x.weather === advice.weather).map((x) => ({ ...x, score: tu.score(x) })).sort((a, b) => a.score - b.score), runs: rt.tune.length },
+    // per weather: how many settings were seen (stable over the day, unlike the advice for the weather now)
+    electricFrom,
+    accuracy: await predictionAccuracy(nowMs).catch(() => null),
+    dataCheck: { linked: linkedRoles.length, noValueRoles, unlinkedWithCandidate },
+    // the diagnosis "Data quality" on the page: per linked role its value now, plausible or not, and whether
+    // Loxone keeps statistics for it (from the last "read history")
+    dataQuality: await (async () => {
+      const hist = await settings.get('energy_history_heatpump', null).catch(() => null);
+      const plausible = require('./energyChecks').plausibleValue;
+      const defs = et.ROLES.heatpump.roles;
+      return {
+        history: hist ? { at: hist.at, without: hist.without || [] } : null,
+        rows: linkedRoles.map((role) => {
+          const val = v[role];
+          return { role, label: defs[role]?.label || role, unit: defs[role]?.unit || null, value: val === undefined ? null : val, name: et.byRole(type, role)?.label || null, plausible: plausible(defs[role]?.unit, val), noStats: !!hist && (hist.without || []).includes(role) };
+        }),
+      };
+    })(),
+    // gaps in the kept samples of the last 7 days (only from the first sample on: no history ≠ a gap)
+    dataGaps: rt.weather.length ? gapsIn(rt.weather, { sinceMs: Math.max(nowMs - 7 * DAY, rt.weather[0].ms), nowMs }).slice(0, 10) : [],
+    tuningWeathers: (() => { const by = {}; for (const r of Object.values(tmodel)) by[r.weather] = (by[r.weather] || 0) + 1; return { seen: Object.keys(by).length, compared: Object.values(by).filter((n) => n >= 2).length }; })(),
+    tuning: { overshoot, mode: T.mode, current, advice, lastRuns: truns.filter((x) => x.startMs > nowMs - DAY && x.minutes >= 10).map((x) => ({ startMs: x.startMs, minutes: x.minutes, cop: x.elecKw > 0.2 && Number.isFinite(x.heatKw) ? Math.round((x.heatKw / x.elecKw) * 100) / 100 : null })), model: Object.values(tmodel).filter((x) => advice && x.weather === advice.weather).map((x) => ({ ...x, score: tu.score(x, { useCop: advice.useCop !== false }) })).sort((a, b) => a.score - b.score), runs: rt.tune.length },
     legionella: leg ? { ...leg, lastDoneMs, now: legNow } : null, mode, reason: legNow ? leg.reason : hourPlan.reason, writes, sent: rt.sent.heatpump.slice(-15),
   };
 }
@@ -467,7 +534,8 @@ function refreshStatus(kind) {
   if (!refreshing.has(kind)) refreshing.set(kind, status(kind).then((val) => { statusMemo.set(kind, { at: Date.now(), val }); return val; }).finally(() => refreshing.delete(kind)));
   return refreshing.get(kind);
 }
-async function statusCached(kind, maxAgeMs = 30000) {
+// (the minute tick makes a fresh status every 60 s: a little longer than that, so a page never makes a second one)
+async function statusCached(kind, maxAgeMs = 75000) {
   const hit = statusMemo.get(kind);
   const age = hit ? Date.now() - hit.at : Infinity;
   if (age < maxAgeMs) return hit.val;
@@ -511,13 +579,37 @@ async function heartbeat(kind, cfg, st, nowMs) {
   }
 }
 
+// What the data checks need besides the status (cached 10 min): a Loxone meter that looks like the heat
+// pump's, the last "read history" result, and how many MQTT → Loxone mappings are active.
+let checkCtx = null;
+async function checkContext(nowMs = Date.now()) {
+  if (checkCtx && nowMs - checkCtx.at < 10 * 60000) return checkCtx.val;
+  const val = { powerCandidate: null, history: null, mqttActive: null };
+  try {
+    for (const ms of await miniservers()) {
+      const st = await require('./loxoneStructure').getStructure(ms).catch(() => null);
+      const hit = Object.values(st?.controls || {}).find((c) => c.type === 'Meter' && /warmte ?pomp|heat ?pump|wp/i.test(c.name || '') && !/boost|bijverwarm|booster|dompel/i.test(c.name || ''));
+      if (hit) { val.powerCandidate = hit.name; break; }
+    }
+  } catch { /* no structure */ }
+  val.history = await settings.get('energy_history_heatpump', null).catch(() => null);
+  val.mqttActive = (await db.prepare('SELECT COUNT(*) AS n FROM mappings_mqtt_to_loxone WHERE enabled = 1').get().catch(() => null))?.n ?? null;
+  checkCtx = { at: nowMs, val };
+  return val;
+}
+
 // Alerts of this minute to the notification rules of type 'energy_device' (each key once).
 async function alert(kind, st, nowMs) {
   const ea = require('./energyAlerts');
   const list = [...(kind === 'solar' ? ea.solarAlerts(st, rt.alertMem.solar, nowMs) : ea.heatpumpAlerts(st, rt.alertMem.heatpump, nowMs, { localParts: (ms) => require('./localTime').localParts(ms) })), ...ea.heartbeatAlert(kind, rt.hb[kind], nowMs)];
-  if (!list.length) return;
   const n = require('./notifications');
-  for (const a of list) await n.fireCarEvent('energy_device', `${kind}|${a.key}`, { title: a.title, message: a.message, severity: a.severity, fields: [{ label: 'Device', value: kind === 'solar' ? 'Solar panels' : 'Heat pump' }] }).catch((e) => console.error(`[energy modules] notify: ${e.message}`));
+  // set-up and data quality (energyChecks.js): always in the bell, and to the rules of type 'energy_config'
+  if (kind === 'heatpump') {
+    const checks = require('./energyChecks').heatpumpChecks(st, rt.alertMem.checks || (rt.alertMem.checks = {}), nowMs, await checkContext(nowMs).catch(() => ({})));
+    for (const c of checks) await n.notifyBell('energy_config', `heatpump|${c.key}`, { title: c.title, message: c.message, i18n: c.i18n, severity: c.severity, sourceRef: c.link, fields: [{ label: 'Device', value: 'Heat pump' }] }).catch((e) => console.error(`[energy modules] check: ${e.message}`));
+  }
+  if (!list.length) return;
+  for (const a of list) await n.fireCarEvent('energy_device', `${kind}|${a.key}`, { title: a.title, message: a.message, i18n: a.i18n, severity: a.severity, fields: [{ label: 'Device', value: kind === 'solar' ? 'Solar panels' : 'Heat pump' }] }).catch((e) => console.error(`[energy modules] notify: ${e.message}`));
 }
 
 // Send (live) or log (shadow) the writes of this minute.
@@ -563,9 +655,9 @@ async function tick(nowMs = Date.now()) {
       // own outdoor sensor when there is one (better than the forecast for what really happened)
       const step = Number.isFinite(st.values.powerStep) ? st.values.powerStep : hw.stepOf(st.values.powerLimit1 === 1, st.values.powerLimit2 === 1);
       const rh = Number.isFinite(st.values.outdoorRh) ? st.values.outdoorRh : (w.rh ?? null);
-      if (Number.isFinite(outdoorC)) rt.weather.push({ ms: nowMs, outdoorC, rh, defrost: !!st.state.defrost, elecKw: st.values.electricPower ?? null, heatKw: st.state.thermalKw ?? null, step, ntc: Number.isFinite(st.values.ntcMode) ? st.values.ntcMode : hw.stepOf(st.values.ntcRelay1 === 1, st.values.ntcRelay2 === 1) });
+      if (Number.isFinite(outdoorC)) rt.weather.push({ ms: nowMs, outdoorC, rh, defrost: !!st.state.defrost, ...(Number.isFinite(st.values.boosterPower) ? { boostKw: st.values.boosterPower > 20 ? st.values.boosterPower / 1000 : st.values.boosterPower } : {}), elecKw: st.state.elecKw ?? st.values.electricPower ?? null, heatKw: st.state.thermalKw ?? null, step, ntc: Number.isFinite(st.values.ntcMode) ? st.values.ntcMode : hw.stepOf(st.values.ntcRelay1 === 1, st.values.ntcRelay2 === 1) });
       if (Number.isFinite(st.state.roomC) && Number.isFinite(outdoorC)) rt.room.push({ ms: nowMs, roomC: st.state.roomC, outdoorC, heating: st.state.mode === 'heating', ...(Number.isFinite(st.values.roomTarget) ? { targetC: st.values.roomTarget } : {}) });
-      if (Number.isFinite(outdoorC)) rt.tune.push({ ms: nowMs, running: st.state.mode === 'heating', defrost: !!st.state.defrost, elecKw: st.values.electricPower ?? null, heatKw: st.state.thermalKw ?? null, outdoorC, rh, ...(st.tuning?.current || {}) });
+      if (Number.isFinite(outdoorC)) rt.tune.push({ ms: nowMs, running: st.state.mode === 'heating', defrost: !!st.state.defrost, elecKw: st.state.elecKw ?? st.values.electricPower ?? null, heatKw: st.state.thermalKw ?? null, outdoorC, rh, ...(st.tuning?.current || {}) });
       while (rt.tune.length && rt.tune[0].ms < nowMs - 60 * DAY) rt.tune.shift();
       while (rt.room.length && rt.room[0].ms < nowMs - 30 * DAY) rt.room.shift();
       while (rt.weather.length && rt.weather[0].ms < nowMs - 60 * DAY) rt.weather.shift();
@@ -577,6 +669,7 @@ async function tick(nowMs = Date.now()) {
     await apply(kind, st);
     if (cfg.mode === 'live') await heartbeat(kind, cfg, st, nowMs);
     else rt.hb[kind] = {};
+    if (kind === 'heatpump') await trackPredictions(st, nowMs).catch((e) => console.error(`[energy modules] predictions: ${e.message}`));
     await alert(kind, st, nowMs);
     if (kind === 'heatpump') for (const sr of SERIES) await persist(sr, [hourOf(nowMs)]);
   }
@@ -584,7 +677,7 @@ async function tick(nowMs = Date.now()) {
 
 // Earlier tank samples (the demo, or an import from Loxone's statistics), merged in order.
 function addTankHistory(samples) {
-  rt.tank = [...rt.tank, ...samples].sort((a, b) => a.ms - b.ms).filter((x, k, a) => k === 0 || x.ms !== a[k - 1].ms);
+  rt.tank = mergeByMinute(rt.tank, samples);
   return persistAll('tank', samples);
 }
 
@@ -651,20 +744,123 @@ async function importStatistics(kind, { days = 14, callTool = null, nowMs = Date
         // the heat meter only while the unit runs (see heatPumpTypes.interpret)
         const producing = (x.compressorHz || 0) > 0 || x.running === 1 || (Number.isFinite(x.electricPower) && x.electricPower > 0.2);
         const heatKw = Number.isFinite(meterKw) && x.valveDhw !== 1 ? (producing ? meterKw : 0) : x.thermalPower;
-        weather.push({ ms: x.ms, outdoorC: x.outdoorTemp, rh: x.outdoorRh ?? null, defrost: x.defrost === 2, elecKw: x.electricPower ?? null, heatKw: heatKw ?? null, step: Number.isFinite(x.powerStep) ? x.powerStep : hw.stepOf(x.powerLimit1 === 1, x.powerLimit2 === 1), ntc: Number.isFinite(x.ntcMode) ? x.ntcMode : 0 });
+        // defrosting also from the heat meter running backwards while the compressor runs (see interpret)
+        const dT = Number.isFinite(x.heatMeterFlowTemp) && Number.isFinite(x.heatMeterReturnTemp) ? x.heatMeterFlowTemp - x.heatMeterReturnTemp : null;
+        const kwOf = (w) => (Number.isFinite(w) ? (w > 20 ? w / 1000 : w) : null); // W linked where kW is expected (see interpret)
+        const defrostNow = x.defrost === 2 || ((x.compressorHz || 0) > 0 && x.valveDhw !== 1 && dT !== null && dT < -2);
+        weather.push({ ms: x.ms, outdoorC: x.outdoorTemp, rh: x.outdoorRh ?? null, defrost: defrostNow, ...(Number.isFinite(x.boosterPower) ? { boostKw: kwOf(x.boosterPower) } : {}), elecKw: kwOf(x.electricPower), heatKw: heatKw ?? null, step: Number.isFinite(x.powerStep) ? x.powerStep : hw.stepOf(x.powerLimit1 === 1, x.powerLimit2 === 1), ntc: Number.isFinite(x.ntcMode) ? x.ntcMode : 0 });
         if (Number.isFinite(x.roomTemp)) room.push({ ms: x.ms, roomC: x.roomTemp, outdoorC: x.outdoorTemp, heating: (x.compressorHz || 0) > 0 && x.valveDhw !== 1 && x.defrost !== 2, ...(Number.isFinite(x.roomTarget) ? { targetC: x.roomTarget } : {}) });
-        tune.push({ ms: x.ms, running: (x.compressorHz || 0) > 0 && x.valveDhw !== 1, defrost: x.defrost === 2, elecKw: x.electricPower ?? null, heatKw: heatKw ?? null, outdoorC: x.outdoorTemp, rh: x.outdoorRh ?? null, flowC: Number.isFinite(x.logicFlowC) ? x.logicFlowC : x.heatingMode === 1 ? (x.flowSetpoint ?? x.roomSetpoint ?? null) : (x.flowSetpoint ?? null), step: Number.isFinite(x.powerStep) ? x.powerStep : hw.stepOf(x.powerLimit1 === 1, x.powerLimit2 === 1), ntc: Number.isFinite(x.ntcMode) ? x.ntcMode : 0 });
+        tune.push({ ms: x.ms, running: (x.compressorHz || 0) > 0 && x.valveDhw !== 1, defrost: defrostNow, elecKw: kwOf(x.electricPower), heatKw: heatKw ?? null, outdoorC: x.outdoorTemp, rh: x.outdoorRh ?? null, flowC: Number.isFinite(x.logicFlowC) ? x.logicFlowC : x.heatingMode === 1 ? (x.flowSetpoint ?? x.roomSetpoint ?? null) : (x.flowSetpoint ?? null), step: Number.isFinite(x.powerStep) ? x.powerStep : hw.stepOf(x.powerLimit1 === 1, x.powerLimit2 === 1), ntc: Number.isFinite(x.ntcMode) ? x.ntcMode : 0 });
       }
     }
-    const keep = (arr) => arr.filter((x) => x.ms < fromMs || x.ms >= nowMs);
-    rt.tank = [...keep(rt.tank), ...tank].sort((a, b) => a.ms - b.ms);
-    rt.weather = [...keep(rt.weather), ...weather].sort((a, b) => a.ms - b.ms);
-    rt.room = [...keep(rt.room), ...room].sort((a, b) => a.ms - b.ms);
-    rt.tune = [...keep(rt.tune), ...tune].sort((a, b) => a.ms - b.ms);
+    // merged per minute: a live sample stays (its empty fields filled from the import), an imported one
+    // fills a minute without one — before, the whole window was replaced, also when the import was empty
+    // (no statistics on the unit's values), and 14 days of live samples were gone until a restart
+    rt.tank = mergeByMinute(rt.tank, tank);
+    rt.weather = mergeByMinute(rt.weather, weather);
+    rt.room = mergeByMinute(rt.room, room);
+    rt.tune = mergeByMinute(rt.tune, tune);
     await persistAll('tank', tank); await persistAll('weather', weather); await persistAll('room', room); await persistAll('tune', tune);
     return { from: new Date(fromMs).toISOString(), to: new Date(nowMs).toISOString(), roles: Object.fromEntries(Object.entries(series).map(([k, v]) => [k, v.length])), without, samples: { tank: tank.length, weather: weather.length, room: room.length, runs: tu.runs(tune).length } };
   }
   return { from: new Date(fromMs).toISOString(), to: new Date(nowMs).toISOString(), roles: Object.fromEntries(Object.entries(series).map(([k, v]) => [k, v.length])), without, samples: {} };
+}
+
+// Pure: the lowest and highest tank temperature of the last 14 days (5 % / 95 %, one odd reading doesn't count).
+function tankRangeOf(tank, nowMs = Date.now()) {
+  const xs = (tank || []).filter((x) => x.ms > nowMs - 14 * DAY && Number.isFinite(x.temp)).map((x) => x.temp).sort((a, b) => a - b);
+  if (xs.length < 60) return null;
+  return { minC: Math.round(xs[Math.floor(xs.length * 0.05)] * 10) / 10, maxC: Math.round(xs[Math.floor(xs.length * 0.95)] * 10) / 10 };
+}
+
+// ------------------------------------------------------------------ how good the predictions are
+// Also in shadow mode: once an hour the room and tank temperatures the plan expects are written down
+// (forecast_log, kinds 'hp:room' and 'hp:tank'; an hour ahead and the day before), and later filled in with
+// what the sensors really read. So the learning dashboard can say how right the module is before it is live.
+
+// Pure: the plan's expectations -> [{ kind, targetMs, horizon, value }]. Room: at the end of each planned
+// hour; tank: at the start of the hour (as tankDraws predicts it).
+function predictionsOf(plan, nowMs) {
+  const { horizonFor } = require('./forecastLog');
+  const out = [];
+  for (const h of plan || []) {
+    const roomAt = h.ms + HOUR, tankAt = h.ms;
+    const hr = horizonFor(roomAt, nowMs), ht = horizonFor(tankAt, nowMs);
+    if (hr && Number.isFinite(h.roomC)) out.push({ kind: 'hp:room', targetMs: roomAt, horizon: hr, value: h.roomC });
+    if (ht && Number.isFinite(h.predC)) out.push({ kind: 'hp:tank', targetMs: tankAt, horizon: ht, value: h.predC });
+  }
+  return out;
+}
+
+// Pure: the mean of the samples within ±tolMin of a moment (null without any).
+function valueAt(samples, ms, field, tolMin = 10) {
+  const xs = (samples || []).filter((x) => Math.abs(x.ms - ms) <= tolMin * 60000 && Number.isFinite(x[field])).map((x) => x[field]);
+  return xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 100) / 100 : null;
+}
+
+// Pure: temperature predictions against reality: { n, maeC, within (share within tolC) }.
+function tempAccuracy(rows, tolC = 0.5) {
+  const ok = (rows || []).filter((r) => Number.isFinite(r.predicted) && Number.isFinite(r.actual));
+  if (!ok.length) return { n: 0 };
+  const err = ok.map((r) => Math.abs(r.predicted - r.actual));
+  return { n: ok.length, maeC: Math.round((err.reduce((a, b) => a + b, 0) / ok.length) * 100) / 100, within: Math.round((err.filter((e) => e <= tolC).length / ok.length) * 100) / 100 };
+}
+
+async function trackPredictions(st, nowMs = Date.now()) {
+  const hour = Math.floor(nowMs / HOUR);
+  if (rt.predHour === hour) return;
+  rt.predHour = hour;
+  const flog = require('./forecastLog');
+  for (const x of predictionsOf(st.plan, nowMs)) await flog.record(x.kind, new Date(x.targetMs).toISOString(), x.horizon, x.value, nowMs).catch(() => {});
+  const open = await db.prepare("SELECT kind, target, horizon FROM forecast_log WHERE kind IN ('hp:room', 'hp:tank') AND actual IS NULL AND target < ? AND target >= ?")
+    .all(new Date(nowMs - 15 * 60000).toISOString(), new Date(nowMs - 3 * DAY).toISOString()).catch(() => []);
+  for (const r of open) {
+    const ms = Date.parse(r.target);
+    const v = r.kind === 'hp:room' ? valueAt(rt.room, ms, 'roomC') : valueAt(rt.tank, ms, 'temp');
+    if (v !== null) await flog.setActual(r.kind, r.target, r.horizon, v).catch(() => {});
+  }
+  rt.accuracy = null; // computed again for the next status
+}
+
+// The last 14 days of room and tank predictions an hour ahead (cached an hour).
+async function predictionAccuracy(nowMs = Date.now()) {
+  if (rt.accuracy && nowMs - rt.accuracy.at < HOUR) return rt.accuracy.val;
+  const from = new Date(nowMs - 14 * DAY).toISOString();
+  const rows = await db.prepare("SELECT kind, horizon, predicted, actual FROM forecast_log WHERE kind IN ('hp:room', 'hp:tank') AND target >= ? AND actual IS NOT NULL").all(from).catch(() => []);
+  const of = (kind, horizon, tol) => tempAccuracy(rows.filter((r) => r.kind === kind && r.horizon === horizon), tol);
+  const val = { room: { h1: of('hp:room', 'h1', 0.5), d1: of('hp:room', 'd1', 0.5) }, tank: { h1: of('hp:tank', 'h1', 3), d1: of('hp:tank', 'd1', 3) } };
+  rt.accuracy = { at: nowMs, val };
+  return val;
+}
+
+// Pure: stretches without samples (the gateway down, the live connection gone): [{ fromMs, toMs, min }]
+// longer than minMin, since sinceMs, newest first. Learning doesn't notice them; the page and the data
+// checks (energyChecks.js) show them.
+function gapsIn(samples, { sinceMs = 0, nowMs = Date.now(), minMin = 30 } = {}) {
+  const xs = (samples || []).filter((x) => x.ms >= sinceMs).map((x) => x.ms).sort((a, b) => a - b);
+  const out = [];
+  let prev = sinceMs;
+  for (const ms of [...xs, nowMs]) {
+    if (ms - prev > minMin * 60000) out.push({ fromMs: prev, toMs: ms, min: Math.round((ms - prev) / 60000) });
+    prev = ms;
+  }
+  return out.reverse();
+}
+
+// Pure: live samples + imported ones, one per minute (by ms rounded to the minute). Live wins; its
+// null/undefined fields are filled from the imported sample of the same minute.
+function mergeByMinute(live, imported) {
+  const key = (ms) => Math.floor(ms / 60000);
+  const by = new Map((live || []).map((x) => [key(x.ms), x]));
+  for (const x of imported || []) {
+    const k = key(x.ms);
+    const cur = by.get(k);
+    if (!cur) { by.set(k, x); continue; }
+    const filled = { ...cur };
+    for (const [f, v] of Object.entries(x)) if ((filled[f] === null || filled[f] === undefined) && v !== null && v !== undefined) filled[f] = v;
+    by.set(k, filled);
+  }
+  return [...by.values()].sort((a, b) => a.ms - b.ms);
 }
 
 // ------------------------------------------------------------------ kept in the database (em_samples)
@@ -680,6 +876,7 @@ async function forget(series) {
   await db.prepare('DELETE FROM em_samples WHERE series = ?').run(series).catch(() => {});
   if (series === 'weather') { rt.days = {}; rt.report = null; await settings.set('energy_hp_days_v2', {}); }
   statusMemo.delete('heatpump');
+  forgetLearned();
   return true;
 }
 
@@ -702,15 +899,19 @@ async function loadPersisted(nowMs = Date.now()) {
   const rows = await db.prepare('SELECT series, data FROM em_samples WHERE hour >= ? ORDER BY hour').all(from);
   for (const sr of SERIES) {
     const got = rows.filter((r) => r.series === sr).flatMap((r) => { try { return JSON.parse(r.data); } catch { return []; } });
-    const have = new Set(rt[sr].map((x) => x.ms));
-    rt[sr] = [...rt[sr], ...got.filter((x) => !have.has(x.ms))].sort((a, b) => a.ms - b.ms);
+    // one sample per minute: history added twice (the demo before 0.65 on every start) is folded together,
+    // and the stored hours written again without the doubles
+    rt[sr] = mergeByMinute(rt[sr], got);
+    if (got.length > rt[sr].length * 1.1) await persist(sr, [...new Set(rt[sr].map((x) => hourOf(x.ms)))]);
   }
+  forgetLearned();
   return rows.length;
 }
 
-function addWeatherHistory(samples) { rt.weather = [...rt.weather, ...samples].sort((a, b) => a.ms - b.ms); return persistAll('weather', samples); }
-function addRoomHistory(samples) { rt.room = [...rt.room, ...samples].sort((a, b) => a.ms - b.ms); return persistAll('room', samples); }
-function addTuneHistory(samples) { rt.tune = [...rt.tune, ...samples].sort((a, b) => a.ms - b.ms); return persistAll('tune', samples); }
+// (one sample per minute: a minute that is already there keeps its values, gaps in it are filled)
+function addWeatherHistory(samples) { rt.weather = mergeByMinute(rt.weather, samples); return persistAll('weather', samples); }
+function addRoomHistory(samples) { rt.room = mergeByMinute(rt.room, samples); return persistAll('room', samples); }
+function addTuneHistory(samples) { rt.tune = mergeByMinute(rt.tune, samples); return persistAll('tune', samples); }
 
 // The stored samples are read again until it works (the database restarting at the same moment).
 function loadWithRetry(attempt = 0) {
@@ -725,4 +926,4 @@ function stopEnergyModules() { if (rt.timer) clearInterval(rt.timer); rt.timer =
 
 function lastStructures(kind) { return rt.discovered.get(kind)?.structures || []; }
 
-module.exports = { forget, statusCached, lastStructures, loadPersisted, detectConflicts, KINDS, DEFAULTS, getConfig, saveConfig, discover, resolve, status, tick, importStatistics, toMinutes, addTankHistory, addWeatherHistory, addRoomHistory, addTuneHistory, startEnergyModules, stopEnergyModules, rolesView };
+module.exports = { predictionsOf, valueAt, tempAccuracy, gapsIn, consumerPowerKw, mergeByMinute, forget, statusCached, lastStructures, loadPersisted, detectConflicts, KINDS, DEFAULTS, getConfig, saveConfig, discover, resolve, status, tick, importStatistics, toMinutes, addTankHistory, addWeatherHistory, addRoomHistory, addTuneHistory, startEnergyModules, stopEnergyModules, rolesView };

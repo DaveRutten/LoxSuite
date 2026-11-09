@@ -30,9 +30,16 @@ function heatFromMeter(v, unit = 'auto') {
 
 function interpret(v, { electricKw = null, compressorMaxKw = 3.5, meterFlowUnit = 'auto' } = {}) {
   const fault = v.fault === 1 || (v.errorCode !== undefined && v.errorCode !== 8000 && v.errorCode !== 0 && v.fault !== undefined);
-  const defrost = v.defrost === 2;
-  const elec = electricKw ?? v.electricPower ?? null;
+  // a power above 20 kW is no heat pump: a meter or sensor in W linked where kW is expected
+  const rawElec = electricKw ?? v.electricPower ?? null;
+  const elecInW = Number.isFinite(rawElec) && rawElec > 20;
+  const elec = elecInW ? Math.round(rawElec) / 1000 : rawElec;
   const running = v.running === 1 || (v.compressorHz || 0) > 0;
+  // defrosting: the unit's own register (2), or — when one poll of that register is missed — the heat
+  // meter running backwards while the compressor runs (the water gives heat to the outdoor coil)
+  const meterDT = Number.isFinite(v.heatMeterFlowTemp) && Number.isFinite(v.heatMeterReturnTemp) ? v.heatMeterFlowTemp - v.heatMeterReturnTemp : null;
+  const defrostByDT = running && v.valveDhw !== 1 && meterDT !== null && meterDT < -2;
+  const defrost = v.defrost === 2 || defrostByDT;
   const mode = fault ? 'fault' : defrost ? 'defrost' : !running ? 'idle' : v.valveDhw === 1 ? 'dhw' : 'heating';
   // the heat from flow × ΔT — with own sensors per circuit (CV / tap water) the ones of the circuit in use
   const onDhw = v.valveDhw === 1;
@@ -60,7 +67,7 @@ function interpret(v, { electricKw = null, compressorMaxKw = 3.5, meterFlowUnit 
   }
   // without a valve signal: the unit says tap water is being forced
   const heatingTank = mode === 'dhw' || (v.valveDhw === undefined && v.forceDhw === 1 && running);
-  return { mode: heatingTank && mode === 'heating' ? 'dhw' : mode, heatingTank, tankC: v.tankTemp ?? null, outdoorC: v.outdoorTemp ?? null, roomC: v.roomTemp ?? null, thermalKw, cop, boost, boostWhy, fault, defrost };
+  return { elecKw: elec, elecInW, defrostByDT, mode: heatingTank && mode === 'heating' ? 'dhw' : mode, heatingTank, tankC: v.tankTemp ?? null, outdoorC: v.outdoorTemp ?? null, roomC: v.roomTemp ?? null, thermalKw, cop, boost, boostWhy, fault, defrost };
 }
 
 // Pure: the tap-water setpoint for a planned hour.
@@ -88,7 +95,13 @@ function writesFor({ type, plan, now, last = {}, nowMs = Date.now(), settings = 
   const capC = Math.min(s.hpMaxC ?? 55, s.bufferMaxC ?? Infinity, s.absoluteMaxC ?? Infinity);
   const legionella = plan.mode === 'legionella';
   const target = legionella ? (s.legionellaC ?? 60) : s.targetC;
-  if (canWrite('dhwSetpoint')) {
+  const sem = s.setpointModes && [s.setpointModes.hold, s.setpointModes.normal, s.setpointModes.high].every(Number.isFinite) ? s.setpointModes : null;
+  if (canWrite('dhwSetpoint') && sem) {
+    // the own Loxone logic reads the setpoint as a mode: only its three values are written
+    const high = legionella || (plan.mode === 'dhw' && plan.buffer);
+    const value = high ? sem.high : plan.mode === 'dhw' ? sem.normal : sem.hold;
+    want.push({ role: 'dhwSetpoint', value, why: high ? (legionella ? `setpoint mode high (${sem.high}): legionella` : `setpoint mode high (${sem.high}): solar buffer`) : plan.mode === 'dhw' ? `setpoint mode normal (${sem.normal}): tap water now` : `setpoint mode hold (${sem.hold}): no action` });
+  } else if (canWrite('dhwSetpoint')) {
     const value = legionella ? target : dhwSetpoint({ mode: plan.mode, tankC: now.tankTemp, targetC: s.targetC, comfortMinC: s.comfortMinC, dropC, hpMaxC: capC, force });
     want.push({ role: 'dhwSetpoint', value,
       why: legionella ? `legionella: ${target} °C (the booster helps above ${s.hpMaxC ?? 55} °C)` : plan.mode === 'dhw' ? (force ? 'tap water now: up to the target' : 'tap water now: above tank + drop') : `hold: the unit itself only starts below ${s.comfortMinC} °C` });

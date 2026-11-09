@@ -1,6 +1,7 @@
-<%- include('partials/head', { pageTitle: 'Live Data', active: 'live-data', refresh: 60, liveSwap: true }) %>
+<%- include('partials/head', { pageTitle: 'Loxone values', active: 'live-data', refresh: 60, liveSwap: true }) %>
 
-<p class="hint">
+<%- include('partials/page-intro', { text: t('Every value the Miniserver sends, live.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
   <%= t('Every control the selected Miniserver\'s structure file knows about, grouped by room and then by category — the same grouping Loxone Config itself uses, so this works for any project, not just this one\'s specific setup. Rooms, categories, and values are all only fetched once you actually expand them — a structure file can list hundreds of controls, so reading all of them up front just to open this page would mean hundreds of requests to the Miniserver, and thousands of rows of HTML, before you\'ve looked at any of it. Open values refresh automatically every few seconds.') %>
 </p>
 

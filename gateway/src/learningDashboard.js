@@ -102,11 +102,22 @@ async function heatpumpTopic(mods) {
     { key: 'hp.schedule', forget: 'room', label: 'Comfort times from Loxone', value: rp.schedule?.all ? `${rp.schedule.all.from}–${rp.schedule.all.until || '…'}` : null, sub: rp.schedule?.comfortC ? { t: '{c} °C comfort, {s} °C otherwise', p: { c: rp.schedule.comfortC, s: rp.schedule.setbackC } } : '', conf: rp.schedule?.all ? 0.8 : 0 },
     { key: 'hp.weather', forget: 'weather', label: 'Defrosting and COP per weather', value: weatherH ? { n: Math.round(weatherH), u: 'h' } : null, sub: W.now?.learned ? { t: 'this weather learned: COP {c}', p: { c: r1(W.now.cop) } } : { t: 'this weather not seen yet', p: {} }, conf: clamp01(weatherH / 300) },
     { key: 'hp.scop', forget: 'weather', label: 'SCOP (measured)', value: W.scop?.scop ? { n: r2(W.scop.scop), d: 2 } : null, sub: W.scop?.days ? { t: 'over {n} days', p: { n: W.scop.days } } : '', conf: clamp01((W.scop?.days || 0) / 365) },
-    { key: 'hp.tuning', forget: 'tune', label: 'Best setting for this weather', value: TU.advice?.learned ? (Number.isFinite(TU.advice.setting?.flowC) ? { n: r1(TU.advice.setting.flowC), d: 1, u: '°C' } : '✓') : null, sub: { t: '{n} minutes of runs', p: { n: TU.runs || 0 } }, conf: clamp01((TU.runs || 0) / (30 * 24 * 60)) },
+    // not the advice for the weather of this moment (that changed every day and filled the timeline with
+    // "learned / not seen any more"): in how many kinds of weather two or more settings could be compared
+    { key: 'hp.tuning', forget: 'tune', label: 'Settings compared per weather', value: st.tuningWeathers?.seen ? { n: st.tuningWeathers.compared, u: `/ ${st.tuningWeathers.seen}` } : null, sub: { t: '{n} minutes of runs', p: { n: TU.runs || 0 } }, conf: clamp01((TU.runs || 0) / (30 * 24 * 60)) },
     { key: 'hp.overshoot', forget: 'tune', label: 'Run longer before stopping', value: TU.overshoot?.overshootC ? { n: r1(TU.overshoot.overshootC), d: 1, u: '°C' } : null, sub: Number.isFinite(TU.overshoot?.medianOffMin) ? { t: 'usually starts again after {m} min', p: { m: TU.overshoot.medianOffMin } } : '', conf: TU.overshoot?.overshootC !== undefined ? 0.6 : 0.1 },
   ];
+  // how right its expectations were — measured also in shadow mode (energyModules.trackPredictions)
+  const A = st.accuracy || {};
+  const ra = A.room?.h1, ta = A.tank?.h1;
+  items.push({ key: 'hp.accRoom', label: 'Room an hour ahead', value: ra?.n >= 12 ? { n: Math.round(ra.within * 100), u: '%' } : null, sub: ra?.n ? { t: 'within 0.5 °C · off by {m} °C on average · {n} hours', p: { m: ra.maeC, n: ra.n } } : { t: 'not compared yet', p: {} }, conf: clamp01((ra?.n || 0) / 168) });
+  items.push({ key: 'hp.accTank', label: 'Tank an hour ahead', value: ta?.n >= 12 ? { n: Math.round(ta.within * 100), u: '%' } : null, sub: ta?.n ? { t: 'within 3 °C · off by {m} °C on average · {n} hours', p: { m: ta.maeC, n: ta.n } } : { t: 'not compared yet', p: {} }, conf: clamp01((ta?.n || 0) / 168) });
+  const accRoom = ra?.n >= 12 ? ra.within : null, accTank = ta?.n >= 12 ? ta.within : null;
+  const accs = [accRoom, accTank].filter((x) => x !== null);
   const conf = items.reduce((a, x) => a + x.conf, 0) / items.length;
   return topic('heatpump', 'Heat pump', 'heat', '#e67e22', {
+    accuracy: accs.length ? accs.reduce((a, b) => a + b, 0) / accs.length : null,
+    accuracyNote: accs.length ? { t: 'room and tank an hour ahead, last 14 days', p: {} } : '',
     headline: W.scop?.scop ? { t: 'SCOP {s} · room {r} °C/h · {n} draws a day', p: { s: r2(W.scop.scop), r: rp.rate?.rate ? r2(rp.rate.rate) : '—', n: (L.patterns || []).length } } : { t: '{n} usual draws a day', p: { n: (L.patterns || []).length } },
     conf, items, link: '/energy-manager/modules/heatpump',
   });
@@ -181,7 +192,11 @@ async function snapshot(nowMs = Date.now(), { force = false } = {}) {
   const values = valuesOf(topics);
   const ev = await settings.get('learning_events', { list: [] });
   const list = ev.list || [];
-  if (prev.values) for (const c of changes(prev.values, values)) list.push({ at: new Date(nowMs).toISOString(), ...c });
+  const found = prev.values ? changes(prev.values, values) : [];
+  for (const c of found) list.push({ at: new Date(nowMs).toISOString(), ...c });
+  // what it learned today, also in the bell (a learning milestone)
+  const msg = require('./energyChecks').learnedMessage(found, nowMs);
+  if (msg) require('./notifications').notifyBell('energy_config', msg.key, { title: msg.title, message: msg.message, i18n: msg.i18n, severity: msg.severity, sourceRef: msg.link }).catch(() => {});
   await settings.set('learning_events', { list: list.slice(-200) });
   await settings.set('learning_snapshot', { at: new Date(nowMs).toISOString(), values });
   return values;

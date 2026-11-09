@@ -1,0 +1,95 @@
+<%
+  // Home: now first (greeting, one sentence, the energy flowing), then what needs you, then the day.
+  // Data from src/homeSummary.js. The [data-live-id] parts are refreshed with the page (every 5 s).
+  const Hm = home;
+  const kw = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
+  const eur = (v, d = 2) => (v === null || v === undefined ? '—' : '€ ' + Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const hhmm = (iso) => (iso ? new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }) : '');
+  const F = Hm.flow;
+  // numbers in a sentence in the reader's own notation (3,6 kW)
+  const loc = (p) => Object.fromEntries(Object.entries(p || {}).map(([k, x]) => [k, typeof x === 'number' ? x.toLocaleString(uiLocale || 'nl-NL') : x]));
+%>
+<section class="home-hero">
+  <div class="home-head">
+    <div>
+      <div class="home-eyebrow" data-live-id="home-date"><%= new Date(Hm.dayMs).toLocaleDateString(uiLocale || 'nl-NL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: displayTimezone || 'UTC' }) %> · <%= hhmm(new Date(Hm.dayMs).toISOString()) %></div>
+      <h2 class="home-greeting"><%= t(Hm.greeting) %><%= currentUser && currentUser.displayName ? ', ' + currentUser.displayName.split(' ')[0] : '' %></h2>
+      <% if (Hm.sentence) { %><p class="home-sentence" data-live-id="home-sentence"><%= t(Hm.sentence[0], loc(Hm.sentence[1])) %></p><% } %>
+    </div>
+    <% if (Hm.price.now !== null) { %>
+      <div class="home-pills" data-live-id="home-price">
+        <a class="home-pill" href="/planner"><%= t('Electricity now') %> <b><%= eur(Hm.price.now, 2) %></b></a>
+        <% if (Hm.price.min !== null) { %><a class="home-pill home-pill-low" href="/planner"><%= t('lowest') %><%= Hm.price.minAt ? ' ' + hhmm(Hm.price.minAt) : '' %> <b><%= eur(Hm.price.min, 2) %></b></a><% } %>
+      </div>
+    <% } %>
+  </div>
+
+  <% if (F) {
+       const pv = F.pv || 0, house = F.house || 0, car = Math.max(0, F.car || 0), grid = F.grid || 0, bat = F.battery || 0;
+       const sunHouse = Math.min(pv, house), sunCar = Math.min(Math.max(pv - sunHouse, 0), car);
+       const imp = Math.max(grid, 0), exp = Math.max(-grid, 0);
+       // a line moves when something flows: faster and thicker with more kW
+       const line = (kwv) => (kwv > 0.05 ? `class="hf-line on" style="--hf-dur:${Math.max(0.6, Math.min(4, 3 / kwv)).toFixed(2)}s; --hf-w:${Math.min(6, 2 + kwv / 2).toFixed(1)}px"` : 'class="hf-line"');
+       const hasCar = F.car !== null; const hasBat = F.battery !== null; %>
+    <a class="home-flow" href="/energy-manager" aria-label="<%= t('Energy now') %>" data-live-id="home-flow">
+      <svg viewBox="0 0 640 250" role="img" aria-label="<%= t('Solar {pv} kW, house {house} kW, grid {grid} kW', { pv: kw(pv), house: kw(house), grid: kw(grid) }) %>">
+        <path d="M150 125 C 240 125, 250 70, 330 70" <%- line(sunHouse) %> data-c="sun"/>
+        <% if (hasCar) { %><path d="M150 125 C 240 125, 250 185, 330 185" <%- line(sunCar) %> data-c="sun"/><% } %>
+        <path d="M150 125 L 500 125" <%- line(exp) %> data-c="sun"/>
+        <path d="M505 112 C 470 80, 470 70, 470 70" <%- line(imp) %> data-c="grid"/>
+        <% if (hasBat) { %><path d="M110 160 L 110 205" <%- line(Math.abs(bat)) %> data-c="bat" <%- bat < 0 ? 'data-rev' : '' %>/><% } %>
+        <g class="hf-node hf-sun"><circle cx="105" cy="125" r="40"/><text x="105" y="130" text-anchor="middle" class="hf-tag"><%= t('SUN') %></text></g>
+        <text x="105" y="190" text-anchor="middle" class="hf-big"><%= kw(pv) %> kW</text>
+        <g class="hf-node hf-box"><rect x="330" y="42" width="140" height="56" rx="14"/><text x="346" y="64" class="hf-sub"><%= t('House') %><%= F.hpMode && F.hpMode !== 'idle' ? ' · ' + t({ dhw: 'heat pump: tap water', heating: 'heat pump: heating', defrost: 'heat pump: defrosting', fault: 'heat pump: fault' }[F.hpMode] || '') : '' %></text><text x="346" y="86" class="hf-val"><%= kw(house) %> kW</text></g>
+        <% if (hasCar) { %><g class="hf-node hf-box"><rect x="330" y="157" width="140" height="56" rx="14"/><text x="346" y="179" class="hf-sub"><%= t('Car') %></text><text x="346" y="201" class="hf-val"><%= car > 0.05 ? kw(car) + ' kW' : t('not charging') %></text></g><% } %>
+        <g class="hf-node hf-grid"><circle cx="545" cy="125" r="36"/><text x="545" y="130" text-anchor="middle" class="hf-tag"><%= t('GRID') %></text></g>
+        <text x="545" y="185" text-anchor="middle" class="hf-big"><%= kw(Math.abs(grid)) %> kW</text>
+        <text x="545" y="203" text-anchor="middle" class="hf-sub"><%= grid < -0.05 ? t('back to the grid') : grid > 0.05 ? t('from the grid') : t('in balance') %></text>
+        <% if (hasBat) { %><text x="105" y="228" text-anchor="middle" class="hf-sub"><%= t('Battery') %> <%= kw(Math.abs(bat)) %> kW <%= bat > 0.05 ? t('charging') : bat < -0.05 ? t('giving') : '' %></text><% } %>
+      </svg>
+      <% /* on a phone the drawing is too small to read: the same flow as four blocks */ %>
+      <div class="hf-compact" aria-hidden="true">
+        <div class="hfc hfc-sun"><span><%= t('SUN') %></span><b><%= kw(pv) %> kW</b></div>
+        <div class="hfc-arrow<%= pv > 0.05 ? ' on' : '' %>">→</div>
+        <div class="hfc"><span><%= t('House') %></span><b><%= kw(house) %> kW</b><% if (F.hpMode && F.hpMode !== 'idle') { %><small><%= t({ dhw: 'heat pump: tap water', heating: 'heat pump: heating', defrost: 'heat pump: defrosting', fault: 'heat pump: fault' }[F.hpMode] || '') %></small><% } %></div>
+        <% if (hasCar) { %><div class="hfc"><span><%= t('Car') %></span><b><%= car > 0.05 ? kw(car) + ' kW' : '—' %></b></div><% } %>
+        <div class="hfc hfc-grid"><span><%= t('GRID') %></span><b><%= kw(Math.abs(grid)) %> kW</b><small><%= grid < -0.05 ? t('back to the grid') : grid > 0.05 ? t('from the grid') : t('in balance') %></small></div>
+      </div>
+    </a>
+  <% } %>
+
+  <div class="home-kpis" data-live-id="home-kpis">
+    <% Hm.kpis.forEach((k) => { %>
+      <a class="home-kpi<%= k.warn ? ' warn' : '' %>" href="<%= k.href %>">
+        <span class="home-kpi-l"><%= t(k.label) %></span>
+        <b class="home-kpi-v"><%= t(k.value) %></b>
+        <% if (k.trend) { %><span class="home-kpi-trend <%= k.trend.pts > 0 ? 'up' : k.trend.pts < 0 ? 'down' : '' %>"><%= t(k.trend.text[0], loc(k.trend.text[1])) %></span><% } %>
+        <% if (k.sub) { %><span class="home-kpi-s"><%= t(k.sub[0], loc(k.sub[1])) %></span><% } %>
+      </a>
+    <% }) %>
+  </div>
+
+  <% const D = Hm.today; const maxS = Math.max(0.5, ...D.hours.map((h) => h.surplus)); const anyCar = D.hours.some((h) => h.car > 0.05), anyHp = D.hours.some((h) => h.hp === 'dhw'), anyLeg = D.hours.some((h) => h.hp === 'legionella'), anyPre = D.hours.some((h) => h.hp === 'preheat'), anySun = D.hours.some((h) => h.surplus > 0.1); %>
+  <div class="home-today">
+    <div class="home-today-head"><h3><%= t('Today') %></h3><span class="hint" style="margin:0;"><%= t('the plan for the day') %></span></div>
+    <div class="home-bar" data-live-id="home-bar" role="img" aria-label="<%= t('Today') %>">
+      <% D.hours.forEach((h) => { %>
+        <div class="hb-h<%= h.past ? ' past' : '' %>" title="<%= hhmm(new Date(h.ms).toISOString()) %><%= h.surplus > 0.1 ? ' · ' + t('solar to spare') + ' ' + kw(h.surplus) + ' kWh' : '' %><%= h.car > 0.05 ? ' · ' + t('car charges') + ' ' + kw(h.car) + ' kWh' : '' %><%= h.hp ? ' · ' + t({ dhw: 'tap water', legionella: 'legionella', preheat: 'pre-heating' }[h.hp]) : '' %>">
+          <span class="hb-sun" style="opacity:<%= (h.surplus / maxS).toFixed(2) %>"></span>
+          <% if (h.car > 0.05) { %><span class="hb-car"></span><% } %>
+          <% if (h.hp) { %><span class="hb-hp hb-<%= h.hp %>"></span><% } %>
+        </div>
+      <% }) %>
+      <span class="hb-now" style="left:<%= D.nowPct.toFixed(1) %>%"></span>
+    </div>
+    <div class="hb-axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+    <div class="hb-legend">
+      <% if (anySun) { %><span><i class="hb-sw sun"></i><%= t('solar to spare') %></span><% } %>
+      <% if (anyCar) { %><span><i class="hb-sw car"></i><%= t('car charges') %></span><% } %>
+      <% if (anyHp) { %><span><i class="hb-sw hp"></i><%= t('heat pump: tap water') %></span><% } %>
+      <% if (anyLeg) { %><span><i class="hb-sw leg"></i><%= t('legionella') %></span><% } %>
+      <% if (anyPre) { %><span><i class="hb-sw pre"></i><%= t('pre-heating') %></span><% } %>
+      <span><i class="hb-sw now"></i><%= t('now') %></span>
+    </div>
+  </div>
+</section>

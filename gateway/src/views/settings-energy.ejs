@@ -1,9 +1,10 @@
 <%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
 <%- include('partials/tabs-admin', { active: 'energy' }) %>
 
+<% const chargingOn = typeof moduleOn !== 'function' || moduleOn('charging'); %>
 <nav class="section-nav" id="se-nav" aria-label="<%= t('On this page') %>">
   <a href="#prices"><%= t('Prices, solar & fuel') %></a>
-  <% if (canView('charging')) { %>
+  <% if (chargingOn && canView('charging')) { %>
     <a href="#calendars"><%= t('Calendars') %></a>
     <a href="#agenda-settings"><%= t('Agenda & climate') %></a>
     <a href="#day-types"><%= t('Days away & holidays') %></a>
@@ -21,7 +22,7 @@
   <div class="ls-fold-list">
   <details <%= saved === 'prices' ? 'open' : '' %>>
     <summary><strong><%= t('Electricity price') %></strong> <span class="hint"><%= priceStatus ? (priceStatus.ok ? '· ' + t('{0} intervals, until {1}', [priceStatus.count, formatDateTime(priceStatus.until)]) + (priceStatus.basis ? ' · ' + t('estimate from {0} Spot Price Optimizer values', [priceStatus.basis]) : '') + (priceStatus.filled ? ' · ' + t('missing prices from EnergyZero') : '') + (priceStatus.warning ? ' · ' + priceStatus.warning : '') : '· ' + t(priceStatus.error)) : '' %></span></summary>
-    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+    <form method="post" action="/settings/energy/shared" style="margin-top:0.7rem;">
       <input type="hidden" name="section" value="prices">
       <div class="form-grid">
         <div><label><%= t('Source') %></label><select name="source">
@@ -61,7 +62,7 @@
 
   <details <%= saved === 'solar' ? 'open' : '' %>>
     <summary><strong><%= t('Home & solar forecast') %></strong> <span class="hint"><%= solarStatus ? (solarStatus.ok ? `· updated ${formatDateTime(solarStatus.at)}` : `· ${solarStatus.error}`) : '' %></span></summary>
-    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+    <form method="post" action="/settings/energy/shared" style="margin-top:0.7rem;">
       <input type="hidden" name="section" value="solar">
       <div class="form-grid">
         <div><label><%= t('Home latitude') %></label><input type="text" name="lat" value="<%= site.lat ?? '' %>" placeholder="52.09"></div>
@@ -82,7 +83,7 @@
 
   <details <%= saved === 'fuel' ? 'open' : '' %>>
     <summary><strong><%= t('Fuel (plug-in hybrid)') %></strong> <span class="hint">· <%= fuel.label %> € <%= fuel.eur_l.toFixed(3) %>/l (<%= fuel.source === 'auto' ? t('CBS') + (fuel.date ? ' ' + fuel.date.split('-').reverse().join('-') : '') + (fuel.markup ? ', ' + t('incl. surcharge') + ' € ' + Number(fuel.markup).toFixed(3) : '') : t('manual') %>)</span></summary>
-    <form method="post" action="/planner/settings" style="margin-top:0.7rem;">
+    <form method="post" action="/settings/energy/shared" style="margin-top:0.7rem;">
       <input type="hidden" name="section" value="fuel">
       <div class="form-grid">
         <div><label><%= t('What do you tank?') %></label><select name="fuel_type"><% Object.entries(fuelTypes).forEach(([k, v]) => { %><option value="<%= k %>" <%= (cfg.fuel_type || 'euro95') === k ? 'selected' : '' %>><%= v.label %></option><% }) %></select></div>
@@ -99,7 +100,7 @@
 
 </div>
 
-<% if (canView('charging')) { %>
+<% if (chargingOn && canView('charging')) { %>
 <div class="card" id="calendars">
   <h2 class="en-h" style="margin-top:0;"><%- enIcon('calendar', 'var(--accent)') %><%= t('Calendars') %></h2>
   <% if (!site.lat) { %><p class="hint" style="color:#b8860b;"><%= t('Set the home location under') %> <a href="/settings/energy#prices"><%= t('Administration → Energy & charging') %></a> <%= t('so distances can be calculated.') %></p><% } %>
@@ -255,7 +256,7 @@
   })();
   </script>
 </div>
-<% if (canEdit('charging')) { %>
+<% if (chargingOn && canEdit('charging')) { %>
 <div class="card" id="charging">
   <h2 class="en-h" style="margin-top:0;"><%- enIcon('bolt', 'var(--en-car)') %><%= t('Smart charging') %></h2>
   <p class="hint" style="margin:0 0 0.6rem;"><%= t('How the car is charged, what LoxSuite sends to Loxone and when it reminds you to plug in.') %></p>

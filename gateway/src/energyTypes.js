@@ -57,6 +57,9 @@ const ROLES = {
       roomHumidity: { label: 'Room humidity', unit: '%', rw: 'r' },
       boosterHeater: { label: 'Booster heater (1/0)', rw: 'r' },
       immersionHeater: { label: 'Immersion heater (1/0)', rw: 'r' },
+      // a Loxone meter on the booster / immersion heater (e.g. "Meter WarmtePomp Boost"): its power in kW,
+      // counted in the SCOP (heat at COP 1) and shown when it does the last degrees of the tank
+      boosterPower: { label: 'Booster heater: electric power (meter)', unit: 'kW', rw: 'r' },
       heatSource: { label: 'Heat source (0 = heat pump, else electric / boiler)', rw: 'r' },
       legionella: { label: 'Legionella prevention', rw: 'r' },
       electricPower: { label: 'Electric power', unit: 'kW', rw: 'r' },

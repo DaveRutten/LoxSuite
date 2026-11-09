@@ -304,7 +304,9 @@ async function seed() {
   const samples = [];
   const weather = [];
   const room = []; const tune = [];
-  for (let t = now - 14 * DAY; t < now; t += MIN) {
+  // (on whole minutes, and only once: after a restart the history is read back from the database)
+  const seeded = Number((await db.prepare("SELECT COUNT(*) AS n FROM em_samples WHERE series = 'tank'").get().catch(() => null))?.n || 0) > 0;
+  for (let t = Math.floor(now / MIN) * MIN - 14 * DAY; t < now; t += MIN) {
     const { h, m } = localHourMin(t);
     // the past: the own Loxone logic, now and then a different flow temperature (so there is something to compare)
     hist.zoneTarget = [35, 35, 33, 37][Math.floor(t / (6 * 3600000)) % 4];
@@ -316,10 +318,12 @@ async function seed() {
     weather.push({ ms: t, outdoorC: hist.outdoor, rh: hist.rh, defrost: hist.defrost === 2, elecKw: hist.elec, heatKw: hist.heat, step: hist.step, ntc: hist.ntc });
   }
   Object.assign(sim, hist);
-  require('../energyModules').addTankHistory(samples);
-  require('../energyModules').addWeatherHistory(weather);
-  require('../energyModules').addRoomHistory(room);
-  require('../energyModules').addTuneHistory(tune);
+  if (!seeded) {
+    require('../energyModules').addTankHistory(samples);
+    require('../energyModules').addWeatherHistory(weather);
+    require('../energyModules').addRoomHistory(room);
+    require('../energyModules').addTuneHistory(tune);
+  }
   setInterval(() => step(Date.now(), 1 / 6), 10000);
   // Dutch as the default language of the demo (once the languages are loaded, right after this)
   setTimeout(() => require('../i18n').setDefaultLanguage('nl').catch((e) => log(`language: ${e.message}`)), 5000);

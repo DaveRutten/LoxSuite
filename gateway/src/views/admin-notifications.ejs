@@ -21,7 +21,7 @@
     <code>tgram://bottoken/ChatID</code>, <code>mailtos://user:pass@smtp.example.com?to=you@example.com</code>).
   </p>
 
-  <details class="add-panel">
+  <details class="add-panel" id="add-channel">
     <summary><%= t('Add channel') %></summary>
     <div class="add-panel-body">
       <form method="post" action="/admin/notifications/channels" class="channel-form">
@@ -103,7 +103,7 @@
           </tr>
         <% }) %>
         <% if (channels.length === 0) { %>
-          <tr><td colspan="4" class="empty"><%= t('No channels yet — add one above.') %></td></tr>
+          <tr><td colspan="4" class="empty"><%- include('partials/empty-state', { title: t('No channels yet'), action: { label: t('Add channel'), open: '#add-channel' }, alt: t('A channel is where notifications go: Telegram, e-mail, push, …') }) %></td></tr>
         <% } %>
       </tbody>
     </table>
@@ -113,7 +113,7 @@
 <div class="card">
   <h2><%= t('Rules') %></h2>
 
-  <details class="add-panel" <%= presetTrigger ? 'open' : '' %>>
+  <details class="add-panel" id="add-rule" <%= presetTrigger ? 'open' : '' %>>
     <summary><%= t('Add rule') %></summary>
     <div class="add-panel-body">
       <form method="post" action="/admin/notifications/rules" class="rule-form">
@@ -466,7 +466,7 @@
           </tr>
         <% }) %>
         <% if (rules.length === 0) { %>
-          <tr><td colspan="5" class="empty"><%= t('No rules yet — add one above.') %></td></tr>
+          <tr><td colspan="5" class="empty"><%- include('partials/empty-state', { title: t('No rules yet'), action: { label: t('Add rule'), open: '#add-rule' }, alt: t('A rule says when a notification is sent, and to which channel.') }) %></td></tr>
         <% } %>
       </tbody>
     </table>
@@ -539,8 +539,8 @@
      menu positioning below (see its own comment), the same dependency tabulator-table.js already
      uses for the Columns menu and row-actions popovers, loaded here directly since this page has
      no Tabulator table of its own to pull it in via that file. -->
-<script src="/vendor/floating-ui.core.umd.min.js"></script>
-<script src="/vendor/floating-ui.dom.umd.min.js"></script>
+<script src="/vendor/floating-ui.core.umd.min.js?v=<%= assetVersion %>"></script>
+<script src="/vendor/floating-ui.dom.umd.min.js?v=<%= assetVersion %>"></script>
 <script>
   // Live preview for the Message templates card above — pure client-side, against the same example
   // data the server embeds (notifications.js's own TEMPLATE_PREVIEW_SAMPLES), so nothing is ever

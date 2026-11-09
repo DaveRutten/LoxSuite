@@ -17,12 +17,7 @@
   mark(document);
   new MutationObserver(function (list) { list.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType === 1) mark(n.parentElement || n); }); }); })
     .observe(document.body, { childList: true, subtree: true });
-  // Highlight the tab of the current section.
-  var path = location.pathname;
-  document.querySelectorAll('.mobile-tabbar a').forEach(function (a) {
-    var h = a.getAttribute('href');
-    if (h === '/' ? path === '/' : path === h || path.indexOf(h + '/') === 0) a.classList.add('active');
-  });
+  // The tab of the current section is lit server-side (partials/foot.ejs, from the menu list).
   var more = document.getElementById('mobile-tabbar-more');
   if (more) more.addEventListener('click', function () { var t = document.getElementById('mobile-nav-toggle'); if (t) t.click(); });
 })();

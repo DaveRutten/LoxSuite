@@ -1,7 +1,8 @@
-<%- include('partials/head', { pageTitle: 'Logs', active: 'logs-system', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/system', topbarRangeValue: range, topbarRangeExtra: { q: query.q } }) %>
+<%- include('partials/head', { pageTitle: 'System log', active: 'logs-system', refresh: 5, liveSwap: true, topbarRange: true, topbarRangeAction: '/logs/system', topbarRangeValue: range, topbarRangeExtra: { q: query.q } }) %>
 
-<p class="hint">
-  <%= t('This gateway\'s own housekeeping events — e.g. a disconnected MQTT client getting auto-removed from') %> <a href="/incoming/clients"><%= t('Client Activity') %></a><%= t('. Persisted in SQLite and kept for') %> <strong><%= retentionDays %></strong> <%= t('days, same retention setting as the other two tabs —') %> <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
+<%- include('partials/page-intro', { text: t('What LoxSuite itself did and noticed.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
+  <%= t('This gateway\'s own housekeeping events — e.g. a disconnected MQTT client getting auto-removed from') %> <a href="/incoming/clients"><%= t('Client Activity') %></a><%= t('. Kept in the database for') %> <strong><%= retentionDays %></strong> <%= t('days, same retention setting as the other two tabs —') %> <% if (canEdit('settings')) { %><a href="/settings"><%= t('change that in Settings') %></a><% } else { %><%= t('change that in Settings') %><% } %>.
 </p>
 
 <div class="filterable-table-card">
@@ -44,5 +45,5 @@
   </div>
 </div>
 
-<script src="/log-select.js" defer></script>
+<script src="/log-select.js?v=<%= assetVersion %>" defer></script>
 <%- include('partials/foot') %>

@@ -25,6 +25,8 @@ const TRIGGER_TYPES = [
   { key: 'charging_plan', label: 'Car: charging plan warnings (won\'t be ready, trip longer than the battery)', module: 'charging' },
   { key: 'car_climate', label: 'Car: climate at departure (started, failed)', module: 'charging' },
   { key: 'energy_device', label: 'Energy manager: heat pump and solar panels (legionella, tank, fault, defrosting, limit, heartbeat)', module: 'energy_manager' },
+  { key: 'system_check', label: 'LoxSuite itself: down time, disk, live connections, quiet MQTT topics, Loxone program saved, security' },
+  { key: 'energy_config', label: 'Energy manager: set-up and data quality (links, implausible values, data gaps, advice, settings)', module: 'energy_manager' },
 ];
 
 // Sending goes through Apprise (https://github.com/caronc/apprise, installed as a CLI in the
@@ -122,6 +124,18 @@ const TEMPLATE_PREVIEW_SAMPLES = {
     message: 'Saturday 08:55 birthday, Utrecht needs about 38.8 kWh; the battery holds 26 kWh. It will be full before you leave; the rest is driven on fuel.',
     severity: 'warning',
     fields: [{ label: 'Vehicle', value: 'Skoda' }, { label: 'Trip', value: 'Utrecht' }],
+  },
+  system_check: {
+    title: 'MQTT: topics gone quiet',
+    message: 'shellies/plug-1/relay/0/power (Kitchen plug, last 47 min ago) — normally every few minutes. Is the device or the bridge that publishes them still running?',
+    severity: 'warning',
+    fields: [],
+  },
+  energy_config: {
+    title: 'Heat pump: power use not linked',
+    message: 'Link "Meter WarmtePomp" as the heat pump\'s electric power (or give the consumer "heat pump" in the energy manager that meter) for COP, SCOP and advice.',
+    severity: 'warning',
+    fields: [{ label: 'Device', value: 'Heat pump' }],
   },
   energy_device: {
     title: 'Heat pump: legionella overdue',
@@ -475,9 +489,10 @@ async function deliverWithRetry(rule, target, event, attempt = 1) {
   }
 }
 
-async function fireRule(rule, rawEvent) {
+// record: false when the event is already in the bell (notifyBell records it once for every rule)
+async function fireRule(rule, rawEvent, { record = true } = {}) {
   const event = await applyTemplate(rawEvent, rule.trigger_type);
-  await recordNotificationEvent(event, { eventType: rule.trigger_type, ruleId: rule.id });
+  if (record) await recordNotificationEvent(event, { eventType: rule.trigger_type, ruleId: rule.id });
 
   // sendToChannel only needs { name, url }, so channels and personal subscribers collapse to the
   // same target shape and share one delivery path (and the same retry behaviour).
@@ -984,7 +999,43 @@ async function checkEnergyMeterStatus(role, label, status, detail) {
 
 // Car notifications (reminders.js / planner): fired once per `key` (e.g. "plug|2026-10-05T04:45")
 // so a reminder isn't repeated every check; `event` may carry push actions and a link.
-async function fireCarEvent(triggerType, key, event) {
+// Always in the bell, also without a rule of this type: set-up and data-quality checks are for whoever
+// looks at LoxSuite, not only for whoever made a rule. With rules, those send it (and put it in the bell);
+// without, it is recorded once per key (kept 14 days).
+// An event with English templates (event.i18n: { title: { t, p }, message: { t, p } }, see energyChecks.made)
+// is made in LoxSuite's default language — the bell, Telegram and the other channels then all show it in
+// that language. Field labels and values that are a known text are translated too. Without i18n: as given.
+function localizeEvent(event) {
+  if (!event) return event;
+  let lang;
+  try { lang = require('./i18n').defaultLanguage(); } catch { return event; }
+  if (!lang || lang === 'en') { const { i18n, ...rest } = event; return rest; }
+  const tr = (k) => require('./i18n').translate(lang, k);
+  const { fillText } = require('./energyChecks');
+  const { i18n, ...rest } = event;
+  const out = { ...rest };
+  if (i18n?.title) out.title = fillText(i18n.title.t, i18n.title.p, tr);
+  if (i18n?.message) out.message = fillText(i18n.message.t, i18n.message.p, tr);
+  if (Array.isArray(out.fields)) out.fields = out.fields.map((f) => ({ ...f, label: tr(f.label), value: typeof f.value === 'string' ? tr(f.value) : f.value }));
+  return out;
+}
+
+async function notifyBell(triggerType, key, event) {
+  event = localizeEvent(event);
+  // once in the bell, however many rules (and personal auto rules) there are; the rules then only send
+  const settings = require('./wallboxSettings');
+  const seen = await settings.get('notify_bell_keys', {}).catch(() => ({}));
+  const k = `${triggerType}|${key}`;
+  if (seen[k]) return;
+  const now = Date.now();
+  const pruned = Object.fromEntries(Object.entries(seen).filter(([, at]) => now - Date.parse(at) < 14 * 86400000));
+  await settings.set('notify_bell_keys', { ...pruned, [k]: new Date(now).toISOString() });
+  await recordNotificationEvent({ severity: 'info', timestamp: new Date(now).toISOString(), ...event }, { eventType: triggerType, ruleId: null });
+  await fireCarEvent(triggerType, key, event, { record: false });
+}
+
+async function fireCarEvent(triggerType, key, event, { record = true } = {}) {
+  event = localizeEvent(event);
   for (const rule of await getRulesByTrigger(triggerType)) {
     const cfg = JSON.parse(rule.config || '{}');
     if (cfg.vehicle_id && event.vehicleId && Number(cfg.vehicle_id) !== Number(event.vehicleId)) continue;
@@ -992,11 +1043,13 @@ async function fireCarEvent(triggerType, key, event) {
     if (state[key]) continue;
     const pruned = Object.fromEntries(Object.entries(state).filter(([, at]) => Date.now() - Date.parse(at) < 14 * 86400000));
     await updateRuleState(rule.id, { ...pruned, [key]: new Date().toISOString() });
-    await fireRule(rule, { severity: 'info', timestamp: new Date().toISOString(), ...event });
+    await fireRule(rule, { severity: 'info', timestamp: new Date().toISOString(), ...event }, { record });
   }
 }
 
 module.exports = {
+  notifyBell,
+  localizeEvent,
   dedupeTargets,
   telegramMessage,
   escapeCommonMark,

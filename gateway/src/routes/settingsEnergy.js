@@ -48,6 +48,14 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 // Days away & holidays (dayType.js).
+// Price, home & solar forecast, fuel: for anyone who may edit one of the energy functions.
+router.post('/shared', require('../middleware/requirePermission').requireAnyPermission(['charging', 'energy', 'energy_manager'], 'edit'), asyncHandler(async (req, res) => {
+  const section = String(req.body.section || '');
+  if (!(await require('../energySettings').saveShared(section, req.body))) return res.redirect('/settings/energy#prices');
+  if (require('../modules').isOn('charging')) await planner.recalc().catch(() => {});
+  res.redirect(`/settings/energy?saved=${encodeURIComponent(section)}#prices`);
+}));
+
 router.post('/day-types', require('../middleware/requirePermission').requirePermission('charging', 'edit'), asyncHandler(async (req, res) => {
   const b = req.body || {};
   const date = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');

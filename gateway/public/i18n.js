@@ -103,6 +103,17 @@
     }
     return null;
   }
+  // The same texts come back on every refresh of a page (every 5 s on the dashboard): each text is
+  // worked out once and then looked up (the server's own, already translated texts included).
+  var memo = new Map(), trRaw = tr;
+  tr = function (text, depth) {
+    if (depth) return trRaw(text, depth);
+    if (memo.has(text)) return memo.get(text);
+    var r = trRaw(text, 0);
+    if (memo.size > 20000) memo.clear();
+    memo.set(text, r);
+    return r;
+  };
   window.lsT = function (s) { var r = tr(String(s)); return r === null ? s : r; };
 
   var SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, CODE: 1, PRE: 1, KBD: 1, SAMP: 1, NOSCRIPT: 1 };

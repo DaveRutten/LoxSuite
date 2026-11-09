@@ -54,7 +54,7 @@
 </style>
 
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
-<p class="hint"><a href="/energy-manager"><%= t('← Energy manager') %></a> · <%= only === 'solar' ? t('The solar inverter, found in Loxone; limited when exporting costs money under your contract.') : t('The heat pump, found in Loxone like the Home Connect appliances. LoxSuite decides, Loxone carries it out and keeps the safety limits.') %></p>
+<%- include('partials/page-intro', { text: only === 'solar' ? t('The solar inverter from Loxone, limited when exporting costs money.') : t('LoxSuite plans the heat pump; Loxone carries it out and keeps the safety limits.'), help: only === 'solar' ? 'solar' : 'heatpump' }) %>
 
 <% function moduleHead(kind, st) { const cfg = st.cfg || {}; %>
   <div class="mm-head">
@@ -148,11 +148,32 @@
   <h2 class="en-h" style="margin-top:0;"><%- enIcon('heat', '#e67e22') %><%= t('Heat pump') %></h2>
   <% if (hpS.error) { %><p class="error"><%= hpS.error %></p><% } else { %>
   <% moduleStatus('heatpump', hpS) %>
+  <% const SGn = (hpS.suggestions || []).length; const DQp = hpS.dataQuality || { rows: [] }; const dqN = DQp.rows.filter((r) => r.value === null || r.plausible !== true || r.noStats).length + (hpS.electricFrom ? 0 : 1) + ((hpS.dataGaps || []).length ? 1 : 0); %>
+  <div class="mm-statusline" data-statusline="heatpump">
+    <div class="segmented mm-mode" role="group" aria-label="<%= t('Mode') %>">
+      <button type="button" data-mode-set="shadow" class="<%= hpS.cfg.mode !== 'live' ? 'on' : '' %>"><%= t('Shadow') %></button>
+      <button type="button" data-mode-set="live" class="<%= hpS.cfg.mode === 'live' ? 'on' : '' %>"><%= t('Live') %></button>
+    </div>
+    <span class="mm-confirm" data-mode-confirm hidden><%= t('Live: LoxSuite then sends to Loxone.') %> <button type="button" class="btn-soft" data-mode-yes><%= t('Switch to live') %></button> <button type="button" class="btn-soft" data-mode-no><%= t('Cancel') %></button></span>
+    <div class="mm-chips">
+      <% if (hpS.chosen) { %><a class="mm-chip ok" href="#instellingen" data-goto-tab="instellingen"><span class="mm-cdot"></span><%= hpS.chosen.name %><%= hpS.check && hpS.check.ok === false ? ' · ' + t('incomplete') : '' %></a><% } %>
+      <a class="mm-chip <%= dqN ? 'warn' : 'ok' %>" href="#datakwaliteit" data-goto-tab="datakwaliteit"><span class="mm-cdot"></span><%= dqN === 1 ? t('Data quality: 1 point') : dqN ? t('Data quality: {n} points', { n: dqN }) : t('Data quality: good') %></a>
+      <% if (SGn) { %><a class="mm-chip info" href="#overzicht" data-goto-tab="overzicht"><span class="mm-cdot"></span><%= t('{n} suggestions', { n: SGn }) %></a><% } %>
+      <% if (hpS.weather && hpS.weather.scop && hpS.weather.scop.scop) { %><span class="mm-chip">SCOP <%= String(hpS.weather.scop.scop).replace('.', ',') %> · <%= t('{n} days', { n: hpS.weather.scop.days }) %></span><% } %>
+    </div>
+  </div>
+  <nav class="mm-tabs" data-tabs="heatpump" aria-label="<%= t('Heat pump') %>">
+    <a href="#overzicht" data-tab-link="overzicht"><%= t('Overview') %></a>
+    <a href="#plan" data-tab-link="plan"><%= t('Plan') %></a>
+    <a href="#leren" data-tab-link="leren"><%= t('Learning & advice') %></a>
+    <a href="#datakwaliteit" data-tab-link="datakwaliteit"><%= t('Data quality') %><% if (dqN) { %> <span class="mm-tab-n"><%= dqN %></span><% } %></a>
+    <a href="#instellingen" data-tab-link="instellingen"><%= t('Settings') %></a>
+  </nav>
   <% const FE = hpS.cfg.features || {}; const hasRole = (re) => (hpS.roles || []).some((r) => re.test(r.role) && (r.read || r.write));
      const fStep = FE.power_steps !== null && FE.power_steps !== undefined ? FE.power_steps : hasRole(/^powerStep$|^powerLimit/);
      const fNtc = FE.ntc !== null && FE.ntc !== undefined ? FE.ntc : hasRole(/^ntc/); %>
   <% if (!hpS.cfg.setup_done) { %>
-  <div class="mm-sub mm-wizard" data-wizard>
+  <div class="mm-sub mm-wizard" data-wizard data-tab="overzicht">
     <h3 class="en-h3"><%- enIcon('gear', 'var(--accent)', { plain: true }) %><%= t('Set up your heat pump') %></h3>
     <p class="hint" style="margin:0 0 0.5rem;"><%= t('Not every heat pump can do the same. Three questions, so LoxSuite only shows and steers what yours has. You can change it later under Settings.') %></p>
     <div class="mm-wq"><b>1. <%= t('What kind of heat pump?') %></b>
@@ -168,7 +189,7 @@
   </div>
   <% } %>
   <% const st = hpS.state || {}; const v = hpS.values || {}; %>
-  <div class="mm-kpis">
+  <div class="mm-kpis" data-tab="overzicht">
     <div class="mm-kpi"><span class="en-kl"><%- enIcon('tank', '#3b82f6', { plain: true, size: 13 }) %><%= t('Tank') %></span><b><%= nf(st.tankC) %> °C</b><span><%= t('target') %> <%= nf(v.dhwSetpoint, 0) %> °C<%= v.dhwDrop !== undefined ? ' · ' + t('hysteresis') + ' ' + nf(v.dhwDrop, 0) + ' °C' : '' %></span></div>
     <div class="mm-kpi"><span class="en-kl"><%- enIcon('heat', '#e67e22', { plain: true, size: 13 }) %><%= t('Doing now') %></span><b><%= modeText[st.mode] || st.mode || '—' %></b><span><%= v.compressorHz !== undefined ? nf(v.compressorHz, 0) + ' Hz' : '' %><%= st.outdoorC !== null && st.outdoorC !== undefined ? ' · ' + t('outside') + ' ' + nf(st.outdoorC) + ' °C' : '' %></span></div>
     <div class="mm-kpi"><span class="en-kl"><%- enIcon('gauge', 'var(--en-export)', { plain: true, size: 13 }) %><%= t('COP now') %></span><b><%= nf(st.cop, 2) %></b><span><%= nf(st.thermalKw) %> kW <%= t('heat') %> / <%= nf(v.electricPower) %> kW</span></div>
@@ -180,12 +201,12 @@
      const sgSet = (x) => [Number.isFinite(x && x.flowC) ? t('flow {c} °C', { c: nf(x.flowC, 1) }) : null,
        fStep && x && Number.isFinite(x.step) ? (SGN[String(x.step)] || (x.step > 2 ? x.step + '%' : x.step === 0 ? t('full power') : t('step {n}', { n: x.step }))) : null,
        fNtc && x && Number.isFinite(x.ntc) ? (SGT[String(x.ntc)] || (x.ntc > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(x.ntc, 0) }) : x.ntc === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: x.ntc }))) : null].filter(Boolean).join(' · '); %>
-  <details class="mm-sub" data-suggestions open><summary class="mm-sug-head"><strong class="en-h3"><%- enIcon('bulb', 'var(--accent)', { plain: true }) %><%= t('Suggestions') %></strong> <span class="mm-sum"><%= SG.length ? '· ' + SG.length + ' — ' + [...new Set(SG.map((g) => ({ comfort: t('Comfort'), energy: t('Energy'), efficiency: t('Efficiency') }[g.kind])))].join(', ').toLowerCase() : '· ' + t('nothing to improve') %></span></summary>
+  <details class="mm-sub" data-suggestions open data-tab="overzicht"><summary class="mm-sug-head"><strong class="en-h3"><%- enIcon('bulb', 'var(--accent)', { plain: true }) %><%= t('Suggestions') %></strong> <span class="mm-sum"><%= SG.length ? '· ' + SG.length + ' — ' + [...new Set(SG.map((g) => ({ comfort: t('Comfort'), energy: t('Energy'), efficiency: t('Efficiency') }[g.kind])))].join(', ').toLowerCase() : '· ' + t('nothing to improve') %></span></summary>
     <% if (SG.length) { %><div class="mm-sugs" style="margin-top:0.4rem;"><% SG.forEach((g) => { %><div class="mm-sug mm-sug-<%= g.kind %>"><span class="mm-sug-k"><%= { comfort: t('Comfort'), energy: t('Energy'), efficiency: t('Efficiency') }[g.kind] %></span><span><%= t(g.text, Object.fromEntries(Object.entries(g.params || {}).map(([k, v]) => [k, k === 'setting' ? sgSet(v) : v && typeof v === 'object' && 'min' in v ? dur(v.min) : typeof v === 'number' ? nf(v, Number.isInteger(v) ? 0 : (k === 'cop' || k === 's' ? 2 : 1)) : tr(String(v))]))) %></span></div><% }) %></div>
     <% } else { %><p class="mm-sum" style="margin:0.3rem 0 0;"><%= t('Nothing to improve right now — it runs as well as it has learned.') %></p><% } %>
   </details>
 
-  <div class="mm-sub"><h3 class="en-h3"><%- enIcon('chart', 'var(--en-price)', { plain: true }) %><%= hpS.cooling ? t('Plan: cooling and tap water, next 24 hours') : t('Plan: heating and tap water, next 24 hours') %></h3>
+  <div class="mm-sub" data-tab="plan"><h3 class="en-h3"><%- enIcon('chart', 'var(--en-price)', { plain: true }) %><%= hpS.cooling ? t('Plan: cooling and tap water, next 24 hours') : t('Plan: heating and tap water, next 24 hours') %></h3>
     <p class="hint" style="margin:0;">
       <% if ((hpS.plan || []).some((h) => h.estimated)) { %> <%= t('No prices yet: estimated.') %><% } %>
     </p>
@@ -204,7 +225,7 @@
   </div>
 
   <% const RP = hpS.report || []; const RN = RP[RP.length - 1]; const RY = RP.slice(-12); const sumY = (k) => RY.reduce((a, m) => a + (m[k] || 0), 0); %>
-  <div class="mm-sub" data-report><h3 class="en-h3"><%- enIcon('euro', 'var(--en-export)', { plain: true }) %><%= t('What it brought') %></h3>
+  <div class="mm-sub" data-report data-tab="overzicht"><h3 class="en-h3"><%- enIcon('euro', 'var(--en-export)', { plain: true }) %><%= t('What it brought') %></h3>
     <% if (RN) { %><div class="mm-kpis">
       <div class="mm-kpi"><span><%= t('Saved this month') %></span><b><%= RN.pricedShare > 0 ? '€ ' + nf(RN.savedEur, 2) : '—' %></b><span><%= t('against the same kWh at the day\'s average price') %></span></div>
       <div class="mm-kpi"><span><%= t('Heat pump this month') %></span><b><%= nf(RN.elecKwh, 0) %> kWh</b><span><%= RN.pricedShare > 0 ? '€ ' + nf(RN.costEur, 2) + ' · ' : '' %>SCOP <%= nf(RN.scop, 2) %></span></div>
@@ -216,7 +237,7 @@
     <% } else { %><p class="mm-sum" style="margin:0;"><%= t('Builds up from now on: power, heat, SCOP and costs per month.') %></p><% } %>
   </div>
 
-  <div class="mm-sub" data-tapwater><h3 class="en-h3"><%- enIcon('drop', '#3b82f6', { plain: true }) %><%= t('Tap water') %></h3>
+  <div class="mm-sub" data-tapwater data-tab="plan"><h3 class="en-h3"><%- enIcon('drop', '#3b82f6', { plain: true }) %><%= t('Tap water') %></h3>
     <% const LR = hpS.learned || {}; const nextDhw = (hpS.plan || []).find((h) => h.does === 'dhw' || h.does === 'legionella'); const LMT = hpS.cfg.limits || {}; %>
     <div class="mm-kpis">
       <div class="mm-kpi"><span><%= t('Tank now') %></span><b><%= nf(st.tankC) %> °C</b><span><%= t('target') %> <%= nf(LMT.targetC, 0) %> °C · <%= t('never below') %> <%= nf(LMT.comfortMinC, 0) %> °C</span></div>
@@ -232,7 +253,7 @@
     </details>
   </div>
 
-  <div class="mm-sub" data-room><h3 class="en-h3"><%- enIcon('thermo', '#e67e22', { plain: true }) %><%= t('Room temperature') %></h3>
+  <div class="mm-sub" data-room data-tab="plan"><h3 class="en-h3"><%- enIcon('thermo', '#e67e22', { plain: true }) %><%= t('Room temperature') %></h3>
     <% const RC = hpS.cfg.room || {}; const rp = hpS.room; %>
     <div class="mm-toggle mm-master"><label class="switch"><input type="checkbox" id="mm-r-enabled" data-r="enabled" <%= RC.enabled ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-r-enabled"><%= t('Plan the room temperature (pre-heat in time for comfort)') %></label></div>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-top:0.4rem;">
@@ -261,7 +282,7 @@
     <p class="hint" style="margin:0.3rem 0 0;"><%= t('Tap water is planned right before or after pre-heating the room, never in between.') %></p>
   </div>
 
-  <div class="mm-sub" data-tuning><h3 class="en-h3"><%- enIcon('tune', 'var(--accent)', { plain: true }) %><%= t('Fine-tuning for long, calm runs') %></h3>
+  <div class="mm-sub" data-tuning data-tab="leren"><h3 class="en-h3"><%- enIcon('tune', 'var(--accent)', { plain: true }) %><%= t('Fine-tuning for long, calm runs') %></h3>
     <% const TU = hpS.tuning || {}; const TC = hpS.cfg.tuning || {}; const SN2 = hpS.cfg.step_names || {}, NN2 = hpS.cfg.ntc_names || {}; const stepTxt = (v) => (v === null || v === undefined ? null : SN2[String(v)] || (v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v })));
     const ntcTxt = (v) => (v === null || v === undefined ? null : NN2[String(v)] || (v > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(v, 0) }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v })));
     const setTxt = (x) => x ? [Number.isFinite(x.flowC) ? t('flow {c} °C', { c: nf(x.flowC, 1) }) : null, fStep ? stepTxt(x.step) : null, fNtc ? ntcTxt(x.ntc) : null].filter((y) => y !== null && y !== undefined).join(' · ') : '—'; %>
@@ -281,7 +302,7 @@
     <p class="hint" style="margin:0.3rem 0 0;"><%= t('Per weather it learns which flow temperature, power step and outdoor-sensor setting give the longest runs with the least power per kWh of heat and the fewest defrosts. With a lot of defrosting it tries a calmer setting — never while the room is behind.') %></p>
   </div>
 
-  <div class="mm-sub"><h3 class="en-h3"><%- enIcon('snow', '#06b6d4', { plain: true }) %><%= t('Weather and defrosting') %></h3>
+  <div class="mm-sub" data-tab="leren"><h3 class="en-h3"><%- enIcon('snow', '#06b6d4', { plain: true }) %><%= t('Weather and defrosting') %></h3>
     <% const W = hpS.weather || {}; const bins = Object.values((W.model && W.model.bins) || {}).sort((a, b) => a.t - b.t || a.band.localeCompare(b.band)); const SC2 = W.scop || {}; const seenH = bins.reduce((a, b) => a + (b.hours || 0), 0); %>
     <div class="mm-kpis">
       <div class="mm-kpi"><span><%= t('This hour') %></span><b>COP ~<%= W.now ? nf(W.now.cop, 1) : '—' %></b><span><%= W.now && W.now.outdoorC !== null && W.now.outdoorC !== undefined ? nf(W.now.outdoorC) + ' °C' : '' %><%= W.now && W.now.rh ? ' · ' + nf(W.now.rh, 0) + '% ' + t('humidity') : '' %><%= W.now && W.now.defrost > 0.02 ? ' · ' + t('defrosting ~{p}% of the time', { p: Math.round(W.now.defrost * 100) }) : '' %></span></div>
@@ -294,7 +315,7 @@
   </div>
 
   <% if (fStep || fNtc) { %>
-  <div class="mm-sub"><h3 class="en-h3"><%- enIcon('bolt', 'var(--en-solar)', { plain: true }) %><%= fStep && fNtc ? t('Power steps and outdoor sensor (NTC)') : fStep ? t('Power steps') : t('Outdoor sensor (NTC)') %></h3>
+  <div class="mm-sub" data-tab="leren"><h3 class="en-h3"><%- enIcon('bolt', 'var(--en-solar)', { plain: true }) %><%= fStep && fNtc ? t('Power steps and outdoor sensor (NTC)') : fStep ? t('Power steps') : t('Outdoor sensor (NTC)') %></h3>
     <% const steps = (W.steps || []); const SN = hpS.cfg.step_names || {}, NN = hpS.cfg.ntc_names || {};
        const stTxt = (v) => SN[String(v)] || (v > 2 ? v + '%' : v === 0 ? t('full power') : t('step {n}', { n: v }));
        const ntTxt = (v) => NN[String(v)] || (v > 2 ? t('outdoor sensor fixed at {c} °C', { c: nf(v, 0) }) : v === 0 ? t('real outdoor temperature') : t('outdoor sensor fixed ({n})', { n: v }));
@@ -320,7 +341,26 @@
   </div>
   <% } %>
 
-  <details class="mm-sub mm-settings"><summary style="cursor:pointer;"><strong class="en-h3"><%- enIcon('gear', 'var(--text-muted)', { plain: true }) %><%= t('Settings') %></strong> <span class="hint" style="margin:0;">— <%= t('device, link with Loxone, limits, legionella') %></span></summary>
+  <% const DQ = hpS.dataQuality || { rows: [] }; const dqBad = DQ.rows.filter((r) => r.value === null || r.plausible !== true || r.noStats).length + (hpS.electricFrom ? 0 : 1) + ((hpS.dataGaps || []).length ? 1 : 0); const ACC = hpS.accuracy || {}; %>
+  <details class="mm-sub" data-quality data-tab="datakwaliteit"><summary style="cursor:pointer;"><strong class="en-h3"><%- enIcon('gauge', 'var(--text-muted)', { plain: true }) %><%= t('Data quality') %></strong> <span class="hint" style="margin:0;">— <%= dqBad ? t('{n} points to check', { n: dqBad }) : t('everything reads well') %></span></summary>
+    <div class="ls-tiles" style="margin:0.6rem 0;">
+      <div class="ls-tile"><div class="ls-tile-label"><%= t('Electric power from') %></div><div class="ls-tile-value" style="font-size:1rem;"><%= hpS.electricFrom === 'module' ? t('the module') : hpS.electricFrom === 'consumer' ? t('the consumer "heat pump"') : t('not linked') %></div><div class="ls-tile-sub"><%= hpS.electricFrom ? t('for COP, SCOP and advice') : t('no COP, SCOP or advice without it') %></div></div>
+      <div class="ls-tile"><div class="ls-tile-label"><%= t('Data gaps (7 days)') %></div><div class="ls-tile-value"><%= (hpS.dataGaps || []).length %></div><div class="ls-tile-sub"><%= (hpS.dataGaps || []).length ? t('longest {m} min', { m: Math.max(...hpS.dataGaps.map((g) => g.min)) }) : t('none') %></div></div>
+      <div class="ls-tile"><div class="ls-tile-label"><%= t('Room an hour ahead') %></div><div class="ls-tile-value"><%= ACC.room && ACC.room.h1 && ACC.room.h1.n >= 12 ? Math.round(ACC.room.h1.within * 100) + '%' : '—' %></div><div class="ls-tile-sub"><%= ACC.room && ACC.room.h1 && ACC.room.h1.n ? t('within 0.5 °C · {n} hours', { n: ACC.room.h1.n }) : t('not compared yet') %></div></div>
+      <div class="ls-tile"><div class="ls-tile-label"><%= t('Tank an hour ahead') %></div><div class="ls-tile-value"><%= ACC.tank && ACC.tank.h1 && ACC.tank.h1.n >= 12 ? Math.round(ACC.tank.h1.within * 100) + '%' : '—' %></div><div class="ls-tile-sub"><%= ACC.tank && ACC.tank.h1 && ACC.tank.h1.n ? t('within 3 °C · {n} hours', { n: ACC.tank.h1.n }) : t('not compared yet') %></div></div>
+    </div>
+    <div style="overflow-x:auto;"><table class="mm-log"><thead><tr><th><%= t('Role') %></th><th><%= t('Loxone object') %></th><th class="num"><%= t('Now') %></th><th><%= t('Plausible') %></th><th><%= t('Statistics in Loxone') %></th></tr></thead><tbody>
+      <% DQ.rows.forEach((r) => { %>
+        <tr><td><%= t(r.label) %></td><td class="hint"><%= r.name || '' %></td><td class="num"><%= r.value === null ? '—' : (typeof r.value === 'number' ? Math.round(r.value * 100) / 100 : r.value) %><%= r.value !== null && r.unit ? ' ' + r.unit : '' %></td>
+          <td><% if (r.value === null) { %><span style="color:var(--warning, #d4a017);"><%= t('no value') %></span><% } else if (r.plausible === true) { %><span style="color:var(--success);">✓</span><% } else { %><span style="color:var(--danger);"><%= tr(r.plausible) %></span><% } %></td>
+          <td><%= !DQ.history ? '—' : r.noStats ? t('none') : '✓' %></td></tr>
+      <% }) %>
+      <% if (!DQ.rows.length) { %><tr><td colspan="5" class="hint"><%= t('Nothing linked yet.') %></td></tr><% } %>
+    </tbody></table></div>
+    <p class="hint" style="margin:0.4rem 0 0;"><%= DQ.history ? t('Statistics as found by "Read history" on {d}.', { d: formatDateTime(DQ.history.at) }) : t('Statistics: use "Read history" once to see which values Loxone keeps.') %></p>
+  </details>
+  <details class="mm-sub mm-settings" data-tab="instellingen" data-settings-menu><summary style="cursor:pointer;"><strong class="en-h3"><%- enIcon('gear', 'var(--text-muted)', { plain: true }) %><%= t('Settings') %></strong> <span class="hint" style="margin:0;">— <%= t('device, link with Loxone, limits, legionella') %></span></summary>
+  <h3 class="en-h3" data-menu-title><%- enIcon('link', 'var(--text-muted)', { plain: true }) %><%= t('Device & link') %></h3>
   <% moduleHead('heatpump', hpS) %>
   <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:0.5rem;">
     <div><label><%= t('What it has') %></label><p class="hint" style="margin:0.2rem 0 0;"><%= [fStep ? t('power steps') : null, fNtc ? t('fake outdoor sensor (NTC)') : null].filter(Boolean).join(' · ') || t('no power steps, no NTC') %> — <a href="#" data-wizard-again><%= t('set up again') %></a></p></div>
@@ -338,6 +378,13 @@
       <div><label><%= t('Absolute maximum (°C)') %></label><input type="text" data-l="absoluteMaxC" value="<%= L.absoluteMaxC %>"><p class="hint" style="margin:0.2rem 0 0;"><%= t('except legionella') %></p></div>
     </div>
     <div class="mm-toggle"><label class="switch"><input type="checkbox" id="mm-l-boosterForBuffer" data-l="boosterForBuffer" <%= L.boosterForBuffer ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-l-boosterForBuffer"><%= t('Use the booster for the buffer on solar surplus') %></label></div>
+    <div class="mm-toggle"><label class="switch"><input type="checkbox" id="mm-l-setpointModes" data-l="setpointModes" data-show-if-src <%= L.setpointModes ? 'checked' : '' %>><span class="switch-track"><span class="switch-thumb"></span></span></label><label for="mm-l-setpointModes"><%= t('My Loxone logic reads the setpoint as a mode') %></label></div>
+    <div class="form-grid" data-setpoint-modes style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));<%= L.setpointModes ? '' : ' display:none;' %>">
+      <div><label><%= t('No action (°C)') %></label><input type="text" data-l="setpointHold" value="<%= L.setpointHold ?? 40 %>"><p class="hint" style="margin:0.2rem 0 0;"><%= t('the logic does nothing at or below this') %></p></div>
+      <div><label><%= t('Normal (°C)') %></label><input type="text" data-l="setpointNormal" value="<%= L.setpointNormal ?? 52 %>"><p class="hint" style="margin:0.2rem 0 0;"><%= t('a planned tap-water hour') %></p></div>
+      <div><label><%= t('Solar / legionella (°C)') %></label><input type="text" data-l="setpointHigh" value="<%= L.setpointHigh ?? 60 %>"><p class="hint" style="margin:0.2rem 0 0;"><%= t('buffer on solar and the legionella cycle') %></p></div>
+    </div>
+    <script>(function () { var c = document.getElementById('mm-l-setpointModes'), g = document.querySelector('[data-setpoint-modes]'); if (c && g) c.addEventListener('change', function () { g.style.display = c.checked ? '' : 'none'; }); })();</script>
     <% (hpS.warnings || []).forEach((w) => { %><div class="mm-warn"><%= tr(w) %></div><% }) %>
   </div>
 
@@ -673,6 +720,84 @@
   }
 
   // the setup wizard: what this heat pump has
+  // Heat pump: tabs instead of one long page. The tab is in the address (#plan …) so a link from a
+  // notification opens the right one; the last one is remembered per browser.
+  (function () {
+    var card = document.querySelector('[data-module="heatpump"]');
+    var nav = card && card.querySelector('[data-tabs]');
+    if (!nav) return;
+    var names = ['overzicht', 'plan', 'leren', 'datakwaliteit', 'instellingen'];
+    function show(name, push) {
+      if (names.indexOf(name) < 0) name = 'overzicht';
+      card.querySelectorAll('[data-tab]').forEach(function (el) { el.hidden = el.getAttribute('data-tab') !== name; });
+      nav.querySelectorAll('[data-tab-link]').forEach(function (a) { a.classList.toggle('on', a.getAttribute('data-tab-link') === name); a.setAttribute('aria-current', a.getAttribute('data-tab-link') === name ? 'page' : 'false'); });
+      // in their own tab the folded blocks are open
+      if (name === 'datakwaliteit' || name === 'instellingen') card.querySelectorAll('[data-tab="' + name + '"]').forEach(function (d) { if (d.tagName === 'DETAILS') d.open = true; });
+      try { localStorage.setItem('ls-hp-tab', name); } catch (e) { /* no storage */ }
+      if (push && location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+    }
+    var start = (location.hash || '').slice(1);
+    if (names.indexOf(start) < 0) { try { start = localStorage.getItem('ls-hp-tab') || 'overzicht'; } catch (e) { start = 'overzicht'; } }
+    show(start, false);
+    nav.addEventListener('click', function (e) { var a = e.target.closest('[data-tab-link]'); if (!a) return; e.preventDefault(); show(a.getAttribute('data-tab-link'), true); });
+    card.querySelectorAll('[data-goto-tab]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); show(a.getAttribute('data-goto-tab'), true); nav.scrollIntoView({ block: 'nearest' }); }); });
+    window.addEventListener('hashchange', function () { show((location.hash || '').slice(1), false); });
+
+    // Shadow / Live at the top: sets the mode field in Settings, which saves itself (autosave). Live asks first.
+    var sel = card.querySelector('select[data-f="mode"]');
+    var conf = card.querySelector('[data-mode-confirm]');
+    function setMode(v) {
+      if (!sel) return;
+      sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true }));
+      card.querySelectorAll('[data-mode-set]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-mode-set') === v); });
+      if (conf) conf.hidden = true;
+    }
+    card.querySelectorAll('[data-mode-set]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-mode-set');
+        if (sel && sel.value === v) return;
+        if (v === 'live' && conf) { conf.hidden = false; return; }
+        setMode(v);
+      });
+    });
+    var yes = card.querySelector('[data-mode-yes]'), no = card.querySelector('[data-mode-no]');
+    if (yes) yes.addEventListener('click', function () { setMode('live'); });
+    if (no) no.addEventListener('click', function () { conf.hidden = true; });
+    if (sel) sel.addEventListener('change', function () { card.querySelectorAll('[data-mode-set]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-mode-set') === sel.value); }); });
+
+    // Settings: a short menu of its own sections on the left, built from their headings
+    var set = card.querySelector('[data-settings-menu]');
+    if (set && !set.querySelector('.mm-setmenu')) {
+      var heads = [];
+      Array.prototype.forEach.call(set.children, function (ch) {
+        var h = ch.matches && ch.matches('h3') ? ch : (ch.querySelector && ch.querySelector(':scope > h3, :scope > summary strong'));
+        if (!h || ch.tagName === 'SUMMARY') return;
+        var label = h.textContent.replace(/\s+/g, ' ').trim();
+        if (!label) return;
+        var target = ch;
+        if (!target.id) target.id = 'set-' + heads.length;
+        heads.push({ id: target.id, label: label.split(' — ')[0].replace(/optioneel.*$|optional.*$/i, '').trim() });
+      });
+      if (heads.length > 2) {
+        var menu = document.createElement('nav');
+        menu.className = 'mm-setmenu';
+        heads.forEach(function (h, i) {
+          var a = document.createElement('a'); a.href = '#' + h.id; a.textContent = h.label; if (!i) a.className = 'on';
+          a.addEventListener('click', function (e) { e.preventDefault(); var t = document.getElementById(h.id); if (t.tagName === 'DETAILS') t.open = true; t.scrollIntoView({ block: 'start', behavior: 'smooth' }); menu.querySelectorAll('a').forEach(function (x) { x.classList.toggle('on', x === a); }); });
+          menu.appendChild(a);
+        });
+        var summary = set.querySelector(':scope > summary');
+        // the sections in one column next to the menu
+        var body = document.createElement('div');
+        body.className = 'mm-setbody';
+        Array.prototype.slice.call(set.children).forEach(function (ch) { if (ch !== summary) body.appendChild(ch); });
+        // a <details> doesn't lay its own children out as a grid: one wrapper does
+        var grid = document.createElement('div'); grid.className = 'mm-setgrid';
+        grid.appendChild(menu); grid.appendChild(body); set.appendChild(grid);
+        set.classList.add('mm-has-menu');
+      }
+    }
+  })();
   var wz = document.querySelector('[data-wizard-done]');
   function wizardPost(body) {
     return fetch('/energy-manager/modules/heatpump.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
@@ -734,7 +859,7 @@
       });
     });
   });
-  var L = <%- JSON.stringify({ searching: t('Reading the Loxone structure of every Miniserver again…'), found: t('{n} found; structure read from: {ms}.'), busy: t('Reading the statistics of the linked objects…'), done: t('Read {n} days: {roles}. Without statistics in Loxone: {without}.'), none: t('none') }) %>;
+  var L = <%- JSON.stringify({ searching: t('Reading the Loxone structure of every Miniserver again…'), found: t('{n} found; structure read from: {ms}.'), busy: t('Reading the statistics of the linked objects…'), done: t('Read {n} days: {roles}. Without statistics in Loxone: {without}.'), none: t('none'), reload: t('Reload the page') }) %>;
   document.querySelectorAll('[data-history]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var kind = btn.getAttribute('data-history'), msg = document.querySelector('[data-history-msg="' + kind + '"]');
@@ -744,7 +869,9 @@
           btn.disabled = false;
           if (!j.ok) { msg.textContent = j.message || 'Error'; return; }
           var roles = Object.keys(j.roles || {}); msg.textContent = L.done.replace('{n}', '14').replace('{roles}', roles.length ? roles.join(', ') : L.none).replace('{without}', (j.without || []).length ? j.without.join(', ') : L.none);
-          setTimeout(function () { location.reload(); }, 2500);
+          // the list of values without statistics stays readable: only reload by itself when there is none
+          if ((j.without || []).length) { var rl = document.createElement('a'); rl.href = '#'; rl.textContent = ' ' + L.reload; rl.onclick = function (e) { e.preventDefault(); location.reload(); }; msg.appendChild(rl); }
+          else setTimeout(function () { location.reload(); }, 2500);
         });
     });
   });

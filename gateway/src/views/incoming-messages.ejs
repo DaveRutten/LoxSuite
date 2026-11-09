@@ -1,6 +1,7 @@
-<%- include('partials/head', { pageTitle: 'Live Data', active: 'incoming', refresh: 5, liveSwap: true }) %>
+<%- include('partials/head', { pageTitle: 'MQTT messages', active: 'incoming', refresh: 5, liveSwap: true }) %>
 
-<p class="hint">
+<%- include('partials/page-intro', { text: t('Every MQTT topic seen since the start, newest first.'), more: true }) %>
+<p class="hint page-intro-more" data-hint-keep hidden>
   <strong><%= topics.length %> <%= t('topic') %><%= topics.length === 1 ? '' : 's' %></strong> <%= t('seen since the gateway started. Refreshes every 5 seconds, one row per topic, most recently updated on top — the') %>
   <strong><%= t('Previous value') %></strong> <%= t('column shows what changed. In-memory only, so this clears on a gateway restart.') %>
 </p>

@@ -9,6 +9,21 @@ const em = require('../energyManager');
 const router = express.Router();
 const num = (v, def = null) => { if (v === undefined || v === null || String(v).trim() === '') return def; const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : def; };
 
+// The own-energy figures of the last 30 days for a tile (selfUse.js), at most every 10 minutes.
+let ownCache = null;
+async function ownEnergyCached() {
+  if (ownCache && Date.now() - ownCache.at < 10 * 60000) return ownCache.val;
+  const o = await require('../selfUse').overview(30);
+  const val = o && o.hasGrid && o.hasSolar && o.totals.days ? { ...o.totals } : null;
+  // the 30 days before, to compare with (Home: ▲▼)
+  if (val) {
+    const prev = await require('../selfUse').overview(30, Date.now() - 30 * 86400000).catch(() => null);
+    val.prevSelfRate = prev && prev.totals && prev.totals.days >= 7 ? prev.totals.selfRate : null;
+  }
+  ownCache = { at: Date.now(), val };
+  return val;
+}
+
 router.get('/', asyncHandler(async (req, res) => {
   const loads = await em.listLoads();
   // the heat pump and the solar panels as devices on the overview (details behind a click)
@@ -20,7 +35,11 @@ router.get('/', asyncHandler(async (req, res) => {
   }
   let meters = [];
   try { meters = (await require('../energyMeters').candidateMeters()).filter((m) => m.type === 'Meter'); } catch { meters = []; }
+  // what needs attention (set-up, data, the devices) and the own-energy tile (cached 10 min)
+  const attention = await require('./notificationCenter').attentionFor(req.user.id, ['energy_config', 'energy_device', 'energy_meter_status']);
+  const own = await ownEnergyCached().catch(() => null);
   res.render('energy-manager', {
+    attention, own,
     loads: loads.map((l) => ({ ...l, signals: (em.KINDS[l.kind]?.signals || []).map((s) => ({ ...s, vi: em.viName(l, s) })) })),
     devices, priceDay: await require('../prices').priceSummary().catch(() => null), kinds: em.KINDS, meters, miniservers: await db.prepare('SELECT id, name FROM miniservers ORDER BY sort_order, id').all().catch(() => []), cfg: await em.getConfig(), saved: req.query.saved || null, error: req.query.error || null,
   });
@@ -297,7 +316,7 @@ router.get('/modules/:kind', asyncHandler(async (req, res, next) => {
   if (!kindOk(req.params.kind)) return next();
   const kind = req.params.kind;
   // the status of the last minute (made fresh after a save): the page doesn't wait for the learning
-  const st = await mods().statusCached(kind, 60000).catch((e) => ({ error: e.message }));
+  const st = await mods().statusCached(kind, 75000).catch((e) => ({ error: e.message }));
   const reasons = require('../reasonText');
   res.render('energy-manager-modules', { only: kind, heatpump: kind === 'heatpump' ? st : {}, solar: kind === 'solar' ? st : {}, saved: req.query.saved || null, roles: require('../energyTypes').ROLES, tr: (r) => reasons.tr(res.locals.t, r) });
 }));
@@ -349,7 +368,10 @@ router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), 
   if (kind === 'heatpump' && b.limits) {
     const checked = require('../legionella').dhwLimits(Object.fromEntries(['comfortMinC', 'targetC', 'bufferMaxC', 'hpMaxC', 'absoluteMaxC'].map((k) => [k, num(b.limits[k])]).concat([['boosterForBuffer', !!b.limits.boosterForBuffer]])));
     const limits = checked.limits;
-    c.limits = { comfortMinC: limits.comfortMinC, targetC: limits.targetC, bufferMaxC: Number(num(b.limits.bufferMaxC, limits.bufferMaxC)), hpMaxC: limits.hpMaxC, absoluteMaxC: limits.absoluteMaxC, boosterForBuffer: limits.boosterForBuffer };
+    c.limits = { comfortMinC: limits.comfortMinC, targetC: limits.targetC, bufferMaxC: Number(num(b.limits.bufferMaxC, limits.bufferMaxC)), hpMaxC: limits.hpMaxC, absoluteMaxC: limits.absoluteMaxC, boosterForBuffer: limits.boosterForBuffer,
+      // the own Loxone logic reads the tap-water setpoint as a mode switch (e.g. ≤ 40 nothing, 52 normal,
+      // 60 solar / legionella): then only these three values are written
+      setpointModes: !!b.limits.setpointModes, setpointHold: num(b.limits.setpointHold, 40), setpointNormal: num(b.limits.setpointNormal, 52), setpointHigh: num(b.limits.setpointHigh, 60) };
     c._warnings = checked.warnings;
   }
   // own names per value seen (a step 0–2, a percentage, an NTC temperature): { "14": "Fake 14 graden" }
@@ -382,7 +404,12 @@ router.post('/modules/:kind.json', requirePermission('energy_manager', 'edit'), 
 // The history of the linked objects that keep statistics in Loxone, so learning doesn't start from zero.
 router.post('/modules/:kind/history.json', requirePermission('energy_manager', 'edit'), asyncHandler(async (req, res) => {
   if (!kindOk(req.params.kind)) return res.status(404).json({ ok: false, message: 'Unknown module' });
-  try { res.json({ ok: true, ...(await mods().importStatistics(req.params.kind, { days: num(req.body?.days, 14) })) }); } catch (err) { res.json({ ok: false, message: err.message }); }
+  try {
+    const out = await mods().importStatistics(req.params.kind, { days: num(req.body?.days, 14) });
+    // kept, so the data checks (energyChecks.js) can say which linked values have no statistics in Loxone
+    await require('../wallboxSettings').set(`energy_history_${req.params.kind}`, { at: new Date().toISOString(), without: out.without || [], roles: out.roles || {} }).catch(() => {});
+    res.json({ ok: true, ...out });
+  } catch (err) { res.json({ ok: false, message: err.message }); }
 }));
 
 // A Loxone Modbus template (.LxAddon from the Library, or .xml) as an own type, the backup when the
@@ -408,3 +435,4 @@ router.post('/modules/:kind/import.json', requirePermission('energy_manager', 'e
 }));
 
 module.exports = router;
+module.exports.ownEnergyCached = ownEnergyCached;

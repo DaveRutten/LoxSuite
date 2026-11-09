@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: 'Energy manager', active: 'energymanager' }) %>
+<%- include('partials/head', { pageTitle: 'Energy now', active: 'energymanager' }) %>
 
 <% if (saved) { %><p class="hint" style="color: var(--success);"><%= t('Saved.') %></p><% } %>
 <% if (error) { %><p class="error"><%= error %></p><% } %>
@@ -7,6 +7,36 @@
 <% const nfx = (v, d = 1) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }));
    const HP = (devices && devices.heatpump) || {}, SO = (devices && devices.solar) || {}; %>
 <% if (typeof priceDay !== 'undefined' && priceDay && priceDay.min !== null) { const hm2 = (iso) => (iso ? new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: displayTimezone || 'UTC' }) : ''); %><p class="em-price-day"><%- enIcon('euro', 'var(--en-price)', { plain: true, size: 15 }) %><span><%= t('Price today') %>: <%= t('now') %> <strong>€ <%= nfx(priceDay.now, 3) %></strong></span><span class="en-lo" title="<%= t('lowest today') %>"><svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M5 9L0.5 2h9z" fill="currentColor"/></svg> € <%= nfx(priceDay.min, 3) %> <small><%= hm2(priceDay.minAt) %></small></span><span class="en-hi" title="<%= t('highest today') %>"><svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M5 1l4.5 7h-9z" fill="currentColor"/></svg> € <%= nfx(priceDay.max, 3) %> <small><%= hm2(priceDay.maxAt) %></small></span><span><%= t('average') %> € <%= nfx(priceDay.avg, 3) %></span><% if (priceDay.source === 'loxone') { %><span class="em-src"><%= t('from the Spot Price Optimizer') %></span><% } %></p><% } %>
+<% const ATT = typeof attention !== 'undefined' ? attention : []; %>
+<div class="card em-attn" data-attention>
+  <% if (!ATT.length) { %>
+    <p class="em-attn-ok"><span class="mm-cdot"></span><%= t('Nothing needs attention: links, data and devices are fine.') %> <a href="/notifications"><%= t('All notifications') %> &rarr;</a></p>
+  <% } else { %>
+    <h2 class="en-h" style="margin:0;"><%- enIcon('bulb', 'var(--warning, #d4a017)') %><%= t('Attention') %> <span class="em-attn-n"><%= ATT.length %></span></h2>
+    <div class="em-attn-list">
+      <% ATT.forEach((e) => { const link = notificationSourceLink(e.event_type, e.source_id, canView, e.source_ref); %>
+        <div class="em-attn-row" data-attn-id="<%= e.id %>">
+          <span class="em-sev em-sev-<%= e.severity %>"><%= t({ critical: 'critical', error: 'error', warning: 'warning' }[e.severity] || e.severity) %></span>
+          <div class="em-attn-txt"><strong><%= t(e.title) %></strong><span><%= t(e.message) %></span></div>
+          <div class="em-attn-act">
+            <% if (link) { %><a class="btn-soft" href="<%= link %>"><%= t('Open') %> &rarr;</a><% } %>
+            <button type="button" class="btn-soft" data-attn-done title="<%= t('Remove from this list') %>"><%= t('Done') %></button>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+    <p class="hint" style="margin:0.4rem 0 0;"><a href="/notifications"><%= t('All notifications') %> &rarr;</a></p>
+  <% } %>
+</div>
+<script>
+  document.querySelectorAll('[data-attn-done]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var row = b.closest('[data-attn-id]');
+      fetch('/notifications/' + row.getAttribute('data-attn-id') + '/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      row.remove();
+    });
+  });
+</script>
 <div class="em-devices">
   <a class="card em-device" href="/energy-manager/modules/heatpump">
     <div class="em-dev-head"><h2 class="en-h" style="margin:0;"><%- enIcon('heat', '#e67e22') %><%= t('Heat pump') %></h2><% if (HP.state) { %><span class="em-dev-sum"><%= { dhw: t('Tap water'), heating: t('Heating'), idle: t('Idle'), defrost: t('Defrosting'), fault: t('Fault') }[HP.state.mode] || HP.state.mode %></span><% } %><% if (!(HP.cfg && HP.cfg.enabled)) { %><span class="badge badge-off"><%= t('off') %></span><% } %></div>
@@ -27,8 +57,35 @@
       <div><span><%= t('Limit') %></span><b><%= SO.limit.pct %> %</b></div>
     </div><% } else { %><p class="hint" style="margin:0.3rem 0 0;" data-hint-keep><%= t('Switch it on in its settings to limit the inverter when exporting costs money.') %></p><% } %>
   </a>
+  <% if (typeof own !== 'undefined' && own) { %>
+  <a class="card em-device" href="/energy/own">
+    <div class="em-dev-head"><h2 class="en-h" style="margin:0;"><%- enIcon('sun', 'var(--en-solar)') %><%= t('Own energy') %></h2><span class="em-dev-sum"><%= t('30 days') %></span></div>
+    <div class="em-own">
+      <div><small><%= t('Used yourself') %></small><b><%= own.selfRate === null ? '—' : Math.round(own.selfRate * 100) + ' %' %></b></div>
+      <div><small><%= t('Self-sufficient') %></small><b><%= own.autarky === null ? '—' : Math.round(own.autarky * 100) + ' %' %></b></div>
+      <div><small><%= t('To the grid') %></small><b><%= nfx(own.exportKwh, 0) %> kWh</b></div>
+    </div>
+  </a>
+  <% } %>
 </div>
 <style>
+  .em-attn { margin-bottom: 1rem; }
+  .em-attn-ok { margin: 0; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; color: var(--success); font-size: 0.9rem; }
+  .em-attn-ok a { color: var(--text-muted); margin-left: auto; }
+  .em-attn-n { font-size: 0.75rem; padding: 0.05rem 0.5rem; border-radius: 999px; background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
+  .em-attn-list { display: flex; flex-direction: column; margin-top: 0.6rem; }
+  .em-attn-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; padding: 0.6rem 0; border-top: 1px solid var(--border); }
+  .em-attn-row:first-child { border-top: 0; }
+  .em-attn-txt { display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.88rem; min-width: 0; }
+  .em-attn-txt span { color: var(--text-muted); overflow-wrap: anywhere; }
+  .em-attn-act { display: flex; gap: 0.4rem; }
+  .em-attn-act .btn-soft { white-space: nowrap; text-decoration: none; }
+  .em-sev { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; padding: 0.1rem 0.5rem; border-radius: 999px; background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+  .em-sev-error, .em-sev-critical { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+  .em-own { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.6rem; }
+  .em-own small { display: block; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .em-own b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+  @media (max-width: 640px) { .em-attn-row { grid-template-columns: minmax(0, 1fr); } }
   .em-price-day { display:flex; flex-wrap:wrap; align-items:center; gap:0.25rem 0.9rem; margin:0 0 0.7rem; font-size:0.85rem; color:var(--text-muted); font-variant-numeric:tabular-nums; } .em-price-day strong { color:var(--text); } .em-price-day small { font-size:0.75rem; opacity:0.8; } .em-price-day .en-lo { color:var(--en-export); } .em-price-day .en-hi { color:var(--en-import); } .em-src { font-size:0.75rem; opacity:0.75; }
   .em-devices { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:1rem; margin-bottom:1rem; }
   .em-device { display:block; color:inherit; text-decoration:none; margin:0; transition:box-shadow .15s; }

@@ -24,7 +24,7 @@
   // <script> block, so the module has to already be defined before the FIRST of those runs, not
   // just before the page finishes loading.
 %>
-<script src="/color-picker.js"></script>
+<script src="/color-picker.js?v=<%= assetVersion %>"></script>
 <%
   // GridStack.js (vendored MIT-licensed build, see /vendor/gridstack-all.min.js's own header) —
   // one instance per "zone" powers the whole panel grid below, replacing the old hand-rolled
@@ -32,8 +32,8 @@
   // render loop's own comment further down). Loaded here rather than in partials/head.ejs/foot.ejs
   // since this grid is the only consumer, same reasoning as color-picker.js just above.
 %>
-<link rel="stylesheet" href="/vendor/gridstack.min.css">
-<script src="/vendor/gridstack-all.min.js"></script>
+<link rel="stylesheet" href="/vendor/gridstack.min.css?v=<%= assetVersion %>">
+<script src="/vendor/gridstack-all.min.js?v=<%= assetVersion %>"></script>
 <%
   // Favorite/Lock/Auto order all live in one icon-only trailing group, right-aligned via the
   // wrapping div's own margin-left:auto (not on any one button — which of the three actually
@@ -1364,8 +1364,8 @@
      drag-to-reorder for the plain threshold/annotation/value-mapping row lists (see that file's
      own top comment); loaded here, right before its one consumer, same convention as
      color-picker.js above. -->
-<script src="/vendor/sortable.min.js"></script>
-<script src="/threshold-annotation-builder.js"></script>
+<script src="/vendor/sortable.min.js?v=<%= assetVersion %>"></script>
+<script src="/threshold-annotation-builder.js?v=<%= assetVersion %>"></script>
 
 <%
   // .value-mapping-builder's own JS wiring moved to partials/foot.ejs (shared with the Monitor
@@ -1990,7 +1990,7 @@
   // Extracted to /panel-drawer-resize.js once the Monitor detail page's own chart-settings drawer
   // became a second consumer of this same drag-to-resize behavior.
 %>
-<script src="/panel-drawer-resize.js"></script>
+<script src="/panel-drawer-resize.js?v=<%= assetVersion %>"></script>
 
 <script>
   // Auto-saves every .panel-settings-form on any field change instead of requiring the explicit
@@ -2836,7 +2836,7 @@
   })();
 </script>
 
-<script src="/vendor/chart.umd.min.js"></script>
+<script src="/vendor/chart.umd.min.js?v=<%= assetVersion %>"></script>
 <%
   // chartjs-plugin-zoom reads window.Hammer at its OWN script-evaluation time (it's a UMD module
   // whose browser-globals branch does `t.ChartZoom = n(t.Chart, t.Hammer, ...)`) — Hammer.js has
@@ -2845,8 +2845,8 @@
   // while wheel-zoom keeps working fine since that's wired via a plain native 'wheel' listener,
   // not Hammer — exactly the "zoom works, pan doesn't, no error anywhere" shape this had.
 %>
-<script src="/vendor/hammer.min.js"></script>
-<script src="/vendor/chartjs-plugin-zoom.min.js"></script>
+<script src="/vendor/hammer.min.js?v=<%= assetVersion %>"></script>
+<script src="/vendor/chartjs-plugin-zoom.min.js?v=<%= assetVersion %>"></script>
 <script src="/monitor-chart.js?v=<%= assetVersion %>" defer></script>
 <script>
   // Swaps the generic loading skeleton (see #dash-loading-skeleton/.dash-grid-loading above and in

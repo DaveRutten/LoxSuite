@@ -1,0 +1,12 @@
+<%
+  // An empty page or table: one line and one button for the next step (and, optional, one other way).
+  // locals: title, action ({ label, href } or { label, open: '<css selector of a <details> to open>' }), alt (text), altLink ({ label, href })
+%>
+<div class="empty-state">
+  <strong><%= title %></strong>
+  <% if (typeof action !== 'undefined' && action) { %>
+    <% if (action.open) { %><button type="button" class="btn-edit" data-empty-open="<%= action.open %>"><%- icon('plus') %> <%= action.label %></button>
+    <% } else { %><a class="btn-edit" href="<%= action.href %>" style="text-decoration:none;"><%- icon('plus') %> <%= action.label %></a><% } %>
+  <% } %>
+  <% if (typeof alt !== 'undefined' && alt) { %><span class="empty-state-alt"><%= alt %><% if (typeof altLink !== 'undefined' && altLink) { %> <a href="<%= altLink.href %>"><%= altLink.label %></a><% } %></span><% } %>
+</div>

@@ -88,6 +88,10 @@
     <p class="hint"><%= t('Your name, email, avatar, and password are all managed by Pocket ID, not this gateway — they\'re refreshed here automatically every time you sign in.') %></p>
   <% } %>
 <% } else { %>
+  <div class="notify-pointer">
+  <span><%= t('Which notifications you get, in the bell and on your phone, you choose in one place:') %></span>
+  <a class="btn-soft" href="/notifications#prefs" style="text-decoration:none;"><%- icon('bell') %> <%= t('Notifications → What do I want to get') %></a>
+</div>
   <div class="card">
     <h2><%= t('My channel') %></h2>
     <p class="hint">

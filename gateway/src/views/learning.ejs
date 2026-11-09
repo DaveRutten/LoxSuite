@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: 'Learning dashboard', active: 'learning' }) %>
+<%- include('partials/head', { pageTitle: 'What LoxSuite learned', active: 'learning' }) %>
 <%
   // a text from learningDashboard.js: a plain string or { t: template, p: params }
   const tt = (x) => (!x ? '' : typeof x === 'string' ? t(x) : x.parts ? (x.parts.length ? x.parts.map(tt).join(' · ') : t('still learning')) : t(x.t, Object.fromEntries(Object.entries(x.p || {}).map(([k, v]) => [k, typeof v === 'number' ? v.toLocaleString('nl-NL', { maximumFractionDigits: 2 }) : v]))));

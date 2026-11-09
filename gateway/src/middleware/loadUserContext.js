@@ -113,6 +113,11 @@ module.exports = asyncHandler(async function loadUserContext(req, res, next) {
   res.locals.lang = req.lang;
   res.locals.t = i18n.translator(req.lang);
   res.locals.uiLocale = i18n.localeOf(req.lang);
+  // Requests for data (JSON, the browser's background calls) get no page: the menu, the bell and the
+  // AI widget below are not needed for them — 5 queries less on every poll.
+  const accept = req.get('accept') || '';
+  const forData = /\.json$/.test(req.path) || req.path.startsWith('/api/') || req.xhr || (accept.startsWith('application/json') && !accept.includes('text/html'));
+  if (forData) { res.locals.tablePageSize = user.table_page_size || 25; return next(); }
   // Only queried for a user who could even see the widget at all (canView('ai_chat')) — the global
   // Administration > AI Assistant toggle is the SECOND, independent off switch (see the AI
   // Assistant feature's own "two independent switches" design): the widget must stay invisible for
@@ -121,8 +126,10 @@ module.exports = asyncHandler(async function loadUserContext(req, res, next) {
     const aiSettings = await db.prepare('SELECT enabled FROM ai_settings WHERE id = 1').get();
     res.locals.aiChatEnabled = !!(aiSettings && aiSettings.enabled) && require('../modules').isOn('ai');
   }
-  res.locals.collapsedSections = (await db.prepare('SELECT section_key FROM user_nav_prefs WHERE user_id = ? AND collapsed = 1')
-    .all(user.id)).map((r) => r.section_key);
+  const navPrefs = await db.prepare('SELECT section_key, collapsed FROM user_nav_prefs WHERE user_id = ?').all(user.id);
+  res.locals.collapsedSections = navPrefs.filter((r) => Number(r.collapsed) === 1).map((r) => r.section_key);
+  // sections folded by default (MQTT) that this user opened
+  res.locals.expandedSections = navPrefs.filter((r) => Number(r.collapsed) === 0).map((r) => r.section_key);
   res.locals.favoriteDashboards = await loadFavoriteDashboards(user.id, req.user.roleId);
   // Computed fresh per-request like everything else here (no session caching) — correct on first
   // paint with zero extra round-trip; the topbar's own periodic poll (see foot.ejs) only has to
