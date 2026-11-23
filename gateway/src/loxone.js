@@ -28,18 +28,36 @@ async function applyTransform(rawValue, mapping) {
   }
 
   if (mapping.value_transform === 'json_path' && mapping.transform_arg) {
+    let picked;
     try {
       const parsed = JSON.parse(value);
-      return mapping.transform_arg
-        .split('.')
-        .filter(Boolean)
+      picked = jsonPathKeys(mapping.transform_arg)
         .reduce((acc, key) => (acc == null ? undefined : acc[key]), parsed);
     } catch (err) {
       throw new Error(`json_path transform failed: ${err.message}`);
     }
+    // Loxone reads a number from "\v", so a JSON true/false (e.g. a Shelly Motion's "motion") goes as 1/0.
+    if (typeof picked === 'boolean') return picked ? '1' : '0';
+    if (picked !== null && typeof picked === 'object') return JSON.stringify(picked);
+    return picked;
   }
 
   return value;
+}
+
+function jsonPathKeys(arg) {
+  return String(arg).split('.').filter(Boolean);
+}
+
+// The topic a UDP "MQTT:<topic>=<value>" message carries. With a json_path the picked field is added to
+// the topic ("shellies/x/status" + "bat" -> "shellies/x/status/bat"), so several mappings on one JSON topic
+// each reach their own Loxone Virtual Input instead of all arriving as the same "shellies/x/status".
+function udpTopicFor(mapping, topic) {
+  if (mapping.value_transform === 'json_path' && mapping.transform_arg) {
+    const keys = jsonPathKeys(mapping.transform_arg);
+    if (keys.length) return `${topic}/${keys.join('/')}`;
+  }
+  return topic;
 }
 
 function miniserverBaseUrl(miniserver) {
@@ -397,7 +415,7 @@ async function forwardToLoxone(mapping, rawValue, actualTopic) {
   const value = await applyTransform(rawValue, mapping);
 
   if (mapping.transport === 'udp') {
-    await sendUdpVirtualInput(miniserver, actualTopic || mapping.mqtt_topic, value);
+    await sendUdpVirtualInput(miniserver, udpTopicFor(mapping, actualTopic || mapping.mqtt_topic), value);
   } else {
     await sendHttpVirtualInput(miniserver, mapping.target, value);
   }
@@ -411,6 +429,7 @@ module.exports = {
   sendHttpVirtualInput, transportStats,
   forwardToLoxone,
   applyTransform,
+  udpTopicFor,
   applyLoxoneToMqttTransform,
   findOrAutoCreateLoxoneMapping,
   splitUdpMessage,

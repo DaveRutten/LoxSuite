@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.65.1-alpha.1] - 2026-11-23
+
+### Changed
+- **MQTT → Loxone with a JSON path over UDP**: the picked field now goes in the topic
+  (`shellies/x/status` + `bat` → `MQTT:shellies/x/status/bat=32`), so several mappings on one JSON topic — like
+  a Shelly Motion's `status` with `motion`, `vibration`, `lux` and `bat` — each reach their own Virtual Input.
+  JSON `true`/`false` go as `1`/`0`, a picked object as JSON. HTTP mappings are unchanged.
+
 ## [0.65.0-alpha.1] - 2026-11-09
 
 ### Added
