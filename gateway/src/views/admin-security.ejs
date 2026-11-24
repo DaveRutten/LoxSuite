@@ -45,6 +45,24 @@
     <%= t('database, with no per-request call to a third party. Applies to the whole app on every request (not just the login form), the same way "Require SSO from outside the local network" above does — a request from your own local network is always exempt, so you can\'t lock yourself out from home and a Loxone Miniserver\'s own callback (always LAN-local in a normal setup) is never affected.') %>
   </p>
 
+  <div class="geo-self" id="geo-self" data-local="<%= connection.local ? 1 : 0 %>" data-db="<%= connection.dbLoaded ? 1 : 0 %>" data-country="<%= connection.code || '' %>"
+       data-ok="<%= t('With this setting you still get in.') %>" data-bad="<%= t('With this setting you lock yourself out.') %>"
+       style="display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap; padding:0.7rem 0.9rem; margin:0.6rem 0 0.9rem; border:1px solid var(--border); border-radius:var(--radius);">
+    <span style="font-size:1.8rem; line-height:1;"><%= connection.local ? '🏠' : connection.flag %></span>
+    <div style="flex:1; min-width:14rem;">
+      <strong><%= t('Your connection right now') %>:</strong>
+      <% if (connection.local) { %><%= t('local network') %> <code><%= connection.ip %></code> — <%= t('always allowed') %>
+      <% } else if (!connection.dbLoaded) { %><code><%= connection.ip %></code> — <%= t('country unknown until the database is downloaded') %>
+      <% } else { %><%= connection.name || t('unknown country') %> <code><%= connection.ip %></code><% } %>
+      <div class="hint" id="geo-self-verdict" style="margin-top:0.2rem;"></div>
+      <% if (connection.local) { %><div class="hint"><%= t('From outside you may come in through another country than you think: a mobile network, VPN or iCloud Private Relay often routes through Germany or elsewhere. Open this page once from outside to see it.') %></div><% } %>
+    </div>
+  </div>
+
+  <% if (geoLockout) { %>
+    <p class="error"><%= t('Not saved: with this setting you lock yourself out. Your connection comes in as {country} ({ip}). Check that country, or confirm below that you want it anyway.', { country: connection.name || t('unknown country'), ip: connection.ip }) %></p>
+  <% } %>
+
   <form method="post" action="/admin/security/geo-block" id="geo-block-form">
     <div class="form-grid">
       <div>
@@ -91,6 +109,7 @@
         <% if (geoBlock.mode === 'blocklist') { %><%= t('Requests from a checked country are refused; every other country is allowed.') %>
         <% } else { %><%= t('Only requests from a checked country are allowed; every other country is refused.') %><% } %>
       </p>
+      <div class="geo-chips" id="geo-chips" data-none="<%= t('No countries ticked yet.') %>" data-remove="<%= t('Remove') %>"></div>
       <input type="text" id="geo-block-country-filter" placeholder="<%= t('Filter countries…') %>" style="max-width:20rem; margin-bottom:0.5rem;">
       <div style="max-height:16rem; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem 0.75rem;">
         <% countries.forEach(c => { %>
@@ -102,10 +121,47 @@
       </div>
     </div>
 
-    <div style="margin-top:0.9rem;">
+    <div style="margin-top:0.9rem; display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap;">
       <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
+      <label id="geo-confirm-lockout" style="<%= geoLockout ? '' : 'display:none;' %>"><input type="checkbox" name="confirm_lockout" value="1"> <%= t('Save anyway, I know I lock myself out from here') %></label>
     </div>
   </form>
+
+  <h3 style="margin-top:1.4rem;"><%= t('Refused in the last 24 hours') %></h3>
+  <% if (!blocked.countries.length) { %>
+    <p class="hint"><%= t('Nobody refused since the last restart.') %></p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th><%= t('Country') %></th><th><%= t('Refused') %></th><th><%= t('IP addresses') %></th><th><%= t('Last') %></th><th></th></tr></thead>
+        <tbody>
+          <% blocked.countries.forEach(r => { %>
+            <tr>
+              <td><%= r.flag %> <%= r.name || t('unknown country') %></td>
+              <td><%= r.count %>×</td>
+              <td><%= r.ips %></td>
+              <td><%= formatDateTime(r.last) %></td>
+              <td><% if (r.code) { %><button type="button" class="btn-soft geo-let-in" data-code="<%= r.code %>"><%= t('Let in') %></button><% } %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <details style="margin-top:0.5rem;">
+      <summary class="hint"><%= t('Latest refusals') %></summary>
+      <div class="table-wrap">
+        <table>
+          <tbody>
+            <% blocked.latest.forEach(b => { %>
+              <tr><td><%= formatDateTime(b.at) %></td><td><%= b.flag %> <%= b.name || t('unknown country') %></td><td><code><%= b.ip %></code></td><td><code><%= b.path %></code></td></tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </details>
+    <p class="hint" id="geo-let-in-hint" style="display:none;"><%= t('Changed in the list above; press Save to apply.') %></p>
+  <% } %>
+
   <script>
     (function () {
       var modeSelect = document.getElementById('geo-block-mode');
@@ -123,6 +179,63 @@
         var q = filterInput.value.trim().toLowerCase();
         document.querySelectorAll('.geo-block-country-row').forEach(function (row) {
           row.style.display = !q || row.dataset.countryName.indexOf(q) !== -1 ? '' : 'none';
+        });
+      });
+
+      // Live: would the rule in the form refuse the connection this page was opened over?
+      var self = document.getElementById('geo-self');
+      var verdict = document.getElementById('geo-self-verdict');
+      var confirmBox = document.getElementById('geo-confirm-lockout');
+      function blocksMe() {
+        if (self.dataset.local === '1' || self.dataset.db !== '1') return false;
+        var mode = modeSelect.value, me = self.dataset.country;
+        var listed = !!me && !!document.querySelector('input[name="countries"][value="' + me + '"]:checked');
+        if (mode === 'blocklist') return listed;
+        if (mode === 'allowlist') return !listed;
+        return false;
+      }
+      function showVerdict() {
+        var bad = blocksMe();
+        verdict.textContent = modeSelect.value === 'off' ? '' : (bad ? '⚠️ ' + self.dataset.bad : '✓ ' + self.dataset.ok);
+        verdict.style.color = bad ? 'var(--danger)' : 'var(--success)';
+        self.style.borderColor = bad ? 'var(--danger)' : '';
+        if (bad) confirmBox.style.display = '';
+      }
+      // The ticked countries as chips (✕ unticks), so you see the rule without scrolling the list.
+      var chips = document.getElementById('geo-chips');
+      function showChips() {
+        chips.textContent = '';
+        var ticked = document.querySelectorAll('input[name="countries"]:checked');
+        if (!ticked.length) { var none = document.createElement('span'); none.className = 'hint'; none.textContent = chips.dataset.none; chips.appendChild(none); return; }
+        ticked.forEach(function (box) {
+          var row = box.closest('label');
+          var chip = document.createElement('span');
+          chip.className = 'geo-chip';
+          chip.textContent = Array.prototype.map.call(row.querySelectorAll('span'), function (x) { return x.textContent; }).join(' ');
+          var x = document.createElement('button');
+          x.type = 'button'; x.textContent = '✕'; x.title = chips.dataset.remove;
+          x.addEventListener('click', function () { box.checked = false; showChips(); showVerdict(); });
+          chip.appendChild(x);
+          chips.appendChild(chip);
+        });
+      }
+      document.getElementById('geo-block-form').addEventListener('change', showChips);
+      showChips();
+
+      modeSelect.addEventListener('change', showVerdict);
+      document.getElementById('geo-block-form').addEventListener('change', showVerdict);
+      showVerdict();
+
+      // "Let in": on an allowlist check the country, on a blocklist uncheck it (saved with Save).
+      document.querySelectorAll('.geo-let-in').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var box = document.querySelector('input[name="countries"][value="' + btn.dataset.code + '"]');
+          if (!box) return;
+          box.checked = modeSelect.value !== 'blocklist';
+          box.closest('label').scrollIntoView({ block: 'nearest' });
+          document.getElementById('geo-let-in-hint').style.display = '';
+          showChips();
+          showVerdict();
         });
       });
 

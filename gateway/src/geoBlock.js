@@ -195,6 +195,48 @@ function startGeoBlockUpdater() {
 // mirrors. Fails OPEN (lets the request through) on anything that isn't a clean "yes, block this"
 // decision — a misconfigured or not-yet-downloaded database must never turn into locking out every
 // visitor, including the admin, by accident.
+const databaseAvailable = () => fs.existsSync(mmdbPath());
+
+// How this one request is seen: local network (always allowed), or its country (null = unknown).
+async function connectionInfo(req) {
+  const ip = String(req.ip || '').replace(/^::ffff:/, '');
+  const local = isPrivateNetworkRequest(req);
+  const dbLoaded = databaseAvailable();
+  return { ip, local, dbLoaded, country: local || !dbLoaded ? null : await countryCodeForIp(ip) };
+}
+
+// Would this rule refuse the connection described by connectionInfo()? Same rules as the middleware.
+function wouldBlock({ mode, countries }, info) {
+  if (info.local || !info.dbLoaded) return false;
+  return isBlocked({ mode, countries, countryCode: info.country });
+}
+
+// The last refusals, in memory only (gone after a restart), for Administration > Security.
+const RECENT_MAX = 200;
+const recent = [];
+function recordBlock(entry) {
+  recent.push(entry);
+  if (recent.length > RECENT_MAX) recent.shift();
+}
+
+function blockSummary(nowMs = Date.now()) {
+  const dayAgo = nowMs - 24 * 60 * 60 * 1000;
+  const perCountry = new Map();
+  for (const b of recent) {
+    if (Date.parse(b.at) < dayAgo) continue;
+    const key = b.country || '';
+    const row = perCountry.get(key) || { country: b.country, count: 0, last: b.at, ips: new Set() };
+    row.count += 1;
+    row.last = b.at;
+    row.ips.add(b.ip);
+    perCountry.set(key, row);
+  }
+  return {
+    countries: [...perCountry.values()].map((r) => ({ country: r.country, count: r.count, last: r.last, ips: r.ips.size })).sort((a, b) => b.count - a.count),
+    latest: recent.slice(-10).reverse(),
+  };
+}
+
 async function geoBlockMiddleware(req, res, next) {
   if (isPrivateNetworkRequest(req)) return next();
 
@@ -206,15 +248,21 @@ async function geoBlockMiddleware(req, res, next) {
   }
   if (settings.mode === 'off') return next();
 
-  const countryCode = await countryCodeForIp(req.ip);
-  if (!isBlocked({ mode: settings.mode, countries: settings.countries, countryCode })) return next();
+  const info = await connectionInfo(req);
+  if (!wouldBlock(settings, info)) return next(); // without a database nobody is refused, not even on an allowlist
 
-  res.status(403).type('text/plain').send('Access from your region is not permitted.');
+  recordBlock({ at: new Date().toISOString(), ip: info.ip, country: info.country, path: req.path.slice(0, 120) });
+  res.status(403).type('text/plain').send(`Access from your region is not permitted.
+Seen as: ${info.country || 'unknown country'} (${info.ip}).`);
 }
 
 module.exports = {
   geoBlockMiddleware,
   isBlocked,
+  connectionInfo,
+  wouldBlock,
+  recordBlock,
+  blockSummary,
   countryCodeForIp,
   loadSettings,
   saveRule,

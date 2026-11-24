@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.66.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.66.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -1461,6 +1461,10 @@ whatever channel(s) they already send to.
   license). Applies to the whole app on every request, not just the login form. A request from your
   own local network is always exempt, so misconfiguring this can't lock you out from home, and a
   Loxone Miniserver's own callback (always LAN-local in a normal setup) is unaffected either way.
+  The page shows how *your* connection is seen right now (a phone network or VPN often comes in
+  through another country), says live whether the rule you're editing would lock you out — and
+  won't save such a rule without an extra tick — and lists who was refused in the last 24 hours per
+  country, with *Let in* to allow one. Until the database is downloaded nobody is refused.
 - **Secrets encrypted at rest** — Miniserver passwords, the MQTT broker password, the SSO client
   secret, OCPP backend passwords, and any saved `rclone.conf` are stored encrypted (AES-256-GCM) in `gateway.db`, not
   plain text. The key is derived from `SESSION_SECRET` (see Environment variables below) — **that

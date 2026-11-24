@@ -1,0 +1,8 @@
+twemoji-country-flags.woff2 = TwemojiCountryFlags.woff2 from country-flag-emoji-polyfill 0.1.10
+(https://github.com/talkjs/country-flag-emoji-polyfill), unchanged.
+
+Font build: MIT, Copyright (c) 2022 TalkJS.
+Flag artwork: Twemoji (https://github.com/jdecked/twemoji), CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/).
+
+Used so country flags show on Windows, which has no flag emoji of its own.

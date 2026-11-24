@@ -138,8 +138,16 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
    just applied once here instead of needing to be set per-browser/per-visit. */
 html { scroll-behavior: smooth; font-size: 90%; }
 
+/* Flag emoji for Windows (it has none of its own): only the flag code points, the rest falls through. */
+@font-face {
+  font-family: "Twemoji Country Flags";
+  src: url("/vendor/twemoji-country-flags.woff2") format("woff2");
+  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+  font-display: swap;
+}
+
 body {
-  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Twemoji Country Flags", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   margin: 0;
   background-color: var(--bg);
   /* Same soft radial glow as the login page (.login-page below), anchored to the viewport
@@ -5327,3 +5335,9 @@ button.page-intro-help { background: none; border: 0; padding: 0; font: inherit;
 :root[data-theme="dark"] .home-pill-low { background: color-mix(in srgb, var(--text) 6%, transparent); }
 :root[data-theme="dark"] .home-kpi, :root[data-theme="dark"] .home-today, :root[data-theme="dark"] .home-flow { box-shadow: none; }
 :root[data-theme="dark"] .hb-sun { background: color-mix(in srgb, var(--en-solar) 45%, transparent); }
+
+/* Geo-blocking: the countries ticked, as chips above the list. */
+.geo-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.2rem 0 0.6rem; }
+.geo-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.3rem 0.15rem 0.55rem; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-soft, transparent); font-size: 0.9em; }
+.geo-chip button { border: 0; background: none; padding: 0 0.25rem; cursor: pointer; color: var(--muted, inherit); font-size: 1em; line-height: 1; }
+.geo-chip button:hover { color: var(--danger); }

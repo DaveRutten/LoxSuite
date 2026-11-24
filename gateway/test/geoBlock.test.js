@@ -6,7 +6,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const zlib = require('zlib');
-const { isBlocked, extractMmdbFromTarGz, downloadDatabase } = require('../src/geoBlock');
+const { isBlocked, extractMmdbFromTarGz, downloadDatabase, wouldBlock, recordBlock, blockSummary } = require('../src/geoBlock');
 
 test('off mode never blocks, regardless of country or list contents', () => {
   assert.equal(isBlocked({ mode: 'off', countries: ['NL'], countryCode: 'NL' }), false);
@@ -28,6 +28,28 @@ test('allowlist: blocks everything except a listed country, fails CLOSED (blocks
   assert.equal(isBlocked({ mode: 'allowlist', countries, countryCode: 'BE' }), false);
   assert.equal(isBlocked({ mode: 'allowlist', countries, countryCode: 'DE' }), true);
   assert.equal(isBlocked({ mode: 'allowlist', countries, countryCode: null }), true);
+});
+
+test('wouldBlock: the local network and a missing database never lock anyone out; otherwise the list decides', () => {
+  const allowNl = { mode: 'allowlist', countries: ['NL'] };
+  assert.equal(wouldBlock(allowNl, { local: true, dbLoaded: true, country: null }), false);
+  assert.equal(wouldBlock(allowNl, { local: false, dbLoaded: false, country: null }), false);
+  assert.equal(wouldBlock(allowNl, { local: false, dbLoaded: true, country: 'DE' }), true);
+  assert.equal(wouldBlock(allowNl, { local: false, dbLoaded: true, country: 'NL' }), false);
+  assert.equal(wouldBlock(allowNl, { local: false, dbLoaded: true, country: null }), true);
+  assert.equal(wouldBlock({ mode: 'blocklist', countries: ['DE'] }, { local: false, dbLoaded: true, country: 'DE' }), true);
+});
+
+test('blockSummary counts refusals per country over the last 24 hours, newest first', () => {
+  const now = Date.parse('2026-11-24T12:00:00Z');
+  recordBlock({ at: '2026-11-22T12:00:00Z', ip: '1.1.1.1', country: 'CN', path: '/' });
+  recordBlock({ at: '2026-11-24T10:00:00Z', ip: '2.2.2.2', country: 'DE', path: '/' });
+  recordBlock({ at: '2026-11-24T11:00:00Z', ip: '2.2.2.3', country: 'DE', path: '/login' });
+  recordBlock({ at: '2026-11-24T11:30:00Z', ip: '3.3.3.3', country: null, path: '/' });
+  const s = blockSummary(now);
+  assert.deepEqual(s.countries.map((r) => [r.country, r.count, r.ips]), [['DE', 2, 2], [null, 1, 1]]);
+  assert.equal(s.countries[0].last, '2026-11-24T11:00:00Z');
+  assert.equal(s.latest[0].ip, '3.3.3.3');
 });
 
 test('an unrecognized mode value never blocks (same as off) rather than defaulting to either list behavior', () => {

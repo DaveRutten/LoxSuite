@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.66.1-alpha.1] - 2026-11-24
+
+### Added
+- **Geo-blocking shows your own connection** (Administration → Security): how LoxSuite sees you right now
+  (local network, or country and IP — a phone network or VPN often comes in through another country), and
+  live while you edit whether the rule would lock you out. Such a rule isn't saved without an extra tick.
+- **Refused in the last 24 hours**: per country how often and from how many IP addresses, the latest
+  refusals, and *Let in* to allow that country in the form. The refusal itself now says which country and IP
+  it saw.
+
+### Fixed
+- An allowlist without a downloaded GeoLite2 database refused every visitor from outside; until the database
+  is there, nobody is refused (as the page already promised).
+
 ## [0.66.0-alpha.1] - 2026-11-24
 
 ### Added

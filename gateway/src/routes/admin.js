@@ -328,14 +328,27 @@ function proxyTrustMisconfigured(req) {
   return !req.app.get('trust proxy') && !!req.headers['x-forwarded-for'];
 }
 
-async function loadSecurityPageData(req) {
+// `draft` = a geo-block rule that wasn't saved (it would lock the admin out), shown back in the form.
+async function loadSecurityPageData(req, draft = null) {
+  const locale = require('../i18n').localeOf(req.lang);
+  const countries = listCountries(locale);
+  const byCode = new Map(countries.map((c) => [c.code, c]));
+  const named = (code) => (code ? { code, name: byCode.get(code)?.name || code, flag: byCode.get(code)?.flag || '🌐' } : { code: null, name: null, flag: '❔' });
+  const summary = geoBlock.blockSummary();
+  const conn = await geoBlock.connectionInfo(req);
   return {
     sso: await db.prepare('SELECT * FROM sso_settings WHERE id = 1').get(),
     roles: await db.prepare('SELECT * FROM access_roles ORDER BY name').all(),
     gatewaySettings: await db.prepare('SELECT * FROM gateway_settings WHERE id = 1').get(),
     proxyTrustMisconfigured: proxyTrustMisconfigured(req),
-    geoBlock: await geoBlock.loadSettings(),
-    countries: listCountries(require('../i18n').localeOf(req.lang)),
+    geoBlock: { ...(await geoBlock.loadSettings()), ...(draft || {}) },
+    geoLockout: !!draft,
+    connection: { ...conn, ...named(conn.country) },
+    blocked: {
+      countries: summary.countries.map((r) => ({ ...r, ...named(r.country) })),
+      latest: summary.latest.map((b) => ({ ...b, ...named(b.country) })),
+    },
+    countries,
   };
 }
 
@@ -397,8 +410,11 @@ router.post('/security/geo-block', asyncHandler(async (req, res) => {
   const validCodes = new Set(listCountries().map((c) => c.code));
   const countries = [...new Set(posted.map((c) => String(c).toUpperCase()))].filter((c) => validCodes.has(c));
 
-  await geoBlock.saveRule(mode, countries);
   await geoBlock.saveCredentials(req.body.maxmind_account_id, req.body.maxmind_license_key);
+  if (!req.body.confirm_lockout && geoBlock.wouldBlock({ mode, countries }, await geoBlock.connectionInfo(req))) {
+    return res.render('admin-security', { ...(await loadSecurityPageData(req, { mode, countries })), error: null, saved: false, baseUrl: `${req.protocol}://${req.get('host')}` });
+  }
+  await geoBlock.saveRule(mode, countries);
   await logSystemEvent(`"${req.user.username}" updated Geo-blocking settings (mode: ${mode}, ${countries.length} countr${countries.length === 1 ? 'y' : 'ies'}).`);
   res.render('admin-security', { ...(await loadSecurityPageData(req)), error: null, saved: true, baseUrl: `${req.protocol}://${req.get('host')}` });
 }));
