@@ -2168,7 +2168,7 @@ code.recognition-string {
   align-items: start;
 }
 
-.form-grid > button { align-self: end; }
+.form-grid > button { align-self: end; justify-self: start; }
 
 /* Groups a panel-type's fields under a small labeled header inside the Edit panel drawer (see
    panel-grid.ejs) — display:contents makes the wrapper itself invisible to layout, so its children
@@ -5454,3 +5454,71 @@ td { font-variant-numeric: tabular-nums; }
 .admin-nav-chips a.active { background: var(--surface); color: var(--text); border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
 .ah-tile-icon { border-radius: 12px; }
 .sidebar { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.16) transparent; }
+
+/* ---- Design tokens and components, after Material (as MudBlazor uses it): a 4/8 px spacing scale, a type
+   scale, elevation levels 0–4 (in dark a higher level is also a lighter surface), and buttons in three
+   variants with one anatomy and the same states everywhere. The colours keep the house convention: green
+   add, yellow change/save, red delete, purple test, grey neutral. ---- */
+:root {
+  --sp-1: 0.25rem; --sp-2: 0.5rem; --sp-3: 0.75rem; --sp-4: 1rem; --sp-5: 1.5rem; --sp-6: 2rem;
+  --fs-caption: 0.75rem; --fs-body-sm: 0.85rem; --fs-body: 0.9375rem; --fs-title: 1rem; --fs-headline: 1.4rem;
+  --elev-1: var(--shadow); --elev-2: var(--shadow-md);
+  --elev-3: 0 3px 6px rgba(30, 35, 38, 0.06), 0 14px 32px rgba(30, 35, 38, 0.12); --elev-4: var(--shadow-lg);
+  --surface-3: var(--surface); --on-fill: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --surface-3: color-mix(in srgb, var(--surface) 90%, #ffffff); --on-fill: #0d120f; --elev-3: 0 4px 10px rgba(0, 0, 0, 0.4), 0 18px 40px rgba(0, 0, 0, 0.45); }
+}
+:root[data-theme="dark"] { --surface-3: color-mix(in srgb, var(--surface) 90%, #ffffff); --on-fill: #0d120f; --elev-3: 0 4px 10px rgba(0, 0, 0, 0.4), 0 18px 40px rgba(0, 0, 0, 0.45); }
+:root[data-theme="light"] { --surface-3: var(--surface); --on-fill: #ffffff; --elev-3: 0 3px 6px rgba(30, 35, 38, 0.06), 0 14px 32px rgba(30, 35, 38, 0.12); }
+
+/* type scale */
+.topbar h1 { font-size: var(--fs-headline); }
+.card h2 { font-size: var(--fs-title); }
+.hint, .ah-tile-text, .ah-tile-status { font-size: var(--fs-body-sm); }
+th { font-size: var(--fs-caption); }
+
+/* elevation: cards 1, a tile under the pointer 2, menus and pop-overs 3, dialogs 4 */
+.card, .ah-tile { box-shadow: var(--elev-1); }
+.ah-tile:hover, .ah-tile:focus-visible { box-shadow: var(--elev-2); }
+.account-menu-panel, .admin-nav-menu, .ah-results { background: var(--surface-3); box-shadow: var(--elev-3); }
+.ls-search { background: var(--surface-3); box-shadow: var(--elev-4); }
+
+/* buttons: --b is the role colour */
+button.primary, a.primary { --b: var(--accent); }
+button.danger { --b: var(--danger); }
+.btn-edit { --b: var(--warning); }
+.btn-test { --b: var(--purple); }
+.btn-soft, td button:not(.danger):not(.primary):not(.btn-edit):not(.btn-test) { --b: var(--text-muted); }
+button.primary, a.primary, button.danger, .btn-soft, .btn-edit, .btn-test,
+td button:not(.danger):not(.primary):not(.btn-edit):not(.btn-test) {
+  gap: var(--sp-1); height: 2rem; padding: 0 var(--sp-3); border-radius: 8px; font-size: 0.8rem; font-weight: 600;
+  background: color-mix(in srgb, var(--b) 7%, transparent); color: var(--b);
+  border: 1px solid color-mix(in srgb, var(--b) 55%, transparent);
+  transition: background 0.15s var(--ease), box-shadow 0.15s var(--ease), border-color 0.15s var(--ease), transform 0.08s var(--ease);
+}
+td button { height: 1.75rem; }
+/* outlined (the default): a light layer of the role colour on hover, a stronger one while pressed */
+button.primary:hover, a.primary:hover, button.danger:hover, .btn-soft:hover, .btn-edit:hover, .btn-test:hover,
+td button:not(.danger):not(.primary):not(.btn-edit):not(.btn-test):hover {
+  background: color-mix(in srgb, var(--b) 15%, transparent); color: var(--b); border-color: var(--b);
+}
+button.primary:active, button.danger:active, .btn-soft:active, .btn-edit:active, .btn-test:active { background: color-mix(in srgb, var(--b) 24%, transparent); transform: translateY(1px); }
+button.primary:focus-visible, a.primary:focus-visible, button.danger:focus-visible, .btn-soft:focus-visible, .btn-edit:focus-visible, .btn-test:focus-visible,
+td button:focus-visible { outline: 2px solid var(--b); outline-offset: 2px; }
+/* filled: the action that submits a form (Save, Add), outside a table row — the most important button */
+button[type="submit"]:is(.primary, .btn-edit):not(td button) {
+  background: var(--b); color: var(--on-fill); border-color: var(--b); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+button[type="submit"]:is(.primary, .btn-edit):not(td button):hover {
+  background: color-mix(in srgb, var(--b) 88%, var(--text)); color: var(--on-fill); border-color: transparent; box-shadow: var(--elev-2);
+}
+button[type="submit"]:is(.primary, .btn-edit):not(td button):active { background: color-mix(in srgb, var(--b) 80%, var(--text)); }
+/* text: neutral, low-emphasis actions (Columns, Cancel) — no border until the pointer is on it */
+.btn-soft, td button:not(.danger):not(.primary):not(.btn-edit):not(.btn-test) { background: transparent; border-color: transparent; color: var(--text-muted); }
+.btn-soft:hover, td button:not(.danger):not(.primary):not(.btn-edit):not(.btn-test):hover { background: color-mix(in srgb, var(--text) 8%, transparent); border-color: transparent; color: var(--text); }
+/* disabled keeps its resting look, dimmed (the :disabled:hover rules above restate the old colours) */
+button.primary:disabled, button.primary:disabled:hover, .btn-edit:disabled, .btn-edit:disabled:hover, .btn-test:disabled, .btn-test:disabled:hover, button.danger:disabled, button.danger:disabled:hover {
+  background: color-mix(in srgb, var(--b) 7%, transparent); color: var(--b); border-color: color-mix(in srgb, var(--b) 55%, transparent); box-shadow: none; transform: none;
+}
+.btn-soft:disabled, .btn-soft:disabled:hover { background: transparent; color: var(--text-muted); }

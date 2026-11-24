@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.67.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.68.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -29,7 +29,8 @@ It provides:
 - **OCPP bridge**: report a Loxone Wallbox to an OCPP 1.6 backend (e.g. Laadloon) as a charge point,
   plus a quarterly Excel/CSV export of all charging sessions with MID meter readings.
 - A web interface (with login) to manage all of the above — no manual JSON or config-file editing. Quiet and
-  technical, in light and dark: green on anthracite and white, with Administration as one home page of tiles.
+  technical, in light and dark: green on anthracite and white, with Administration as one home page of tiles,
+  and components after Material (spacing, type and elevation tokens; filled, outlined and text buttons).
 
 ## Screenshots
 

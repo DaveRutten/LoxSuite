@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.68.0-alpha.1] - 2026-11-24
+
+### Changed
+- **Buttons in three variants, after Material**: the action that submits a form (Save, Add) is *filled* in its
+  colour, so the main action of a page stands out; the other coloured buttons (in table rows, Test, Delete) are
+  *outlined*; neutral ones like Columns are *text* buttons without a border. All 32 px high with the same
+  rounding, a light colour layer on hover, a stronger one while pressed and a focus ring from the keyboard. The
+  colour convention stays: green add, yellow change/save, red delete, purple test, grey neutral.
+- **Design tokens**: a 4/8 px spacing scale, a type scale (caption, body, title, headline) and elevation levels
+  — cards, a tile under the pointer, menus and the search dialog each have their own shadow, and in dark a higher
+  level is also a slightly lighter surface.
+
+### Fixed
+- A button placed straight in a form's grid (Save on Administration → MCP) stretched to the width of its column;
+  it is now as wide as its text.
+
 ## [0.67.0-alpha.1] - 2026-11-24
 
 ### Changed
