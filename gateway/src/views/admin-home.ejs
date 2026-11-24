@@ -1,0 +1,112 @@
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+<%
+  // Administration home: the parts of Administration as tiles in groups, each with a live status line
+  // (src/adminHub.js), what needs attention on top, and a search that filters the tiles and finds the
+  // settings on their pages (the same index as the search in the top bar). locals: groups.
+  const tiles = groups.flatMap((g) => g.tiles);
+  const attention = tiles.filter((x) => x.warn);
+  const T = { settingsIn: t('Settings found on the pages') };
+%>
+<%- include('partials/page-intro', { text: t('Everything you set up for the whole installation. The line under each tile shows how it stands now.') }) %>
+
+<div class="ah-search">
+  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+  <input type="search" id="ah-search" autocomplete="off" spellcheck="false" placeholder="<%= t('Search, e.g. password, backup, SSO…') %>" aria-label="<%= t('Search in Administration') %>" aria-controls="ah-results">
+</div>
+<div id="ah-results" class="ah-results" hidden data-t="<%= JSON.stringify(T) %>" data-hrefs="<%= JSON.stringify(tiles.map((x) => x.href)) %>"></div>
+
+<% if (attention.length) { %>
+  <section class="ah-attention" aria-label="<%= t('Needs attention') %>">
+    <h2><span aria-hidden="true">⚠️</span> <%= attention.length === 1 ? t('1 thing needs attention') : t('{n} things need attention', { n: attention.length }) %></h2>
+    <ul>
+      <% attention.forEach((x) => { %>
+        <li><a href="<%= x.href %>"><strong><%= x.label %></strong> — <%= x.warn %></a></li>
+      <% }) %>
+    </ul>
+  </section>
+<% } %>
+
+<div class="ah-groups">
+  <% groups.forEach((g) => { %>
+    <section class="ah-group" data-group="<%= g.key %>">
+      <h2 class="ah-group-title"><span aria-hidden="true"><%= g.icon %></span> <%= g.label %></h2>
+      <div class="ah-tiles">
+        <% g.tiles.forEach((x) => { %>
+          <a class="ah-tile<%= x.warn ? ' warn' : '' %>" href="<%= x.href %>" data-find="<%= [x.label, x.text, x.status, x.warn || '', x.kw, g.label].join(' ') %>">
+            <span class="ah-tile-icon" aria-hidden="true"><%= x.icon %></span>
+            <span class="ah-tile-body">
+              <span class="ah-tile-label"><%= x.label %></span>
+              <span class="ah-tile-text"><%= x.text %></span>
+              <span class="ah-tile-status<%= x.warn ? ' warn' : x.ok ? ' ok' : '' %>">
+                <% if (x.warn) { %><span aria-hidden="true">⚠️</span> <%= x.warn %><% } else { %><% if (x.ok) { %><span aria-hidden="true">✓</span> <% } %><%= x.status %><% } %>
+              </span>
+              <% if (x.warn && x.status) { %><span class="ah-tile-status"><%= x.status %></span><% } %>
+            </span>
+          </a>
+        <% }) %>
+      </div>
+    </section>
+  <% }) %>
+</div>
+<p id="ah-none" class="hint" hidden><%= t('Nothing found. Try another word.') %></p>
+
+<script>
+  // Search: typing filters the tiles (label, description, status, search words) and lists the settings
+  // on their pages (from /api/search-index, only the pages of these tiles). Enter opens the first hit;
+  // a setting opens its page and jumps to it (public/search.js reads ls-find).
+  (function () {
+    var input = document.getElementById('ah-search'), box = document.getElementById('ah-results');
+    if (!input || !box) return;
+    var T = JSON.parse(box.getAttribute('data-t')), hrefs = JSON.parse(box.getAttribute('data-hrefs'));
+    var tiles = Array.prototype.slice.call(document.querySelectorAll('.ah-tile'));
+    var none = document.getElementById('ah-none');
+    var fold = function (x) { return String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); };
+    tiles.forEach(function (a) { a._f = fold(a.getAttribute('data-find')); });
+    var index = null, hits = [];
+    function load() {
+      if (index) return Promise.resolve(index);
+      return fetch('/api/search-index', { headers: { Accept: 'application/json' } }).then(function (r) { return r.json(); }).then(function (d) {
+        index = (d || []).filter(function (e) { return e.find && hrefs.indexOf(String(e.href).split('#')[0]) >= 0; })
+          .map(function (e) { e._f = fold(e.label + ' ' + e.where); return e; });
+        return index;
+      }).catch(function () { index = []; return index; });
+    }
+    function esc(x) { return String(x).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function render() {
+      var q = fold(input.value.trim()), words = q ? q.split(/\s+/) : [];
+      var match = function (f) { return words.every(function (w) { return f.indexOf(w) >= 0; }); };
+      var shown = 0;
+      tiles.forEach(function (a) { var on = !q || match(a._f); a.hidden = !on; if (on) shown += 1; });
+      document.querySelectorAll('.ah-group').forEach(function (s) { s.hidden = !s.querySelector('.ah-tile:not([hidden])'); });
+      var att = document.querySelector('.ah-attention'); if (att) att.hidden = !!q;
+      hits = q && index ? index.filter(function (e) { return match(e._f); }).slice(0, 8) : [];
+      box.hidden = !hits.length;
+      box.innerHTML = hits.length ? '<p class="ah-results-title">' + esc(T.settingsIn) + '</p><ul>' + hits.map(function (e, i) {
+        return '<li><a href="' + esc(e.href) + '" data-i="' + i + '"><span>' + esc(e.label) + '</span><span class="ah-where">' + esc(e.where) + '</span></a></li>';
+      }).join('') + '</ul>' : '';
+      none.hidden = !(q && !shown && !hits.length && index);
+    }
+    function go(e) {
+      try { sessionStorage.setItem('ls-find', e.find); } catch (x) { /* no storage */ }
+      location.href = e.href;
+    }
+    box.addEventListener('click', function (ev) {
+      var a = ev.target.closest('a[data-i]');
+      if (!a) return;
+      ev.preventDefault();
+      go(hits[Number(a.getAttribute('data-i'))]);
+    });
+    input.addEventListener('input', function () { render(); load().then(render); });
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { input.value = ''; render(); return; }
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      var first = tiles.find(function (a) { return !a.hidden; });
+      if (input.value.trim() && first) location.href = first.getAttribute('href');
+      else if (hits[0]) go(hits[0]);
+    });
+    if (window.matchMedia && matchMedia('(pointer: fine)').matches) input.focus({ preventScroll: true });
+  })();
+</script>
+
+<%- include('partials/foot') %>

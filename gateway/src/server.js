@@ -202,6 +202,7 @@ async function main() {
   // per Miniserver: how its calls went (live connection / HTTP / HTTP after the live one didn't answer)
   app.locals.loxoneTransport = (id) => require('./loxone').transportStats(id);
   app.locals.navCurrent = require('./navigation').current;
+  app.locals.adminGroups = require('./adminHub').groupsFor;
   app.locals.serializeKeyValueLines = dashboardsRoutes.serializeKeyValueLines;
   app.locals.serializeThresholdLadder = dashboardsRoutes.serializeThresholdLadder;
   app.locals.serializeValueMappings = dashboardsRoutes.serializeValueMappings;
@@ -389,6 +390,12 @@ async function main() {
   app.use('/admin/backup', requireAuth, requireAdmin, backupRoutes);
   app.use('/admin/notifications', requireAuth, requireAdmin, notificationsRoutes);
   app.use('/admin/mcp', requireAuth, requireAdmin, require('./routes/adminMcp'));
+  // The Administration home: tiles for what this user may open (adminHub.js), so not admin-only.
+  app.get('/admin', requireAuth, require('./middleware/asyncHandler')(async (req, res) => {
+    const groups = await require('./adminHub').hubFor(res.locals);
+    if (!groups.length) return res.status(403).render('forbidden', { area: 'Administration' });
+    res.render('admin-home', { groups });
+  }));
   app.use('/admin', requireAuth, requireAdmin, adminRoutes);
   // Admin-only, same as the routes just above — the wizard changes global settings (timezone) and
   // adds Miniservers, not personal preferences, so it needs the same standing an Administrator's

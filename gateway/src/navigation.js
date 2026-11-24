@@ -76,13 +76,10 @@ const SECTIONS = [
 
 const hrefOf = (it, c) => (typeof it.href === 'function' ? it.href(c) : it.href);
 
-// Where the Administration link goes for this user: the first tab they may use.
+// Where the Administration link goes for this user: the Administration home, when there is a part
+// they may open (the tiles in adminHub.js; required here, not at the top, as adminHub needs this file).
 function adminHrefFor(c) {
-  if (c.isAdmin) return '/admin/general';
-  if (c.canEdit('settings')) return '/settings';
-  if ((c.mod('charging') && c.canView('charging')) || (c.mod('energy') && c.canView('energy')) || (c.mod('energy_manager') && c.canView('energy_manager'))) return '/settings/energy';
-  if (c.canView('translations') && c.multiLang) return '/translations';
-  return null;
+  return require('./adminHub').TILES.some((x) => x.show(c)) ? '/admin' : null;
 }
 
 function context(locals) {

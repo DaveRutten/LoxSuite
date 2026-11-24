@@ -57,8 +57,6 @@ async function isLastAdmin(userId) {
   return !!(user && user.isAdmin && adminCount === 1);
 }
 
-router.get('/', (req, res) => res.redirect('/admin/general'));
-
 router.get('/general', asyncHandler(async (req, res) => {
   res.render('admin-general', {
     error: null, justChecked: false, dbInfo: await db.getInfo(),

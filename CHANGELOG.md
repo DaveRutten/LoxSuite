@@ -4,6 +4,29 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.67.0-alpha.1] - 2026-11-24
+
+### Changed
+- **Administration has a home page** (`/admin`) instead of 13 tabs: the parts as tiles in five groups — Access
+  (users, roles, security), System (general, settings, modules, backups, languages, translations), Notifications,
+  Energy & charging, and AI & integrations (AI, MCP). Each tile shows how it stands now ("last backup 2 h ago",
+  "SSO off · geo-blocking: only NL", "MCP on · 2 tokens", "v0.67.0 · up to date"), and what needs attention is
+  listed on top (backups off or failed, an update, geo-blocking without a country database, rules without a
+  channel, MCP writing switched on, a language not fully translated).
+- **Search in Administration**: typing filters the tiles (also on Dutch words like *wachtwoord*) and lists the
+  settings on their pages; a hit opens the page and jumps to that setting. The search in the top bar now also
+  finds the sections of Users, Access Roles, Languages, AI, MCP and Translations.
+- **Detail pages** have a compact bar instead of the tab bar: the other parts of the same group as chips
+  (sideways scrolling on a phone) and *All parts* for the rest; the breadcrumb goes back to the home page. The
+  page title is now the part itself (Users, Backups, …).
+- Who sees what is unchanged: admins everything; someone else only Settings (edit), Energy & charging and
+  Translations when their role allows it — they get the home page with just those tiles. All old addresses still
+  work.
+- **A quieter, more technical look** across the whole interface, in light and dark: green-grey neutrals instead of
+  blue-grey, an anthracite sidebar where the current page has a green marker instead of a filled green button,
+  Segoe UI Variable, rounder cards with a softer shadow, tabs as one segmented control, table headers in small
+  capitals with figures lined up. LoxSuite keeps its own green, name and logo.
+
 ## [0.66.1-alpha.1] - 2026-11-24
 
 ### Added

@@ -5,7 +5,7 @@
 //
 // Categorical palette from the dataviz skill's validated default order
 // (blue/orange/aqua/yellow/magenta/green/violet/red), re-validated against this
-// app's own light (#ffffff) and dark (#1c1f26) surfaces — see style.css for the
+// app's own light (#ffffff) and dark (#1c2023) surfaces — see style.css for the
 // --surface tokens. Colors are assigned by a series' fixed position in the
 // canvas's monitor-id list, never reassigned as data refreshes.
 (function () {

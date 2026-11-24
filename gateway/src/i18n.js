@@ -179,6 +179,8 @@ function catalog() {
       for (const m of line.matchAll(/label: '((?:[^'\\]|\\.)*)'/g)) add(unescape(m[1]), current, 'moduleInfo');
     }
   } catch { /* no moduleInfo */ }
+  // Tile labels and status lines of the Administration home.
+  try { for (const k of extract(fs.readFileSync(path.join(__dirname, 'adminHub.js'), 'utf8'))) add(k, 'core', 'adminHub'); } catch { /* no adminHub */ }
   catalogCache = [...map.values()].map((e) => ({ key: e.key, module: e.module, where: [...e.where] })).sort((a, b) => a.key.localeCompare(b.key));
   return catalogCache;
 }

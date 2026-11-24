@@ -62,10 +62,10 @@ test('energy pages render with the modules on', async () => {
   assert.deepEqual(failures, []);
 });
 
-test('Administration: Settings and Energy & charging are tabs; the agenda page loads its layout helpers', async () => {
+test('Administration: Settings and Energy & charging are in the Administration navigation; the agenda page loads its layout helpers', async () => {
   const cookie = await login();
   const html = await (await fetch(`${BASE}/settings/energy`, { headers: { Cookie: cookie } })).text();
-  assert.ok(/<div class="tabs">[\s\S]*href="\/admin\/general"[\s\S]*href="\/settings"[\s\S]*href="\/settings\/energy" class="active"/.test(html));
+  assert.ok(/<nav class="admin-nav"[\s\S]*href="\/admin\/general"[\s\S]*href="\/settings"[\s\S]*href="\/settings\/energy" class="active"/.test(html));
   const agenda = await (await fetch(`${BASE}/agenda`, { headers: { Cookie: cookie } })).text();
   assert.ok(agenda.includes('/agenda-layout.js'));
   const js = await fetch(`${BASE}/agenda-layout.js`);

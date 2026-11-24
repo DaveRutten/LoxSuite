@@ -1,24 +1,35 @@
 <%
-  // Administration: one place with tabs. Admins see everything; someone with only the Settings, Smart
-  // charging or Translations permission sees just those tabs. locals: active.
-  const isAdm = !!(typeof currentUser !== 'undefined' && currentUser && currentUser.isAdmin);
-  const tabOn = (k) => (typeof moduleOn !== 'function' || moduleOn(k));
-  const adminTabs = [
-    isAdm && ['general', '/admin/general', t('General')],
-    canEdit('settings') && ['settings', '/settings', t('Settings')],
-    ((tabOn('charging') && canView('charging')) || (tabOn('energy') && canView('energy')) || (tabOn('energy_manager') && canView('energy_manager'))) && ['energy', '/settings/energy', t('Energy & charging')],
-    isAdm && ['users', '/admin/users', t('Users')],
-    isAdm && ['roles', '/admin/roles', t('Access Roles')],
-    isAdm && ['backup', '/admin/backup', t('Backups')],
-    isAdm && ['notifications', '/admin/notifications', t('Notifications')],
-    isAdm && ['security', '/admin/security', t('Security')],
-    isAdm && ['modules', '/admin/modules', t('Modules')],
-    isAdm && ['languages', '/admin/languages', t('Languages')],
-    canView('translations') && typeof multiLang !== 'undefined' && multiLang && ['translations', '/translations', t('Translations')],
-    isAdm && tabOn('ai') && ['ai', '/admin/ai', t('AI Assistant')],
-    isAdm && ['mcp', '/admin/mcp', t('MCP')],
-  ].filter(Boolean);
+  // Administration detail pages: a compact bar instead of 13 tabs. The breadcrumb above the title goes
+  // back to the Administration home; here the other parts of the same group as chips, and "All" for
+  // the rest. Who sees which part: src/adminHub.js (the same rules as the old tabs). locals: active.
+  const adminNavGroups = adminGroups(locals);
+  const adminNavHere = adminNavGroups.find((g) => g.tiles.some((x) => x.key === active));
 %>
-<div class="tabs">
-  <% adminTabs.forEach(([k, href, label]) => { %><a href="<%= href %>" class="<%= active === k ? 'active' : '' %>"><%= label %></a><% }) %>
-</div>
+<nav class="admin-nav" aria-label="<%= t('Administration') %>">
+  <% if (adminNavHere) { %>
+    <span class="admin-nav-group"><span aria-hidden="true"><%= adminNavHere.icon %></span> <%= adminNavHere.label %></span>
+    <% if (adminNavHere.tiles.length > 1) { %>
+      <div class="admin-nav-chips">
+        <% adminNavHere.tiles.forEach((x) => { %><a href="<%= x.href %>" class="<%= x.key === active ? 'active' : '' %>"<%- x.key === active ? ' aria-current="page"' : '' %>><%= x.label %></a><% }) %>
+      </div>
+    <% } %>
+  <% } %>
+  <details class="admin-nav-all">
+    <summary><%= t('All parts') %></summary>
+    <div class="admin-nav-menu">
+      <a href="/admin" class="admin-nav-home"><%= t('Administration home') %></a>
+      <% adminNavGroups.forEach((g) => { %>
+        <div class="admin-nav-menu-group">
+          <span><span aria-hidden="true"><%= g.icon %></span> <%= g.label %></span>
+          <% g.tiles.forEach((x) => { %><a href="<%= x.href %>" class="<%= x.key === active ? 'active' : '' %>"><%= x.label %></a><% }) %>
+        </div>
+      <% }) %>
+    </div>
+  </details>
+</nav>
+<script>
+  // On a phone the chips scroll sideways: the current one in view. "All parts" closes on a click or tap outside it, and on Escape.
+  (function () { var c = document.querySelector('.admin-nav-chips'), a = c && c.querySelector('a.active'); if (a && c.scrollWidth > c.clientWidth) c.scrollLeft = a.offsetLeft - c.offsetLeft - 16; })();
+  document.addEventListener('click', function (e) { document.querySelectorAll('.admin-nav-all[open]').forEach(function (d) { if (!d.contains(e.target)) d.open = false; }); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.querySelectorAll('.admin-nav-all[open]').forEach(function (d) { d.open = false; }); });
+</script>

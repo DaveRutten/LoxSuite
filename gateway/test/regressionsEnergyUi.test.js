@@ -157,7 +157,7 @@ test('update notice: several tags at once pick the newest by number', () => {
 function renderTabs({ isAdmin, canEditSettings = false, canViewCharging = false, canViewTranslations = false, modulesOn = ['charging', 'ai'], multiLang = true }) {
   const file = path.join(__dirname, '..', 'src', 'views', 'partials', 'tabs-admin.ejs');
   return ejs.render(fs.readFileSync(file, 'utf8'), {
-    active: 'general', t: (k) => k, currentUser: { isAdmin }, multiLang,
+    active: 'general', t: (k) => k, currentUser: { isAdmin }, multiLang, adminGroups: require('../src/adminHub').groupsFor,
     canEdit: (k) => (k === 'settings' ? canEditSettings : false),
     canView: (k) => (k === 'charging' ? canViewCharging : k === 'translations' ? canViewTranslations : false),
     moduleOn: (k) => modulesOn.includes(k),

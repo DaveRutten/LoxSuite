@@ -28,7 +28,8 @@ It provides:
   found in Loxone like Home Connect appliances.
 - **OCPP bridge**: report a Loxone Wallbox to an OCPP 1.6 backend (e.g. Laadloon) as a charge point,
   plus a quarterly Excel/CSV export of all charging sessions with MID meter readings.
-- A web interface (with login) to manage all of the above — no manual JSON or config-file editing.
+- A web interface (with login) to manage all of the above — no manual JSON or config-file editing. Quiet and
+  technical, in light and dark: green on anthracite and white, with Administration as one home page of tiles.
 
 ## Screenshots
 
@@ -1330,7 +1331,15 @@ Display; dates and numbers follow the chosen language.
 
 ### Administration & Access Roles
 
-Visible only to users whose Access Role has **Administrator** checked. Six tabs:
+**Administration** opens on a home page with tiles in five groups: *Access* (Users, Access Roles, Security),
+*System* (General, Settings, Modules, Backups, Languages, Translations), *Notifications*, *Energy & charging* and
+*AI & integrations* (AI Assistant, MCP). Every tile has a live status line — the last backup, geo-blocking and
+SSO, MCP and its tokens, the version — and whatever needs attention is listed on top. The search field filters
+the tiles and finds a setting on its page. On a part's page, the other parts of its group are chips above the
+content, with *All parts* for the rest.
+
+Most parts are visible only to users whose Access Role has **Administrator** checked; Settings, Energy &
+charging and Translations follow their own access rights, and such a user sees the home page with just those tiles:
 
 - **General** — re-run the guided first-run setup wizard any time: admin password, timezone,
   Miniserver, MQTT broker connection, SSO, backups, and notifications, each step skippable and

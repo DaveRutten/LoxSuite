@@ -122,7 +122,7 @@ const PAGES = [
   '/', '/miniservers', '/miniservers/data.json', '/monitor', '/monitor/series.json?ids=', '/monitor/current.json?ids=',
   '/mappings/mqtt-to-loxone', '/mappings/mqtt-to-loxone/data.json', '/mappings/loxone-to-mqtt', '/mappings/loxone-to-mqtt/data.json',
   '/mappings/known-topics.json', '/mappings/commands', '/transformations', '/logs/mqtt', '/logs/loxone', '/logs/loxone-commands', '/logs/system', '/logs/notifications',
-  '/dashboards', '/settings', '/settings/broker', '/settings/live-data-state-names', '/admin/general', '/admin/users', '/admin/roles',
+  '/dashboards', '/settings', '/settings/broker', '/settings/live-data-state-names', '/admin', '/admin/general', '/admin/modules', '/admin/languages', '/admin/users', '/admin/roles',
   '/admin/security', '/admin/mcp', '/admin/backup', '/admin/notifications', '/admin/tech-report', '/live-data', '/hardware', '/incoming/messages', '/incoming/clients',
   '/mqtt-users', '/mqtt-roles', '/profile', '/setup', '/help',
 ];
@@ -137,6 +137,18 @@ test('every top-level page renders 200 with no leaked unresolved promise', async
     else if (/\[object Promise\]/.test(body)) failures.push(`${p} -> leaked an unresolved Promise into the rendered HTML`);
   }
   assert.deepEqual(failures, [], `Pages that failed:\n${failures.join('\n')}`);
+});
+
+test('the Administration home shows tiles with a status, and a detail page the compact navigation', async () => {
+  const cookie = await loginAndGetCookie();
+  const home = await (await fetch(`${BASE}/admin`, { headers: { Cookie: cookie } })).text();
+  for (const href of ['/admin/users', '/admin/roles', '/admin/security', '/admin/general', '/settings', '/admin/modules', '/admin/backup', '/admin/languages', '/admin/notifications', '/admin/mcp']) {
+    assert.ok(home.includes(`class="ah-tile`) && home.includes(`href="${href}"`), `tile for ${href}`);
+  }
+  assert.ok(!home.includes('status unknown'), 'every tile has a status');
+  const users = await (await fetch(`${BASE}/admin/users`, { headers: { Cookie: cookie } })).text();
+  assert.match(users, /class="admin-nav"/);
+  assert.match(users, /<a href="\/admin\/users" class="active"/);
 });
 
 test('creating a monitor persists through the async facade', async () => {
