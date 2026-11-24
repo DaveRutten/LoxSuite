@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.66.0-alpha.1] - 2026-11-24
+
+### Added
+- **MCP server for AI assistants** (`/mcp`, off by default; Administration → MCP): Claude Code and other MCP
+  clients read what LoxSuite knows to find out why something doesn't work, next to the Loxone Config MCP and the
+  Miniserver's own MCP. `trace` follows one device from Loxone through MQTT and back, step by step with ✓/✗
+  (no mapping, commands rejected, the device on another broker, no state coming back, a Miniserver without UDP
+  port, the Command Recognition its Virtual UDP Input needs, empty charts). `chart_health` says why a chart is
+  empty and suggests the live topic a renamed device now uses.
+- **Setting up through MCP** (token scope *setup*): mappings, monitors and dashboards — even a whole dashboard
+  from a list of topics — always as plan → preview → apply after your OK, with undo. Only while *Writing* is
+  on (or on for a while); every change on Administration → MCP and in the System log.
+- Tokens per assistant, acting as one user and never more than that user's Access Role; only from the local
+  network unless allowed.
+
 ## [0.65.1-alpha.1] - 2026-11-23
 
 ### Changed

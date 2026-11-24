@@ -16,6 +16,7 @@
     isAdm && ['languages', '/admin/languages', t('Languages')],
     canView('translations') && typeof multiLang !== 'undefined' && multiLang && ['translations', '/translations', t('Translations')],
     isAdm && tabOn('ai') && ['ai', '/admin/ai', t('AI Assistant')],
+    isAdm && ['mcp', '/admin/mcp', t('MCP')],
   ].filter(Boolean);
 %>
 <div class="tabs">

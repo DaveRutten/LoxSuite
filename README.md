@@ -7,7 +7,7 @@
      since this repo only publishes git tags, not GitHub Releases) — bump it alongside CHANGELOG.md
      and package.json on every version release. -->
 [![Latest version](https://img.shields.io/github/v/tag/DaveRutten/LoxSuite?sort=semver&label=version)](https://github.com/DaveRutten/LoxSuite/tags)
-[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.65.1-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
+[![Commits since latest tag](https://img.shields.io/github/commits-since/DaveRutten/LoxSuite/v0.66.0-alpha.1)](https://github.com/DaveRutten/LoxSuite/commits/main)
 [![Open issues](https://img.shields.io/github/issues/DaveRutten/LoxSuite)](https://github.com/DaveRutten/LoxSuite/issues)
 [![License](https://img.shields.io/github/license/DaveRutten/LoxSuite)](LICENSE)
 
@@ -429,6 +429,33 @@ plugin. Still experimental — see the warning shown on Administration → AI As
   or narrating a tool call instead of making one — double-check anything it reports before acting
   on it. ChatGPT/Gemini are built against each SDK's own real, installed type definitions but not
   yet run against a live API key.
+
+### MCP server for AI assistants
+
+Off by default. Lets an AI assistant such as Claude Code read what LoxSuite knows — mappings, MQTT clients and
+topics, the Loxone commands log, logs, notifications, charts — to find out why something doesn't work, without
+clicking through the web UI. It is the middle layer next to the **Loxone Config MCP** (how Loxone is programmed:
+Virtual Outputs/Inputs, addresses, command recognition) and the **Miniserver's own MCP** (its live state).
+
+- **Turn it on**: Administration → MCP → *MCP server on*. Only from the local network unless *Also from outside
+  the local network* is on.
+- **Token**: Administration → MCP → *New token*, acting as a user you pick. A token never gets more than that
+  user's Access Role (a tool for an area the role can't view answers "No permission"). Shown once; LoxSuite only
+  keeps a hash. Add it to Claude Code:
+  `claude mcp add --transport http loxsuite http://<loxsuite>:5582/mcp --header "Authorization: Bearer lxs_…"`
+- **Reading**: `overview`, `trace`, `miniservers`, `mappings`, `mqtt_clients`, `mqtt_topics`, `mqtt_messages`,
+  `loxone_commands`, `logs`, `notifications`, `loxone_find`, `chart_health`, `dashboards`.
+  `trace("shellyplug-WERKWcd")` walks one device through the chain — Loxone → MQTT mapping, commands arriving
+  from Loxone, the broker, the device connected to *this* broker, its state topics, the MQTT → Loxone mapping
+  back (with the Miniserver's UDP port and the Command Recognition the Virtual UDP Input needs) and its charts —
+  and marks every step ✓/✗ with the evidence.
+- **Setting up** (token with *May set things up*): `plan_change` → the assistant shows the preview → `apply_change`
+  after your OK → `undo_change` puts it back (refused when the row was changed since, unless forced). Actions:
+  create a Loxone → MQTT or MQTT → Loxone mapping, change or switch a mapping on/off, create a monitor, repair a
+  monitor (on/off, label, new topic or uuid), create a dashboard, add a panel, and build a whole dashboard from a
+  list of topics/Loxone states. Carrying out only works while **Writing** is on (or *on for a while*, then it
+  switches itself off). Every change is listed on Administration → MCP (with an Undo button) and in the System log.
+- **Not through MCP**: passwords, MQTT users, Miniserver settings, backups, deleting anything without a plan.
 
 ### Notification Center
 

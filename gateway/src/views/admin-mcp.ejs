@@ -1,0 +1,125 @@
+<%- include('partials/head', { pageTitle: 'Administration', active: 'admin' }) %>
+
+<%- include('partials/tabs-admin', { active: 'mcp' }) %>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+<% if (newToken) { %>
+  <div class="card">
+    <h2><%= t('New token') %></h2>
+    <p class="hint"><%= t('Copy it now: LoxSuite only keeps a hash and can\'t show it again.') %></p>
+    <p><code><%= newToken %></code></p>
+    <p class="hint"><%= t('Add it to Claude Code with:') %></p>
+    <pre><code>claude mcp add --transport http loxsuite <%= baseUrl %>/mcp --header "Authorization: Bearer <%= newToken %>"</code></pre>
+  </div>
+<% } %>
+
+<div class="card">
+  <h2><%= t('MCP server') %></h2>
+  <p class="hint"><%= t('Lets an AI assistant such as Claude Code read what LoxSuite knows (mappings, MQTT clients and topics, the Loxone commands log, charts) to find out why something doesn\'t work, together with the Loxone Config MCP and the Miniserver\'s own MCP. A token never gets more than the role of the user it belongs to.') %></p>
+  <form method="post" action="/admin/mcp/settings" class="form-grid">
+    <div>
+      <label><input type="checkbox" name="enabled" value="1" <%= settings.enabled ? 'checked' : '' %>> <%= t('MCP server on') %></label>
+    </div>
+    <div>
+      <label><input type="checkbox" name="remote" value="1" <%= settings.remote ? 'checked' : '' %>> <%= t('Also from outside the local network') %></label>
+    </div>
+    <div>
+      <label><%= t('Writing (tokens with setup)') %></label>
+      <select name="write">
+        <option value="off" <%= settings.write === 'off' || (settings.write === 'timed' && !writing) ? 'selected' : '' %>><%= t('Off: only read') %></option>
+        <option value="timed" <%= settings.write === 'timed' && writing ? 'selected' : '' %>><%= t('On for a while') %></option>
+        <option value="on" <%= settings.write === 'on' ? 'selected' : '' %>><%= t('On') %></option>
+      </select>
+    </div>
+    <div>
+      <label><%= t('Minutes (on for a while)') %></label>
+      <input type="number" name="minutes" min="5" value="60" style="max-width:8rem;">
+    </div>
+    <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Save') %></button>
+  </form>
+  <p class="hint" style="margin-top:0.6rem;">
+    <% if (!settings.enabled) { %><%= t('The server is off: /mcp answers nothing.') %>
+    <% } else if (writing && settings.write === 'timed') { %><%= t('Writing is on until {time}.', { time: formatDateTime(settings.writeUntil) }) %>
+    <% } else if (writing) { %><%= t('Writing is on.') %>
+    <% } else { %><%= t('Only reading: an assistant can plan a change, but not carry it out.') %><% } %>
+  </p>
+  <p class="hint"><%= t('Every change goes in two steps: the assistant shows a preview, and carries it out after your OK. Each one is in the list below and in the System log, and can be undone.') %></p>
+</div>
+
+<details class="add-panel">
+  <summary><%= t('New token') %></summary>
+  <div class="add-panel-body">
+    <form method="post" action="/admin/mcp/tokens">
+      <div class="form-grid">
+        <div><label><%= t('Name') %></label><input type="text" name="name" placeholder="Claude Code laptop" required></div>
+        <div>
+          <label><%= t('Acts as user') %></label>
+          <select name="user_id">
+            <% users.forEach(u => { %><option value="<%= u.id %>" <%= u.id === currentUser.id ? 'selected' : '' %>><%= u.username %></option><% }) %>
+          </select>
+        </div>
+        <div><label><input type="checkbox" name="setup" value="1"> <%= t('May set things up (mappings, monitors, dashboards)') %></label></div>
+        <button type="submit" class="primary"><%- icon('plus') %> <%= t('Add') %></button>
+      </div>
+    </form>
+  </div>
+</details>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th><%= t('Name') %></th><th><%= t('User') %></th><th><%= t('Scopes') %></th><th><%= t('Token') %></th><th><%= t('Last used') %></th><th><%= t('Status') %></th><th><%= t('Actions') %></th></tr></thead>
+    <tbody>
+      <% if (!list.length) { %><tr><td colspan="7" class="hint"><%= t('No tokens yet.') %></td></tr><% } %>
+      <% list.forEach(tk => { %>
+        <tr>
+          <td><%= tk.name %></td>
+          <td><%= tk.username || '-' %></td>
+          <td><%= tk.scopes %></td>
+          <td><code>lxs_…<%= tk.token_hint %></code></td>
+          <td><%= tk.last_used_at ? formatDateTime(tk.last_used_at) : '-' %></td>
+          <td><% if (tk.revoked_at) { %><span class="badge badge-off"><%= t('Revoked') %></span><% } else { %><span class="badge badge-ok"><%= t('Active') %></span><% } %></td>
+          <td>
+            <% if (!tk.revoked_at) { %>
+              <form class="inline" method="post" action="/admin/mcp/tokens/<%= tk.id %>/revoke" data-confirm="<%= t('Revoke this token? An assistant using it can no longer connect.') %>">
+                <button type="submit" class="danger"><%- icon('power') %> <%= t('Revoke') %></button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2><%= t('Changes by assistants') %></h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th><%= t('When') %></th><th><%= t('Token') %></th><th><%= t('Change') %></th><th><%= t('Status') %></th><th><%= t('Actions') %></th></tr></thead>
+      <tbody>
+        <% if (!changes.length) { %><tr><td colspan="6" class="hint"><%= t('Nothing changed through MCP yet.') %></td></tr><% } %>
+        <% changes.forEach(c => { %>
+          <tr>
+            <td><%= c.id %></td>
+            <td><%= formatDateTime(c.applied_at || c.created_at) %></td>
+            <td><%= c.token_name || '-' %></td>
+            <td><%= c.summary %></td>
+            <td><%= c.status %></td>
+            <td>
+              <% if (c.status === 'applied') { %>
+                <form class="inline" method="post" action="/admin/mcp/changes/<%= c.id %>/undo" data-confirm="<%= t('Undo this change?') %>">
+                  <button type="submit" class="btn-edit"><%- icon('edit') %> <%= t('Undo') %></button>
+                </form>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('partials/foot') %>

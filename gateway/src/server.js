@@ -237,6 +237,8 @@ async function main() {
       else res.setHeader('Cache-Control', 'public, max-age=3600');
     },
   }));
+  // MCP server for AI assistants (mcp/server.js): its own bearer token, so before the session and CSRF.
+  app.use('/mcp', require('./mcp/server').createMcpRouter());
   app.use(
     session({
       // connect-session-knex (replacing better-sqlite3-session-store — see
@@ -386,6 +388,7 @@ async function main() {
   app.use('/translations', requireAuth, requirePermission('translations', 'view'), require('./routes/translations'));
   app.use('/admin/backup', requireAuth, requireAdmin, backupRoutes);
   app.use('/admin/notifications', requireAuth, requireAdmin, notificationsRoutes);
+  app.use('/admin/mcp', requireAuth, requireAdmin, require('./routes/adminMcp'));
   app.use('/admin', requireAuth, requireAdmin, adminRoutes);
   // Admin-only, same as the routes just above — the wizard changes global settings (timezone) and
   // adds Miniservers, not personal preferences, so it needs the same standing an Administrator's

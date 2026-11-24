@@ -123,7 +123,7 @@ const PAGES = [
   '/mappings/mqtt-to-loxone', '/mappings/mqtt-to-loxone/data.json', '/mappings/loxone-to-mqtt', '/mappings/loxone-to-mqtt/data.json',
   '/mappings/known-topics.json', '/mappings/commands', '/transformations', '/logs/mqtt', '/logs/loxone', '/logs/loxone-commands', '/logs/system', '/logs/notifications',
   '/dashboards', '/settings', '/settings/broker', '/settings/live-data-state-names', '/admin/general', '/admin/users', '/admin/roles',
-  '/admin/security', '/admin/backup', '/admin/notifications', '/admin/tech-report', '/live-data', '/hardware', '/incoming/messages', '/incoming/clients',
+  '/admin/security', '/admin/mcp', '/admin/backup', '/admin/notifications', '/admin/tech-report', '/live-data', '/hardware', '/incoming/messages', '/incoming/clients',
   '/mqtt-users', '/mqtt-roles', '/profile', '/setup', '/help',
 ];
 
